@@ -1,13 +1,14 @@
 /* MERD - MacVTap Egress and Routing Daemon
  *
+ * merd.c - Daemon implementation
+ *
  * Author: Stefano Brivio <sbrivio@redhat.com>
  * License: GPLv2
  *
- * Grab packets from Ethernet interface via AF_PACKET, build AF_INET sockets for
- * each 5-tuple from ICMP, TCP, UDP packets, perform connection tracking and
- * forward them with destination address NAT. Forward packets received on
- * sockets back to the AF_PACKET interface (typically, a macvtap, tap or veth
- * interface towards a network namespace or a VM).
+ * Grab Ethernet frames via AF_UNIX socket, build AF_INET sockets for each
+ * 5-tuple from ICMP, TCP, UDP packets, perform connection tracking and forward
+ * them with destination address NAT. Forward packets received on sockets back
+ * to the UNIX domain socket (typically, a tap file descriptor from qemu).
  *
  * TODO:
  * - steal packets from AF_INET sockets (using eBPF/XDP, or a new socket
@@ -27,6 +28,7 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <ifaddrs.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
@@ -43,6 +45,8 @@
 #include <string.h>
 #include <errno.h>
 #include <linux/ip.h>
+
+#include "merd.h"
 
 #define EPOLL_EVENTS	10
 #define CT_SIZE		4096
@@ -73,54 +77,40 @@ struct ct4 {
  * struct ctx - Execution context
  * @epollfd:	file descriptor for epoll instance
  * @ext_addr4:	IPv4 address for external, routable interface
- * @tap_idx:	Interface index for tap interface
- * @fd_tap4:	IPv4 AF_PACKET socket for tap interface
+ * @fd_unix:	AF_UNIX socket for tap file descriptor
  * @map4:	Connection tracking table
  */
 struct ctx {
 	int epollfd;
 	unsigned long ext_addr4;
-	int tap_idx;
-	int fd_tap4;
+	int fd_unix;
 	struct ct4 map4[CT_SIZE];
 };
 
 /**
- * sock4_l3() - Create and bind AF_PACKET socket for IPv4, add to epoll list
- * @c:		Execution context
- * @ifn:	Name of tap interface
- * @type:	AF_PACKET protocol type
+ * sock_unix() - Create and bind AF_UNIX socket, add to epoll list
  *
  * Return: newly created socket, doesn't return on error
  */
-static int sock4_l3(struct ctx *c, const char *ifn, int type)
+static int sock_unix(void)
 {
-	struct sockaddr_ll addr = {
-		.sll_family = AF_PACKET,
-		.sll_protocol = htons(ETH_P_IP),
-		.sll_ifindex = if_nametoindex(ifn),
+	struct sockaddr_un addr = {
+		.sun_family = AF_UNIX,
+		.sun_path = UNIX_SOCK_PATH,
 	};
-	struct epoll_event ev = { 0 };
 	int fd;
 
-	fd = socket(AF_PACKET, type, htons(ETH_P_IP));
+	fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (fd < 0) {
-		perror("L3 socket");
+		perror("UNIX socket");
 		exit(EXIT_FAILURE);
 	}
 
+	unlink(UNIX_SOCK_PATH);
 	if (bind(fd, (const struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		perror("L3 bind");
+		perror("UNIX socket bind");
 		exit(EXIT_FAILURE);
 	}
-
-	ev.events = EPOLLIN;
-	ev.data.fd = fd;
-	if (epoll_ctl(c->epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-		perror("epoll_ctl");
-		exit(EXIT_FAILURE);
-	}
-
 	return fd;
 }
 
@@ -207,7 +197,7 @@ static int sock4_l4(struct ctx *c, uint16_t proto, uint16_t port)
  */
 void usage(const char *name)
 {
-	fprintf(stderr, "Usage: %s IF_TAP IF_EXT\n", name);
+	fprintf(stderr, "Usage: %s IF_EXT\n", name);
 
 	exit(EXIT_FAILURE);
 }
@@ -411,7 +401,7 @@ static void csum_tcp4(uint16_t *in)
 }
 
 /**
- * tap4_handler() - Packet handler for tap interface
+ * tap4_handler() - Packet handler for tap file descriptor
  * @c:		Execution context
  * @len:	Total L2 packet length
  * @in:		Packet buffer, L2 headers
@@ -433,21 +423,6 @@ static void tap4_handler(struct ctx *c, int len, char *in)
 	if (fd == -1)
 		return;
 
-	nat4_out(c->ext_addr4, in + ETH_HLEN);
-
-	switch (iph->protocol) {
-	case IPPROTO_TCP:
-		csum_tcp4((uint16_t *)(in + ETH_HLEN));
-		break;
-	case IPPROTO_UDP:
-		uh->check = 0;
-		break;
-	case IPPROTO_ICMP:
-		break;
-	default:
-		return;
-	}
-
 	if (iph->protocol == IPPROTO_ICMP) {
 		fprintf(stderr, "icmp from tap: %s -> %s (socket %i)\n",
 			inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
@@ -461,6 +436,21 @@ static void tap4_handler(struct ctx *c, int len, char *in)
 			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
 			ntohs(th->dest),
 			fd);
+	}
+
+	nat4_out(c->ext_addr4, in + ETH_HLEN);
+
+	switch (iph->protocol) {
+	case IPPROTO_TCP:
+		csum_tcp4((uint16_t *)(in + ETH_HLEN));
+		break;
+	case IPPROTO_UDP:
+		uh->check = 0;
+		break;
+	case IPPROTO_ICMP:
+		break;
+	default:
+		return;
 	}
 
 	if (sendto(fd, in + sizeof(struct ethhdr) + sizeof(struct iphdr),
@@ -478,12 +468,6 @@ static void tap4_handler(struct ctx *c, int len, char *in)
  */
 static void ext4_handler(struct ctx *c, int len, char *in)
 {
-	struct sockaddr_ll addr = {
-		.sll_family = AF_PACKET,
-		.sll_protocol = ntohs(ETH_P_IP),
-		.sll_ifindex = c->tap_idx,
-		.sll_halen = ETHER_ADDR_LEN,
-	};
 	struct iphdr *iph = (struct iphdr *)in;
 	struct tcphdr *th = (struct tcphdr *)(iph + 1);
 	char buf_s[BUFSIZ], buf_d[BUFSIZ];
@@ -507,8 +491,6 @@ static void ext4_handler(struct ctx *c, int len, char *in)
 		uh->check = 0;
 	}
 
-	memcpy(&addr.sll_addr, entry->hs, ETH_ALEN);
-
 	eh = (struct ethhdr *)buf;
 	memcpy(eh->h_dest, entry->hs, ETH_ALEN);
 	memcpy(eh->h_source, entry->hd, ETH_ALEN);
@@ -531,9 +513,8 @@ static void ext4_handler(struct ctx *c, int len, char *in)
 			ntohs(th->dest));
 	}
 
-	if (sendto(c->fd_tap4, buf, len + sizeof(struct ethhdr), 0,
-		   (struct sockaddr *)&addr, sizeof(addr)) < 0)
-		perror("sendto");
+	if (send(c->fd_unix, buf, len + sizeof(struct ethhdr), 0) < 0)
+		perror("send");
 }
 
 /**
@@ -546,18 +527,18 @@ static void ext4_handler(struct ctx *c, int len, char *in)
 int main(int argc, char **argv)
 {
 	struct epoll_event events[EPOLL_EVENTS];
-	const char *if_tap, *if_ext;
+	struct epoll_event ev = { 0 };
 	struct ctx c = { 0 };
+	const char *if_ext;
 	char buf[1 << 16];
 	int nfds, i, len;
+	int fd_unix;
 
-	if (argc != 3)
+	if (argc != 2)
 		usage(argv[0]);
-	if_tap = argv[1];
-	if_ext = argv[2];
 
+	if_ext = argv[1];
 	getaddrs_ext(&c, if_ext);
-	c.tap_idx = if_nametoindex(if_tap);
 
 	c.epollfd = epoll_create1(0);
 	if (c.epollfd == -1) {
@@ -565,7 +546,17 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	c.fd_tap4 = sock4_l3(&c, if_tap, SOCK_RAW);
+	fd_unix = sock_unix();
+listen:
+	listen(fd_unix, 1);
+	fprintf(stderr,
+		"You can now start qrap:\n\t"
+		"./qrap 42 kvm ... -net tap,fd=42 -net nic,model=virtio ...\n");
+
+	c.fd_unix = accept(fd_unix, NULL, NULL);
+	ev.events = EPOLLIN;
+	ev.data.fd = c.fd_unix;
+	epoll_ctl(c.epollfd, EPOLL_CTL_ADD, c.fd_unix, &ev);
 
 loop:
 	nfds = epoll_wait(c.epollfd, events, EPOLL_EVENTS, -1);
@@ -576,15 +567,23 @@ loop:
 
 	for (i = 0; i < nfds; i++) {
 		len = recv(events[i].data.fd, buf, sizeof(buf), MSG_DONTWAIT);
+
+		if (events[i].data.fd == c.fd_unix && len <= 0) {
+			epoll_ctl(c.epollfd, EPOLL_CTL_DEL, c.fd_unix, &ev);
+			close(c.fd_unix);
+			goto listen;
+		}
+
 		if (len == 0)
 			continue;
+
 		if (len < 0) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 				break;
 			goto out;
 		}
 
-		if (events[i].data.fd == c.fd_tap4)
+		if (events[i].data.fd == c.fd_unix)
 			tap4_handler(&c, len, buf);
 		else
 			ext4_handler(&c, len, buf);

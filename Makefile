@@ -1,10 +1,13 @@
 CFLAGS += -Wall -Wextra -pedantic
 
-all: merd
+all: merd qrap
 
-merd: merd.c
+merd: merd.c merd.h
 	$(CC) $(CFLAGS) merd.c -o merd
+
+qrap: qrap.c merd.h
+	$(CC) $(CFLAGS) qrap.o -o qrap
 
 .PHONY: clean
 clean:
-	-${RM} merd
+	-${RM} merd qrap
