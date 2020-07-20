@@ -1,5 +1,5 @@
 #define CT_SIZE		4096
-#define UNIX_SOCK_PATH	"/tmp/merd.socket"
+#define UNIX_SOCK_PATH	"/tmp/passt.socket"
 
 /**
  * struct ct4 - IPv4 connection tracking entry

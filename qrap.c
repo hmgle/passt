@@ -1,4 +1,4 @@
-/* MERD - MacVTap Egress and Routing Daemon
+/* PASST - Plug A Simple Socket Transport
  *
  * qrap.c - qemu wrapper connecting UNIX domain socket to tap file descriptor
  *
@@ -10,6 +10,7 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -17,8 +18,10 @@
 #include <sys/un.h>
 #include <errno.h>
 #include <limits.h>
+#include <linux/if_ether.h>
+#include <net/if.h>
 
-#include "merd.h"
+#include "passt.h"
 
 /**
  * usage() - Print usage and exit

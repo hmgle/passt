@@ -1,4 +1,4 @@
-/* MERD - MacVTap Egress and Routing Daemon
+/* PASST - Plug A Simple Socket Transport
  *
  * util.c - Convenience helpers
  *

@@ -1,13 +1,13 @@
 CFLAGS += -Wall -Wextra -pedantic
 
-all: merd qrap
+all: passt qrap
 
-merd: merd.c merd.h arp.c arp.h dhcp.c dhcp.h util.c util.h
-	$(CC) $(CFLAGS) merd.c arp.c dhcp.c util.c -o merd
+passt: passt.c passt.h arp.c arp.h dhcp.c dhcp.h util.c util.h
+	$(CC) $(CFLAGS) passt.c arp.c dhcp.c util.c -o passt
 
-qrap: qrap.c merd.h
-	$(CC) $(CFLAGS) qrap.o -o qrap
+qrap: qrap.c passt.h
+	$(CC) $(CFLAGS) qrap.c -o qrap
 
 .PHONY: clean
 clean:
-	-${RM} merd qrap
+	-${RM} passt *.o qrap

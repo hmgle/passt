@@ -1,6 +1,6 @@
-/* MERD - MacVTap Egress and Routing Daemon
+/* PASST - Plug A Simple Socket Transport
  *
- * merd.c - Daemon implementation
+ * passt.c - Daemon implementation
  *
  * Author: Stefano Brivio <sbrivio@redhat.com>
  * License: GPLv2
@@ -50,7 +50,7 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
-#include "merd.h"
+#include "passt.h"
 #include "arp.h"
 #include "dhcp.h"
 #include "util.h"

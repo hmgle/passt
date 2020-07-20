@@ -1,6 +1,6 @@
-/* MERD - MacVTap Egress and Routing Daemon
+/* PASST - Plug A Simple Socket Transport
  *
- * dhcp.c - Minimalistic DHCP server for MERD
+ * dhcp.c - Minimalistic DHCP server for PASST
  *
  * Author: Stefano Brivio <sbrivio@redhat.com>
  * License: GPLv2
@@ -18,7 +18,7 @@
 #include <net/if.h>
 #include <arpa/inet.h>
 
-#include "merd.h"
+#include "passt.h"
 #include "dhcp.h"
 #include "util.h"
 

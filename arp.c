@@ -1,4 +1,4 @@
-/* MERD - MacVTap Egress and Routing Daemon
+/* PASST - Plug A Simple Socket Transport
  *
  * arp.c - ARP implementation
  *
@@ -19,7 +19,7 @@
 #include <net/if_arp.h>
 #include <arpa/inet.h>
 
-#include "merd.h"
+#include "passt.h"
 #include "dhcp.h"
 #include "util.h"
 
