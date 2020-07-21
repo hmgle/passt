@@ -2,8 +2,8 @@ CFLAGS += -Wall -Wextra -pedantic
 
 all: passt qrap
 
-passt: passt.c passt.h arp.c arp.h dhcp.c dhcp.h util.c util.h
-	$(CC) $(CFLAGS) passt.c arp.c dhcp.c util.c -o passt
+passt: passt.c passt.h arp.c arp.h dhcp.c dhcp.h ndp.c ndp.h util.c util.h
+	$(CC) $(CFLAGS) passt.c arp.c dhcp.c ndp.c util.c -o passt
 
 qrap: qrap.c passt.h
 	$(CC) $(CFLAGS) qrap.c -o qrap

@@ -14,6 +14,7 @@
 #include <string.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
+#include <linux/ipv6.h>
 #include <linux/udp.h>
 #include <net/if.h>
 #include <net/if_arp.h>
