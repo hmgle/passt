@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /* PASST - Plug A Simple Socket Transport
  *
  * ndp.c - NDP support for PASST
  *
+ * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
- * License: GPLv2
  *
  */
 
@@ -23,6 +25,7 @@
 
 #include "passt.h"
 #include "util.h"
+#include "tap.h"
 
 #define RS	133
 #define RA	134
@@ -126,7 +129,7 @@ int ndp(struct ctx *c, unsigned len, struct ethhdr *eh)
 	memcpy(ehr->h_source, c->mac, ETH_ALEN);
 	ehr->h_proto = htons(ETH_P_IPV6);
 
-	if (send(c->fd_unix, ehr, len, 0) < 0)
+	if (tap_send(c->fd_unix, ehr, len, 0) < 0)
 		perror("NDP: send");
 
 	return 1;

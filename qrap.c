@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /* PASST - Plug A Simple Socket Transport
  *
- * qrap.c - qemu wrapper connecting UNIX domain socket to tap file descriptor
+ * qrap.c - qemu wrapper connecting UNIX domain socket to socket file descriptor
  *
+ * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
- * License: GPLv2
  *
  * TODO: Implement this functionality directly in qemu: we have TCP and UDP
  * socket back-ends already.

@@ -1,27 +1,16 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /* PASST - Plug A Simple Socket Transport
  *
  * passt.c - Daemon implementation
  *
+ * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
- * License: GPLv2
  *
- * Grab Ethernet frames via AF_UNIX socket, build AF_INET/AF_INET6 sockets for
- * each 5-tuple from ICMP, TCP, UDP packets, perform connection tracking and
- * forward them with destination address NAT. Forward packets received on
- * sockets back to the UNIX domain socket (typically, a tap file descriptor from
- * qemu).
- *
- * TODO:
- * - steal packets from AF_INET/AF_INET6 sockets (using eBPF/XDP, or a new
- *   socket option): currently, incoming packets are also handled by in-kernel
- *   protocol handlers, so every incoming untracked TCP packet gets a RST.
- *   Workaround:
- *	iptables -A OUTPUT -m state --state INVALID,NEW,ESTABLISHED \
- *				-p tcp --tcp-flags RST RST -j DROP
- *	ip6tables -A OUTPUT -m state --state INVALID,NEW,ESTABLISHED \
- *				-p tcp --tcp-flags RST RST -j DROP
- * - and use XDP sockmap on top of that to improve performance
- * - aging and timeout/RST bookkeeping for connection tracking entries
+ * Grab Ethernet frames via AF_UNIX socket, build SOCK_DGRAM/SOCK_STREAM sockets
+ * for each 5-tuple from TCP, UDP packets, perform connection tracking and
+ * forward them. Forward packets received on sockets back to the UNIX domain
+ * socket (typically, a socket virtio_net file descriptor from qemu).
  */
 
 #include <stdio.h>
@@ -50,14 +39,21 @@
 #include <linux/ip.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+#include <time.h>
 
 #include "passt.h"
 #include "arp.h"
 #include "dhcp.h"
 #include "ndp.h"
 #include "util.h"
+#include "tcp.h"
+#include "udp.h"
 
-#define EPOLL_EVENTS	10
+#define EPOLL_EVENTS		10
+
+#define EPOLL_TIMEOUT		100 /* ms, for protocol periodic handlers */
+#define PERIODIC_HANDLER_FAST	100
+#define PERIODIC_HANDLER_SLOW	1000
 
 /**
  * sock_unix() - Create and bind AF_UNIX socket, add to epoll list
@@ -298,376 +294,42 @@ static void get_dns(struct ctx *c)
 }
 
 /**
- * sock_l4() - Create and bind socket for given L4, add to epoll list
- * @c:		Execution context
- * @v:		IP protocol, 4 or 6
- * @proto:	Protocol number, network order
- * @port:	L4 port, network order
- *
- * Return: newly created socket, -1 on error
- */
-static int sock_l4(struct ctx *c, int v, uint16_t proto, uint16_t port)
-{
-	struct sockaddr_in addr4 = {
-		.sin_family = AF_INET,
-		.sin_port = port,
-		.sin_addr = { .s_addr = c->addr4 },
-	};
-	struct sockaddr_in6 addr6 = {
-		.sin6_family = AF_INET6,
-		.sin6_port = port,
-		.sin6_addr = c->addr6,
-	};
-	struct epoll_event ev = { 0 };
-	const struct sockaddr *sa;
-	int fd, sl;
-
-	fd = socket(v == 4 ? AF_INET : AF_INET6, SOCK_RAW, proto);
-	if (fd < 0) {
-		perror("L4 socket");
-		return -1;
-	}
-
-	if (v == 4) {
-		sa = (const struct sockaddr *)&addr4;
-		sl = sizeof(addr4);
-	} else {
-		sa = (const struct sockaddr *)&addr6;
-		sl = sizeof(addr6);
-	}
-
-	if (bind(fd, sa, sl) < 0) {
-		perror("L4 bind");
-		close(fd);
-		return -1;
-	}
-
-	ev.events = EPOLLIN;
-	ev.data.fd = fd;
-	if (epoll_ctl(c->epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-		perror("L4 epoll_ctl");
-		return -1;
-	}
-
-	return fd;
-}
-
-/**
- * lookup4() - Look up entry from tap-sourced IPv4 packet, create if missing
- * @c:		Execution context
- * @eh:		Packet buffer, Ethernet header
- *
- * Return: -1 for unsupported or too many sockets, matching socket otherwise
- */
-static int lookup4(struct ctx *c, const struct ethhdr *eh)
-{
-	struct iphdr *iph = (struct iphdr *)(eh + 1);
-	struct tcphdr *th = (struct tcphdr *)((char *)iph + iph->ihl * 4);
-	char buf_s[BUFSIZ], buf_d[BUFSIZ];
-	struct ct4 *ct = c->map4;
-	int i, one_icmp_fd = 0;
-
-	if (iph->protocol != IPPROTO_ICMP && iph->protocol != IPPROTO_TCP &&
-	    iph->protocol != IPPROTO_UDP)
-		return -1;
-
-	for (i = 0; i < CT_SIZE; i++) {
-		if (ct[i].p == iph->protocol && ct[i].sa == iph->saddr &&
-		    ((ct[i].p == IPPROTO_ICMP && ct[i].da == iph->daddr)
-		     || ct[i].sp == th->source) &&
-		    !memcmp(ct[i].hd, eh->h_dest, ETH_ALEN) &&
-		    !memcmp(ct[i].hs, eh->h_source, ETH_ALEN)) {
-			if (iph->protocol != IPPROTO_ICMP) {
-				ct[i].da = iph->daddr;
-				ct[i].dp = th->dest;
-			}
-			return ct[i].fd;
-		}
-	}
-
-	for (i = 0; i < CT_SIZE && ct[i].p; i++) {
-		if (iph->protocol == IPPROTO_ICMP && ct[i].p == IPPROTO_ICMP)
-			one_icmp_fd = ct[i].fd;
-	}
-
-	if (i == CT_SIZE) {
-		fprintf(stderr, "\nToo many sockets, aborting ");
-	} else {
-		if (iph->protocol == IPPROTO_ICMP) {
-			if (one_icmp_fd)
-				ct[i].fd = one_icmp_fd;
-			else
-				ct[i].fd = sock_l4(c, 4, iph->protocol, 0);
-		} else {
-			ct[i].fd = sock_l4(c, 4, iph->protocol, th->source);
-		}
-
-		fprintf(stderr, "\n(socket %i) New ", ct[i].fd);
-		ct[i].p = iph->protocol;
-		ct[i].sa = iph->saddr;
-		ct[i].da = iph->daddr;
-		if (iph->protocol != IPPROTO_ICMP) {
-			ct[i].sp = th->source;
-			ct[i].dp = th->dest;
-		}
-		memcpy(&ct[i].hd, eh->h_dest, ETH_ALEN);
-		memcpy(&ct[i].hs, eh->h_source, ETH_ALEN);
-	}
-
-	if (iph->protocol == IPPROTO_ICMP) {
-		fprintf(stderr, "icmp connection\n\tfrom %s to %s\n\n",
-			inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
-			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)));
-	} else {
-		fprintf(stderr, "%s connection\n\tfrom %s:%i to %s:%i\n\n",
-			getprotobynumber(iph->protocol)->p_name,
-			inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
-			ntohs(th->source),
-			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
-			ntohs(th->dest));
-	}
-
-	return (i == CT_SIZE) ? -1 : ct[i].fd;
-}
-
-/**
- * lookup6() - Look up entry from tap-sourced IPv6 packet, create if missing
- * @c:		Execution context
- * @eh:		Packet buffer, Ethernet header
- *
- * Return: -1 for unsupported or too many sockets, matching socket otherwise
- */
-static int lookup6(struct ctx *c, const struct ethhdr *eh)
-{
-	struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1);
-	char buf_s[BUFSIZ], buf_d[BUFSIZ];
-	struct ct6 *ct = c->map6;
-	int i, one_icmp_fd = 0;
-	struct tcphdr *th;
-	uint8_t proto;
-
-	th = (struct tcphdr *)ipv6_l4hdr(ip6h, &proto);
-	if (!th)
-		return -1;
-
-	if (proto != IPPROTO_ICMPV6 && proto != IPPROTO_TCP &&
-	    proto != IPPROTO_UDP)
-		return -1;
-
-	for (i = 0; i < CT_SIZE; i++) {
-		if (ct[i].p != proto)
-			continue;
-
-		if (memcmp(ct[i].hd, eh->h_dest, ETH_ALEN) ||
-		    memcmp(ct[i].hs, eh->h_source, ETH_ALEN) ||
-		    memcmp(&ct[i].sa, &ip6h->saddr, sizeof(ct[i].sa)))
-			continue;
-
-		if (ct[i].p != IPPROTO_ICMPV6 &&
-		    ct[i].sp != th->source)
-			continue;
-
-		if (ct[i].p == IPPROTO_ICMPV6 &&
-		    memcmp(&ct[i].da, &ip6h->daddr, sizeof(ct[i].da)))
-			continue;
-
-		if (ct[i].p != IPPROTO_ICMPV6) {
-			memcpy(&ct[i].da, &ip6h->daddr, sizeof(ct[i].da));
-			ct[i].dp = th->dest;
-		}
-
-		return ct[i].fd;
-	}
-
-	for (i = 0; i < CT_SIZE && ct[i].p; i++) {
-		if (proto == IPPROTO_ICMPV6 && ct[i].p == IPPROTO_ICMPV6)
-			one_icmp_fd = ct[i].fd;
-	}
-
-	if (i == CT_SIZE) {
-		fprintf(stderr, "\nToo many sockets, aborting ");
-	} else {
-		if (proto == IPPROTO_ICMPV6) {
-			if (one_icmp_fd)
-				ct[i].fd = one_icmp_fd;
-			else
-				ct[i].fd = sock_l4(c, 6, proto, 0);
-		} else {
-			ct[i].fd = sock_l4(c, 6, proto, th->source);
-		}
-
-		fprintf(stderr, "\n(socket %i) New ", ct[i].fd);
-		ct[i].p = proto;
-		memcpy(&ct[i].sa, &ip6h->saddr, sizeof(ct[i].sa));
-		memcpy(&ct[i].da, &ip6h->daddr, sizeof(ct[i].da));
-		if (ct[i].p != IPPROTO_ICMPV6) {
-			ct[i].sp = th->source;
-			ct[i].dp = th->dest;
-		}
-		memcpy(&ct[i].hd, eh->h_dest, ETH_ALEN);
-		memcpy(&ct[i].hs, eh->h_source, ETH_ALEN);
-	}
-
-	if (proto == IPPROTO_ICMPV6) {
-		fprintf(stderr, "icmpv6 connection\n\tfrom %s\n"
-				"\tto %s\n\n",
-			inet_ntop(AF_INET6, &ct[i].sa, buf_s, sizeof(buf_s)),
-			inet_ntop(AF_INET6, &ct[i].da, buf_d, sizeof(buf_d)));
-	} else {
-		fprintf(stderr, "%s connection\n\tfrom [%s]:%i\n"
-				"\tto [%s]:%i\n\n",
-			getprotobynumber(proto)->p_name,
-			inet_ntop(AF_INET6, &ct[i].sa, buf_s, sizeof(buf_s)),
-			ntohs(th->source),
-			inet_ntop(AF_INET6, &ct[i].da, buf_d, sizeof(buf_d)),
-			ntohs(th->dest));
-	}
-
-	return (i == CT_SIZE) ? -1 : ct[i].fd;
-}
-
-/**
- * lookup_r4() - Reverse look up connection tracking entry for IPv4 packet
- * @ct:		Connection tracking table
- * @fd:		File descriptor that received the packet
- * @iph:	Packet buffer, IP header
- *
- * Return: matching entry if any, NULL otherwise
- */
-struct ct4 *lookup_r4(struct ct4 *ct, int fd, struct iphdr *iph)
-{
-	struct tcphdr *th = (struct tcphdr *)((char *)iph + iph->ihl * 4);
-	int i;
-
-	for (i = 0; i < CT_SIZE; i++) {
-		if (ct[i].fd == fd &&
-		    iph->protocol == ct[i].p &&
-		    iph->saddr == ct[i].da &&
-		    (iph->protocol == IPPROTO_ICMP ||
-		     (th->source == ct[i].dp && th->dest == ct[i].sp)))
-			return &ct[i];
-	}
-
-	return NULL;
-}
-
-/**
- * lookup_r6() - Reverse look up connection tracking entry for IPv6 packet
- * @ct:		Connection tracking table
- * @fd:		File descriptor that received the packet
- *
- * Return: matching entry if any, NULL otherwise
- */
-struct ct6 *lookup_r6(struct ct6 *ct, int fd, struct tcphdr *th)
-{
-	int i;
-
-	for (i = 0; i < CT_SIZE; i++) {
-		if (ct[i].fd != fd)
-			continue;
-
-		if (ct[i].p == IPPROTO_ICMPV6 ||
-		    (ct[i].dp == th->source && ct[i].sp == th->dest))
-			return &ct[i];
-	}
-
-	return NULL;
-}
-
-/**
- * nat4_in() - Perform incoming IPv4 address translation
- * @addr:	Original destination address to be used
- * @iph:	IP header
- */
-static void nat_in(unsigned long addr, struct iphdr *iph)
-{
-	iph->daddr = addr;
-}
-
-/**
- * csum_ipv4() - Calculate TCP checksum for IPv4 and set in place
- * @iph:	Packet buffer, IP header
- */
-static void csum_tcp4(struct iphdr *iph)
-{
-	struct tcphdr *th = (struct tcphdr *)((char *)iph + iph->ihl * 4);
-	uint16_t tlen = ntohs(iph->tot_len) - iph->ihl * 4, *p = (uint16_t *)th;
-	uint32_t sum = 0;
-
-	sum += (iph->saddr >> 16) & 0xffff;
-	sum += iph->saddr & 0xffff;
-	sum += (iph->daddr >> 16) & 0xffff;
-	sum += iph->daddr & 0xffff;
-
-	sum += htons(IPPROTO_TCP);
-	sum += htons(tlen);
-
-	th->check = 0;
-	while (tlen > 1) {
-		sum += *p++;
-		tlen -= 2;
-	}
-
-	if (tlen > 0) {
-		sum += *p & htons(0xff00);
-	}
-
-	th->check = (uint16_t)~csum_fold(sum);
-}
-
-/**
  * tap4_handler() - IPv4 packet handler for tap file descriptor
  * @c:		Execution context
  * @len:	Total L2 packet length
  * @in:		Packet buffer, L2 headers
  */
-static void tap4_handler(struct ctx *c, int len, char *in)
+static void tap4_handler(struct ctx *c, char *in, size_t len)
 {
 	struct ethhdr *eh = (struct ethhdr *)in;
 	struct iphdr *iph = (struct iphdr *)(eh + 1);
-	struct tcphdr *th = (struct tcphdr *)((char *)iph + iph->ihl * 4);
-	struct udphdr *uh = (struct udphdr *)th;
-	struct sockaddr_in addr = {
-		.sin_family = AF_INET,
-		.sin_port = th->dest,
-		.sin_addr = { .s_addr = iph->daddr },
-	};
+	char *l4h = (char *)iph + iph->ihl * 4;
 	char buf_s[BUFSIZ], buf_d[BUFSIZ];
-	int fd;
 
 	if (arp(c, len, eh) || dhcp(c, len, eh))
 		return;
 
-	fd = lookup4(c, eh);
-	if (fd == -1)
-		return;
-
 	if (iph->protocol == IPPROTO_ICMP) {
-		fprintf(stderr, "icmp from tap: %s -> %s (socket %i)\n",
+		fprintf(stderr, "icmp from tap: %s -> %s\n",
 			inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
-			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
-			fd);
+			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)));
 	} else {
-		fprintf(stderr, "%s from tap: %s:%i -> %s:%i (socket %i)\n",
+		struct tcphdr *th = (struct tcphdr *)l4h;
+
+		fprintf(stderr, "%s from tap: %s:%i -> %s:%i\n",
 			getprotobynumber(iph->protocol)->p_name,
 			inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
 			ntohs(th->source),
 			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
-			ntohs(th->dest),
-			fd);
+			ntohs(th->dest));
 	}
 
+	len -= (intptr_t)l4h - (intptr_t)eh;
+
 	if (iph->protocol == IPPROTO_TCP)
-		csum_tcp4(iph);
+		tcp_tap_handler(c, AF_INET, &iph->daddr, l4h, len);
 	else if (iph->protocol == IPPROTO_UDP)
-		uh->check = 0;
-	else if (iph->protocol != IPPROTO_ICMP)
-		return;
-
-	if (sendto(fd, (void *)th, len - sizeof(*eh) - iph->ihl * 4, 0,
-		   (struct sockaddr *)&addr, sizeof(addr)) < 0)
-		perror("sendto");
-
+		udp_tap_handler(c, AF_INET, &iph->daddr, l4h, len);
 }
 
 /**
@@ -676,228 +338,122 @@ static void tap4_handler(struct ctx *c, int len, char *in)
  * @len:	Total L2 packet length
  * @in:		Packet buffer, L2 headers
  */
-static void tap6_handler(struct ctx *c, int len, char *in)
+static void tap6_handler(struct ctx *c, char *in, size_t len)
 {
 	struct ethhdr *eh = (struct ethhdr *)in;
 	struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1);
-	struct tcphdr *th;
-	struct udphdr *uh;
-	struct icmp6hdr *ih;
-	struct sockaddr_in6 addr = {
-		.sin6_family = AF_INET6,
-		.sin6_addr = ip6h->daddr,
-	};
 	char buf_s[BUFSIZ], buf_d[BUFSIZ];
 	uint8_t proto;
-	int fd;
+	char *l4h;
 
 	if (ndp(c, len, eh))
 		return;
 
-	fd = lookup6(c, eh);
-	if (fd == -1)
-		return;
+	l4h = ipv6_l4hdr(ip6h, &proto);
 
-	th = (struct tcphdr *)ipv6_l4hdr(ip6h, &proto);
-	uh = (struct udphdr *)th;
-	ih = (struct icmp6hdr *)th;
-
-	if (proto == IPPROTO_ICMPV6) {
-		fprintf(stderr, "icmpv6 from tap: %s ->\n\t%s (socket %i)\n",
-			inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
-			inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)),
-			fd);
-	} else {
-		fprintf(stderr, "%s from tap: [%s]:%i\n"
-				"\t-> [%s]:%i (socket %i)\n",
-			getprotobynumber(proto)->p_name,
-			inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
-			ntohs(th->source),
-			inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)),
-			ntohs(th->dest),
-			fd);
-	}
-
-	if (proto != IPPROTO_TCP && proto != IPPROTO_UDP &&
-	    proto != IPPROTO_ICMPV6)
-		return;
-
+	/* TODO: Assign MAC address to guest so that, together with prefix
+	 * assigned via NDP, address matches the one on the host. Then drop
+	 * address change and checksum recomputation.
+	 */
+	c->addr6_guest = ip6h->saddr;
 	ip6h->saddr = c->addr6;
-
-	ip6h->hop_limit = proto;
-	ip6h->version = 0;
-	ip6h->nexthdr = 0;
-	memset(ip6h->flow_lbl, 0, 3);
-
 	if (proto == IPPROTO_TCP) {
-		th->check = 0;
-		th->check = csum_ip4(ip6h,
-				     len - ((intptr_t)th - (intptr_t)eh) +
-				     sizeof(*ip6h));
-	} else if (proto == IPPROTO_UDP) {
-		uh->check = 0;
-		uh->check = csum_ip4(ip6h,
-				     len - ((intptr_t)uh - (intptr_t)eh) +
-				     sizeof(*ip6h));
-	} else if (proto == IPPROTO_ICMPV6) {
-		ih->icmp6_cksum = 0;
-		ih->icmp6_cksum = csum_ip4(ip6h,
-					   len - ((intptr_t)ih - (intptr_t)eh) +
-					   sizeof(*ip6h));
-	}
+		struct tcphdr *th = (struct tcphdr *)(ip6h + 1);
 
-	ip6h->version = 6;
-	ip6h->nexthdr = proto;
-	ip6h->hop_limit = 255;
-
-	if (sendto(fd, (void *)th, len - ((intptr_t)th - (intptr_t)eh), 0,
-		   (struct sockaddr *)&addr, sizeof(addr)) < 0)
-		perror("sendto");
-
-}
-
-static void tap_handler(struct ctx *c, int len, char *in)
-{
-	struct ethhdr *eh = (struct ethhdr *)in;
-
-	if (eh->h_proto == ntohs(ETH_P_IP) || eh->h_proto == ntohs(ETH_P_ARP))
-		tap4_handler(c, len, in);
-	else if (eh->h_proto == ntohs(ETH_P_IPV6))
-		tap6_handler(c, len, in);
-}
-
-/**
- * ext4_handler() - IPv4 packet handler for external routable interface
- * @c:		Execution context
- * @fd:		File descriptor that received the packet
- * @len:	Total L3 packet length
- * @in:		Packet buffer, L3 headers
- */
-static void ext4_handler(struct ctx *c, int fd, int len, char *in)
-{
-	struct iphdr *iph = (struct iphdr *)in;
-	struct tcphdr *th = (struct tcphdr *)((char *)iph + iph->ihl * 4);
-	struct udphdr *uh = (struct udphdr *)th;
-	char buf_s[BUFSIZ], buf_d[BUFSIZ], buf[ETH_MAX_MTU];
-	struct ethhdr *eh = (struct ethhdr *)buf;
-	struct ct4 *entry;
-
-	entry = lookup_r4(c->map4, fd, iph);
-	if (!entry)
-		return;
-
-	nat_in(entry->sa, iph);
-
-	iph->check = 0;
-	iph->check = csum_ip4(iph, iph->ihl * 4);
-
-	if (iph->protocol == IPPROTO_TCP)
-		csum_tcp4(iph);
-	else if (iph->protocol == IPPROTO_UDP)
-		uh->check = 0;
-
-	memcpy(eh->h_dest, entry->hs, ETH_ALEN);
-	memcpy(eh->h_source, entry->hd, ETH_ALEN);
-	eh->h_proto = ntohs(ETH_P_IP);
-
-	memcpy(eh + 1, in, len);
-
-	if (iph->protocol == IPPROTO_ICMP) {
-		fprintf(stderr, "icmp (socket %i) to tap: %s -> %s\n",
-			entry->fd,
-			inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
-			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)));
-	} else {
-		fprintf(stderr, "%s (socket %i) to tap: %s:%i -> %s:%i\n",
-			getprotobynumber(iph->protocol)->p_name,
-			entry->fd,
-			inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
-			ntohs(th->source),
-			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
-			ntohs(th->dest));
-	}
-
-	if (send(c->fd_unix, buf, len + sizeof(*eh), 0) < 0)
-		perror("send");
-}
-
-/**
- * ext6_handler() - IPv6 packet handler for external routable interface
- * @c:		Execution context
- * @fd:		File descriptor that received the packet
- * @len:	Total L4 packet length
- * @in:		Packet buffer, L4 headers
- */
-static int ext6_handler(struct ctx *c, int fd, int len, char *in)
-{
-	struct tcphdr *th = (struct tcphdr *)in;
-	struct udphdr *uh;
-	struct icmp6hdr *ih;
-	char buf_s[BUFSIZ], buf_d[BUFSIZ], buf[ETH_MAX_MTU] = { 0 };
-	struct ethhdr *eh = (struct ethhdr *)buf;
-	struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1);
-	struct ct6 *entry;
-
-	entry = lookup_r6(c->map6, fd, th);
-	if (!entry)
-		return 0;
-
-	ip6h->daddr = entry->sa;
-	ip6h->saddr = entry->da;
-	memcpy(ip6h + 1, in, len);
-	ip6h->payload_len = htons(len);
-
-	th = (struct tcphdr *)(ip6h + 1);
-	uh = (struct udphdr *)th;
-	ih = (struct icmp6hdr *)th;
-	ip6h->hop_limit = entry->p;
-
-	if (entry->p == IPPROTO_TCP) {
 		th->check = 0;
 		th->check = csum_ip4(ip6h, len + sizeof(*ip6h));
-	} else if (entry->p == IPPROTO_UDP) {
+	} else if (proto == IPPROTO_UDP) {
+		struct udphdr *uh = (struct udphdr *)(ip6h + 1);
+
 		uh->check = 0;
 		uh->check = csum_ip4(ip6h, len + sizeof(*ip6h));
-	} else if (entry->p == IPPROTO_ICMPV6) {
+	} else if (proto == IPPROTO_ICMPV6) {
+		struct icmp6hdr *ih = (struct icmp6hdr *)(ip6h + 1);
+
 		ih->icmp6_cksum = 0;
 		ih->icmp6_cksum = csum_ip4(ip6h, len + sizeof(*ip6h));
 	}
 
-	ip6h->version = 6;
-	ip6h->nexthdr = entry->p;
-	ip6h->hop_limit = 255;
-
-	memcpy(eh->h_dest, entry->hs, ETH_ALEN);
-	memcpy(eh->h_source, entry->hd, ETH_ALEN);
-	eh->h_proto = ntohs(ETH_P_IPV6);
-
-	if (entry->p == IPPROTO_ICMPV6) {
-		fprintf(stderr, "icmpv6 (socket %i) to tap: %s\n\t-> %s\n",
-			entry->fd,
+	if (proto == IPPROTO_ICMPV6) {
+		fprintf(stderr, "icmpv6 from tap: %s ->\n\t%s\n",
 			inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
-			inet_ntop(AF_INET6, &ip6h->daddr, buf_d,
-				  sizeof(buf_d)));
+			inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d))
+		);
 	} else {
-		fprintf(stderr, "%s (socket %i) to tap: [%s]:%i\n"
+		struct tcphdr *th = (struct tcphdr *)l4h;
+
+		fprintf(stderr, "%s from tap: [%s]:%i\n"
 				"\t-> [%s]:%i\n",
-			getprotobynumber(entry->p)->p_name,
-			entry->fd,
+			getprotobynumber(proto)->p_name,
 			inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
 			ntohs(th->source),
 			inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)),
 			ntohs(th->dest));
 	}
 
-	if (send(c->fd_unix, buf, len + sizeof(*ip6h) + sizeof(*eh), 0) < 0)
-		perror("send");
+	len -= (intptr_t)l4h - (intptr_t)eh;
 
-	return 1;
+	if (proto == IPPROTO_TCP)
+		tcp_tap_handler(c, AF_INET6, &ip6h->daddr, l4h, len);
+	else if (proto == IPPROTO_UDP)
+		udp_tap_handler(c, AF_INET6, &ip6h->daddr, l4h, len);
 }
 
-static void ext_handler(struct ctx *c, int fd, int len, char *in)
+/**
+ * tap_handler() - IPv4/IPv6/ARP packet handler for tap file descriptor
+ * @c:		Execution context
+ * @len:	Total L2 packet length
+ * @in:		Packet buffer, L2 headers
+ */
+static void tap_handler(struct ctx *c, char *in, size_t len)
 {
-	if (!ext6_handler(c, fd, len, in))
-		ext4_handler(c, fd, len, in);
+	struct ethhdr *eh = (struct ethhdr *)in;
+
+	if (eh->h_proto == ntohs(ETH_P_IP) || eh->h_proto == ntohs(ETH_P_ARP))
+		tap4_handler(c, in, len);
+	else if (eh->h_proto == ntohs(ETH_P_IPV6))
+		tap6_handler(c, in, len);
+}
+
+/**
+ * sock_handler() - Event handler for L4 sockets
+ * @c:		Execution context
+ * @fd:		File descriptor associated to event
+ * @events	epoll events
+ */
+static void sock_handler(struct ctx *c, int fd, uint32_t events)
+{
+	socklen_t sl;
+	int so;
+
+	sl = sizeof(so);
+
+	if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &so, &sl) ||
+	    so == SOCK_STREAM)
+		tcp_sock_handler(c, fd, events);
+	else if (so == SOCK_DGRAM)
+		udp_sock_handler(c, fd, events);
+}
+
+/**
+ * periodic_handler() - Run periodic tasks for L4 protocol handlers
+ * @c:		Execution context
+ * @last:	Timestamp of last run, updated on return
+ */
+static void periodic_handler(struct ctx *c, struct timespec *last)
+{
+	struct timespec tmp;
+	int elapsed_ms;
+
+	clock_gettime(CLOCK_MONOTONIC, &tmp);
+	elapsed_ms = timespec_diff_ms(&tmp, last);
+
+	if (elapsed_ms >= PERIODIC_HANDLER_FAST)
+		tcp_periodic_fast(c);
+	if (elapsed_ms >= PERIODIC_HANDLER_SLOW)
+		tcp_periodic_slow(c);
+
+	*last = tmp;
 }
 
 /**
@@ -924,6 +480,7 @@ int main(int argc, char **argv)
 	char buf4[4][sizeof("255.255.255.255")];
 	struct epoll_event events[EPOLL_EVENTS];
 	struct epoll_event ev = { 0 };
+	struct timespec last_time;
 	char buf[ETH_MAX_MTU];
 	struct ctx c = { 0 };
 	int nfds, i, len;
@@ -958,54 +515,70 @@ int main(int argc, char **argv)
 	}
 	fprintf(stderr, "\n");
 
+	if (clock_gettime(CLOCK_MONOTONIC, &last_time)) {
+		perror("clock_gettime");
+		exit(EXIT_FAILURE);
+	}
+
 	c.epollfd = epoll_create1(0);
 	if (c.epollfd == -1) {
 		perror("epoll_create1");
 		exit(EXIT_FAILURE);
 	}
 
+	if (tcp_sock_init(&c) || udp_sock_init(&c))
+		exit(EXIT_FAILURE);
+
 	fd_unix = sock_unix();
 listen:
 	listen(fd_unix, 1);
 	fprintf(stderr,
 		"You can now start qrap:\n\t"
-		"./qrap 42 kvm ... -net tap,fd=42 -net nic,model=virtio\n\n");
+		"./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio\n\n");
 
 	c.fd_unix = accept(fd_unix, NULL, NULL);
-	ev.events = EPOLLIN;
+	ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
 	ev.data.fd = c.fd_unix;
 	epoll_ctl(c.epollfd, EPOLL_CTL_ADD, c.fd_unix, &ev);
 
+	clock_gettime(CLOCK_MONOTONIC, &last_time);
+
 loop:
-	nfds = epoll_wait(c.epollfd, events, EPOLL_EVENTS, -1);
+	nfds = epoll_wait(c.epollfd, events, EPOLL_EVENTS, EPOLL_TIMEOUT);
 	if (nfds == -1 && errno != EINTR) {
 		perror("epoll_wait");
 		exit(EXIT_FAILURE);
 	}
 
 	for (i = 0; i < nfds; i++) {
-		len = recv(events[i].data.fd, buf, sizeof(buf), MSG_DONTWAIT);
+		if (events[i].data.fd == c.fd_unix) {
+			len = recv(events[i].data.fd, buf, sizeof(buf),
+				   MSG_DONTWAIT);
 
-		if (events[i].data.fd == c.fd_unix && len <= 0) {
-			epoll_ctl(c.epollfd, EPOLL_CTL_DEL, c.fd_unix, &ev);
-			close(c.fd_unix);
-			goto listen;
+			if (len <= 0) {
+				epoll_ctl(c.epollfd, EPOLL_CTL_DEL, c.fd_unix,
+					  &ev);
+				close(c.fd_unix);
+				goto listen;
+			}
+
+			if (len == 0 || (len < 0 && errno == EINTR))
+				continue;
+
+			if (len < 0) {
+				if (errno == EAGAIN || errno == EWOULDBLOCK)
+					break;
+				goto out;
+			}
+
+			tap_handler(&c, buf + 4, ntohl(*(uint32_t *)buf));
+		} else {
+			sock_handler(&c, events[i].data.fd, events[i].events);
 		}
-
-		if (len == 0 || (len < 0 && errno == EINTR))
-			continue;
-
-		if (len < 0) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-				break;
-			goto out;
-		}
-
-		if (events[i].data.fd == c.fd_unix)
-			tap_handler(&c, len, buf);
-		else
-			ext_handler(&c, events[i].data.fd, len, buf);
 	}
+
+	periodic_handler(&c, &last_time);
+	clock_gettime(CLOCK_MONOTONIC, &last_time);
 
 	goto loop;
 

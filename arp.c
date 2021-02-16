@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /* PASST - Plug A Simple Socket Transport
  *
  * arp.c - ARP implementation
  *
+ * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
- * License: GPLv2
  *
  */
 
@@ -23,6 +25,7 @@
 #include "passt.h"
 #include "dhcp.h"
 #include "util.h"
+#include "tap.h"
 
 /**
  * struct arpmsg - 802.2 ARP IPv4 payload
@@ -39,7 +42,7 @@ struct arpmsg {
 } __attribute__((__packed__));
 
 /**
- * dhcp() - Check if this is an ARP message, reply as needed
+ * arp() - Check if this is an ARP message, reply as needed
  * @c:		Execution context
  * @len:	Total L2 packet length
  * @eh:		Packet buffer, Ethernet header
@@ -74,9 +77,11 @@ int arp(struct ctx *c, unsigned len, struct ethhdr *eh)
 
 	len = sizeof(*eh) + sizeof(*ah) + sizeof(*am);
 	memcpy(eh->h_dest, eh->h_source, ETH_ALEN);
+	/* HACK */
+	memcpy(c->mac_guest, eh->h_source, ETH_ALEN);
 	memcpy(eh->h_source, c->mac, ETH_ALEN);
 
-	if (send(c->fd_unix, eh, len, 0) < 0)
+	if (tap_send(c->fd_unix, eh, len, 0) < 0)
 		perror("ARP: send");
 
 	return 1;

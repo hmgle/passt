@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /* PASST - Plug A Simple Socket Transport
  *
  * dhcp.c - Minimalistic DHCP server for PASST
  *
+ * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
- * License: GPLv2
  *
  */
 
@@ -22,6 +24,7 @@
 #include "passt.h"
 #include "dhcp.h"
 #include "util.h"
+#include "tap.h"
 
 /**
  * struct opt - DHCP option
@@ -212,7 +215,7 @@ int dhcp(struct ctx *c, unsigned len, struct ethhdr *eh)
 	memcpy(eh->h_dest, eh->h_source, ETH_ALEN);
 	memcpy(eh->h_source, c->mac, ETH_ALEN);
 
-	if (send(c->fd_unix, eh, len, 0) < 0)
+	if (tap_send(c->fd_unix, eh, len, 0) < 0)
 		perror("DHCP: send");
 
 	return 1;
