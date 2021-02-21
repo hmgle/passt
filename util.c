@@ -139,7 +139,7 @@ char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto)
  * sock_l4_add() - Create and bind socket for given L4, add to epoll list
  * @c:		Execution context
  * @v:		IP protocol, 4 or 6
- * @proto:	Protocol number, network order
+ * @proto:	Protocol number, host order
  * @port:	Port, network order
  *
  * Return: newly created socket, -1 on error
@@ -148,17 +148,17 @@ int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
 {
 	struct sockaddr_in addr4 = {
 		.sin_family = AF_INET,
-		.sin_port = port,
+		.sin_port = htons(port),
 		.sin_addr = { .s_addr = INADDR_ANY },
 	};
 	struct sockaddr_in6 addr6 = {
 		.sin6_family = AF_INET6,
-		.sin6_port = port,
+		.sin6_port = htons(port),
 		.sin6_addr = IN6ADDR_ANY_INIT,
 	};
 	struct epoll_event ev = { 0 };
 	const struct sockaddr *sa;
-	int fd, sl;
+	int fd, sl, one = 1;
 
 	if (proto != IPPROTO_TCP && proto != IPPROTO_UDP)
 		return -1;	/* Not implemented. */
@@ -176,6 +176,8 @@ int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
 	} else {
 		sa = (const struct sockaddr *)&addr6;
 		sl = sizeof(addr6);
+
+		setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &one, sizeof(one));
 	}
 
 	if (bind(fd, sa, sl) < 0) {
@@ -213,10 +215,10 @@ int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
 int timespec_diff_ms(struct timespec *a, struct timespec *b)
 {
 	if (a->tv_nsec < b->tv_nsec) {
-		return (b->tv_nsec - a->tv_nsec) / 1000 +
+		return (b->tv_nsec - a->tv_nsec) / 1000000 +
 		       (a->tv_sec - b->tv_sec - 1) * 1000;
 	}
 
-	return (a->tv_nsec - b->tv_nsec) / 1000 +
+	return (a->tv_nsec - b->tv_nsec) / 1000000 +
 	       (a->tv_sec - b->tv_sec) * 1000;
 }

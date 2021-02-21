@@ -49,7 +49,7 @@ struct arpmsg {
  *
  * Return: 0 if it's not an ARP message, 1 if handled, -1 on failure
  */
-int arp(struct ctx *c, unsigned len, struct ethhdr *eh)
+int arp(struct ctx *c, struct ethhdr *eh, size_t len)
 {
 	struct arphdr *ah = (struct arphdr *)(eh + 1);
 	struct arpmsg *am = (struct arpmsg *)(ah + 1);

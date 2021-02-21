@@ -130,7 +130,7 @@
  *
  * These states apply to connected sockets only, listening sockets are always
  * open after initialisation, in LISTEN state. A single state is maintained for
- * both sides of the connection, and most states are omitted as they are already
+ * both sides of the connection, and some states are omitted as they are already
  * handled by host kernel and guest.
  *
  * - CLOSED			no connection
@@ -144,31 +144,32 @@
  *
  * - SOCK_SYN_SENT		new connected socket, SYN sent to tap
  *   - SYN,ACK from tap		ACK to tap > ESTABLISHED
- *   - SYN,ACK timeout		RST to tap, close socket > CLOSED
  *   - socket error		RST to tap, close socket > CLOSED
+ *   - SYN,ACK timeout		RST to tap, close socket > CLOSED
  *   - RST from tap		close socket > CLOSED
  *
  * - TAP_SYN_RCVD		connect() completed, SYN,ACK sent to tap
+ *   - FIN from tap		write shutdown > FIN_WAIT_1
  *   - ACK from tap		> ESTABLISHED
- *   - ACK timeout		RST to tap, close socket > CLOSED
  *   - socket error		RST to tap, close socket > CLOSED
+ *   - ACK timeout		RST to tap, close socket > CLOSED
  *   - RST from tap		close socket > CLOSED
  *
  * - ESTABLISHED		connection established, ready for data
- *   - zero-sized socket read	FIN to tap > ESTABLISHED_SOCK_FIN
- *   - data timeout		FIN to tap > ESTABLISHED_SOCK_FIN
+ *   - FIN from tap		write shutdown > FIN_WAIT_1
+ *   - zero-sized socket read	read shutdown, FIN to tap > ESTABLISHED_SOCK_FIN
  *   - socket error		RST to tap, close socket > CLOSED
- *   - FIN from tap		FIN,ACK to tap, close socket > FIN_WAIT_1
+ *   - data timeout		FIN to tap > ESTABLISHED_SOCK_FIN
  *   - RST from tap		close socket > CLOSED
  *
- * - ESTABLISHED_SOCK_FIN	socket wants to close connection, data allowed
+ * - ESTABLISHED_SOCK_FIN	socket closing connection, FIN sent to tap
  *   - ACK from tap		> CLOSE_WAIT
  *   - ACK timeout		RST to tap, close socket > CLOSED
  *   - RST from tap		close socket > CLOSED
  *
- * - CLOSE_WAIT			socket wants to close connection, seen by tap
+ * - CLOSE_WAIT			socket closing connection, ACK from tap
+ *   - FIN from tap		write shutdown > LAST_ACK
  *   - socket error		RST to tap, close socket > CLOSED
- *   - FIN from tap		ACK to tap, close socket > LAST_ACK
  *   - FIN timeout		RST to tap, close socket > CLOSED
  *   - RST from tap		close socket > CLOSED
  * 
@@ -176,12 +177,19 @@
  *   - anything from socket	close socket > CLOSED
  *   - socket error		RST to tap, close socket > CLOSED
  *   - ACK timeout		RST to tap, close socket > CLOSED
+ *   - RST from tap		close socket > CLOSED
  *
- * - FIN_WAIT_1			tap wants to close connection, _FIN,ACK sent_
+ * - FIN_WAIT_1			tap closing connection, FIN sent to socket
+ *   - zero-sized socket read	FIN,ACK to tap, shutdown > FIN_WAIT_1_SOCK_FIN
+ *   - socket error		RST to tap, close socket > CLOSED
+ *   - ACK timeout		RST to tap, close socket > CLOSED
+ *   - RST from tap		close socket > CLOSED
+ *
+ * - FIN_WAIT_1_SOCK_FIN	tap closing connection, FIN received from socket
  *   - ACK from tap		close socket > CLOSED
  *   - socket error		RST to tap, close socket > CLOSED
  *   - ACK timeout		RST to tap, close socket > CLOSED
- *
+ *   - RST from tap		close socket > CLOSED
  *
  * Connection setup
  * ----------------
@@ -198,34 +206,33 @@
  * Aging and timeout
  * -----------------
  *
- * Two bitmaps of TCP_MAX_CONNS bits indicate which connections need scheduled
- * actions:
- * - @tcp_act_fast is used to send ACK segments to the tap once TCP_INFO reports
- *   an increased number of acknowledged bytes sent on a socket, and examined
- *   every 20ms (one tenth of current TCP_DELACK_MAX on Linux): for each marked
- *   connection, a TCP_INFO query is performed and ACK segments are sent right
- *   away as needed
- * - @tcp_act_slow is used for state and retransmission timeouts, and examined
- *   every 2s: for each marked connection with an expired @timeout timestamp
- *   specific actions are taken depending on the connection state:
- *   - SOCK_SYN_SENT: after a 2MSL (240s) timeout waiting for a SYN,ACK segment
- *     from tap expires, connection is reset (RST to tap, socket closed)
- *   - TAP_SYN_RCVD: after a 2MSL (240s) timeout waiting for an ACK segment from
- *     tap expires, connection is reset (RST to tap, socket closed)
- *   - ESTABLISHED: after a timeout of 1s (TODO: implement requirements from
- *     RFC 6298) waiting for an ACK segment from tap expires, data from socket
- *     queue is retransmitted starting from the last ACK sequence
- *   - ESTABLISHED: after a two hours (current TCP_KEEPALIVE_TIME on Linux)
- *     timeout waiting for any activity expires, connection is reset (RST to
- *     tap, socket closed)
- *   - ESTABLISHED_SOCK_FIN: after a 2MSL (240s) timeout waiting for an ACK
- *     segment from tap expires, connection is reset (RST to tap, socket closed)
- *   - CLOSE_WAIT: after a 2MSL (240s) timeout waiting for a FIN segment from
- *     tap expires, connection is reset (RST to tap, socket closed)
- *   - LAST_ACK: after a 2MSL (240s) timeout waiting for an ACK segment from
- *     socket expires, connection is reset (RST to tap, socket closed)
- *   - FIN_WAIT_1: after a 2MSL (240s) timeout waiting for an ACK segment from
- *     tap expires, connection is reset (RST to tap, socket closed)
+ * A bitmap of TCP_MAX_CONNS bits indicate the connections subject to timed
+ * events based on states:
+ * - SOCK_SYN_SENT: after a 2MSL (240s) timeout waiting for a SYN,ACK segment
+ *   from tap expires, connection is reset (RST to tap, socket closed)
+ * - TAP_SYN_RCVD: after a 2MSL (240s) timeout waiting for an ACK segment from
+ *   tap expires, connection is reset (RST to tap, socket closed)
+ * - TAP_SYN_SENT: connect() is pending, timeout is handled implicitly by
+ *   connect() timeout, connection will be reset in case
+ * - ESTABLISHED, ESTABLISHED_SOCK_FIN: if an ACK segment to tap is pending,
+ *   bytes acknowledged by socket endpoint are checked every 50ms (one quarter
+ *   of current TCP_DELACK_MAX on Linux)
+ * - ESTABLISHED, ESTABLISHED_SOCK_FIN: after a timeout of 3s (TODO: implement
+ *   requirements from RFC 6298) waiting for an ACK segment from tap expires,
+ *   data from socket queue is retransmitted starting from the last ACK sequence
+ * - ESTABLISHED, ESTABLISHED_SOCK_FIN: after a two hours (current
+ *   TCP_KEEPALIVE_TIME on Linux) timeout waiting for any activity expires,
+ *   connection is reset (RST to tap, socket closed)
+ * - ESTABLISHED_SOCK_FIN: after a 2MSL (240s) timeout waiting for an ACK
+ *   segment from tap expires, connection is reset (RST to tap, socket closed)
+ * - CLOSE_WAIT: after a 2MSL (240s) timeout waiting for a FIN segment from tap
+ *   expires, connection is reset (RST to tap, socket closed)
+ * - FIN_WAIT_1: after a 2MSL (240s) timeout waiting for an ACK segment from
+ *   socet expires, connection is reset (RST to tap, socket closed)
+ * - FIN_WAIT_1_SOCK_FIN: after a 2MSL (240s) timeout waiting for an ACK segment
+ *   from tap expires, connection is reset (RST to tap, socket closed)
+ * - LAST_ACK: after a 2MSL (240s) timeout waiting for an ACK segment from
+ *   socket expires, connection is reset (RST to tap, socket closed)
  *
  *
  * Data flows (from ESTABLISHED, ESTABLISHED_SOCK_FIN states)
@@ -253,6 +260,7 @@
  *     - on read error, send RST to tap, close socket
  *     - on zero read, send FIN to tap, enter ESTABLISHED_SOCK_FIN
  *   - on ACK from tap:
+ *     - set @ts_ack_tap
  *     - check if it's the second duplicated ACK
  *     - consume buffer by difference between new ack_seq and @seq_ack_from_tap
  *     - update @seq_ack_from_tap from ack_seq in header
@@ -263,11 +271,12 @@
  *   - periodically:
  *     - if @seq_ack_from_tap < @seq_to_tap and the retransmission timer
  *       (TODO: implement requirements from RFC 6298, currently 3s fixed) from
- *       @last_ts_to_tap elapsed, reset @seq_to_tap to @seq_ack_from_tap, and
+ *       @ts_sock elapsed, reset @seq_to_tap to @seq_ack_from_tap, and
  *       resend data with the steps listed above
  *
  * - from tap to socket:
  *   - on packet from tap:
+ *     - set @ts_tap
  *     - set TCP_WINDOW_CLAMP from TCP header from tap
  *     - check seq from header against @seq_from_tap, if data is missing, send
  *       two ACKs with number @seq_ack_to_tap, discard packet
@@ -277,15 +286,11 @@
  *       set @tcpi_acked_last to tcpi_bytes_acked, set @seq_ack_to_tap
  *       to (tcpi_bytes_acked + @seq_init_from_tap) % 2^32 and
  *       send ACK to tap
- *     - set @last_ts_sock
- *     - on @seq_ack_to_tap < @seq_from_tap, mark socket for later ACK in bitmap
  *   - periodically:
- *     - if socket is marked in bitmap, query socket for TCP_INFO, on
- *       tcpi_bytes_acked > @tcpi_acked_last, 
+ *     - query socket for TCP_INFO, on tcpi_bytes_acked > @tcpi_acked_last, 
  *       set @tcpi_acked_last to tcpi_bytes_acked, set @seq_ack_to_tap
  *       to (tcpi_bytes_acked + @seq_init_from_tap) % 2^32 and
  *       send ACK to tap
- *     - on @seq_ack_to_tap == @seq_from_tap, unmark socket from bitmap
  */
 
 #define _GNU_SOURCE
@@ -321,21 +326,16 @@
 
 #define SYN_TIMEOUT			240000		/* ms */
 #define ACK_TIMEOUT			3000
+#define ACK_INTERVAL			50
 #define ACT_TIMEOUT			7200000
 #define FIN_TIMEOUT			240000
 #define LAST_ACK_TIMEOUT		240000
 
-#define SOCK_ACK_INTERVAL		20
 
 /* We need to include <linux/tcp.h> for tcpi_bytes_acked, instead of
  * <netinet/tcp.h>, but that doesn't include a definition for SOL_TCP
  */
 #define SOL_TCP				IPPROTO_TCP
-
-static char tcp_in_buf[MAX_WINDOW];
-
-static uint8_t tcp_act_fast[MAX_CONNS / 8] = { 0 };
-static uint8_t tcp_act_slow[MAX_CONNS / 8] = { 0 };
 
 enum tcp_state {
 	CLOSED = 0,
@@ -347,6 +347,13 @@ enum tcp_state {
 	CLOSE_WAIT,
 	LAST_ACK,
 	FIN_WAIT_1,
+	FIN_WAIT_1_SOCK_FIN,
+};
+
+static char *tcp_state_str[FIN_WAIT_1_SOCK_FIN + 1] = {
+	"CLOSED", "TAP_SYN_SENT", "SOCK_SYN_SENT", "TAP_SYN_RCVD",
+	"ESTABLISHED", "ESTABLISHED_SOCK_FIN", "CLOSE_WAIT", "LAST_ACK",
+	"FIN_WAIT_1", "FIN_WAIT_1_SOCK_FIN",
 };
 
 #define FIN		(1 << 0)
@@ -357,7 +364,9 @@ enum tcp_state {
 #define OPT_EOL		0
 #define OPT_NOP		1
 #define OPT_MSS		2
+#define OPT_MSS_LEN	4
 #define OPT_WS		3
+#define OPT_WS_LEN	3
 #define OPT_SACKP	4
 #define OPT_SACK	5
 #define OPT_TS		8
@@ -381,8 +390,9 @@ enum tcp_state {
  * @ws_allowed:		Window scaling allowed
  * @ws:			Window scaling factor
  * @tap_window:		Last window size received from tap, scaled
- * @last_ts_sock:	Last activity timestamp from socket for timeout purposes
- * @last_ts_tap:	Last activity timestamp from tap for timeout purposes
+ * @ts_sock:		Last activity timestamp from socket for timeout purposes
+ * @ts_tap:		Last activity timestamp from tap for timeout purposes
+ * @ts_ack_tap:		Last ACK segment timestamp from tap for timeout purposes
  * @mss_guest:		Maximum segment size advertised by guest
  */
 struct tcp_conn {
@@ -410,106 +420,101 @@ struct tcp_conn {
 	int ws;
 	int tap_window;
 
-	struct timespec last_ts_sock;
-	struct timespec last_ts_tap;
+	struct timespec ts_sock;
+	struct timespec ts_tap;
+	struct timespec ts_ack_tap;
 
 	int mss_guest;
 };
 
+static char sock_buf[MAX_WINDOW];
+static uint8_t tcp_act[MAX_CONNS / 8] = { 0 };
 static struct tcp_conn tc[MAX_CONNS];
 
 static int tcp_send_to_tap(struct ctx *c, int s, int flags, char *in, int len);
 
 /**
- * tcp_act_fast_set() - Set socket in bitmap for "fast" timeout events
+ * tcp_act_set() - Set socket in bitmap for timed events
  * @s:		Socket file descriptor number
  */
-static void tcp_act_fast_set(int s)
+static void tcp_act_set(int s)
 {
-	tcp_act_fast[s / 8] |= 1 << (s % 8);
+	tcp_act[s / 8] |= 1 << (s % 8);
 }
 
 /**
- * tcp_act_fast_clear() - Clear socket from bitmap for "fast" timeout events
+ * tcp_act_clear() - Clear socket from bitmap for timed events
  * @s:		Socket file descriptor number
  */
-static void tcp_act_fast_clear(int s)
+static void tcp_act_clear(int s)
 {
-	tcp_act_fast[s / 8] &= ~(1 << (s % 8));
+	tcp_act[s / 8] &= ~(1 << (s % 8));
 }
 
 /**
- * tcp_act_slow_set() - Set socket in bitmap for "slow" timeout events
+ * tcp_set_state() - Set given TCP state for socket, report change to stderr
  * @s:		Socket file descriptor number
+ * @state:	New TCP state to be set
  */
-static void tcp_act_slow_set(int s)
+static void tcp_set_state(int s, enum tcp_state state)
 {
-	tcp_act_slow[s / 8] |= 1 << (s % 8);
-}
-
-/**
- * tcp_act_slow_clear() - Clear socket from bitmap for "slow" timeout events
- * @s:		Socket file descriptor number
- */
-static void tcp_act_slow_clear(int s)
-{
-	tcp_act_slow[s / 8] &= ~(1 << (s % 8));
+	fprintf(stderr, "TCP: socket %i: %s -> %s\n", s,
+		tcp_state_str[tc[s].s], tcp_state_str[state]);
+	tc[s].s = state;
 }
 
 /**
  * tcp_opt_get() - Get option, and value if any, from TCP header
  * @th:		Pointer to TCP header
  * @len:	Length of buffer, including TCP header
- * @type:	Option type to look for
- * @optlen:	Optional, filled with option length if passed
- * @value:	Optional, set to start of option value if passed
+ * @__type:	Option type to look for
+ * @__optlen:	Optional, filled with option length if passed
+ * @__value:	Optional, set to start of option value if passed
  *
  * Return: Option value, meaningful for up to 4 bytes, -1 if not found
  */
-static int tcp_opt_get(struct tcphdr *th, unsigned int len, uint8_t type,
-		       uint8_t *optlen, void *value)
+static int tcp_opt_get(struct tcphdr *th, size_t len, uint8_t __type,
+		       uint8_t *__optlen, char **__value)
 {
-	uint8_t *p, __type, __optlen;
+	uint8_t type, optlen;
+	char *p;
+
+	if (len > th->doff * 4)
+		len = th->doff * 4;
 
 	len -= sizeof(*th);
-	p = (uint8_t *)(th + 1);
+	p = (char *)(th + 1);
 
-	if (len > th->doff * 4 - sizeof(*th))
-		len = th->doff * 4 - sizeof(*th);
-
-	while (len >= 2) {
+	for (; len >= 2; p += optlen, len -= optlen) {
 		switch (*p) {
 		case OPT_EOL:
 			return -1;
 		case OPT_NOP:
-			p++;
-			len--;
+			optlen = 1;
 			break;
 		default:
-			__type = *(p++);
-			__optlen = *(p++);
+			type = *(p++);
+			optlen = *(p++) - 2;
 			len -= 2;
 
-			if (type == __type) {
-				if (optlen)
-					*optlen = __optlen;
-				if (value)
-					value = p;
+			if (type != __type)
+				break;
 
-				if (__optlen - 2 == 0)
-					return 0;
+			if (__optlen)
+				*__optlen = optlen;
+			if (__value)
+				*__value = p;
 
-				if (__optlen - 2 == 1)
-					return *p;
-
-				if (__optlen - 2 == 2)
-					return ntohs(*(uint16_t *)p);
-
+			switch (optlen) {
+			case 0:
+				return 0;
+			case 1:
+				return *p;
+			case 2:
+				return ntohs(*(uint16_t *)p);
+			default:
 				return ntohl(*(uint32_t *)p);
 			}
-
-			p += __optlen - 2;
-			len -= __optlen - 2;
 		}
 	}
 
@@ -524,9 +529,9 @@ static int tcp_opt_get(struct tcphdr *th, unsigned int len, uint8_t type,
 static void tcp_close_and_epoll_del(struct ctx *c, int s)
 {
 	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, s, NULL);
+	tcp_set_state(s, CLOSED);
 	close(s);
-	tcp_act_fast_clear(s);
-	tcp_act_slow_clear(s);
+	tcp_act_clear(s);
 }
 
 /**
@@ -541,7 +546,7 @@ static void tcp_rst(struct ctx *c, int s)
 
 	tcp_send_to_tap(c, s, RST, NULL, 0);
 	tcp_close_and_epoll_del(c, s);
-	tc[s].s = CLOSED;
+	tcp_set_state(s, CLOSED);
 }
 
 /**
@@ -549,76 +554,70 @@ static void tcp_rst(struct ctx *c, int s)
  * @c:		Execution context
  * @s:		File descriptor number for socket
  * @flags:	TCP flags to set
- * @in:		Input buffer, L4 header
- * @len:	Buffer length, at L4
+ * @in:		Payload buffer
+ * @len:	Payload length
  *
- * Return: -1 on error with connection reset, 0 otherwise
+ * Return: negative error code on connection reset, 0 otherwise
  */
 static int tcp_send_to_tap(struct ctx *c, int s, int flags, char *in, int len)
 {
 	char buf[USHRT_MAX] = { 0 }, *data;
 	struct tcp_info info = { 0 };
 	socklen_t sl = sizeof(info);
-	int ws = 0, have_info = 1;
 	struct tcphdr *th;
+	int ws = 0, err;
 
-	if (getsockopt(s, SOL_TCP, TCP_INFO, &info, &sl)) {
-		if (!(flags & RST)) {
-			tcp_rst(c, s);
-			return -1;
-		}
-
-		have_info = 0;
+	if ((err = getsockopt(s, SOL_TCP, TCP_INFO, &info, &sl)) &&
+	    !(flags & RST)) {
+		tcp_rst(c, s);
+		return err;
 	}
 
 	th = (struct tcphdr *)buf;
 	data = (char *)(th + 1);
+	th->doff = sizeof(*th) / 4;
 
-	if (flags & SYN && have_info) {
-		if (tc[s].ws_allowed)
-			ws = info.tcpi_snd_wscale;
-
+	if ((flags & SYN) && !err) {
 		/* Options: MSS, NOP and window scale if allowed (4-8 bytes) */
-		*data++ = 2;
-		*data++ = 4;
+		*data++ = OPT_MSS;
+		*data++ = OPT_MSS_LEN;
 		*(uint16_t *)data = htons(info.tcpi_snd_mss);
-		data += 2;
+		data += OPT_MSS_LEN - 2;
+		th->doff += OPT_MSS_LEN / 4;
 
-		if (ws) {
-			*data++ = 1;
+		if (tc[s].ws_allowed && (ws = info.tcpi_snd_wscale)) {
+			*data++ = OPT_NOP;
 
-			*data++ = 3;
-			*data++ = 3;
-			*data++ = ws;
+			*data++ = OPT_WS;
+			*data++ = OPT_WS_LEN;
+			*data = ws;
+			*data += OPT_WS_LEN - 2;
 
-			th->doff = (20 + 8) / 4;
-		} else {
-			th->doff = (20 + 4) / 4;
+			th->doff += (1 + OPT_WS_LEN) / 4;
 		}
 
+		/* RFC 793, 3.1: "[...] and the first data octet is ISN+1." */
 		th->seq = htonl(tc[s].seq_to_tap++);
 	} else {
-		th->doff = 20 / 4;
-
 		th->seq = htonl(tc[s].seq_to_tap);
 		tc[s].seq_to_tap += len;
 	}
 
-	if ((info.tcpi_bytes_acked > tc[s].tcpi_acked_last || (flags & ACK) ||
-	     len) &&
-	    have_info) {
+	if (!err && ((info.tcpi_bytes_acked > tc[s].tcpi_acked_last) ||
+		     (flags & ACK) || len)) {
 		uint64_t ack_seq;
 
 		th->ack = 1;
-		/* info.tcpi_bytes_acked already includes one byte for SYN, but
-		 * not for incoming connections.
-		 */
-		ack_seq = info.tcpi_bytes_acked + tc[s].seq_init_from_tap;
-		if (!info.tcpi_bytes_acked)
-			ack_seq++;
-		ack_seq &= (uint32_t)~0U;
 
-		tc[s].seq_ack_to_tap = ack_seq;
+		ack_seq = info.tcpi_bytes_acked + tc[s].seq_init_from_tap;
+
+		tc[s].seq_ack_to_tap = ack_seq & (uint32_t)~0U;
+
+		if (tc[s].s == LAST_ACK) {
+			tc[s].seq_ack_to_tap = tc[s].seq_from_tap + 1;
+			th->seq = htonl(ntohl(th->seq) + 1);
+		}
+
 		th->ack_seq = htonl(tc[s].seq_ack_to_tap);
 
 		tc[s].tcpi_acked_last = info.tcpi_bytes_acked;
@@ -636,7 +635,7 @@ static int tcp_send_to_tap(struct ctx *c, int s, int flags, char *in, int len)
 	th->source = tc[s].sock_port;
 	th->dest = tc[s].tap_port;
 
-	if (have_info)
+	if (!err)
 		th->window = htons(info.tcpi_snd_wnd >> info.tcpi_snd_wscale);
 	else
 		th->window = WINDOW_DEFAULT;
@@ -656,23 +655,18 @@ static int tcp_send_to_tap(struct ctx *c, int s, int flags, char *in, int len)
  * @s:		File descriptor number for socket
  * @th:		TCP header, from tap
  * @len:	Buffer length, at L4
+ * @init:	Set if this is the very first segment from tap
  */
-static void tcp_clamp_window(int s, struct tcphdr *th, int len)
+static void tcp_clamp_window(int s, struct tcphdr *th, int len, int init)
 {
-	int ws;
+	if (init) {
+		tc[s].ws = tcp_opt_get(th, len, OPT_WS, NULL, NULL);
+		tc[s].ws_allowed = tc[s].ws >= 0 && tc[s].ws <= MAX_WS;
+		tc[s].ws *= tc[s].ws_allowed;
 
-	if (!tc[s].tap_window) {
-		ws = tcp_opt_get(th, len, OPT_WS, NULL, NULL);
-		if (ws >= 0 && ws <= MAX_WS) {
-			tc[s].ws_allowed = 1;
-			tc[s].ws = ws;
-		} else {
-			tc[s].ws_allowed = 0;
-			tc[s].ws = 0;
-		}
-
-		/* First value is not scaled. Also, don't clamp yet, to avoid
-		 * getting a zero scale just because we set a small window now.
+		/* RFC 7323, 2.2: first value is not scaled. Also, don't clamp
+		 * yet, to avoid getting a zero scale just because we set a
+		 * small window now.
 		 */
 		tc[s].tap_window = ntohs(th->window);
 	} else {
@@ -718,24 +712,30 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	sl = sizeof(tc[s].mss_guest);
 	setsockopt(s, SOL_TCP, TCP_MAXSEG, &tc[s].mss_guest, sl);
 
-	tcp_clamp_window(s, th, len);
+	tcp_clamp_window(s, th, len, 1);
 
 	if (af == AF_INET) {
-		sa = (const struct sockaddr *)&addr4;
+		sa = (struct sockaddr *)&addr4;
 		sl = sizeof(addr4);
 
-		memset(&tc[s].a.a4.zero, 0, sizeof(tc[s].a.a4.zero));
-		memset(&tc[s].a.a4.one, 0xff, sizeof(tc[s].a.a4.one));
-		memcpy(&tc[s].a.a4.a, addr, sizeof(tc[s].a.a4.a));
+		memset(&tc[s].a.a4.zero, 0,    sizeof(tc[s].a.a4.zero));
+		memset(&tc[s].a.a4.one,  0xff, sizeof(tc[s].a.a4.one));
+		memcpy(&tc[s].a.a4.a,    addr, sizeof(tc[s].a.a4.a));
 	} else {
-		sa = (const struct sockaddr *)&addr6;
+		sa = (struct sockaddr *)&addr6;
 		sl = sizeof(addr6);
 
-		memcpy(&tc[s].a.a6, addr, sizeof(tc[s].a.a6));
+		memcpy(&tc[s].a.a6,      addr, sizeof(tc[s].a.a6));
 	}
 
 	tc[s].sock_port = th->dest;
 	tc[s].tap_port = th->source;
+
+	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_sock);
+	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_tap);
+	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_ack_tap);
+
+	tcp_act_set(s);
 
 	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
 	ev.data.fd = s;
@@ -745,7 +745,8 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	tc[s].seq_ack_to_tap = tc[s].seq_from_tap;
 
 	/* TODO: RFC 6528 with SipHash, worth it? */
-	tc[s].seq_ack_from_tap = tc[s].seq_to_tap = 0;
+	tc[s].seq_to_tap = 0;
+	tc[s].seq_ack_from_tap = tc[s].seq_to_tap;
 
 	if (connect(s, sa, sl)) {
 		if (errno != EINPROGRESS) {
@@ -754,17 +755,15 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 		}
 
 		ev.events |= EPOLLOUT;
-		tc[s].s = TAP_SYN_SENT;
+		tcp_set_state(s, TAP_SYN_SENT);
 	} else {
 		if (tcp_send_to_tap(c, s, SYN | ACK, NULL, 0))
 			return;
 
-		tc[s].s = TAP_SYN_RCVD;
+		tcp_set_state(s, TAP_SYN_RCVD);
 	}
 
 	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, s, &ev);
-
-	return;
 }
 
 /**
@@ -773,7 +772,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
  * @tap_port:	tap-facing port
  * @sock_port:	Socket-facing port
  *
- * Return: file descriptor number for socket, if found, -1 otherwise
+ * Return: file descriptor number for socket, if found, -ENOENT otherwise
  */
 static int tcp_sock_lookup(int af, void *addr,
 			   in_port_t tap_port, in_port_t sock_port)
@@ -797,7 +796,7 @@ static int tcp_sock_lookup(int af, void *addr,
 			return i;
 	}
 
-	return -1;
+	return -ENOENT;
 }
 
 /**
@@ -808,10 +807,8 @@ static int tcp_sock_lookup(int af, void *addr,
 static void tcp_conn_from_sock(struct ctx *c, int fd)
 {
 	struct sockaddr_storage sa_r, sa_l;
-	socklen_t sa_len = sizeof(sa_r);
+	socklen_t sa_len = sizeof(sa_l);
 	struct epoll_event ev = { 0 };
-	struct sockaddr_in6 *sa6;
-	struct sockaddr_in *sa4;
 	int s;
 
 	if (getsockname(fd, (struct sockaddr *)&sa_l, &sa_len))
@@ -822,41 +819,41 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 		return;
 
 	if (sa_l.ss_family == AF_INET) {
-		sa4 = (struct sockaddr_in *)&sa_r;
+		struct sockaddr_in *sa4 = (struct sockaddr_in *)&sa_r;
 
 		memset(&tc[s].a.a4.zero, 0, sizeof(tc[s].a.a4.zero));
 		memset(&tc[s].a.a4.one, 0xff, sizeof(tc[s].a.a4.one));
 		memcpy(&tc[s].a.a4.a, &sa4->sin_addr, sizeof(tc[s].a.a4.a));
 
 		tc[s].sock_port = sa4->sin_port;
-
-		sa4 = (struct sockaddr_in *)&sa_l;
-		tc[s].tap_port = sa4->sin_port;
-
+		tc[s].tap_port = ((struct sockaddr_in *)&sa_l)->sin_port;
 	} else if (sa_l.ss_family == AF_INET6) {
-		sa6 = (struct sockaddr_in6 *)&sa_r;
+		struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&sa_r;
 
 		memcpy(&tc[s].a.a6, &sa6->sin6_addr, sizeof(tc[s].a.a6));
 
 		tc[s].sock_port = sa6->sin6_port;
-
-		sa6 = (struct sockaddr_in6 *)&sa_l;
-		tc[s].tap_port = sa6->sin6_port;
+		tc[s].tap_port = ((struct sockaddr_in6 *)&sa_l)->sin6_port;
 	}
 
 	/* TODO: RFC 6528 with SipHash, worth it? */
 	tc[s].seq_to_tap = 0;
+	tc[s].seq_ack_from_tap = tc[s].seq_to_tap + 1;
 
+	tc[s].tap_window = WINDOW_DEFAULT;
 	tc[s].ws_allowed = 1;
 
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].last_ts_sock);
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].last_ts_tap);
+	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_sock);
+	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_tap);
+	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_ack_tap);
+
+	tcp_act_set(s);
 
 	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
 	ev.data.fd = s;
 	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, s, &ev);
 
-	tc[s].s = SOCK_SYN_SENT;
+	tcp_set_state(s, SOCK_SYN_SENT);
 	tcp_send_to_tap(c, s, SYN, NULL, 0);
 }
 
@@ -864,14 +861,13 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
  * tcp_send_to_sock() - Send buffer to socket, update timestamp and sequence
  * @c:			Execution context
  * @s:			File descriptor number for socket
- * @seq:		Previous TCP sequence, host order
  * @data:		Data buffer
  * @len:		Length at L4
  * @extra_flags:	Additional flags for send(), if any
  *
- * Return: -1 on socket error with connection reset, 0 otherwise
+ * Return: negative on socket error with connection reset, 0 otherwise
  */
-static int tcp_send_to_sock(struct ctx *c, int s, int seq, char *data, int len,
+static int tcp_send_to_sock(struct ctx *c, int s, char *data, int len,
 			    int extra_flags)
 {
 	int err = send(s, data, len, MSG_DONTWAIT | MSG_NOSIGNAL | extra_flags);
@@ -884,28 +880,28 @@ static int tcp_send_to_sock(struct ctx *c, int s, int seq, char *data, int len,
 			return 0;
 		}
 
+		err = errno;
 		tcp_rst(c, s);
-		return -1;
+		return -err;
 	}
 
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].last_ts_sock);
-	tc[s].seq_from_tap = seq + len;
+	tc[s].seq_from_tap += len;
 
 	return 0;
 }
 
 /**
- * tcp_check_dupack() - Check if given ACK number is duplicated, update counter
+ * tcp_is_dupack() - Check if given ACK number is duplicated, update counter
  * @s:		File descriptor number for socket
  * @ack_seq:	ACK sequence, host order
  *
- * Return: 1 on two duplicated ACKs observed, with counter reset, 0 otherwise
+ * Return: -EAGAIN on duplicated ACKs observed, with counter reset, 0 otherwise
  */
-static int tcp_check_dupack(int s, uint32_t ack_seq)
+static int tcp_is_dupack(int s, uint32_t ack_seq)
 {
 	if (ack_seq == tc[s].seq_ack_from_tap && ++tc[s].dup_acks == 2) {
 		tc[s].dup_acks = 0;
-		return 1;
+		return -EAGAIN;
 	}
 
 	return 0;
@@ -916,7 +912,7 @@ static int tcp_check_dupack(int s, uint32_t ack_seq)
  * @s:		File descriptor number for socket
  * @ack_seq:	ACK sequence, host order
  *
- * Return: -1 on invalid sequence, 0 otherwise
+ * Return: negative on invalid sequence, 0 otherwise
  */
 static int tcp_sock_consume(int s, uint32_t ack_seq)
 {
@@ -926,7 +922,7 @@ static int tcp_sock_consume(int s, uint32_t ack_seq)
 	to_ack = ack_seq - tc[s].seq_ack_from_tap;
 
 	if (to_ack < 0)
-		return -1;
+		return -EIO;
 
 	recv(s, NULL, to_ack, MSG_DONTWAIT | MSG_TRUNC);
 	tc[s].seq_ack_from_tap = ack_seq;
@@ -939,27 +935,29 @@ static int tcp_sock_consume(int s, uint32_t ack_seq)
  * @c:		Execution context
  * @s:		File descriptor number for socket
  *
- * Return: non-zero on socket error or pending data, 0 otherwise
+ * Return: negative on connection reset, 1 on pending data, 0 otherwise
  */
 static int tcp_data_from_sock(struct ctx *c, int s)
 {
-	int len, offset, left, send;
+	int len, err, offset, left, send;
 
 	/* Don't dequeue until acknowledged by guest */
-	len = recv(s, tcp_in_buf, sizeof(tcp_in_buf), MSG_DONTWAIT | MSG_PEEK);
+	len = recv(s, sock_buf, sizeof(sock_buf), MSG_DONTWAIT | MSG_PEEK);
 	if (len < 0) {
-		if (errno != EAGAIN && errno != EWOULDBLOCK)
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
 			tcp_rst(c, s);
-		return 1;
+			return -errno;
+		}
+		return 0;
 	}
 
 	if (len == 0) {
 		if (tc[s].s >= ESTABLISHED_SOCK_FIN)
 			return 0;
 
-		tc[s].s = ESTABLISHED_SOCK_FIN;
-		if (tcp_send_to_tap(c, s, FIN | ACK, NULL, 0))
-			return 0;
+		tcp_set_state(s, ESTABLISHED_SOCK_FIN);
+		if ((err = tcp_send_to_tap(c, s, FIN | ACK, NULL, 0)))
+			return err;
 
 		left = 0;
 		goto out;
@@ -973,16 +971,15 @@ static int tcp_data_from_sock(struct ctx *c, int s)
 		else
 			send = tc[s].mss_guest;
 
-		if (tcp_send_to_tap(c, s, 0, tcp_in_buf + offset, send))
-			return 0;
+		if ((err = tcp_send_to_tap(c, s, 0, sock_buf + offset, send)))
+			return err;
 
 		offset += send;
 		left -= send;
 	}
 
 out:
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].last_ts_tap);
-	tcp_act_slow_set(s);
+	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_sock);
 
 	return !!left;
 }
@@ -997,7 +994,7 @@ out:
 void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 {
 	struct tcphdr *th = (struct tcphdr *)in;
-	size_t off;
+	size_t off, skip = 0;
 	int s, ws;
 
 	if (len < sizeof(*th))
@@ -1007,9 +1004,7 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 	if (off < sizeof(*th) || off > len)
 		return;
 
-	s = tcp_sock_lookup(af, addr, th->source, th->dest);
-
-	if (s < 0) {
+	if ((s = tcp_sock_lookup(af, addr, th->source, th->dest)) < 0) {
 		if (th->syn)
 			tcp_conn_from_tap(c, af, addr, th, len);
 		return;
@@ -1020,15 +1015,19 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 		return;
 	}
 
-	tcp_clamp_window(s, th, len);
+	tcp_clamp_window(s, th, len, th->syn && th->ack);
 
-	if (th->ack)
-		clock_gettime(CLOCK_MONOTONIC, &tc[s].last_ts_tap);
+	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_tap);
+
+	if (ntohl(th->seq) < tc[s].seq_from_tap)
+		skip = tc[s].seq_from_tap - ntohl(th->seq);
 
 	switch (tc[s].s) {
 	case SOCK_SYN_SENT:
-		if (!th->syn || !th->ack)
+		if (!th->syn || !th->ack) {
+			tcp_rst(c, s);
 			return;
+		}
 
 		tc[s].mss_guest = tcp_opt_get(th, len, OPT_MSS, NULL, NULL);
 		if (tc[s].mss_guest < 0)
@@ -1045,19 +1044,20 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 			return;
 		}
 
-		tc[s].seq_from_tap = tc[s].seq_init_from_tap = ntohl(th->seq);
+		/* info.tcpi_bytes_acked already includes one byte for SYN, but
+		 * not for incoming connections.
+		 */
+		tc[s].seq_init_from_tap = ntohl(th->seq) + 1;
+		tc[s].seq_from_tap = tc[s].seq_init_from_tap;
 		tc[s].seq_ack_to_tap = tc[s].seq_from_tap;
 
-		tc[s].s = ESTABLISHED;
+		tcp_set_state(s, ESTABLISHED);
 		tcp_send_to_tap(c, s, ACK, NULL, 0);
-		break;
-	case TAP_SYN_SENT:
 		break;
 	case TAP_SYN_RCVD:
 		if (th->fin) {
 			shutdown(s, SHUT_WR);
-			tc[s].s = FIN_WAIT_1;
-
+			tcp_set_state(s, FIN_WAIT_1);
 			break;
 		}
 
@@ -1066,83 +1066,81 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 			return;
 		}
 
-		tc[s].seq_ack_from_tap = ntohl(th->ack_seq);
-
-		tc[s].s = ESTABLISHED;
+		tcp_set_state(s, ESTABLISHED);
 		break;
 	case ESTABLISHED:
+	case ESTABLISHED_SOCK_FIN:
+		clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_ack_tap);
+
+		if (ntohl(th->seq) > tc[s].seq_from_tap) {
+			tc[s].seq_from_tap = tc[s].seq_ack_to_tap;
+			tcp_send_to_tap(c, s, ACK, NULL, 0);
+			break;
+		}
+
 		if (th->ack) {
 			int retrans = 0;
 
-			if (len == th->doff)
-				retrans = tcp_check_dupack(s, th->ack_seq);
+			if (len == off)
+				retrans = tcp_is_dupack(s, ntohl(th->ack_seq));
 
 			if (tcp_sock_consume(s, ntohl(th->ack_seq))) {
 				tcp_rst(c, s);
 				return;
 			}
 
-			if (retrans) {
+			tc[s].seq_ack_from_tap = ntohl(th->ack_seq);
+
+			if (retrans)
 				tc[s].seq_to_tap = tc[s].seq_ack_from_tap;
-				tcp_data_from_sock(c, s);
+
+			if (tc[s].s == ESTABLISHED_SOCK_FIN) {
+				if (!tcp_data_from_sock(c, s))
+					tcp_set_state(s, CLOSE_WAIT);
 			}
 		}
 
-		if (tcp_send_to_sock(c, s, ntohl(th->seq), in + off, len - off,
+		if (skip < len - off &&
+		    tcp_send_to_sock(c, s, in + off + skip, len - off - skip,
 				     th->psh ? 0 : MSG_MORE))
 			break;
 
 		if (th->fin) {
 			shutdown(s, SHUT_WR);
-			tc[s].s = FIN_WAIT_1;
+			if (tc[s].s == ESTABLISHED)
+				tcp_set_state(s, FIN_WAIT_1);
+			else
+				tcp_set_state(s, LAST_ACK);
 		}
 
 		break;
-	case ESTABLISHED_SOCK_FIN:
-		if (tcp_send_to_sock(c, s, ntohl(th->seq), in + off, len - off,
-				     th->psh ? 0 : MSG_MORE) < 0)
-			break;
-
-		if (th->ack) {
-			shutdown(s, SHUT_RD);
-			if (!tcp_data_from_sock(c, s))
-				tc[s].s = CLOSE_WAIT;
-
-			if (tcp_sock_consume(s, ntohl(th->ack_seq))) {
-				tcp_rst(c, s);
-				return;
-			}
-		}
-
-		break;
-
 	case CLOSE_WAIT:
 		if (tcp_sock_consume(s, ntohl(th->ack_seq))) {
 			tcp_rst(c, s);
 			return;
 		}
 
+		if (skip < len - off &&
+		    tcp_send_to_sock(c, s, in + off + skip, len - off - skip,
+				     th->psh ? 0 : MSG_MORE))
+			break;
+
 		if (th->fin) {
 			shutdown(s, SHUT_WR);
-			tc[s].s = LAST_ACK;
+			tcp_set_state(s, LAST_ACK);
 		}
 
 		break;
+	case FIN_WAIT_1_SOCK_FIN:
+		if (th->ack)
+			tcp_close_and_epoll_del(c, s);
+		break;
 	case FIN_WAIT_1:
+	case TAP_SYN_SENT:
 	case LAST_ACK:
 	case CLOSED:	/* ;) */
 		break;
 	}
-
-	if (tc[s].seq_to_tap > tc[s].seq_ack_from_tap)
-		tcp_act_slow_set(s);
-	else
-		tcp_act_slow_clear(s);
-
-	if (tc[s].seq_from_tap > tc[s].seq_ack_to_tap)
-		tcp_act_fast_set(s);
-	else
-		tcp_act_fast_clear(s);
 }
 
 /**
@@ -1162,14 +1160,15 @@ static void tcp_connect_finish(struct ctx *c, int s)
 		return;
 	}
 
-	if (tcp_send_to_tap(c, s, SYN | ACK, NULL, 0) < 0)
+	if (tcp_send_to_tap(c, s, SYN | ACK, NULL, 0))
 		return;
 
+	/* Drop EPOLLOUT, only used to wait for connect() to complete */
 	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
 	ev.data.fd = s;
 	epoll_ctl(c->epollfd, EPOLL_CTL_MOD, s, &ev);
 
-	tc[s].s = TAP_SYN_RCVD;
+	tcp_set_state(s, TAP_SYN_RCVD);
 }
 
 /**
@@ -1184,6 +1183,7 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 	int so;
 
 	if (tc[s].s == LAST_ACK) {
+		tcp_send_to_tap(c, s, ACK, NULL, 0);
 		tcp_close_and_epoll_del(c, s);
 		return;
 	}
@@ -1210,21 +1210,21 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 		tcp_data_from_sock(c, s);
 
 	if (events & EPOLLRDHUP || events & EPOLLHUP) {
-		if (tc[s].s == ESTABLISHED)
-			tc[s].s = ESTABLISHED_SOCK_FIN;
-
-		tcp_send_to_tap(c, s, FIN | ACK, NULL, 0);
-
-		if (tc[s].s == FIN_WAIT_1) {
+		if (tc[s].s == ESTABLISHED) {
+			tcp_set_state(s, ESTABLISHED_SOCK_FIN);
 			shutdown(s, SHUT_RD);
+			tcp_data_from_sock(c, s);
+			tcp_send_to_tap(c, s, FIN | ACK, NULL, 0);
+		} else if (tc[s].s == FIN_WAIT_1) {
+			tcp_set_state(s, FIN_WAIT_1_SOCK_FIN);
+			shutdown(s, SHUT_RD);
+			tcp_data_from_sock(c, s);
+			tcp_send_to_tap(c, s, FIN | ACK, NULL, 0);
 
-			if (tcp_sock_consume(s, ntohl(tc[s].seq_ack_from_tap))) {
+			if (tcp_sock_consume(s, tc[s].seq_ack_from_tap)) {
 				tcp_rst(c, s);
 				return;
 			}
-
-			tcp_close_and_epoll_del(c, s);
-			tc[s].s = CLOSED;
 		}
 	}
 }
@@ -1240,9 +1240,9 @@ int tcp_sock_init(struct ctx *c)
 	in_port_t port;
 
 	for (port = 0; port < (1 << 15) + (1 << 14); port++) {
-		if (c->v4 && sock_l4_add(c, 4, IPPROTO_TCP, htons(port)) < 0)
+		if (c->v4 && sock_l4_add(c, 4, IPPROTO_TCP, port) < 0)
 			return -1;
-		if (c->v6 && sock_l4_add(c, 6, IPPROTO_TCP, htons(port)) < 0)
+		if (c->v6 && sock_l4_add(c, 6, IPPROTO_TCP, port) < 0)
 			return -1;
 	}
 
@@ -1250,118 +1250,92 @@ int tcp_sock_init(struct ctx *c)
 }
 
 /**
- * tcp_periodic_fast_one() - Handler for "fast" timeout events on one socket
- * @c:		Execution context
- * @s:		File descriptor number for socket
- * @ts:		Timestamp from caller
- *
- * Return: 0 if socket needs to be monitored further, non-zero otherwise
- */
-int tcp_periodic_fast_one(struct ctx *c, int s, struct timespec *ts)
-{
-	if (timespec_diff_ms(ts, &tc[s].last_ts_sock) < SOCK_ACK_INTERVAL)
-		return 0;
-
-	tc[s].last_ts_sock = *ts;
-
-	tcp_send_to_tap(c, s, 0, NULL, 0);
-
-	return tc[s].seq_from_tap == tc[s].seq_ack_to_tap;
-}
-
-/**
- * tcp_periodic_fast() - Handle sockets in "fast" event bitmap, clear as needed
- * @c:		Execution context
- */
-void tcp_periodic_fast(struct ctx *c)
-{
-	long *word = (long *)tcp_act_fast, tmp;
-	struct timespec now;
-	unsigned int i;
-	int n, s;
-
-	clock_gettime(CLOCK_MONOTONIC, &now);
-
-	for (i = 0; i < sizeof(tcp_act_fast) / sizeof(long); i++, word++) {
-		tmp = *word;
-		while ((n = ffsl(tmp))) {
-			tmp &= ~(1UL << (n - 1));
-
-			s = i * sizeof(long) * 8 + n - 1;
-
-			if (tcp_periodic_fast_one(c, s, &now))
-				*word &= ~(1UL << (n - 1));
-		}
-	}
-}
-
-/**
- * tcp_periodic_fast_one() - Handler for "slow" timeout events on one socket
+ * tcp_timer_one() - Handler for timed events on one socket
  * @c:		Execution context
  * @s:		File descriptor number for socket
  * @ts:		Timestamp from caller
  */
-void tcp_periodic_slow_one(struct ctx *c, int s, struct timespec *ts)
+static void tcp_timer_one(struct ctx *c, int s, struct timespec *ts)
 {
+	int ack_tap_ms = timespec_diff_ms(ts, &tc[s].ts_ack_tap);
+	int sock_ms = timespec_diff_ms(ts, &tc[s].ts_tap);
+	int tap_ms = timespec_diff_ms(ts, &tc[s].ts_tap);
+
 	switch (tc[s].s) {
 	case SOCK_SYN_SENT:
-	case TAP_SYN_SENT:
 	case TAP_SYN_RCVD:
-		if (timespec_diff_ms(ts, &tc[s].last_ts_tap) > SYN_TIMEOUT)
+		if (ack_tap_ms > SYN_TIMEOUT)
 			tcp_rst(c, s);
+
 		break;
 	case ESTABLISHED_SOCK_FIN:
-		if (timespec_diff_ms(ts, &tc[s].last_ts_tap) > FIN_TIMEOUT) {
+		if (ack_tap_ms > FIN_TIMEOUT) {
 			tcp_rst(c, s);
 			break;
 		}
 		/* Falls through */
 	case ESTABLISHED:
-		if (tc[s].seq_ack_from_tap < tc[s].seq_to_tap &&
-		    timespec_diff_ms(ts, &tc[s].last_ts_tap) > ACK_TIMEOUT) {
-			tc[s].seq_to_tap = tc[s].seq_ack_from_tap;
-			tcp_data_from_sock(c, s);
+		if (tap_ms > ACT_TIMEOUT && sock_ms > ACT_TIMEOUT)
+			tcp_rst(c, s);
+
+		if (tc[s].seq_to_tap == tc[s].seq_ack_from_tap &&
+		    tc[s].seq_from_tap == tc[s].seq_ack_to_tap) {
+			tc[s].ts_sock = *ts;
+			break;
 		}
 
-		if (timespec_diff_ms(ts, &tc[s].last_ts_tap) > ACT_TIMEOUT &&
-		    timespec_diff_ms(ts, &tc[s].last_ts_sock) > ACT_TIMEOUT)
-			tcp_rst(c, s);
+		if (sock_ms > ACK_INTERVAL) {
+			if (tc[s].seq_from_tap > tc[s].seq_ack_to_tap)
+				tcp_send_to_tap(c, s, 0, NULL, 0);
+		}
+
+		if (ack_tap_ms > ACK_TIMEOUT) {
+			if (tc[s].seq_ack_from_tap < tc[s].seq_to_tap) {
+				tc[s].seq_to_tap = tc[s].seq_ack_from_tap;
+				tc[s].ts_ack_tap = *ts;
+				tcp_data_from_sock(c, s);
+			}
+		}
+
+		if (tc[s].seq_from_tap == tc[s].seq_ack_to_tap)
+			tc[s].ts_sock = *ts;
 
 		break;
 	case CLOSE_WAIT:
 	case FIN_WAIT_1:
-		if (timespec_diff_ms(ts, &tc[s].last_ts_tap) > FIN_TIMEOUT)
+		if (sock_ms > FIN_TIMEOUT)
+			tcp_rst(c, s);
+		break;
+	case FIN_WAIT_1_SOCK_FIN:
+		if (ack_tap_ms > FIN_TIMEOUT)
 			tcp_rst(c, s);
 		break;
 	case LAST_ACK:
-		if (timespec_diff_ms(ts, &tc[s].last_ts_sock) >
-		    LAST_ACK_TIMEOUT)
+		if (sock_ms > LAST_ACK_TIMEOUT)
 			tcp_rst(c, s);
 		break;
+	case TAP_SYN_SENT:
 	case CLOSED:
 		break;
 	}
 }
 
 /**
- * tcp_periodic_slow() - Handle sockets in "slow" event bitmap
+ * tcp_timer() - Scan activity bitmap for sockets waiting for timed events
  * @c:		Execution context
+ * @ts:		Timestamp from caller
  */
-void tcp_periodic_slow(struct ctx *c)
+void tcp_timer(struct ctx *c, struct timespec *ts)
 {
-	long *word = (long *)tcp_act_slow, tmp;
-	struct timespec now;
+	long *word = (long *)tcp_act, tmp;
 	unsigned int i;
 	int n;
 
-	clock_gettime(CLOCK_MONOTONIC, &now);
-
-	for (i = 0; i < sizeof(tcp_act_slow) / sizeof(long); i++, word++) {
+	for (i = 0; i < sizeof(tcp_act) / sizeof(long); i++, word++) {
 		tmp = *word;
 		while ((n = ffsl(tmp))) {
 			tmp &= ~(1UL << (n - 1));
-			tcp_periodic_slow_one(c, i * sizeof(long) * 8 + n - 1,
-					      &now);
+			tcp_timer_one(c, i * sizeof(long) * 8 + n - 1, ts);
 		}
 	}
 }

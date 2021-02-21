@@ -48,9 +48,16 @@ ip netns add passt
 ip link add veth_passt up netns passt type veth peer name veth_passt
 ip link set dev veth_passt up
 
+
 ip -n passt addr add 192.0.2.2/24 dev veth_passt
 ip addr add 192.0.2.1/24 dev veth_passt
 ip -n passt route add default via 192.0.2.1
+
+sysctl -w net.ipv4.ip_forward=1
+nft delete table passt_nat 2>/dev/null || :
+nft add table passt_nat
+nft 'add chain passt_nat postrouting { type nat hook postrouting priority -100 ; }'
+nft add rule passt_nat postrouting ip saddr 192.0.2.2 masquerade
 
 ipv6_addr="$(ipv6_devaddr "$(ipv6_dev)")"
 ipv6_passt="$(ipv6_mangle "${ipv6_addr}")"
@@ -59,11 +66,15 @@ ip -n passt addr add "${ipv6_passt}/$(ipv6_mask "${ipv6_addr}")" dev veth_passt
 ip addr add "${ipv6_addr}" dev veth_passt
 passt_ll="$(ipv6_ll_addr "veth_passt")"
 main_ll="$(get_token "link/ether" $(ip -o li sh veth_passt))"
-ip -n passt neigh add "${passt_ll%%/*}" dev veth_passt lladdr "${main_ll}"
+ip neigh add "${passt_ll%%/*}" dev veth_passt lladdr "${main_ll}"
 ip -n passt route add default via "${passt_ll%%/*}" dev veth_passt
+
+sysctl -w net.ipv6.conf.all.forwarding=1
+
 
 ethtool -K veth_passt tx off
 ip netns exec passt ethtool -K veth_passt tx off
 ulimit -n 300000
+
 
 ip netns exec passt ./passt

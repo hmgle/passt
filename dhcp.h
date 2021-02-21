@@ -1,1 +1,1 @@
-int dhcp(struct ctx *c, unsigned len, struct ethhdr *eh);
+int dhcp(struct ctx *c, struct ethhdr *eh, size_t len);

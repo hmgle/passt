@@ -51,9 +51,7 @@
 
 #define EPOLL_EVENTS		10
 
-#define EPOLL_TIMEOUT		100 /* ms, for protocol periodic handlers */
-#define PERIODIC_HANDLER_FAST	100
-#define PERIODIC_HANDLER_SLOW	1000
+#define TIMER_INTERVAL		20 /* ms, for protocol periodic handlers */
 
 /**
  * sock_unix() - Create and bind AF_UNIX socket, add to epoll list
@@ -294,7 +292,7 @@ static void get_dns(struct ctx *c)
 }
 
 /**
- * tap4_handler() - IPv4 packet handler for tap file descriptor
+ * tap4_handler() - IPv4 and ARP packet handler for tap file descriptor
  * @c:		Execution context
  * @len:	Total L2 packet length
  * @in:		Packet buffer, L2 headers
@@ -303,11 +301,17 @@ static void tap4_handler(struct ctx *c, char *in, size_t len)
 {
 	struct ethhdr *eh = (struct ethhdr *)in;
 	struct iphdr *iph = (struct iphdr *)(eh + 1);
-	char *l4h = (char *)iph + iph->ihl * 4;
 	char buf_s[BUFSIZ], buf_d[BUFSIZ];
+	char *l4h;
 
-	if (arp(c, len, eh) || dhcp(c, len, eh))
+	if (arp(c, eh, len) || dhcp(c, eh, len))
 		return;
+
+	if (len < sizeof(*eh) + sizeof(*iph))
+		return;
+
+	l4h = (char *)iph + iph->ihl * 4;
+	len -= (intptr_t)l4h - (intptr_t)eh;
 
 	if (iph->protocol == IPPROTO_ICMP) {
 		fprintf(stderr, "icmp from tap: %s -> %s\n",
@@ -316,6 +320,9 @@ static void tap4_handler(struct ctx *c, char *in, size_t len)
 	} else {
 		struct tcphdr *th = (struct tcphdr *)l4h;
 
+		if (len < sizeof(*th) && len < sizeof(struct udphdr))
+			return;
+
 		fprintf(stderr, "%s from tap: %s:%i -> %s:%i\n",
 			getprotobynumber(iph->protocol)->p_name,
 			inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
@@ -323,8 +330,6 @@ static void tap4_handler(struct ctx *c, char *in, size_t len)
 			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
 			ntohs(th->dest));
 	}
-
-	len -= (intptr_t)l4h - (intptr_t)eh;
 
 	if (iph->protocol == IPPROTO_TCP)
 		tcp_tap_handler(c, AF_INET, &iph->daddr, l4h, len);
@@ -346,33 +351,21 @@ static void tap6_handler(struct ctx *c, char *in, size_t len)
 	uint8_t proto;
 	char *l4h;
 
-	if (ndp(c, len, eh))
+	if (len < sizeof(*eh) + sizeof(*ip6h))
+		return;
+
+	if (ndp(c, eh, len))
 		return;
 
 	l4h = ipv6_l4hdr(ip6h, &proto);
 
 	/* TODO: Assign MAC address to guest so that, together with prefix
-	 * assigned via NDP, address matches the one on the host. Then drop
-	 * address change and checksum recomputation.
+	 * assigned via NDP, address matches the one from the host.
 	 */
 	c->addr6_guest = ip6h->saddr;
 	ip6h->saddr = c->addr6;
-	if (proto == IPPROTO_TCP) {
-		struct tcphdr *th = (struct tcphdr *)(ip6h + 1);
 
-		th->check = 0;
-		th->check = csum_ip4(ip6h, len + sizeof(*ip6h));
-	} else if (proto == IPPROTO_UDP) {
-		struct udphdr *uh = (struct udphdr *)(ip6h + 1);
-
-		uh->check = 0;
-		uh->check = csum_ip4(ip6h, len + sizeof(*ip6h));
-	} else if (proto == IPPROTO_ICMPV6) {
-		struct icmp6hdr *ih = (struct icmp6hdr *)(ip6h + 1);
-
-		ih->icmp6_cksum = 0;
-		ih->icmp6_cksum = csum_ip4(ip6h, len + sizeof(*ip6h));
-	}
+	len -= (intptr_t)l4h - (intptr_t)eh;
 
 	if (proto == IPPROTO_ICMPV6) {
 		fprintf(stderr, "icmpv6 from tap: %s ->\n\t%s\n",
@@ -381,6 +374,9 @@ static void tap6_handler(struct ctx *c, char *in, size_t len)
 		);
 	} else {
 		struct tcphdr *th = (struct tcphdr *)l4h;
+
+		if (len < sizeof(*th) && len < sizeof(struct udphdr))
+			return;
 
 		fprintf(stderr, "%s from tap: [%s]:%i\n"
 				"\t-> [%s]:%i\n",
@@ -391,8 +387,6 @@ static void tap6_handler(struct ctx *c, char *in, size_t len)
 			ntohs(th->dest));
 	}
 
-	len -= (intptr_t)l4h - (intptr_t)eh;
-
 	if (proto == IPPROTO_TCP)
 		tcp_tap_handler(c, AF_INET6, &ip6h->daddr, l4h, len);
 	else if (proto == IPPROTO_UDP)
@@ -400,19 +394,46 @@ static void tap6_handler(struct ctx *c, char *in, size_t len)
 }
 
 /**
- * tap_handler() - IPv4/IPv6/ARP packet handler for tap file descriptor
+ * tap_handler() - Packet handler for tap file descriptor
  * @c:		Execution context
- * @len:	Total L2 packet length
- * @in:		Packet buffer, L2 headers
+ *
+ * Return: -ECONNRESET if tap connection was lost, 0 otherwise
  */
-static void tap_handler(struct ctx *c, char *in, size_t len)
+static int tap_handler(struct ctx *c)
 {
-	struct ethhdr *eh = (struct ethhdr *)in;
+	char buf[ETH_MAX_MTU];
+	struct ethhdr *eh;
+	uint32_t vnet_len;
+	ssize_t n;
 
-	if (eh->h_proto == ntohs(ETH_P_IP) || eh->h_proto == ntohs(ETH_P_ARP))
-		tap4_handler(c, in, len);
-	else if (eh->h_proto == ntohs(ETH_P_IPV6))
-		tap6_handler(c, in, len);
+	eh = (struct ethhdr *)buf;
+
+	while ((n = recv(c->fd_unix, &vnet_len, 4, MSG_DONTWAIT)) == 4) {
+		n = recv(c->fd_unix, buf, ntohl(vnet_len), MSG_DONTWAIT);
+
+		if (n < (ssize_t)sizeof(*eh))
+			break;
+
+		switch (ntohs(eh->h_proto)) {
+		case ETH_P_IP:
+		case ETH_P_ARP:
+			tap4_handler(c, buf, n);
+			break;
+		case ETH_P_IPV6:
+			tap6_handler(c, buf, n);
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (n >= 0 || errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+		return 0;
+
+	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_unix, NULL);
+	close(c->fd_unix);
+
+	return -ECONNRESET;
 }
 
 /**
@@ -429,29 +450,30 @@ static void sock_handler(struct ctx *c, int fd, uint32_t events)
 	sl = sizeof(so);
 
 	if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &so, &sl) ||
-	    so == SOCK_STREAM)
+	    so == SOCK_STREAM) {
+		fprintf(stderr, "TCP: packet from socket %i\n", fd);
 		tcp_sock_handler(c, fd, events);
-	else if (so == SOCK_DGRAM)
+	}
+	else if (so == SOCK_DGRAM) {
 		udp_sock_handler(c, fd, events);
+		fprintf(stderr, "UDP: packet from socket %i\n", fd);
+	}
 }
 
 /**
- * periodic_handler() - Run periodic tasks for L4 protocol handlers
+ * timer_handler() - Run periodic tasks for L4 protocol handlers
  * @c:		Execution context
  * @last:	Timestamp of last run, updated on return
  */
-static void periodic_handler(struct ctx *c, struct timespec *last)
+static void timer_handler(struct ctx *c, struct timespec *last)
 {
 	struct timespec tmp;
-	int elapsed_ms;
 
 	clock_gettime(CLOCK_MONOTONIC, &tmp);
-	elapsed_ms = timespec_diff_ms(&tmp, last);
+	if (timespec_diff_ms(&tmp, last) < TIMER_INTERVAL)
+		return;
 
-	if (elapsed_ms >= PERIODIC_HANDLER_FAST)
-		tcp_periodic_fast(c);
-	if (elapsed_ms >= PERIODIC_HANDLER_SLOW)
-		tcp_periodic_slow(c);
+	tcp_timer(c, &tmp);
 
 	*last = tmp;
 }
@@ -481,10 +503,8 @@ int main(int argc, char **argv)
 	struct epoll_event events[EPOLL_EVENTS];
 	struct epoll_event ev = { 0 };
 	struct timespec last_time;
-	char buf[ETH_MAX_MTU];
 	struct ctx c = { 0 };
-	int nfds, i, len;
-	int fd_unix;
+	int nfds, i, fd_unix;
 
 	if (argc != 1)
 		usage(argv[0]);
@@ -537,14 +557,14 @@ listen:
 		"./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio\n\n");
 
 	c.fd_unix = accept(fd_unix, NULL, NULL);
-	ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
+	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
 	ev.data.fd = c.fd_unix;
 	epoll_ctl(c.epollfd, EPOLL_CTL_ADD, c.fd_unix, &ev);
 
 	clock_gettime(CLOCK_MONOTONIC, &last_time);
 
 loop:
-	nfds = epoll_wait(c.epollfd, events, EPOLL_EVENTS, EPOLL_TIMEOUT);
+	nfds = epoll_wait(c.epollfd, events, EPOLL_EVENTS, TIMER_INTERVAL);
 	if (nfds == -1 && errno != EINTR) {
 		perror("epoll_wait");
 		exit(EXIT_FAILURE);
@@ -552,36 +572,16 @@ loop:
 
 	for (i = 0; i < nfds; i++) {
 		if (events[i].data.fd == c.fd_unix) {
-			len = recv(events[i].data.fd, buf, sizeof(buf),
-				   MSG_DONTWAIT);
-
-			if (len <= 0) {
-				epoll_ctl(c.epollfd, EPOLL_CTL_DEL, c.fd_unix,
-					  &ev);
-				close(c.fd_unix);
+			if (tap_handler(&c))
 				goto listen;
-			}
-
-			if (len == 0 || (len < 0 && errno == EINTR))
-				continue;
-
-			if (len < 0) {
-				if (errno == EAGAIN || errno == EWOULDBLOCK)
-					break;
-				goto out;
-			}
-
-			tap_handler(&c, buf + 4, ntohl(*(uint32_t *)buf));
 		} else {
 			sock_handler(&c, events[i].data.fd, events[i].events);
 		}
 	}
 
-	periodic_handler(&c, &last_time);
-	clock_gettime(CLOCK_MONOTONIC, &last_time);
+	timer_handler(&c, &last_time);
 
 	goto loop;
 
-out:
 	return 0;
 }

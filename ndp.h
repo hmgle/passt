@@ -1,1 +1,1 @@
-int ndp(struct ctx *c, unsigned len, struct ethhdr *eh);
+int ndp(struct ctx *c, struct ethhdr *eh, size_t len);

@@ -124,8 +124,6 @@ void udp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 		if (!(s = udp4_sock_port[ntohs(uh->source)]))
 			return;
 
-		fprintf(stderr, "udp from tap: using socket %i\n", s);
-
 		sa.sin_addr = *(struct in_addr *)addr;
 
 		sendto(s, in + sizeof(*uh), len - sizeof(*uh), MSG_DONTWAIT,
@@ -140,15 +138,14 @@ void udp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 		if (!(s = udp6_sock_port[ntohs(uh->source)]))
 			return;
 
-		fprintf(stderr, "udp from tap: using socket %i\n", s);
-
-		sendto(s, in + sizeof(*uh), len - sizeof(*uh), MSG_DONTWAIT,
+		sendto(s, in + sizeof(*uh), len - sizeof(*uh),
+		       MSG_DONTWAIT | MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
 	}
 }
 
 /**
- * udp_sock_init() - Create and bind listening sockets for inbound connections
+ * udp_sock_init() - Create and bind listening sockets for inbound packets
  * @c:		Execution context
  *
  * Return: 0 on success, -1 on failure
@@ -159,15 +156,19 @@ int udp_sock_init(struct ctx *c)
 	int s;
 
 	for (port = 0; port < USHRT_MAX; port++) {
-		if (c->v4 &&
-		    (s = sock_l4_add(c, 4, IPPROTO_UDP, htons(port))) < 0)
-			return -1;
-		udp4_sock_port[port] = s;
+		if (c->v4) {
+			if ((s = sock_l4_add(c, 4, IPPROTO_UDP, port)) < 0)
+				return -1;
 
-		if (c->v6 &&
-		    (s = sock_l4_add(c, 6, IPPROTO_UDP, htons(port))) < 0)
-			return -1;
-		udp6_sock_port[port] = s;
+			udp4_sock_port[port] = s;
+		}
+
+		if (c->v6) {
+			if ((s = sock_l4_add(c, 6, IPPROTO_UDP, port)) < 0)
+				return -1;
+
+			udp6_sock_port[port] = s;
+		}
 	}
 
 	return 0;

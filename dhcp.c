@@ -163,22 +163,39 @@ static int fill(struct msg *m)
  *
  * Return: 0 if it's not a DHCP message, 1 if handled, -1 on failure
  */
-int dhcp(struct ctx *c, unsigned len, struct ethhdr *eh)
+int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 {
 	struct iphdr *iph = (struct iphdr *)(eh + 1);
-	struct udphdr *uh = (struct udphdr *)((char *)iph + iph->ihl * 4);
-	struct msg *m = (struct msg *)(uh + 1);
-	unsigned int i, mlen = len - sizeof(*eh) - sizeof(*iph);
+	size_t mlen, olen;
+	struct udphdr *uh;
+	unsigned int i;
+	struct msg *m;
+
+	if (len < sizeof(*eh) + sizeof(*iph))
+		return 0;
+
+	if (len < sizeof(*eh) + iph->ihl * 4 + sizeof(*uh))
+		return 0;
+
+	uh = (struct udphdr *)((char *)iph + iph->ihl * 4);
+	m = (struct msg *)(uh + 1);
 
 	if (uh->dest != htons(67))
 		return 0;
 
-	if (mlen != ntohs(uh->len) || mlen < offsetof(struct msg, o) ||
+	mlen = len - sizeof(*eh) - iph->ihl * 4 - sizeof(*uh);
+	if (mlen != ntohs(uh->len) - sizeof(*uh) ||
+	    mlen < offsetof(struct msg, o) ||
 	    m->op != BOOTREQUEST)
 		return -1;
 
-	for (i = 0; i < mlen - offsetof(struct msg, o); i += m->o[i + 1] + 2)
+	olen = mlen - offsetof(struct msg, o);
+	for (i = 0; i + 2 < olen; i += m->o[i + 1] + 2) {
+		if (m->o[i + 1] + i + 2 >= olen)
+			return -1;
+
 		memcpy(&opts[m->o[i]].c, &m->o[i + 2], m->o[i + 1]);
+	}
 
 	if (opts[53].c[0] == DHCPDISCOVER) {
 		fprintf(stderr, "DHCP: offer to discover");

@@ -40,7 +40,7 @@
  *
  * Return: 0 if not handled here, 1 if handled, -1 on failure
  */
-int ndp(struct ctx *c, unsigned len, struct ethhdr *eh)
+int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 {
 	struct ethhdr *ehr;
 	struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1), *ip6hr;
