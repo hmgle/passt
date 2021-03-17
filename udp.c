@@ -64,7 +64,7 @@ void udp_sock_handler(struct ctx *c, int s, uint32_t events)
 	socklen_t slen = sizeof(sr);
 	char buf[USHRT_MAX];
 	struct udphdr *uh;
-	int n;
+	ssize_t n;
 
 	(void)events;
 
