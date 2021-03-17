@@ -970,26 +970,27 @@ static int tcp_is_dupack(int s, uint32_t ack_seq)
 }
 
 /**
- * tcp_sock_consume() - Consume (discard) data from socket buffer
+ * tcp_sock_consume() - Consume (discard) data from buffer, update ACK sequence
  * @s:		File descriptor number for socket
  * @ack_seq:	ACK sequence, host order
- *
- * Return: negative on invalid sequence, 0 otherwise
  */
-static int tcp_sock_consume(int s, uint32_t ack_seq)
+static void tcp_sock_consume(int s, uint32_t ack_seq)
 {
 	int to_ack;
 
 	/* Implicitly take care of wrap-arounds */
 	to_ack = ack_seq - tc[s].seq_ack_from_tap;
 
+	/* Simply ignore out-of-order ACKs: we already consumed the data we
+	 * needed from the buffer, and we won't rewind back to a lower ACK
+	 * sequence.
+	 */
 	if (to_ack < 0)
-		return -EIO;
+		return;
 
 	recv(s, NULL, to_ack, MSG_DONTWAIT | MSG_TRUNC);
-	tc[s].seq_ack_from_tap = ack_seq;
 
-	return 0;
+	tc[s].seq_ack_from_tap = ack_seq;
 }
 
 /**
@@ -1146,12 +1147,7 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 			if (len == off)
 				retrans = tcp_is_dupack(s, ntohl(th->ack_seq));
 
-			if (tcp_sock_consume(s, ntohl(th->ack_seq))) {
-				tcp_rst(c, s);
-				return;
-			}
-
-			tc[s].seq_ack_from_tap = ntohl(th->ack_seq);
+			tcp_sock_consume(s, ntohl(th->ack_seq));
 
 			if (retrans)
 				tc[s].seq_to_tap = tc[s].seq_ack_from_tap;
@@ -1177,10 +1173,7 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 
 		break;
 	case CLOSE_WAIT:
-		if (tcp_sock_consume(s, ntohl(th->ack_seq))) {
-			tcp_rst(c, s);
-			return;
-		}
+		tcp_sock_consume(s, ntohl(th->ack_seq));
 
 		if (skip < len - off &&
 		    tcp_send_to_sock(c, s, in + off + skip, len - off - skip,
@@ -1282,11 +1275,7 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 			shutdown(s, SHUT_RD);
 			tcp_data_from_sock(c, s);
 			tcp_send_to_tap(c, s, FIN | ACK, NULL, 0);
-
-			if (tcp_sock_consume(s, tc[s].seq_ack_from_tap)) {
-				tcp_rst(c, s);
-				return;
-			}
+			tcp_sock_consume(s, tc[s].seq_ack_from_tap);
 		}
 	}
 }
