@@ -321,6 +321,9 @@
 /* Approximately maximum number of open descriptors per process */
 #define MAX_CONNS			(256 * 1024)
 
+#define TCP_HASH_TABLE_LOAD		70		/* % */
+#define TCP_HASH_TABLE_SIZE		(MAX_CONNS * 100 / TCP_HASH_TABLE_LOAD)
+
 #define MAX_WS				10
 #define MAX_WINDOW			(1 << (16 + (MAX_WS)))
 #define MSS_DEFAULT			536
@@ -373,8 +376,13 @@ static char *tcp_state_str[FIN_WAIT_1_SOCK_FIN + 1] = {
 #define OPT_SACK	5
 #define OPT_TS		8
 
+struct tcp_conn;
+
 /**
  * struct tcp_conn - Descriptor for a TCP connection
+ * @next:		Pointer to next item in hash chain, if any
+ * @sock:		Socket descriptor number
+ * @hash_bucket:	Bucket index in socket lookup hash table
  * @a.a6:		IPv6 remote address, can be IPv4-mapped
  * @a.a4.zero:		Zero prefix for IPv4-mapped, see RFC 6890, Table 20
  * @a.a4.one:		Ones prefix for IPv4-mapped
@@ -398,6 +406,10 @@ static char *tcp_state_str[FIN_WAIT_1_SOCK_FIN + 1] = {
  * @mss_guest:		Maximum segment size advertised by guest
  */
 struct tcp_conn {
+	struct tcp_conn *next;
+	int sock;
+	int hash_bucket;
+
 	union {
 		struct in6_addr a6;
 		struct {
@@ -429,9 +441,19 @@ struct tcp_conn {
 	int mss_guest;
 };
 
+/* Socket receive buffer */
 static char sock_buf[MAX_WINDOW];
+
+/* Bitmap, activity monitoring needed for connection, indexed by socket */
 static uint8_t tcp_act[MAX_CONNS / 8] = { 0 };
+
+/* TCP connections, indexed by socket */
 static struct tcp_conn tc[MAX_CONNS];
+
+/* Hash table for socket lookup given remote address, local port, remote port */
+static int tc_hash[TCP_HASH_TABLE_SIZE];
+
+/* 128-bit secret for hash functions, for initial sequence numbers and table */
 static uint64_t hash_secret[2];
 
 static int tcp_send_to_tap(struct ctx *c, int s, int flags, char *in, int len);
@@ -525,7 +547,143 @@ static int tcp_opt_get(struct tcphdr *th, size_t len, uint8_t __type,
 }
 
 /**
- * tcp_close_and_epoll_del() - Close socket and remove from epoll descriptor
+ * tcp_sock_hash_match() - Check if a connection entry matches address and ports
+ * @conn:	Connection entry to match against
+ * @af:		Address family, AF_INET or AF_INET6
+ * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @tap_port:	tap-facing port
+ * @sock_port:	Socket-facing port
+ *
+ * Return: 1 on match, 0 otherwise
+ */
+static int tcp_sock_hash_match(struct tcp_conn *conn, int af, void *addr,
+			       in_port_t tap_port, in_port_t sock_port)
+{
+	if (af == AF_INET && IN6_IS_ADDR_V4MAPPED(&conn->a.a6)	&&
+	    !memcmp(&conn->a.a4.a, addr, sizeof(conn->a.a4.a))	&&
+	    conn->tap_port == tap_port && conn->sock_port == sock_port)
+		return 1;
+
+	if (af == AF_INET6					&&
+	    !memcmp(&conn->a.a6, addr, sizeof(conn->a.a6))	&&
+	    conn->tap_port == tap_port && conn->sock_port == sock_port)
+		return 1;
+
+	return 0;
+}
+
+/**
+ * tcp_sock_hash() - Calculate hash value for connection given address and ports
+ * @af:		Address family, AF_INET or AF_INET6
+ * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @tap_port:	tap-facing port
+ * @sock_port:	Socket-facing port
+ *
+ * Return: hash value, already modulo size of the hash table
+ */
+static unsigned int tcp_sock_hash(int af, void *addr,
+				  in_port_t tap_port, in_port_t sock_port)
+{
+	uint64_t b;
+
+	if (af == AF_INET) {
+		struct {
+			struct in_addr addr;
+			in_port_t tap_port;
+			in_port_t sock_port;
+		} __attribute__((__packed__)) in = {
+			.addr = *(struct in_addr *)addr,
+			.tap_port = tap_port,
+			.sock_port = sock_port,
+		};
+
+		b = siphash_8b((uint8_t *)&in, hash_secret);
+	} else if (af == AF_INET6) {
+		struct {
+			struct in6_addr addr;
+			in_port_t tap_port;
+			in_port_t sock_port;
+		} __attribute__((__packed__)) in = {
+			.addr = *(struct in6_addr *)addr,
+			.tap_port = tap_port,
+			.sock_port = sock_port,
+		};
+
+		b = siphash_20b((uint8_t *)&in, hash_secret);
+	}
+
+	return (unsigned int)(b % TCP_HASH_TABLE_SIZE);
+}
+
+/**
+ * tcp_sock_hash_insert() - Insert socket into hash table, chain link if needed
+ * @s:		File descriptor number for socket
+ * @af:		Address family, AF_INET or AF_INET6
+ * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @tap_port:	tap-facing port
+ * @sock_port:	Socket-facing port
+ */
+static void tcp_sock_hash_insert(int s, int af, void *addr,
+				 in_port_t tap_port, in_port_t sock_port)
+{
+	int b;
+
+	b = tcp_sock_hash(af, addr, tap_port, sock_port);
+	tc[s].next = tc_hash[b] ? &tc[tc_hash[b]] : NULL;
+	tc_hash[b] = tc[s].sock = s;
+	tc[s].hash_bucket = b;
+}
+
+/**
+ * tcp_sock_hash_remove() - Drop socket from hash table, chain unlink if needed
+ * @b:		Bucket index
+ * @s:		File descriptor number for socket
+ */
+static void tcp_sock_hash_remove(int b, int s)
+{
+	struct tcp_conn *conn, *prev = NULL;
+
+	for (conn = &tc[tc_hash[b]]; conn; prev = conn, conn = conn->next) {
+		if (conn->sock == s) {
+			conn->sock = 0;
+			if (prev)
+				prev->next = conn->next;
+			else
+				tc_hash[b] = conn->next ? conn->next->sock : 0;
+			return;
+		}
+	}
+}
+
+/**
+ * tcp_sock_hash_lookup() - Look up socket given remote address and ports
+ * @af:		Address family, AF_INET or AF_INET6
+ * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @tap_port:	tap-facing port
+ * @sock_port:	Socket-facing port
+ *
+ * Return: file descriptor number for socket, if found, -ENOENT otherwise
+ */
+static int tcp_sock_hash_lookup(int af, void *addr,
+				in_port_t tap_port, in_port_t sock_port)
+{
+	struct tcp_conn *conn;
+	int b;
+
+	b = tcp_sock_hash(af, addr, tap_port, sock_port);
+	if (!tc_hash[b])
+		return -ENOENT;
+
+	for (conn = &tc[tc_hash[b]]; conn; conn = conn->next) {
+		if (tcp_sock_hash_match(conn, af, addr, tap_port, sock_port))
+			return conn->sock;
+	}
+
+	return -ENOENT;
+}
+
+/**
+ * tcp_close_and_epoll_del() - Close, remove socket from hash table and epoll fd
  * @c:		Execution context
  * @s:		File descriptor number for socket
  */
@@ -534,6 +692,7 @@ static void tcp_close_and_epoll_del(struct ctx *c, int s)
 	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, s, NULL);
 	tcp_set_state(s, CLOSED);
 	close(s);
+	tcp_sock_hash_remove(tc[s].hash_bucket, tc[s].sock);
 	tcp_act_clear(s);
 }
 
@@ -804,6 +963,8 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	tc[s].seq_to_tap = tcp_seq_init(c, af, addr, th->dest, th->source);
 	tc[s].seq_ack_from_tap = tc[s].seq_to_tap + 1;
 
+	tcp_sock_hash_insert(s, af, addr, th->source, th->dest);
+
 	if (connect(s, sa, sl)) {
 		if (errno != EINPROGRESS) {
 			tcp_rst(c, s);
@@ -820,39 +981,6 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	}
 
 	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, s, &ev);
-}
-
-/**
- * tcp_sock_lookup() - Look up socket given remote address and pair of ports
- * @af:		Address family, AF_INET or AF_INET6
- * @tap_port:	tap-facing port
- * @sock_port:	Socket-facing port
- *
- * Return: file descriptor number for socket, if found, -ENOENT otherwise
- */
-static int tcp_sock_lookup(int af, void *addr,
-			   in_port_t tap_port, in_port_t sock_port)
-{
-	int i;
-
-	/* TODO: hash table and lookup. This is just a dummy implementation. */
-	for (i = 0; i < MAX_CONNS; i++) {
-		if (af == AF_INET && IN6_IS_ADDR_V4MAPPED(&tc[i].a.a6)	&&
-		    !memcmp(&tc[i].a.a4.a, addr, sizeof(tc[i].a.a4.a))	&&
-		    tc[i].tap_port == tap_port				&&
-		    tc[i].sock_port == sock_port			&&
-		    tc[i].s)
-			return i;
-
-		if (af == AF_INET6					&&
-		    !memcmp(&tc[i].a.a6, addr, sizeof(tc[i].a.a6))	&&
-		    tc[i].tap_port == tap_port				&&
-		    tc[i].sock_port == sock_port			&&
-		    tc[i].s)
-			return i;
-	}
-
-	return -ENOENT;
 }
 
 /**
@@ -887,6 +1015,9 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 		tc[s].seq_to_tap = tcp_seq_init(c, AF_INET, &sa4->sin_addr,
 						tc[s].sock_port,
 						tc[s].tap_port);
+
+		tcp_sock_hash_insert(s, AF_INET, &sa4->sin_addr,
+				     tc[s].tap_port, tc[s].sock_port);
 	} else if (sa_l.ss_family == AF_INET6) {
 		struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&sa_r;
 
@@ -898,6 +1029,9 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 		tc[s].seq_to_tap = tcp_seq_init(c, AF_INET6, &sa6->sin6_addr,
 						tc[s].sock_port,
 						tc[s].tap_port);
+
+		tcp_sock_hash_insert(s, AF_INET6, &sa6->sin6_addr,
+				     tc[s].tap_port, tc[s].sock_port);
 	}
 
 	tc[s].seq_ack_from_tap = tc[s].seq_to_tap + 1;
@@ -1067,7 +1201,7 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 	if (off < sizeof(*th) || off > len)
 		return;
 
-	if ((s = tcp_sock_lookup(af, addr, th->source, th->dest)) < 0) {
+	if ((s = tcp_sock_hash_lookup(af, addr, th->source, th->dest)) < 0) {
 		if (th->syn)
 			tcp_conn_from_tap(c, af, addr, th, len);
 		return;
