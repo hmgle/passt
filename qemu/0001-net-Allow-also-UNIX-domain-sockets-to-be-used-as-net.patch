@@ -1,0 +1,176 @@
+From 8876676bbdb108f51c372d1347dec1382078d702 Mon Sep 17 00:00:00 2001
+From: Stefano Brivio <sbrivio@redhat.com>
+Date: Wed, 17 Mar 2021 10:33:22 +0100
+Subject: [PATCH 1/2] net: Allow also UNIX domain sockets to be used as -netdev
+ socket
+
+It has lower overhead compared to TCP, doesn't need a free port
+and the adaptation is trivial.
+
+Signed-off-by: Stefano Brivio <sbrivio@redhat.com>
+---
+ net/socket.c    | 93 +++++++++++++++++++++++++++++++++++++++++--------
+ qemu-options.hx | 12 +++----
+ 2 files changed, 84 insertions(+), 21 deletions(-)
+
+diff --git a/net/socket.c b/net/socket.c
+index c0de10c0c0..9d06953983 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -528,27 +528,62 @@ static int net_socket_listen_init(NetClientState *peer,
+ {
+     NetClientState *nc;
+     NetSocketState *s;
+-    struct sockaddr_in saddr;
+-    int fd, ret;
++    struct sockaddr_storage saddr;
++    struct sockaddr_in *saddr_in = (struct sockaddr_in *)&saddr;
++    struct sockaddr_un *saddr_un = (struct sockaddr_un *)&saddr;
++    size_t saddr_size;
++    int fd, ret, pf;
+     NetdevSocketOptions *stored;
+ 
+-    if (parse_host_port(&saddr, host_str, errp) < 0) {
+-        return -1;
++#ifndef WIN32
++    if (strchr(host_str, ':')) {
++#endif
++        if (parse_host_port(saddr_in, host_str, errp) < 0)
++            return -1;
++
++        pf = PF_INET;
++        saddr_size = sizeof(*saddr_in);
++#ifndef WIN32
++    } else {
++        struct stat sb;
++
++        if (stat(host_str, &sb) == -1) {
++            error_setg_errno(errp, errno, "can't stat socket path");
++            return -1;
++        }
++
++        if ((sb.st_mode & S_IFMT) != S_IFSOCK) {
++            error_setg_errno(errp, errno, "path provided is not a socket");
++            return -1;
++        }
++
++        saddr_un->sun_family = PF_UNIX;
++        strncpy(saddr_un->sun_path, host_str, sizeof(saddr_un->sun_path));
++
++        pf = PF_UNIX;
++        saddr_size = sizeof(*saddr_un);
+     }
++#endif /* !WIN32 */
+ 
+-    fd = qemu_socket(PF_INET, SOCK_STREAM, 0);
++    fd = qemu_socket(pf, SOCK_STREAM, 0);
+     if (fd < 0) {
+         error_setg_errno(errp, errno, "can't create stream socket");
+         return -1;
+     }
+     qemu_set_nonblock(fd);
+ 
+-    socket_set_fast_reuse(fd);
++    if (pf == PF_INET)
++        socket_set_fast_reuse(fd);
+ 
+-    ret = bind(fd, (struct sockaddr *)&saddr, sizeof(saddr));
++    ret = bind(fd, (struct sockaddr *)&saddr, saddr_size);
+     if (ret < 0) {
+-        error_setg_errno(errp, errno, "can't bind ip=%s to socket",
+-                         inet_ntoa(saddr.sin_addr));
++        if (pf == PF_INET)
++            error_setg_errno(errp, errno, "can't bind ip=%s to socket",
++                             inet_ntoa(saddr_in->sin_addr));
++        else if (pf == PF_UNIX)
++            error_setg_errno(errp, errno, "can't create socket with path: %s",
++                             host_str);
++
+         closesocket(fd);
+         return -1;
+     }
+@@ -586,15 +621,43 @@ static int net_socket_connect_init(NetClientState *peer,
+                                    Error **errp)
+ {
+     NetSocketState *s;
+-    int fd, connected, ret;
+-    struct sockaddr_in saddr;
++    int fd, connected, ret, pf;
++    struct sockaddr_storage saddr;
++    size_t saddr_size;
+     NetdevSocketOptions *stored;
+ 
+-    if (parse_host_port(&saddr, host_str, errp) < 0) {
+-        return -1;
++#ifndef WIN32
++    if (strchr(host_str, ':')) {
++#endif
++        if (parse_host_port((struct sockaddr_in *)&saddr, host_str, errp) < 0)
++            return -1;
++
++        pf = PF_INET;
++        saddr_size = sizeof(struct sockaddr_in);
++#ifndef WIN32
++    } else {
++        struct sockaddr_un *saddr_un = (struct sockaddr_un *)&saddr;
++        struct stat sb;
++
++        if (stat(host_str, &sb) == -1) {
++            error_setg_errno(errp, errno, "can't stat socket path");
++            return -1;
++        }
++
++        if ((sb.st_mode & S_IFMT) != S_IFSOCK) {
++            error_setg_errno(errp, errno, "provided path is not a socket");
++            return -1;
++        }
++
++        saddr_un->sun_family = PF_UNIX;
++        strncpy(saddr_un->sun_path, host_str, sizeof(saddr_un->sun_path));
++
++        pf = PF_UNIX;
++        saddr_size = sizeof(struct sockaddr_un);
+     }
++#endif /* !WIN32 */
+ 
+-    fd = qemu_socket(PF_INET, SOCK_STREAM, 0);
++    fd = qemu_socket(pf, SOCK_STREAM, 0);
+     if (fd < 0) {
+         error_setg_errno(errp, errno, "can't create stream socket");
+         return -1;
+@@ -603,7 +666,7 @@ static int net_socket_connect_init(NetClientState *peer,
+ 
+     connected = 0;
+     for(;;) {
+-        ret = connect(fd, (struct sockaddr *)&saddr, sizeof(saddr));
++        ret = connect(fd, (struct sockaddr *)&saddr, saddr_size);
+         if (ret < 0) {
+             if (errno == EINTR || errno == EWOULDBLOCK) {
+                 /* continue */
+diff --git a/qemu-options.hx b/qemu-options.hx
+index fe83ea09b2..b41351a54e 100644
+--- a/qemu-options.hx
++++ b/qemu-options.hx
+@@ -2836,13 +2836,13 @@ SRST
+         #connect a TAP device to bridge qemubr0
+         |qemu_system| linux.img -netdev bridge,br=qemubr0,id=n1 -device virtio-net,netdev=n1
+ 
+-``-netdev socket,id=id[,fd=h][,listen=[host]:port][,connect=host:port]``
++``-netdev socket,id=id[,fd=h][,listen=[host]:port|path][,connect=host:port|path]``
+     This host network backend can be used to connect the guest's network
+-    to another QEMU virtual machine using a TCP socket connection. If
+-    ``listen`` is specified, QEMU waits for incoming connections on port
+-    (host is optional). ``connect`` is used to connect to another QEMU
+-    instance using the ``listen`` option. ``fd``\ =h specifies an
+-    already opened TCP socket.
++    to another QEMU virtual machine using a TCP or a UNIX domain socket
++    connection. If ``listen`` is specified, QEMU waits for incoming
++    connections on port (host is optional), or on path. ``connect`` is used
++    to connect to another QEMU instance using the ``listen`` option.
++    ``fd``\ =h specifies an already opened TCP or UNIX domain socket.
+ 
+     Example:
+ 
+-- 
+2.28.0
+

@@ -562,7 +562,12 @@ listen:
 	listen(fd_unix, 1);
 	fprintf(stderr,
 		"You can now start qrap:\n\t"
-		"./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio\n\n");
+		"./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio\n"
+		"or directly qemu, patched with:\n\t"
+		"qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch\n"
+		"as follows:\n\t"
+		"kvm ... -net socket,connect="
+			UNIX_SOCK_PATH " -net nic,model=virtio\n\n");
 
 	c.fd_unix = accept(fd_unix, NULL, NULL);
 	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLERR | EPOLLHUP;

@@ -1,0 +1,31 @@
+From f4c9af4041754209eaad4f98041466b6f5e54902 Mon Sep 17 00:00:00 2001
+From: Stefano Brivio <sbrivio@redhat.com>
+Date: Wed, 17 Mar 2021 10:35:32 +0100
+Subject: [PATCH 2/2] net: Don't ignore EINVAL on netdev socket connection
+
+Other errors are treated as failure by net_socket_connect_init(),
+but if connect() returns EINVAL, we'll fail silently. Remove the
+related exception.
+
+Signed-off-by: Stefano Brivio <sbrivio@redhat.com>
+---
+ net/socket.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/net/socket.c b/net/socket.c
+index 9d06953983..a7c10ea2b2 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -671,8 +671,7 @@ static int net_socket_connect_init(NetClientState *peer,
+             if (errno == EINTR || errno == EWOULDBLOCK) {
+                 /* continue */
+             } else if (errno == EINPROGRESS ||
+-                       errno == EALREADY ||
+-                       errno == EINVAL) {
++                       errno == EALREADY) {
+                 break;
+             } else {
+                 error_setg_errno(errp, errno, "can't connect socket");
+-- 
+2.28.0
+
