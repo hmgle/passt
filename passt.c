@@ -498,9 +498,9 @@ void usage(const char *name)
  */
 int main(int argc, char **argv)
 {
-	char buf6[3][sizeof("0123:4567:89ab:cdef:0123:4567:89ab:cdef")];
-	char buf4[4][sizeof("255.255.255.255")];
 	struct epoll_event events[EPOLL_EVENTS];
+	char buf6[3][INET6_ADDRSTRLEN];
+	char buf4[4][INET_ADDRSTRLEN];
 	struct epoll_event ev = { 0 };
 	struct timespec last_time;
 	struct ctx c = { 0 };
