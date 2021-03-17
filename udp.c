@@ -102,7 +102,7 @@ void udp_sock_handler(struct ctx *c, int s, uint32_t events)
 }
 
 /**
- * tcp_tap_handler() - Handle packets from tap
+ * udp_tap_handler() - Handle packets from tap
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
  * @in:		Input buffer
