@@ -74,6 +74,7 @@ sysctl -w net.ipv6.conf.all.forwarding=1
 
 ethtool -K veth_passt tx off
 ip netns exec passt ethtool -K veth_passt tx off
+ip netns exec passt sysctl -w net.ipv4.ping_group_range="0 2147483647"
 ulimit -n 300000
 
 

@@ -1,5 +1,6 @@
 #define UNIX_SOCK_PATH	"/tmp/passt.socket"
 
+#include "icmp.h"
 #include "tcp.h"
 
 /**
@@ -39,5 +40,6 @@ struct ctx {
 
 	char ifn[IF_NAMESIZE];
 
+	struct icmp_ctx icmp;
 	struct tcp_ctx tcp;
 };

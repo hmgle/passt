@@ -160,7 +160,8 @@ int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
 	const struct sockaddr *sa;
 	int fd, sl, one = 1;
 
-	if (proto != IPPROTO_TCP && proto != IPPROTO_UDP)
+	if (proto != IPPROTO_TCP && proto != IPPROTO_UDP &&
+	    proto != IPPROTO_ICMP && proto != IPPROTO_ICMPV6)
 		return -1;	/* Not implemented. */
 
 	fd = socket(v == 4 ? AF_INET : AF_INET6,
@@ -169,6 +170,9 @@ int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
 		perror("L4 socket");
 		return -1;
 	}
+
+	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
+		goto epoll_add;
 
 	if (v == 4) {
 		sa = (const struct sockaddr *)&addr4;
@@ -195,6 +199,7 @@ int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
 		return -1;
 	}
 
+epoll_add:
 	ev.events = EPOLLIN;
 	ev.data.fd = fd;
 	if (epoll_ctl(c->epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {

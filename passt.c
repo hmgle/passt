@@ -46,6 +46,7 @@
 #include "dhcp.h"
 #include "ndp.h"
 #include "util.h"
+#include "icmp.h"
 #include "tcp.h"
 #include "udp.h"
 
@@ -335,6 +336,8 @@ static void tap4_handler(struct ctx *c, char *in, size_t len)
 		tcp_tap_handler(c, AF_INET, &iph->daddr, l4h, len);
 	else if (iph->protocol == IPPROTO_UDP)
 		udp_tap_handler(c, AF_INET, &iph->daddr, l4h, len);
+	else if (iph->protocol == IPPROTO_ICMP)
+		icmp_tap_handler(c, AF_INET, &iph->daddr, l4h, len);
 }
 
 /**
@@ -391,6 +394,8 @@ static void tap6_handler(struct ctx *c, char *in, size_t len)
 		tcp_tap_handler(c, AF_INET6, &ip6h->daddr, l4h, len);
 	else if (proto == IPPROTO_UDP)
 		udp_tap_handler(c, AF_INET6, &ip6h->daddr, l4h, len);
+	else if (proto == IPPROTO_ICMPV6)
+		icmp_tap_handler(c, AF_INET6, &ip6h->daddr, l4h, len);
 }
 
 /**
@@ -449,15 +454,18 @@ static void sock_handler(struct ctx *c, int fd, uint32_t events)
 
 	sl = sizeof(so);
 
-	if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &so, &sl) ||
-	    so == SOCK_STREAM) {
-		fprintf(stderr, "TCP: packet from socket %i\n", fd);
+	if (getsockopt(fd, SOL_SOCKET, SO_PROTOCOL, &so, &sl))
+		return;
+
+	fprintf(stderr, "%s: packet from socket %i\n",
+		getprotobynumber(so)->p_name, fd);
+
+	if (so == IPPROTO_ICMP || so == IPPROTO_ICMPV6)
+		icmp_sock_handler(c, fd, events);
+	else if (so == IPPROTO_TCP)
 		tcp_sock_handler(c, fd, events);
-	}
-	else if (so == SOCK_DGRAM) {
+	else if (so == IPPROTO_UDP)
 		udp_sock_handler(c, fd, events);
-		fprintf(stderr, "UDP: packet from socket %i\n", fd);
-	}
 }
 
 /**
@@ -546,7 +554,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	if (tcp_sock_init(&c) || udp_sock_init(&c))
+	if (icmp_sock_init(&c) || tcp_sock_init(&c) || udp_sock_init(&c))
 		exit(EXIT_FAILURE);
 
 	fd_unix = sock_unix();
