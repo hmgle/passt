@@ -304,8 +304,9 @@
 #include <stddef.h>
 #include <string.h>
 #include <sys/epoll.h>
-#include <sys/types.h>
+#include <sys/random.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
@@ -315,6 +316,7 @@
 #include "passt.h"
 #include "tap.h"
 #include "util.h"
+#include "siphash.h"
 
 /* Approximately maximum number of open descriptors per process */
 #define MAX_CONNS			(256 * 1024)
@@ -430,6 +432,7 @@ struct tcp_conn {
 static char sock_buf[MAX_WINDOW];
 static uint8_t tcp_act[MAX_CONNS / 8] = { 0 };
 static struct tcp_conn tc[MAX_CONNS];
+static uint64_t hash_secret[2];
 
 static int tcp_send_to_tap(struct ctx *c, int s, int flags, char *in, int len);
 
@@ -677,6 +680,60 @@ static void tcp_clamp_window(int s, struct tcphdr *th, int len, int init)
 }
 
 /**
+ * tcp_seq_init() - Calculate initial sequence number according to RFC 6528
+ * @c:		Execution context
+ * @af:		Address family, AF_INET or AF_INET6
+ * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @dstport:	Destination port, connection-wise, network order
+ * @srcport:	Source port, connection-wise, network order
+ *
+ * Return: initial TCP sequence
+ */
+static uint32_t tcp_seq_init(struct ctx *c, int af, void *addr,
+			     in_port_t dstport, in_port_t srcport)
+{
+	struct timespec ts = { 0 };
+	uint32_t ns, seq;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+
+	if (af == AF_INET) {
+		struct {
+			struct in_addr src;
+			in_port_t srcport;
+			struct in_addr dst;
+			in_port_t dstport;
+		} __attribute__((__packed__)) in = {
+			.src = *(struct in_addr *)addr,
+			.srcport = srcport,
+			.dst = *(struct in_addr *)c->addr4,
+			.dstport = dstport,
+		};
+
+		seq = siphash_12b((uint8_t *)&in, hash_secret);
+	} else if (af == AF_INET6) {
+		struct {
+			struct in6_addr src;
+			in_port_t srcport;
+			struct in6_addr dst;
+			in_port_t dstport;
+		} __attribute__((__packed__)) in = {
+			.src = *(struct in6_addr *)addr,
+			.srcport = srcport,
+			.dst = c->addr6,
+			.dstport = dstport,
+		};
+
+		seq = siphash_36b((uint8_t *)&in, hash_secret);
+	}
+
+	ns = ts.tv_sec * 1E9;
+	ns += ts.tv_nsec >> 5;	/* 32ns ticks, overflows 32 bits every 137s */
+
+	return seq + ns;
+}
+
+/**
  * tcp_conn_from_tap() - Handle connection request (SYN segment) from tap
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
@@ -744,9 +801,8 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	tc[s].seq_from_tap = tc[s].seq_init_from_tap + 1;
 	tc[s].seq_ack_to_tap = tc[s].seq_from_tap;
 
-	/* TODO: RFC 6528 with SipHash, worth it? */
-	tc[s].seq_to_tap = 0;
-	tc[s].seq_ack_from_tap = tc[s].seq_to_tap;
+	tc[s].seq_to_tap = tcp_seq_init(c, af, addr, th->dest, th->source);
+	tc[s].seq_ack_from_tap = tc[s].seq_to_tap + 1;
 
 	if (connect(s, sa, sl)) {
 		if (errno != EINPROGRESS) {
@@ -827,6 +883,10 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 
 		tc[s].sock_port = sa4->sin_port;
 		tc[s].tap_port = ((struct sockaddr_in *)&sa_l)->sin_port;
+
+		tc[s].seq_to_tap = tcp_seq_init(c, AF_INET, &sa4->sin_addr,
+						tc[s].sock_port,
+						tc[s].tap_port);
 	} else if (sa_l.ss_family == AF_INET6) {
 		struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&sa_r;
 
@@ -834,10 +894,12 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 
 		tc[s].sock_port = sa6->sin6_port;
 		tc[s].tap_port = ((struct sockaddr_in6 *)&sa_l)->sin6_port;
+
+		tc[s].seq_to_tap = tcp_seq_init(c, AF_INET6, &sa6->sin6_addr,
+						tc[s].sock_port,
+						tc[s].tap_port);
 	}
 
-	/* TODO: RFC 6528 with SipHash, worth it? */
-	tc[s].seq_to_tap = 0;
 	tc[s].seq_ack_from_tap = tc[s].seq_to_tap + 1;
 
 	tc[s].tap_window = WINDOW_DEFAULT;
@@ -1230,7 +1292,7 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 }
 
 /**
- * tcp_sock_init() - Create and bind listening sockets for inbound connections
+ * tcp_sock_init() - Bind sockets for inbound connections, get key for sequence
  * @c:		Execution context
  *
  * Return: 0 on success, -1 on failure
@@ -1245,6 +1307,8 @@ int tcp_sock_init(struct ctx *c)
 		if (c->v6 && sock_l4_add(c, 6, IPPROTO_TCP, port) < 0)
 			return -1;
 	}
+
+	getrandom(hash_secret, sizeof(hash_secret), GRND_RANDOM);
 
 	return 0;
 }
