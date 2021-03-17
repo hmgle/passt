@@ -1,5 +1,7 @@
 #define UNIX_SOCK_PATH	"/tmp/passt.socket"
 
+#include "tcp.h"
+
 /**
  * struct ctx - Execution context
  * @epollfd:	file descriptor for epoll instance
@@ -36,4 +38,6 @@ struct ctx {
 	struct in6_addr dns6;
 
 	char ifn[IF_NAMESIZE];
+
+	struct tcp_ctx tcp;
 };

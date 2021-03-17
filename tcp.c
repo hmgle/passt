@@ -453,9 +453,6 @@ static struct tcp_conn tc[MAX_CONNS];
 /* Hash table for socket lookup given remote address, local port, remote port */
 static int tc_hash[TCP_HASH_TABLE_SIZE];
 
-/* 128-bit secret for hash functions, for initial sequence numbers and table */
-static uint64_t hash_secret[2];
-
 static int tcp_send_to_tap(struct ctx *c, int s, int flags, char *in, int len);
 
 /**
@@ -574,6 +571,7 @@ static int tcp_sock_hash_match(struct tcp_conn *conn, int af, void *addr,
 
 /**
  * tcp_sock_hash() - Calculate hash value for connection given address and ports
+ * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
  * @addr:	Remote address, pointer to sin_addr or sin6_addr
  * @tap_port:	tap-facing port
@@ -581,7 +579,7 @@ static int tcp_sock_hash_match(struct tcp_conn *conn, int af, void *addr,
  *
  * Return: hash value, already modulo size of the hash table
  */
-static unsigned int tcp_sock_hash(int af, void *addr,
+static unsigned int tcp_sock_hash(struct ctx *c, int af, void *addr,
 				  in_port_t tap_port, in_port_t sock_port)
 {
 	uint64_t b;
@@ -597,7 +595,7 @@ static unsigned int tcp_sock_hash(int af, void *addr,
 			.sock_port = sock_port,
 		};
 
-		b = siphash_8b((uint8_t *)&in, hash_secret);
+		b = siphash_8b((uint8_t *)&in, c->tcp.hash_secret);
 	} else if (af == AF_INET6) {
 		struct {
 			struct in6_addr addr;
@@ -609,7 +607,7 @@ static unsigned int tcp_sock_hash(int af, void *addr,
 			.sock_port = sock_port,
 		};
 
-		b = siphash_20b((uint8_t *)&in, hash_secret);
+		b = siphash_20b((uint8_t *)&in, c->tcp.hash_secret);
 	}
 
 	return (unsigned int)(b % TCP_HASH_TABLE_SIZE);
@@ -617,18 +615,19 @@ static unsigned int tcp_sock_hash(int af, void *addr,
 
 /**
  * tcp_sock_hash_insert() - Insert socket into hash table, chain link if needed
+ * @c:		Execution context
  * @s:		File descriptor number for socket
  * @af:		Address family, AF_INET or AF_INET6
  * @addr:	Remote address, pointer to sin_addr or sin6_addr
  * @tap_port:	tap-facing port
  * @sock_port:	Socket-facing port
  */
-static void tcp_sock_hash_insert(int s, int af, void *addr,
+static void tcp_sock_hash_insert(struct ctx *c, int s, int af, void *addr,
 				 in_port_t tap_port, in_port_t sock_port)
 {
 	int b;
 
-	b = tcp_sock_hash(af, addr, tap_port, sock_port);
+	b = tcp_sock_hash(c, af, addr, tap_port, sock_port);
 	tc[s].next = tc_hash[b] ? &tc[tc_hash[b]] : NULL;
 	tc_hash[b] = tc[s].sock = s;
 	tc[s].hash_bucket = b;
@@ -657,6 +656,7 @@ static void tcp_sock_hash_remove(int b, int s)
 
 /**
  * tcp_sock_hash_lookup() - Look up socket given remote address and ports
+ * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
  * @addr:	Remote address, pointer to sin_addr or sin6_addr
  * @tap_port:	tap-facing port
@@ -664,13 +664,13 @@ static void tcp_sock_hash_remove(int b, int s)
  *
  * Return: file descriptor number for socket, if found, -ENOENT otherwise
  */
-static int tcp_sock_hash_lookup(int af, void *addr,
+static int tcp_sock_hash_lookup(struct ctx *c, int af, void *addr,
 				in_port_t tap_port, in_port_t sock_port)
 {
 	struct tcp_conn *conn;
 	int b;
 
-	b = tcp_sock_hash(af, addr, tap_port, sock_port);
+	b = tcp_sock_hash(c, af, addr, tap_port, sock_port);
 	if (!tc_hash[b])
 		return -ENOENT;
 
@@ -869,7 +869,7 @@ static uint32_t tcp_seq_init(struct ctx *c, int af, void *addr,
 			.dstport = dstport,
 		};
 
-		seq = siphash_12b((uint8_t *)&in, hash_secret);
+		seq = siphash_12b((uint8_t *)&in, c->tcp.hash_secret);
 	} else if (af == AF_INET6) {
 		struct {
 			struct in6_addr src;
@@ -883,7 +883,7 @@ static uint32_t tcp_seq_init(struct ctx *c, int af, void *addr,
 			.dstport = dstport,
 		};
 
-		seq = siphash_36b((uint8_t *)&in, hash_secret);
+		seq = siphash_36b((uint8_t *)&in, c->tcp.hash_secret);
 	}
 
 	ns = ts.tv_sec * 1E9;
@@ -963,7 +963,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	tc[s].seq_to_tap = tcp_seq_init(c, af, addr, th->dest, th->source);
 	tc[s].seq_ack_from_tap = tc[s].seq_to_tap + 1;
 
-	tcp_sock_hash_insert(s, af, addr, th->source, th->dest);
+	tcp_sock_hash_insert(c, s, af, addr, th->source, th->dest);
 
 	if (connect(s, sa, sl)) {
 		if (errno != EINPROGRESS) {
@@ -1016,7 +1016,7 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 						tc[s].sock_port,
 						tc[s].tap_port);
 
-		tcp_sock_hash_insert(s, AF_INET, &sa4->sin_addr,
+		tcp_sock_hash_insert(c, s, AF_INET, &sa4->sin_addr,
 				     tc[s].tap_port, tc[s].sock_port);
 	} else if (sa_l.ss_family == AF_INET6) {
 		struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&sa_r;
@@ -1030,7 +1030,7 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 						tc[s].sock_port,
 						tc[s].tap_port);
 
-		tcp_sock_hash_insert(s, AF_INET6, &sa6->sin6_addr,
+		tcp_sock_hash_insert(c, s, AF_INET6, &sa6->sin6_addr,
 				     tc[s].tap_port, tc[s].sock_port);
 	}
 
@@ -1201,7 +1201,7 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 	if (off < sizeof(*th) || off > len)
 		return;
 
-	if ((s = tcp_sock_hash_lookup(af, addr, th->source, th->dest)) < 0) {
+	if ((s = tcp_sock_hash_lookup(c, af, addr, th->source, th->dest)) < 0) {
 		if (th->syn)
 			tcp_conn_from_tap(c, af, addr, th, len);
 		return;
@@ -1431,7 +1431,7 @@ int tcp_sock_init(struct ctx *c)
 			return -1;
 	}
 
-	getrandom(hash_secret, sizeof(hash_secret), GRND_RANDOM);
+	getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret), GRND_RANDOM);
 
 	return 0;
 }
