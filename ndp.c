@@ -61,7 +61,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 	ihr = (struct icmp6hdr *)(ip6hr + 1);
 
 	if (ih->icmp6_type == NS) {
-		fprintf(stderr, "NDP: received NS, sending NA\n");
+		info("NDP: received NS, sending NA");
 		ihr->icmp6_type = NA;
 		ihr->icmp6_code = 0;
 		ihr->icmp6_router = 1;
@@ -76,7 +76,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		memcpy(p, c->mac, ETH_ALEN);
 		p += 6;
 	} else if (ih->icmp6_type == RS) {
-		fprintf(stderr, "NDP: received RS, sending RA\n");
+		info("NDP: received RS, sending RA");
 		ihr->icmp6_type = RA;
 		ihr->icmp6_code = 0;
 		ihr->icmp6_rt_lifetime = htons(3600);

@@ -40,6 +40,7 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <time.h>
+#include <syslog.h>
 
 #include "passt.h"
 #include "arp.h"
@@ -185,7 +186,7 @@ out:
 	close(s);
 
 	if (!(c->v4 || c->v6) || !*c->ifn) {
-		fprintf(stderr, "No routing information\n");
+		err("No routing information");
 		exit(EXIT_FAILURE);
 	}
 }
@@ -256,7 +257,7 @@ static void get_addrs(struct ctx *c)
 
 	return;
 out:
-	fprintf(stderr, "Couldn't get addresses for routable interface\n");
+	err("Couldn't get addresses for routable interface");
 	exit(EXIT_FAILURE);
 }
 
@@ -288,7 +289,7 @@ static void get_dns(struct ctx *c)
 	if (dns4 || dns6)
 		return;
 
-	fprintf(stderr, "Couldn't get any nameserver address\n");
+	err("Couldn't get any nameserver address");
 	exit(EXIT_FAILURE);
 }
 
@@ -302,7 +303,8 @@ static void tap4_handler(struct ctx *c, char *in, size_t len)
 {
 	struct ethhdr *eh = (struct ethhdr *)in;
 	struct iphdr *iph = (struct iphdr *)(eh + 1);
-	char buf_s[BUFSIZ], buf_d[BUFSIZ];
+	char buf_s[BUFSIZ] __attribute((__unused__));
+	char buf_d[BUFSIZ] __attribute((__unused__));
 	char *l4h;
 
 	if (arp(c, eh, len) || dhcp(c, eh, len))
@@ -315,21 +317,21 @@ static void tap4_handler(struct ctx *c, char *in, size_t len)
 	len -= (intptr_t)l4h - (intptr_t)eh;
 
 	if (iph->protocol == IPPROTO_ICMP) {
-		fprintf(stderr, "icmp from tap: %s -> %s\n",
-			inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
-			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)));
+		debug("icmp from tap: %s -> %s",
+		      inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
+		      inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)));
 	} else {
 		struct tcphdr *th = (struct tcphdr *)l4h;
 
 		if (len < sizeof(*th) && len < sizeof(struct udphdr))
 			return;
 
-		fprintf(stderr, "%s from tap: %s:%i -> %s:%i\n",
-			getprotobynumber(iph->protocol)->p_name,
-			inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
-			ntohs(th->source),
-			inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
-			ntohs(th->dest));
+		debug("%s from tap: %s:%i -> %s:%i",
+		      getprotobynumber(iph->protocol)->p_name,
+		      inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
+		      ntohs(th->source),
+		      inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
+		      ntohs(th->dest));
 	}
 
 	if (iph->protocol == IPPROTO_TCP)
@@ -350,7 +352,8 @@ static void tap6_handler(struct ctx *c, char *in, size_t len)
 {
 	struct ethhdr *eh = (struct ethhdr *)in;
 	struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1);
-	char buf_s[BUFSIZ], buf_d[BUFSIZ];
+	char buf_s[BUFSIZ] __attribute((__unused__));
+	char buf_d[BUFSIZ] __attribute((__unused__));
 	uint8_t proto;
 	char *l4h;
 
@@ -371,23 +374,21 @@ static void tap6_handler(struct ctx *c, char *in, size_t len)
 	len -= (intptr_t)l4h - (intptr_t)eh;
 
 	if (proto == IPPROTO_ICMPV6) {
-		fprintf(stderr, "icmpv6 from tap: %s ->\n\t%s\n",
-			inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
-			inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d))
-		);
+		debug("icmpv6 from tap: %s ->\n\t%s",
+		      inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
+		      inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)));
 	} else {
 		struct tcphdr *th = (struct tcphdr *)l4h;
 
 		if (len < sizeof(*th) && len < sizeof(struct udphdr))
 			return;
 
-		fprintf(stderr, "%s from tap: [%s]:%i\n"
-				"\t-> [%s]:%i\n",
-			getprotobynumber(proto)->p_name,
-			inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
-			ntohs(th->source),
-			inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)),
-			ntohs(th->dest));
+		debug("%s from tap: [%s]:%i\n\t-> [%s]:%i",
+		      getprotobynumber(proto)->p_name,
+		      inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
+		      ntohs(th->source),
+		      inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)),
+		      ntohs(th->dest));
 	}
 
 	if (proto == IPPROTO_TCP)
@@ -457,8 +458,7 @@ static void sock_handler(struct ctx *c, int fd, uint32_t events)
 	if (getsockopt(fd, SOL_SOCKET, SO_PROTOCOL, &so, &sl))
 		return;
 
-	fprintf(stderr, "%s: packet from socket %i\n",
-		getprotobynumber(so)->p_name, fd);
+	debug("%s: packet from socket %i", getprotobynumber(so)->p_name, fd);
 
 	if (so == IPPROTO_ICMP || so == IPPROTO_ICMPV6)
 		icmp_sock_handler(c, fd, events);
@@ -517,32 +517,6 @@ int main(int argc, char **argv)
 	if (argc != 1)
 		usage(argv[0]);
 
-	get_routes(&c);
-	get_addrs(&c);
-	get_dns(&c);
-
-	if (c.v4) {
-		fprintf(stderr, "ARP:\n");
-		fprintf(stderr, "\taddress: %02x:%02x:%02x:%02x:%02x:%02x "
-			"from %s\n", c.mac[0], c.mac[1], c.mac[2],
-				     c.mac[3], c.mac[4], c.mac[5], c.ifn);
-		fprintf(stderr, "DHCP:\n");
-		fprintf(stderr, "\tassign:\t%s\n\tnmask:\t%s\n"
-				"\trouter:\t%s\n\tDNS:\t%s\n",
-			inet_ntop(AF_INET, &c.addr4, buf4[0], sizeof(buf4[0])),
-			inet_ntop(AF_INET, &c.mask4, buf4[1], sizeof(buf4[1])),
-			inet_ntop(AF_INET, &c.gw4, buf4[2], sizeof(buf4[2])),
-			inet_ntop(AF_INET, &c.dns4, buf4[3], sizeof(buf4[3])));
-	}
-	if (c.v6) {
-		fprintf(stderr, "NDP:\n");
-		fprintf(stderr, "\tassign:\t%s\n\trouter:\t%s\n\tDNS:\t%s\n",
-			inet_ntop(AF_INET6, &c.addr6, buf6[0], sizeof(buf6[0])),
-			inet_ntop(AF_INET6, &c.gw6, buf6[1], sizeof(buf6[1])),
-			inet_ntop(AF_INET6, &c.dns6, buf6[2], sizeof(buf6[2])));
-	}
-	fprintf(stderr, "\n");
-
 	if (clock_gettime(CLOCK_MONOTONIC, &last_time)) {
 		perror("clock_gettime");
 		exit(EXIT_FAILURE);
@@ -558,16 +532,51 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 
 	fd_unix = sock_unix();
+
+	openlog("passt", 0, LOG_DAEMON);
+	if (daemon(0, 0)) {
+		fprintf(stderr, "Failed to fork into background\n");
+		exit(EXIT_FAILURE);
+	}
+
+	get_routes(&c);
+	get_addrs(&c);
+	get_dns(&c);
+
+	if (c.v4) {
+		info("ARP:");
+		info("    address: %02x:%02x:%02x:%02x:%02x:%02x from %s",
+		     c.mac[0], c.mac[1], c.mac[2], c.mac[3], c.mac[4], c.mac[5],
+		     c.ifn);
+		info("DHCP:");
+		info("    assign: %s",
+		     inet_ntop(AF_INET, &c.addr4, buf4[0], sizeof(buf4[0])));
+		info("    mask: %s",
+		     inet_ntop(AF_INET, &c.mask4, buf4[0], sizeof(buf4[0])));
+		info("    router: %s",
+		     inet_ntop(AF_INET, &c.gw4,   buf4[2], sizeof(buf4[2])));
+		info("    DNS: %s",
+		     inet_ntop(AF_INET, &c.dns4,  buf4[3], sizeof(buf4[3])));
+	}
+	if (c.v6) {
+		info("NDP:");
+		info("    assign: %s",
+		     inet_ntop(AF_INET6, &c.addr6, buf6[0], sizeof(buf6[0])));
+		info("    router: %s",
+		     inet_ntop(AF_INET6, &c.gw6,   buf6[1], sizeof(buf6[1])));
+		info("    DNS: %s",
+		     inet_ntop(AF_INET6, &c.dns6,  buf6[2], sizeof(buf6[2])));
+	}
+
 listen:
 	listen(fd_unix, 1);
-	fprintf(stderr,
-		"You can now start qrap:\n\t"
-		"./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio\n"
-		"or directly qemu, patched with:\n\t"
-		"qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch\n"
-		"as follows:\n\t"
-		"kvm ... -net socket,connect="
-			UNIX_SOCK_PATH " -net nic,model=virtio\n\n");
+	info("You can now start qrap:");
+	info("    ./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio");
+	info("or directly qemu, patched with:");
+	info("    qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch");
+	info("as follows:");
+	info("kvm ... -net socket,connect="
+	     UNIX_SOCK_PATH " -net nic,model=virtio");
 
 	c.fd_unix = accept(fd_unix, NULL, NULL);
 	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLERR | EPOLLHUP;

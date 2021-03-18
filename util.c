@@ -21,8 +21,26 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <sys/epoll.h>
+#include <syslog.h>
+#include <stdarg.h>
 
 #include "passt.h"
+
+#define logfn(name, level)						\
+void name(const char *format, ...) {					\
+	va_list args;							\
+									\
+	va_start(args, format);						\
+	vsyslog(level, format, args);					\
+	va_end(args);							\
+}
+
+logfn(err,   LOG_ERR)
+logfn(warn,  LOG_WARNING)
+logfn(info,  LOG_INFO)
+#ifdef DEBUG
+logfn(debug, LOG_DEBUG)
+#endif
 
 /**
  * csum_fold() - Fold long sum for IP and TCP checksum

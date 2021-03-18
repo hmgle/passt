@@ -1,3 +1,13 @@
+void err(const char *format, ...);
+void warn(const char *format, ...);
+void info(const char *format, ...);
+
+#ifdef DEBUG
+void debug(const char *format, ...);
+#else
+#define debug(...) { }
+#endif
+
 uint16_t csum_fold(uint32_t sum);
 uint16_t csum_ip4(void *buf, size_t len);
 void csum_tcp4(struct iphdr *iph);

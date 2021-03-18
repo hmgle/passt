@@ -198,18 +198,18 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	}
 
 	if (opts[53].c[0] == DHCPDISCOVER) {
-		fprintf(stderr, "DHCP: offer to discover");
+		info("DHCP: offer to discover");
 		opts[53].s[0] = DHCPOFFER;
 	} else if (opts[53].c[0] == DHCPREQUEST) {
-		fprintf(stderr, "DHCP: ack to request");
+		info("DHCP: ack to request");
 		opts[53].s[0] = DHCPACK;
 	} else {
 		return -1;
 	}
 
-	fprintf(stderr, " from %02x:%02x:%02x:%02x:%02x:%02x\n\n",
-		m->chaddr[0], m->chaddr[1], m->chaddr[2],
-		m->chaddr[3], m->chaddr[4], m->chaddr[5]);
+	info("    from %02x:%02x:%02x:%02x:%02x:%02x",
+	     m->chaddr[0], m->chaddr[1], m->chaddr[2],
+	     m->chaddr[3], m->chaddr[4], m->chaddr[5]);
 
 	m->yiaddr = c->addr4;
 	*(unsigned long *)opts[1].s =  c->mask4;

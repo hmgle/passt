@@ -354,8 +354,9 @@ enum tcp_state {
 	FIN_WAIT_1,
 	FIN_WAIT_1_SOCK_FIN,
 };
+#define TCP_STATE_STR_SIZE	(FIN_WAIT_1_SOCK_FIN + 1)
 
-static char *tcp_state_str[FIN_WAIT_1_SOCK_FIN + 1] = {
+static char *tcp_state_str[TCP_STATE_STR_SIZE] __attribute((__unused__)) = {
 	"CLOSED", "TAP_SYN_SENT", "SOCK_SYN_SENT", "TAP_SYN_RCVD",
 	"ESTABLISHED", "ESTABLISHED_SOCK_FIN", "CLOSE_WAIT", "LAST_ACK",
 	"FIN_WAIT_1", "FIN_WAIT_1_SOCK_FIN",
@@ -480,8 +481,8 @@ static void tcp_act_clear(int s)
  */
 static void tcp_set_state(int s, enum tcp_state state)
 {
-	fprintf(stderr, "TCP: socket %i: %s -> %s\n", s,
-		tcp_state_str[tc[s].s], tcp_state_str[state]);
+	debug("TCP: socket %i: %s -> %s", s,
+	      tcp_state_str[tc[s].s], tcp_state_str[state]);
 	tc[s].s = state;
 }
 
