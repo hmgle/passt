@@ -18,6 +18,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <sys/resource.h>
 #include <sys/un.h>
 #include <ifaddrs.h>
 #include <linux/if_ether.h>
@@ -513,6 +514,7 @@ int main(int argc, char **argv)
 	struct timespec last_time;
 	struct ctx c = { 0 };
 	int nfds, i, fd_unix;
+	struct rlimit limit;
 
 	if (argc != 1)
 		usage(argv[0]);
@@ -525,6 +527,16 @@ int main(int argc, char **argv)
 	c.epollfd = epoll_create1(0);
 	if (c.epollfd == -1) {
 		perror("epoll_create1");
+		exit(EXIT_FAILURE);
+	}
+
+	if (getrlimit(RLIMIT_NOFILE, &limit)) {
+		perror("getrlimit");
+		exit(EXIT_FAILURE);
+	}
+	limit.rlim_cur = limit.rlim_max;
+	if (setrlimit(RLIMIT_NOFILE, &limit)) {
+		perror("setrlimit");
 		exit(EXIT_FAILURE);
 	}
 
