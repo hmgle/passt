@@ -5,6 +5,8 @@ and native Layer-4 sockets (TCP, UDP, ICMP/ICMPv6 echo) on a host. It doesn't
 require any capabilities or privileges, and it can be used as a simple
 replacement for Slirp.
 
+![overview diagram](/builds/passt_overview.png)
+
 - [General idea](#general-idea)
 - [Non-functional Targets](#non-functional-targets)
 - [Interfaces and Environment](#interfaces-and-environment)
@@ -50,7 +52,7 @@ solution comes with a number of downsides:
 _passt_ implements a thinner layer between guest and host, that only implements
 what's strictly needed to pretend processes are running locally. A further, full
 TCP/IP stack is not necessarily needed. Some sort of TCP adaptation is needed,
-however, as this layer runs without the `CAP\_NET\_RAW` capability: we can't
+however, as this layer runs without the `CAP_NET_RAW` capability: we can't
 create raw IP sockets on the pod, and therefore need to map packets at Layer-2
 to Layer-4 sockets offered by the host kernel.
 
@@ -162,6 +164,17 @@ before _passt_ starts.
     and start it like this:
 
             qemu-system-x86_64 ... -net socket,connect=/tmp/passt.socket -net nic,model=virtio
+
+* alternatively, you can use libvirt, with [this patch](https://passt.top/passt/tree/libvirt/0001-conf-Introduce-support-for-UNIX-domain-socket-as-qem.patch),
+  to start qemu (with the patch mentioned above), with this kind of network
+  interface configuration:
+
+        <interface type='client'>
+          <mac address='52:54:00:02:6b:60'/>
+          <source path='/tmp/passt.socket'/>
+          <model type='virtio'/>
+          <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
+        </interface>
 
 * and that's it, you should now have TCP connections, UDP, and ICMP/ICMPv6
   echo working from/to the guest for IPv4 and IPv6

@@ -591,7 +591,7 @@ listen:
 	info("or directly qemu, patched with:");
 	info("    qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch");
 	info("as follows:");
-	info("kvm ... -net socket,connect="
+	info("    kvm ... -net socket,connect="
 	     UNIX_SOCK_PATH " -net nic,model=virtio");
 
 	c.fd_unix = accept(fd_unix, NULL, NULL);
