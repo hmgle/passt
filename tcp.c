@@ -866,7 +866,7 @@ static uint32_t tcp_seq_init(struct ctx *c, int af, void *addr,
 		} __attribute__((__packed__)) in = {
 			.src = *(struct in_addr *)addr,
 			.srcport = srcport,
-			.dst = *(struct in_addr *)c->addr4,
+			.dst = { c->addr4 },
 			.dstport = dstport,
 		};
 
