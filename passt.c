@@ -540,20 +540,24 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	if (icmp_sock_init(&c) || tcp_sock_init(&c) || udp_sock_init(&c))
-		exit(EXIT_FAILURE);
-
-	fd_unix = sock_unix();
-
+#if DEBUG
+	openlog("passt", LOG_PERROR, LOG_DAEMON);
+#else
 	openlog("passt", 0, LOG_DAEMON);
 	if (daemon(0, 0)) {
 		fprintf(stderr, "Failed to fork into background\n");
 		exit(EXIT_FAILURE);
 	}
+#endif
 
 	get_routes(&c);
 	get_addrs(&c);
 	get_dns(&c);
+
+	fd_unix = sock_unix();
+
+	if (icmp_sock_init(&c) || tcp_sock_init(&c) || udp_sock_init(&c))
+		exit(EXIT_FAILURE);
 
 	if (c.v4) {
 		info("ARP:");
