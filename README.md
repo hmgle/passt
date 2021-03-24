@@ -5,7 +5,92 @@ and native Layer-4 sockets (TCP, UDP, ICMP/ICMPv6 echo) on a host. It doesn't
 require any capabilities or privileges, and it can be used as a simple
 replacement for Slirp.
 
-![overview diagram](/builds/passt_overview.png)
+<img src="/builds/passt_overview.png" usemap="#image-map" class="bright" style="z-index: 20; position: relative;">
+<map name="image-map" id="map_overview">
+    <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/tcp.7.html" coords="229,275,246,320,306,294,287,249" shape="poly">
+    <area class="map_area" target="_blank" href="https://lwn.net/Articles/420799/" coords="230,201,243,246,297,232,289,186" shape="poly">
+    <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/udp.7.html" coords="234,129,236,175,297,169,293,126" shape="poly">
+    <area class="map_area" target="_blank" href="https://en.wiktionary.org/wiki/passen#German" coords="387,516,841,440,847,476,393,553" shape="poly">
+    <area class="map_area" target="_blank" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/net/ipv4/udp.c" coords="398,123,520,157" shape="rect">
+    <area class="map_area" target="_blank" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/net/ipv4/ping.c" coords="397,164,517,197" shape="rect">
+    <area class="map_area" target="_blank" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/net/ipv4/tcp.c" coords="398,203,516,237" shape="rect">
+    <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/unix.7.html" coords="569,306,674,359" shape="rect">
+    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/udp.c" coords="719,152,740,176,792,134,768,108" shape="poly">
+    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/icmp.c" coords="727,206,827,120,854,150,754,238" shape="poly">
+    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/tcp.c" coords="730,273,774,326,947,176,902,119" shape="poly">
+    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/igmp.c" coords="865,273,912,295" shape="rect">
+    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/arp.c" coords="854,300,897,320" shape="rect">
+    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/ndp.c" coords="869,325,909,344" shape="rect">
+    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/mld.c" coords="924,267,964,289" shape="rect">
+    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/dhcpv6.c" coords="918,297,986,317" shape="rect">
+    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/dhcp.c" coords="931,328,981,352" shape="rect">
+    <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/udp.7.html" coords="1073,115,1059,154,1120,176,1133,137" shape="poly">
+    <area class="map_area" target="_blank" href="https://lwn.net/Articles/420799/" coords="966,113,942,152,1000,175,1017,136" shape="poly">
+    <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/tcp.7.html" coords="1059,175,1039,213,1098,237,1116,197" shape="poly">
+    <area class="map_area" target="_blank" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/net/ipv4/udp.c" coords="1203,154,1326,189" shape="rect">
+    <area class="map_area" target="_blank" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/net/ipv4/ping.c" coords="1202,195,1327,228" shape="rect">
+    <area class="map_area" target="_blank" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/net/ipv4/tcp.c" coords="1204,236,1327,269" shape="rect">
+    <area class="map_area" target="_blank" href="https://en.wikipedia.org/wiki/OSI_model#Layer_architecture" coords="1159,52,1325,147" shape="rect">
+    <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man4/veth.4.html" coords="1119,351,1157,339,1198,340,1236,345,1258,359,1229,377,1176,377,1139,375,1114,365" shape="poly">
+    <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man4/veth.4.html" coords="1044,471,1090,461,1126,462,1150,464,1176,479,1160,491,1121,500,1081,501,1044,491,1037,483" shape="poly">
+    <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/network_namespaces.7.html" coords="240,379,524,452" shape="rect">
+    <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/netlink.7.html" coords="1119,278,1117,293,1165,304,1169,288" shape="poly">
+    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/passt.c#n195" coords="989,294,1040,264,1089,280,986,344" shape="poly">
+</map>
+<canvas id="map_highlight" style="border: 0px; z-index: 10; position: fixed;"></canvas>
+<script>
+function canvas_position(el) {
+	var rect = el.getBoundingClientRect();
+	var canvas = document.getElementById('map_highlight');
+
+	canvas.width = rect.right - rect.left;
+	canvas.height = rect.bottom - rect.top;
+	canvas.style.left = rect.left + 'px';
+	canvas.style.top = rect.top + 'px';
+}
+
+function map_hover() {
+	var coords = this.coords.split(',');
+	var canvas = document.getElementById('map_highlight');
+	var ctx = canvas.getContext('2d');
+
+	canvas_position(this);
+
+	ctx.fillStyle = 'rgba(255, 255, 255, .3)';
+	ctx.lineWidth = 1.5;
+	ctx.strokeStyle = 'rgba(255, 255, 100, 1)';
+
+	ctx.beginPath();
+	ctx.setLineDash([15, 15]);
+	if (this.shape == "poly") {
+		ctx.moveTo(coords[0], coords[1]);
+		for (item = 2; item < coords.length - 1; item += 2) {
+			ctx.lineTo(coords[item], coords[item + 1])
+		}
+	} else if (this.shape == "rect") {
+		ctx.rect(coords[0], coords[1],
+			 coords[2] - coords[0], coords[3] - coords[1]);
+	}
+
+	ctx.closePath();
+	ctx.stroke();
+	ctx.fill();
+}
+
+function map_out() {
+	var canvas = document.getElementById('map_highlight');
+	var ctx = canvas.getContext('2d');
+
+	ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+var map_areas = document.getElementsByClassName("map_area");
+
+for (var i = 0; i < map_areas.length; i++) {
+	map_areas[i].onmouseover = map_hover;
+	map_areas[i].onmouseout = map_out;
+}
+</script>
 
 - [General idea](#general-idea)
 - [Non-functional Targets](#non-functional-targets)
