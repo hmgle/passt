@@ -28,7 +28,6 @@
 
 /**
  * struct opt - DHCP option
- * @force:	Force sending, even if the client didn't request it
  * @sent:	Convenience flag, set while filling replies
  * @slen:	Length of option defined for server
  * @s:		Option payload from server
@@ -118,7 +117,7 @@ static void fill_one(struct msg *m, int o, int *offset)
 }
 
 /**
- * fill() - Fill requested and forced options in message
+ * fill() - Fill options in message
  * @m:		Message to fill
  *
  * Return: current size of options field
