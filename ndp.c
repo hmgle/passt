@@ -80,13 +80,14 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		ihr->icmp6_type = RA;
 		ihr->icmp6_code = 0;
 		ihr->icmp6_rt_lifetime = htons(3600);
+		ihr->icmp6_addrconf_managed = 1;
 
 		p = (unsigned char *)(ihr + 1);
 		p += 8;				/* reachable, retrans time */
 		*p++ = 3;			/* prefix */
 		*p++ = 4;			/* length */
 		*p++ = 64;			/* prefix length */
-		*p++ = 0xc0;			/* flags: L, A */
+		*p++ = 0xc0;			/* prefix flags: L, A */
 		*(uint32_t *)p = htonl(3600);	/* lifetime */
 		p += 4;
 		*(uint32_t *)p = htonl(3600);	/* preferred lifetime */

@@ -47,6 +47,7 @@
 #include "arp.h"
 #include "dhcp.h"
 #include "ndp.h"
+#include "dhcpv6.h"
 #include "util.h"
 #include "icmp.h"
 #include "tcp.h"
@@ -308,6 +309,9 @@ static void tap4_handler(struct ctx *c, char *in, size_t len)
 	char buf_d[BUFSIZ] __attribute((__unused__));
 	char *l4h;
 
+	if (!c->v4)
+		return;
+
 	if (arp(c, eh, len) || dhcp(c, eh, len))
 		return;
 
@@ -358,17 +362,17 @@ static void tap6_handler(struct ctx *c, char *in, size_t len)
 	uint8_t proto;
 	char *l4h;
 
+	if (!c->v6)
+		return;
+
 	if (len < sizeof(*eh) + sizeof(*ip6h))
 		return;
 
-	if (ndp(c, eh, len))
+	if (ndp(c, eh, len) || dhcpv6(c, eh, len))
 		return;
 
 	l4h = ipv6_l4hdr(ip6h, &proto);
 
-	/* TODO: Assign MAC address to guest so that, together with prefix
-	 * assigned via NDP, address matches the one from the host.
-	 */
 	c->addr6_guest = ip6h->saddr;
 	ip6h->saddr = c->addr6;
 
@@ -559,6 +563,9 @@ int main(int argc, char **argv)
 	if (icmp_sock_init(&c) || tcp_sock_init(&c) || udp_sock_init(&c))
 		exit(EXIT_FAILURE);
 
+	if (c.v6)
+		dhcpv6_init(&c);
+
 	if (c.v4) {
 		info("ARP:");
 		info("    address: %02x:%02x:%02x:%02x:%02x:%02x from %s",
@@ -575,7 +582,7 @@ int main(int argc, char **argv)
 		     inet_ntop(AF_INET, &c.dns4,  buf4[3], sizeof(buf4[3])));
 	}
 	if (c.v6) {
-		info("NDP:");
+		info("NDP/DHCPv6:");
 		info("    assign: %s",
 		     inet_ntop(AF_INET6, &c.addr6, buf6[0], sizeof(buf6[0])));
 		info("    router: %s",

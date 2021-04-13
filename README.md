@@ -171,7 +171,7 @@ capabilities, as we don't need to create any interface.
 _passt_ provides some minimalistic implementations of networking services that
 can't practically run on the host:
 
-* [ARP proxy](https://passt.top/passt/tree/arp.c), that resolve the address of
+* [ARP proxy](https://passt.top/passt/tree/arp.c), that resolves the address of
   the host (which is used as gateway) to the original MAC address of the host
 * [DHCP server](https://passt.top/passt/tree/dhcp.c), a simple implementation
   handing out one single IPv4 address to the guest, namely, the same address as
@@ -179,11 +179,10 @@ can't practically run on the host:
   nameservers configured on the host
 * [NDP proxy](https://passt.top/passt/tree/ndp.c), which can also assign prefix
   and nameserver using SLAAC
-* _to be done_: DHCPv6 server: right now, the guest gets the same _prefix_ as
-  the host, but not the same address, because the suffix is generated from the
-  MAC address of the virtual machine, so we currently have to translate packet
-  addresses back and forth. With a DHCPv6 server, we could simply assign the
-  host address to the guest
+* [DHCPv6 server](https://passt.top/passt/tree/dhcpv6.c): a simple
+  implementation handing out one single IPv6 address to the guest, namely, the
+  the same address as the first one configured for the upstream host interface,
+  and passing the first nameserver configured on the host
 
 ## Addresses
 
@@ -192,11 +191,11 @@ interface of the host, and the same default gateway as the default gateway of
 the host. Addresses are never translated.
 
 For IPv6, the guest is assigned, via SLAAC, the same prefix as the upstream
-interface of the host, and the same default route as the default route of the
-host. This means that the guest will typically have a different address, and
-the destination address is translated for packets going to the guest. This will
-be avoided in the future once a minimalistic DHCPv6 server is implemented in
-_passt_.
+interface of the host, the same default route as the default route of the
+host, and, if a DHCPv6 client is running on the guest, also the same address as
+the upstream address of the host. This means that, with a DHCPv6 client on the
+guest, addresses don't need to be translated. Should the client use a different
+address, the destination address is translated for packets going to the guest.
 
 ## Protocols
 
