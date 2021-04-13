@@ -37,7 +37,7 @@ replacement for Slirp.
     <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/netlink.7.html" coords="1119,278,1117,293,1165,304,1169,288" shape="poly">
     <area class="map_area" target="_blank" href="https://passt.top/passt/tree/passt.c#n195" coords="989,294,1040,264,1089,280,986,344" shape="poly">
 </map>
-<canvas id="map_highlight" style="border: 0px; z-index: 10; position: fixed;"></canvas>
+<canvas id="map_highlight" style="border: 0px; z-index: 10; position: fixed; pointer-events: none"></canvas>
 <script>
 function canvas_position(el) {
 	var rect = el.getBoundingClientRect();
