@@ -42,6 +42,7 @@
 #include <linux/rtnetlink.h>
 #include <time.h>
 #include <syslog.h>
+#include <sys/stat.h>
 
 #include "passt.h"
 #include "arp.h"
@@ -80,6 +81,10 @@ static int sock_unix(void)
 		perror("UNIX socket bind");
 		exit(EXIT_FAILURE);
 	}
+
+	chmod(UNIX_SOCK_PATH,
+	      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+
 	return fd;
 }
 
