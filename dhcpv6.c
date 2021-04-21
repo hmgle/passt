@@ -299,6 +299,7 @@ static struct opt_hdr *dhcpv6_ia_notonlink(struct opt_hdr *o, size_t len,
 					   struct in6_addr *addr)
 {
 	struct opt_hdr *ia, *ia_addr;
+	char buf[INET6_ADDRSTRLEN];
 	struct in6_addr *req_addr;
 	size_t __len;
 	int ia_type;
@@ -309,7 +310,7 @@ ia_ta:
 	ia = o;
 
 	while ((ia = dhcpv6_opt(ia, ia_type, &__len))) {
-		size_t ia_len = ntohs(ia->l) - sizeof(struct opt_hdr);
+		size_t ia_len = ntohs(ia->l);
 
 		if (ia_len > __len)
 			return NULL;
@@ -328,8 +329,13 @@ ia_ta:
 			struct opt_ia_addr *next;
 
 			req_addr = (struct in6_addr *)(ia_addr + 1);
-			if (memcmp(addr, req_addr, sizeof(*addr)))
+
+			if (memcmp(addr, req_addr, sizeof(*addr))) {
+				info("DHCPv6: requested address %s not on link",
+				     inet_ntop(AF_INET6, req_addr,
+					       buf, sizeof(buf)));
 				return ia;
+			}
 
 			next = (struct opt_ia_addr *)ia_addr + 1;
 			ia_addr = (struct opt_hdr *)next;
@@ -412,17 +418,21 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 
 		if ((bad_ia = dhcpv6_ia_notonlink((struct opt_hdr *)(mh + 1),
 						  mlen, &c->addr6))) {
-			n = OPT_IA_NA ? sizeof(struct opt_ia_na) :
-					sizeof(struct opt_ia_ta);
-			memcpy(&resp_not_on_link.var, bad_ia, n);
+			info("DHCPv6: received CONFIRM with inappropriate IA,"
+			     " sending NotOnLink status in REPLY");
 
-			memcpy(&resp_not_on_link.var + n, &sc_not_on_link,
+			n = ntohs(bad_ia->l) + sizeof(struct opt_hdr);
+			bad_ia->l = htons(n - sizeof(struct opt_hdr) +
+					  sizeof(sc_not_on_link));
+			memcpy(resp_not_on_link.var, bad_ia, n);
+
+			memcpy(resp_not_on_link.var + n, &sc_not_on_link,
 			       sizeof(sc_not_on_link));
 			n += sizeof(sc_not_on_link);
 
-			memcpy(&resp_not_on_link.var + n, client_id,
-			       sizeof(struct opt_hdr) + client_id->l);
-			n += sizeof(struct opt_hdr) + client_id->l;
+			memcpy(resp_not_on_link.var + n, client_id,
+			       sizeof(struct opt_hdr) + ntohs(client_id->l));
+			n += sizeof(struct opt_hdr) + ntohs(client_id->l);
 
 			n = offsetof(struct resp_not_on_link_t, var) + n;
 			resp_not_on_link.uh.len = htons(n);
