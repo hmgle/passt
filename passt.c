@@ -308,10 +308,10 @@ static void get_dns(struct ctx *c)
  */
 static void tap4_handler(struct ctx *c, char *in, size_t len)
 {
+	char buf_s[INET_ADDRSTRLEN] __attribute((__unused__));
+	char buf_d[INET_ADDRSTRLEN] __attribute((__unused__));
 	struct ethhdr *eh = (struct ethhdr *)in;
 	struct iphdr *iph = (struct iphdr *)(eh + 1);
-	char buf_s[BUFSIZ] __attribute((__unused__));
-	char buf_d[BUFSIZ] __attribute((__unused__));
 	char *l4h;
 
 	if (!c->v4)
@@ -360,10 +360,10 @@ static void tap4_handler(struct ctx *c, char *in, size_t len)
  */
 static void tap6_handler(struct ctx *c, char *in, size_t len)
 {
+	char buf_s[INET6_ADDRSTRLEN] __attribute((__unused__));
+	char buf_d[INET6_ADDRSTRLEN] __attribute((__unused__));
 	struct ethhdr *eh = (struct ethhdr *)in;
 	struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1);
-	char buf_s[BUFSIZ] __attribute((__unused__));
-	char buf_d[BUFSIZ] __attribute((__unused__));
 	uint8_t proto;
 	char *l4h;
 
