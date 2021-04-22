@@ -277,10 +277,11 @@ static struct opt_hdr *dhcpv6_opt(struct opt_hdr *o, uint16_t type, size_t *len)
 		if (ntohs(o->l) > *len)
 			return NULL;
 
+		*len -= ntohs(o->l) + sizeof(struct opt_hdr);
+
 		if (o->t == type)
 			return o;
 
-		*len -= ntohs(o->l) + sizeof(struct opt_hdr);
 		o = (struct opt_hdr *)((uint8_t *)(o + 1) + ntohs(o->l));
 	}
 
