@@ -64,6 +64,7 @@ ipv6_passt="$(ipv6_mangle "${ipv6_addr}")"
 ndp_setup "${ipv6_passt}"
 ip -n passt addr add "${ipv6_passt}/$(ipv6_mask "${ipv6_addr}")" dev veth_passt
 ip addr add "${ipv6_addr}" dev veth_passt
+ip route add "${ipv6_passt}" dev veth_passt
 passt_ll="$(ipv6_ll_addr "veth_passt")"
 main_ll="$(get_token "link/ether" $(ip -o li sh veth_passt))"
 ip neigh add "${passt_ll%%/*}" dev veth_passt lladdr "${main_ll}"
