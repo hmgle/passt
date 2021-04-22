@@ -330,7 +330,9 @@ static void tap4_handler(struct ctx *c, char *in, size_t len)
 		debug("icmp from tap: %s -> %s",
 		      inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
 		      inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)));
-	} else {
+	} else if (iph->protocol == IPPROTO_TCP ||
+		   iph->protocol == IPPROTO_UDP ||
+		   iph->protocol == IPPROTO_SCTP) {
 		struct tcphdr *th = (struct tcphdr *)l4h;
 
 		if (len < sizeof(*th) && len < sizeof(struct udphdr))
@@ -387,7 +389,8 @@ static void tap6_handler(struct ctx *c, char *in, size_t len)
 		debug("icmpv6 from tap: %s ->\n\t%s",
 		      inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
 		      inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)));
-	} else {
+	} else if (proto == IPPROTO_TCP || proto == IPPROTO_UDP ||
+		   proto == IPPROTO_SCTP) {
 		struct tcphdr *th = (struct tcphdr *)l4h;
 
 		if (len < sizeof(*th) && len < sizeof(struct udphdr))
