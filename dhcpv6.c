@@ -210,7 +210,6 @@ static struct resp_t {
 	struct opt_server_id server_id;
 	struct opt_ia_na ia_na;
 	struct opt_ia_addr ia_addr;
-	struct opt_dns_servers dns_servers;
 	struct opt_client_id client_id;
 } __attribute__((__packed__)) resp = {
 	uh_resp,
@@ -227,9 +226,6 @@ static struct resp_t {
 	  IN6ADDR_ANY_INIT, (uint32_t)~0U, (uint32_t)~0U
 	},
 
-	{ { OPT_DNS_SERVERS,	OPT_SIZE(dns_servers), },
-	  IN6ADDR_ANY_INIT
-	},
 
 	{ { OPT_CLIENTID,	0, },
 	  { 0 }
@@ -509,5 +505,4 @@ void dhcpv6_init(struct ctx *c)
 	memcpy(resp_not_on_link.server_id.duid_lladdr,	c->mac, sizeof(c->mac));
 
 	resp.ia_addr.addr	= c->addr6;
-	resp.dns_servers.addr	= c->dns6;
 }
