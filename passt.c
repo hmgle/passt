@@ -698,7 +698,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-#if DEBUG || 1
+#if DEBUG
 	openlog("passt", LOG_PERROR, LOG_DAEMON);
 #else
 	openlog("passt", 0, LOG_DAEMON);
