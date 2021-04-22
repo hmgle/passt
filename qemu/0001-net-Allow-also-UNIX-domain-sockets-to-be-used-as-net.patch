@@ -1,6 +1,7 @@
-From 8876676bbdb108f51c372d1347dec1382078d702 Mon Sep 17 00:00:00 2001
+From ba51349d353f11e05c6341a7e065f2ade3874c68 Mon Sep 17 00:00:00 2001
+Message-Id: <ba51349d353f11e05c6341a7e065f2ade3874c68.1619091389.git.sbrivio@redhat.com>
 From: Stefano Brivio <sbrivio@redhat.com>
-Date: Wed, 17 Mar 2021 10:33:22 +0100
+Date: Wed, 21 Apr 2021 18:51:18 +0200
 Subject: [PATCH 1/2] net: Allow also UNIX domain sockets to be used as -netdev
  socket
 
@@ -9,15 +10,15 @@ and the adaptation is trivial.
 
 Signed-off-by: Stefano Brivio <sbrivio@redhat.com>
 ---
- net/socket.c    | 93 +++++++++++++++++++++++++++++++++++++++++--------
- qemu-options.hx | 12 +++----
- 2 files changed, 84 insertions(+), 21 deletions(-)
+ net/socket.c    | 106 ++++++++++++++++++++++++++++++++++++++++--------
+ qemu-options.hx |  12 +++---
+ 2 files changed, 94 insertions(+), 24 deletions(-)
 
 diff --git a/net/socket.c b/net/socket.c
-index c0de10c0c0..9d06953983 100644
+index 15b410e8d825..aadd11dae2b3 100644
 --- a/net/socket.c
 +++ b/net/socket.c
-@@ -528,27 +528,62 @@ static int net_socket_listen_init(NetClientState *peer,
+@@ -511,26 +511,60 @@ static int net_socket_listen_init(NetClientState *peer,
  {
      NetClientState *nc;
      NetSocketState *s;
@@ -28,16 +29,15 @@ index c0de10c0c0..9d06953983 100644
 +    struct sockaddr_un *saddr_un = (struct sockaddr_un *)&saddr;
 +    size_t saddr_size;
 +    int fd, ret, pf;
-     NetdevSocketOptions *stored;
- 
--    if (parse_host_port(&saddr, host_str, errp) < 0) {
--        return -1;
++
 +#ifndef WIN32
 +    if (strchr(host_str, ':')) {
 +#endif
 +        if (parse_host_port(saddr_in, host_str, errp) < 0)
 +            return -1;
-+
+ 
+-    if (parse_host_port(&saddr, host_str, errp) < 0) {
+-        return -1;
 +        pf = PF_INET;
 +        saddr_size = sizeof(*saddr_in);
 +#ifndef WIN32
@@ -85,11 +85,10 @@ index c0de10c0c0..9d06953983 100644
 +        else if (pf == PF_UNIX)
 +            error_setg_errno(errp, errno, "can't create socket with path: %s",
 +                             host_str);
-+
          closesocket(fd);
          return -1;
      }
-@@ -586,15 +621,43 @@ static int net_socket_connect_init(NetClientState *peer,
+@@ -559,14 +593,44 @@ static int net_socket_connect_init(NetClientState *peer,
                                     Error **errp)
  {
      NetSocketState *s;
@@ -98,21 +97,22 @@ index c0de10c0c0..9d06953983 100644
 +    int fd, connected, ret, pf;
 +    struct sockaddr_storage saddr;
 +    size_t saddr_size;
-     NetdevSocketOptions *stored;
++    struct sockaddr_in *saddr_in = (struct sockaddr_in *)&saddr;
++#ifndef WIN32
++    struct sockaddr_un *saddr_un = (struct sockaddr_un *)&saddr;
  
 -    if (parse_host_port(&saddr, host_str, errp) < 0) {
 -        return -1;
-+#ifndef WIN32
++
 +    if (strchr(host_str, ':')) {
 +#endif
-+        if (parse_host_port((struct sockaddr_in *)&saddr, host_str, errp) < 0)
++        if (parse_host_port(saddr_in, host_str, errp) < 0)
 +            return -1;
 +
 +        pf = PF_INET;
-+        saddr_size = sizeof(struct sockaddr_in);
++        saddr_size = sizeof(*saddr_in);
 +#ifndef WIN32
 +    } else {
-+        struct sockaddr_un *saddr_un = (struct sockaddr_un *)&saddr;
 +        struct stat sb;
 +
 +        if (stat(host_str, &sb) == -1) {
@@ -129,7 +129,7 @@ index c0de10c0c0..9d06953983 100644
 +        strncpy(saddr_un->sun_path, host_str, sizeof(saddr_un->sun_path));
 +
 +        pf = PF_UNIX;
-+        saddr_size = sizeof(struct sockaddr_un);
++        saddr_size = sizeof(*saddr_un);
      }
 +#endif /* !WIN32 */
  
@@ -138,7 +138,7 @@ index c0de10c0c0..9d06953983 100644
      if (fd < 0) {
          error_setg_errno(errp, errno, "can't create stream socket");
          return -1;
-@@ -603,7 +666,7 @@ static int net_socket_connect_init(NetClientState *peer,
+@@ -575,7 +639,7 @@ static int net_socket_connect_init(NetClientState *peer,
  
      connected = 0;
      for(;;) {
@@ -147,11 +147,30 @@ index c0de10c0c0..9d06953983 100644
          if (ret < 0) {
              if (errno == EINTR || errno == EWOULDBLOCK) {
                  /* continue */
+@@ -598,9 +662,15 @@ static int net_socket_connect_init(NetClientState *peer,
+         return -1;
+     }
+ 
+-    snprintf(s->nc.info_str, sizeof(s->nc.info_str),
+-             "socket: connect to %s:%d",
+-             inet_ntoa(saddr.sin_addr), ntohs(saddr.sin_port));
++    if (pf == PF_INET) {
++        snprintf(s->nc.info_str, sizeof(s->nc.info_str),
++                 "socket: connect to %s:%d",
++                 inet_ntoa(saddr_in->sin_addr), ntohs(saddr_in->sin_port));
++    } else if (pf == PF_UNIX) {
++        snprintf(s->nc.info_str, sizeof(s->nc.info_str),
++                 "socket: connect to %s", saddr_un->sun_path);
++    }
++
+     return 0;
+ }
+ 
 diff --git a/qemu-options.hx b/qemu-options.hx
-index fe83ea09b2..b41351a54e 100644
+index fd21002bd61d..625a31dcdbc8 100644
 --- a/qemu-options.hx
 +++ b/qemu-options.hx
-@@ -2836,13 +2836,13 @@ SRST
+@@ -2847,13 +2847,13 @@ SRST
          #connect a TAP device to bridge qemubr0
          |qemu_system| linux.img -netdev bridge,br=qemubr0,id=n1 -device virtio-net,netdev=n1
  
@@ -172,5 +191,5 @@ index fe83ea09b2..b41351a54e 100644
      Example:
  
 -- 
-2.28.0
+2.29.2
 
