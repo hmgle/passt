@@ -47,6 +47,7 @@ ip link del veth_passt 2>/dev/null || :
 ip netns add passt
 ip link add veth_passt up netns passt type veth peer name veth_passt
 ip link set dev veth_passt up
+ip -n passt link set dev lo up
 
 
 ip -n passt addr add 192.0.2.2/24 dev veth_passt
