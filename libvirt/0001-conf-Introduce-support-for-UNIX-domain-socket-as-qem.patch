@@ -1,6 +1,7 @@
-From 62e95cb4b5708eca7860139dffef22e65b29514c Mon Sep 17 00:00:00 2001
+From 7afbbab2ccada16c87e1095e85184bb21c028012 Mon Sep 17 00:00:00 2001
+Message-Id: <7afbbab2ccada16c87e1095e85184bb21c028012.1619091487.git.sbrivio@redhat.com>
 From: Stefano Brivio <sbrivio@redhat.com>
-Date: Sat, 20 Mar 2021 07:16:15 +0100
+Date: Wed, 21 Apr 2021 19:29:31 +0200
 Subject: [PATCH] conf: Introduce support for UNIX domain socket as qemu netdev
  back-end
 
@@ -21,10 +22,10 @@ Signed-off-by: Stefano Brivio <sbrivio@redhat.com>
  6 files changed, 160 insertions(+), 56 deletions(-)
 
 diff --git a/docs/formatdomain.rst b/docs/formatdomain.rst
-index 9392c80113..b5b642e91a 100644
+index 1b9b2216111c..87c3c956fa23 100644
 --- a/docs/formatdomain.rst
 +++ b/docs/formatdomain.rst
-@@ -4995,18 +4995,20 @@ must be from the multicast address block.
+@@ -5010,18 +5010,20 @@ must be from the multicast address block.
     </devices>
     ...
  
@@ -55,12 +56,12 @@ index 9392c80113..b5b642e91a 100644
  
  ::
  
-@@ -5024,6 +5026,25 @@ appropriate routing.
+@@ -5039,6 +5041,25 @@ appropriate routing.
     </devices>
     ...
  
 +Named UNIX domain sockets can be specified as follows:
-+:since:`Since 7.2.0, qemu`
++:since:`Since 7.3.0, qemu`
 +
 +::
 +
@@ -82,10 +83,10 @@ index 9392c80113..b5b642e91a 100644
  
  UDP unicast tunnel
 diff --git a/docs/schemas/domaincommon.rng b/docs/schemas/domaincommon.rng
-index 1dbfc68f18..350d6969c0 100644
+index a2e5c50c1d77..7c0a90ba199b 100644
 --- a/docs/schemas/domaincommon.rng
 +++ b/docs/schemas/domaincommon.rng
-@@ -3125,10 +3125,7 @@
+@@ -3161,10 +3161,7 @@
          </group>
          <group>
            <attribute name="type">
@@ -97,7 +98,7 @@ index 1dbfc68f18..350d6969c0 100644
            </attribute>
            <interleave>
              <element name="source">
-@@ -3143,6 +3140,30 @@
+@@ -3179,6 +3176,30 @@
              <ref name="interface-options"/>
            </interleave>
          </group>
@@ -128,7 +129,7 @@ index 1dbfc68f18..350d6969c0 100644
          <group>
            <attribute name="type">
              <value>udp</value>
-@@ -3174,14 +3195,21 @@
+@@ -3210,14 +3231,21 @@
            </attribute>
            <interleave>
              <element name="source">
@@ -158,10 +159,10 @@ index 1dbfc68f18..350d6969c0 100644
              </element>
              <ref name="interface-options"/>
 diff --git a/src/conf/domain_conf.c b/src/conf/domain_conf.c
-index 7671050134..55543c47ce 100644
+index f8a462fb3b99..8c6a5d4f974e 100644
 --- a/src/conf/domain_conf.c
 +++ b/src/conf/domain_conf.c
-@@ -2569,8 +2569,9 @@ virDomainNetDefFree(virDomainNetDefPtr def)
+@@ -2562,8 +2562,9 @@ virDomainNetDefFree(virDomainNetDef *def)
      case VIR_DOMAIN_NET_TYPE_CLIENT:
      case VIR_DOMAIN_NET_TYPE_MCAST:
      case VIR_DOMAIN_NET_TYPE_UDP:
@@ -173,7 +174,7 @@ index 7671050134..55543c47ce 100644
          break;
  
      case VIR_DOMAIN_NET_TYPE_NETWORK:
-@@ -10792,6 +10793,7 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
+@@ -10555,6 +10556,7 @@ virDomainNetDefParseXML(virDomainXMLOption *xmlopt,
      g_autofree char *downscript = NULL;
      g_autofree char *address = NULL;
      g_autofree char *port = NULL;
@@ -181,7 +182,7 @@ index 7671050134..55543c47ce 100644
      g_autofree char *localaddr = NULL;
      g_autofree char *localport = NULL;
      g_autofree char *model = NULL;
-@@ -10935,7 +10937,7 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
+@@ -10699,7 +10701,7 @@ virDomainNetDefParseXML(virDomainXMLOption *xmlopt,
                                       " <interface type='%s'>"), type);
                      goto error;
                  }
@@ -190,7 +191,7 @@ index 7671050134..55543c47ce 100644
                         (def->type == VIR_DOMAIN_NET_TYPE_SERVER ||
                          def->type == VIR_DOMAIN_NET_TYPE_CLIENT ||
                          def->type == VIR_DOMAIN_NET_TYPE_MCAST ||
-@@ -10943,6 +10945,7 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
+@@ -10707,6 +10709,7 @@ virDomainNetDefParseXML(virDomainXMLOption *xmlopt,
                         virXMLNodeNameEqual(cur, "source")) {
                  address = virXMLPropString(cur, "address");
                  port = virXMLPropString(cur, "port");
@@ -198,7 +199,7 @@ index 7671050134..55543c47ce 100644
                  if (!localaddr && def->type == VIR_DOMAIN_NET_TYPE_UDP) {
                      xmlNodePtr tmpnode = ctxt->node;
                      ctxt->node = cur;
-@@ -11186,6 +11189,27 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
+@@ -10950,6 +10953,27 @@ virDomainNetDefParseXML(virDomainXMLOption *xmlopt,
  
      case VIR_DOMAIN_NET_TYPE_CLIENT:
      case VIR_DOMAIN_NET_TYPE_SERVER:
@@ -226,7 +227,7 @@ index 7671050134..55543c47ce 100644
      case VIR_DOMAIN_NET_TYPE_MCAST:
      case VIR_DOMAIN_NET_TYPE_UDP:
          if (port == NULL) {
-@@ -11194,7 +11218,7 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
+@@ -10958,7 +10982,7 @@ virDomainNetDefParseXML(virDomainXMLOption *xmlopt,
                               "specified with socket interface"));
              goto error;
          }
@@ -235,7 +236,7 @@ index 7671050134..55543c47ce 100644
              virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                             _("Cannot parse <source> 'port' attribute "
                               "with socket interface"));
-@@ -11211,7 +11235,7 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
+@@ -10975,7 +10999,7 @@ virDomainNetDefParseXML(virDomainXMLOption *xmlopt,
                  goto error;
              }
          } else {
@@ -244,7 +245,7 @@ index 7671050134..55543c47ce 100644
          }
  
          if (def->type != VIR_DOMAIN_NET_TYPE_UDP)
-@@ -11223,7 +11247,8 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
+@@ -10987,7 +11011,8 @@ virDomainNetDefParseXML(virDomainXMLOption *xmlopt,
                               "specified with socket interface"));
              goto error;
          }
@@ -254,7 +255,7 @@ index 7671050134..55543c47ce 100644
              virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                             _("Cannot parse <local> 'port' attribute "
                               "with socket interface"));
-@@ -11236,7 +11261,7 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
+@@ -11000,7 +11025,7 @@ virDomainNetDefParseXML(virDomainXMLOption *xmlopt,
                               "specified with socket interface"));
              goto error;
          } else {
@@ -263,7 +264,7 @@ index 7671050134..55543c47ce 100644
          }
          break;
  
-@@ -26219,15 +26244,22 @@ virDomainNetDefFormat(virBufferPtr buf,
+@@ -25940,15 +25965,22 @@ virDomainNetDefFormat(virBuffer *buf,
  
          case VIR_DOMAIN_NET_TYPE_SERVER:
          case VIR_DOMAIN_NET_TYPE_CLIENT:
@@ -290,7 +291,7 @@ index 7671050134..55543c47ce 100644
              }
              sourceLines++;
  
-@@ -26239,8 +26271,8 @@ virDomainNetDefFormat(virBufferPtr buf,
+@@ -25960,8 +25992,8 @@ virDomainNetDefFormat(virBuffer *buf,
              virBufferAdjustIndent(buf, 2);
  
              virBufferAsprintf(buf, "<local address='%s' port='%d'/>\n",
@@ -302,13 +303,13 @@ index 7671050134..55543c47ce 100644
              break;
  
 diff --git a/src/conf/domain_conf.h b/src/conf/domain_conf.h
-index 87bc7e8625..3cc0842eed 100644
+index 7688f17b18cd..054b08330c8c 100644
 --- a/src/conf/domain_conf.h
 +++ b/src/conf/domain_conf.h
-@@ -1042,11 +1042,14 @@ struct _virDomainNetDef {
-     virDomainNetTeamingInfoPtr teaming;
+@@ -1055,11 +1055,14 @@ struct _virDomainNetDef {
+     virDomainNetTeamingInfo *teaming;
      union {
-         virDomainChrSourceDefPtr vhostuser;
+         virDomainChrSourceDef *vhostuser;
 -        struct {
 -            char *address;
 -            int port;
@@ -326,10 +327,10 @@ index 87bc7e8625..3cc0842eed 100644
          struct {
              char *name;
 diff --git a/src/qemu/qemu_command.c b/src/qemu/qemu_command.c
-index 5717f7b98d..c1687e582e 100644
+index 2ceff155124e..dbef58f37879 100644
 --- a/src/qemu/qemu_command.c
 +++ b/src/qemu/qemu_command.c
-@@ -3639,37 +3639,55 @@ qemuBuildHostNetStr(virDomainNetDefPtr net,
+@@ -3713,37 +3713,55 @@ qemuBuildHostNetStr(virDomainNetDef *net,
          break;
  
      case VIR_DOMAIN_NET_TYPE_CLIENT:
@@ -400,10 +401,10 @@ index 5717f7b98d..c1687e582e 100644
          break;
  
 diff --git a/src/qemu/qemu_hotplug.c b/src/qemu/qemu_hotplug.c
-index a66354426d..8ca86f9c53 100644
+index 4344edc75b80..69ef7abd0ee2 100644
 --- a/src/qemu/qemu_hotplug.c
 +++ b/src/qemu/qemu_hotplug.c
-@@ -3752,9 +3752,11 @@ qemuDomainChangeNet(virQEMUDriverPtr driver,
+@@ -3741,9 +3741,11 @@ qemuDomainChangeNet(virQEMUDriver *driver,
          case VIR_DOMAIN_NET_TYPE_CLIENT:
          case VIR_DOMAIN_NET_TYPE_MCAST:
          case VIR_DOMAIN_NET_TYPE_UDP:
@@ -419,5 +420,5 @@ index a66354426d..8ca86f9c53 100644
              }
              break;
 -- 
-2.28.0
+2.29.2
 
