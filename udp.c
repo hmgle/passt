@@ -23,6 +23,7 @@
  *
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <errno.h>
 #include <limits.h>
@@ -35,6 +36,7 @@
 #include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <unistd.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
@@ -105,43 +107,72 @@ void udp_sock_handler(struct ctx *c, int s, uint32_t events)
  * udp_tap_handler() - Handle packets from tap
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
- * @in:		Input buffer
- * @len:	Length, including UDP header
+ * @msg:	Input messages
+ * @count:	Message count
+ *
+ * Return: count of consumed packets
  */
-void udp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
+int udp_tap_handler(struct ctx *c, int af, void *addr,
+		    struct tap_msg *msg, int count)
 {
-	struct udphdr *uh = (struct udphdr *)in;
-	int s;
+	/* The caller already checks that all the messages have the same source
+	 * and destination, so we can just take those from the first message.
+	 */
+	struct udphdr *uh = (struct udphdr *)msg[0].l4h;
+	struct mmsghdr mm[UIO_MAXIOV] = { 0 };
+	struct iovec m[UIO_MAXIOV];
+	struct sockaddr_in6 s_in6;
+	struct sockaddr_in s_in;
+	struct sockaddr *sa;
+	socklen_t sl;
+	int i, s;
 
 	(void)c;
 
 	if (af == AF_INET) {
-		struct sockaddr_in sa = {
+		s_in = (struct sockaddr_in) {
 			.sin_family = AF_INET,
 			.sin_port = uh->dest,
+			.sin_addr = *(struct in_addr *)addr,
 		};
 
-		if (!(s = udp4_sock_port[ntohs(uh->source)]))
-			return;
-
-		sa.sin_addr = *(struct in_addr *)addr;
-
-		sendto(s, in + sizeof(*uh), len - sizeof(*uh), MSG_DONTWAIT,
-		       (struct sockaddr *)&sa, sizeof(sa));
+		sa = (struct sockaddr *)&s_in;
+		sl = sizeof(s_in);
 	} else if (af == AF_INET6) {
-		struct sockaddr_in6 sa = {
+		s_in6 = (struct sockaddr_in6) {
 			.sin6_family = AF_INET6,
 			.sin6_port = uh->dest,
 			.sin6_addr = *(struct in6_addr *)addr,
 		};
 
-		if (!(s = udp6_sock_port[ntohs(uh->source)]))
-			return;
-
-		sendto(s, in + sizeof(*uh), len - sizeof(*uh),
-		       MSG_DONTWAIT | MSG_NOSIGNAL,
-		       (struct sockaddr *)&sa, sizeof(sa));
+		sa = (struct sockaddr *)&s_in6;
+		sl = sizeof(s_in6);
+	} else {
+		return count;
 	}
+
+	for (i = 0; i < count; i++) {
+		m[i].iov_base = (char *)((struct udphdr *)msg[i].l4h + 1);
+		m[i].iov_len = msg[i].l4_len - sizeof(*uh);
+
+		mm[i].msg_hdr.msg_name = sa;
+		mm[i].msg_hdr.msg_namelen = sl;
+
+		mm[i].msg_hdr.msg_iov = m + i;
+		mm[i].msg_hdr.msg_iovlen = 1;
+	}
+
+	if (af == AF_INET) {
+		if (!(s = udp4_sock_port[ntohs(uh->source)]))
+			return count;
+	} else if (af == AF_INET6) {
+		if (!(s = udp6_sock_port[ntohs(uh->source)]))
+			return count;
+	} else {
+		return count;
+	}
+
+	return sendmmsg(s, mm, count, MSG_DONTWAIT | MSG_NOSIGNAL);
 }
 
 /**

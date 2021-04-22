@@ -1,5 +1,19 @@
 #define UNIX_SOCK_PATH	"/tmp/passt.socket"
 
+/**
+ * struct tap_msg - Generic message descriptor for arrays of messages
+ * @start:	Pointer to message start
+ * @l4_start:	Pointer to L4 header
+ * @len:	Message length, with L2 headers
+ * @l4_len:	Message length, with L4 headers
+ */
+struct tap_msg {
+	char *start;
+	char *l4h;
+	size_t len;
+	size_t l4_len;
+};
+
 #include "icmp.h"
 #include "tcp.h"
 

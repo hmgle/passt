@@ -583,7 +583,7 @@ static int tcp_sock_hash_match(struct tcp_conn *conn, int af, void *addr,
 static unsigned int tcp_sock_hash(struct ctx *c, int af, void *addr,
 				  in_port_t tap_port, in_port_t sock_port)
 {
-	uint64_t b;
+	uint64_t b = 0;
 
 	if (af == AF_INET) {
 		struct {
@@ -853,7 +853,7 @@ static uint32_t tcp_seq_init(struct ctx *c, int af, void *addr,
 			     in_port_t dstport, in_port_t srcport)
 {
 	struct timespec ts = { 0 };
-	uint32_t ns, seq;
+	uint32_t ns, seq = 0;
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 
@@ -1186,31 +1186,39 @@ out:
  * tcp_tap_handler() - Handle packets from tap and state transitions
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
- * @in:		Input buffer
- * @len:	Length, including TCP header
+ * @msg:	Input messages
+ * @count:	Message count
+ *
+ * Return: count of consumed packets
  */
-void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
+int tcp_tap_handler(struct ctx *c, int af, void *addr,
+		    struct tap_msg *msg, int count)
 {
-	struct tcphdr *th = (struct tcphdr *)in;
+	/* TODO: Implement message batching for TCP */
+	struct tcphdr *th = (struct tcphdr *)msg[0].l4h;
+	size_t len = msg[0].l4_len;
+
 	size_t off, skip = 0;
 	int s, ws;
 
+	(void)count;
+
 	if (len < sizeof(*th))
-		return;
+		return 1;
 
 	off = th->doff * 4;
 	if (off < sizeof(*th) || off > len)
-		return;
+		return 1;
 
 	if ((s = tcp_sock_hash_lookup(c, af, addr, th->source, th->dest)) < 0) {
 		if (th->syn)
 			tcp_conn_from_tap(c, af, addr, th, len);
-		return;
+		return 1;
 	}
 
 	if (th->rst) {
 		tcp_close_and_epoll_del(c, s);
-		return;
+		return 1;
 	}
 
 	tcp_clamp_window(s, th, len, th->syn && th->ack);
@@ -1224,7 +1232,7 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 	case SOCK_SYN_SENT:
 		if (!th->syn || !th->ack) {
 			tcp_rst(c, s);
-			return;
+			return 1;
 		}
 
 		tc[s].mss_guest = tcp_opt_get(th, len, OPT_MSS, NULL, NULL);
@@ -1234,12 +1242,12 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 		ws = tcp_opt_get(th, len, OPT_WS, NULL, NULL);
 		if (ws > MAX_WS) {
 			if (tcp_send_to_tap(c, s, RST, NULL, 0))
-				return;
+				return 1;
 
 			tc[s].seq_to_tap = 0;
 			tc[s].ws_allowed = 0;
 			tcp_send_to_tap(c, s, SYN, NULL, 0);
-			return;
+			return 1;
 		}
 
 		/* info.tcpi_bytes_acked already includes one byte for SYN, but
@@ -1261,7 +1269,7 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 
 		if (!th->ack) {
 			tcp_rst(c, s);
-			return;
+			return 1;
 		}
 
 		tcp_set_state(s, ESTABLISHED);
@@ -1294,7 +1302,8 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 		}
 
 		if (skip < len - off &&
-		    tcp_send_to_sock(c, s, in + off + skip, len - off - skip,
+		    tcp_send_to_sock(c, s,
+				     msg[0].l4h + off + skip, len - off - skip,
 				     th->psh ? 0 : MSG_MORE))
 			break;
 
@@ -1311,7 +1320,8 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 		tcp_sock_consume(s, ntohl(th->ack_seq));
 
 		if (skip < len - off &&
-		    tcp_send_to_sock(c, s, in + off + skip, len - off - skip,
+		    tcp_send_to_sock(c, s,
+				     msg[0].l4h + off + skip, len - off - skip,
 				     th->psh ? 0 : MSG_MORE))
 			break;
 
@@ -1331,6 +1341,8 @@ void tcp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
 	case CLOSED:	/* ;) */
 		break;
 	}
+
+	return 1;
 }
 
 /**

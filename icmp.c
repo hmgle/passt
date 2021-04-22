@@ -77,45 +77,54 @@ void icmp_sock_handler(struct ctx *c, int s, uint32_t events)
  * icmp_tap_handler() - Handle packets from tap
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
- * @in:		Input buffer
- * @len:	Length, including UDP header
+ * @msg:	Input message
+ * @count:	Message count (always 1 for ICMP)
+ *
+ * Return: count of consumed packets (always 1, even if malformed)
  */
-void icmp_tap_handler(struct ctx *c, int af, void *addr, char *in, size_t len)
+int icmp_tap_handler(struct ctx *c, int af, void *addr,
+		     struct tap_msg *msg, int count)
 {
+	(void)count;
+
 	if (af == AF_INET) {
-		struct icmphdr *ih = (struct icmphdr *)in;
+		struct icmphdr *ih = (struct icmphdr *)msg[0].l4h;
 		struct sockaddr_in sa = {
 			.sin_family = AF_INET,
 			.sin_addr.s_addr = htonl(INADDR_ANY),
 		};
 
-		if (len < sizeof(*ih) || ih->type != ICMP_ECHO)
-			return;
+		if (msg[0].l4_len < sizeof(*ih) || ih->type != ICMP_ECHO)
+			return 1;
 
 		sa.sin_port = ih->un.echo.id;
 		bind(c->icmp.s4, (struct sockaddr *)&sa, sizeof(sa));
 
 		sa.sin_addr = *(struct in_addr *)addr;
-		sendto(c->icmp.s4, in, len, MSG_DONTWAIT,
+		sendto(c->icmp.s4, msg[0].l4h, msg[0].l4_len,
+		       MSG_DONTWAIT | MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
 	} else if (af == AF_INET6) {
 		struct sockaddr_in6 sa = {
 			.sin6_family = AF_INET6,
 			.sin6_addr = IN6ADDR_ANY_INIT,
 		};
-		struct icmp6hdr *ih = (struct icmp6hdr *)in;
+		struct icmp6hdr *ih = (struct icmp6hdr *)msg[0].l4h;
 
-		if (len < sizeof(*ih) ||
+		if (msg[0].l4_len < sizeof(*ih) ||
 		    (ih->icmp6_type != 128 && ih->icmp6_type != 129))
-			return;
+			return 1;
 
 		sa.sin6_port = ih->icmp6_identifier;
 		bind(c->icmp.s6, (struct sockaddr *)&sa, sizeof(sa));
 
 		sa.sin6_addr = *(struct in6_addr *)addr;
-		sendto(c->icmp.s6, in, len, MSG_DONTWAIT | MSG_NOSIGNAL,
+		sendto(c->icmp.s6, msg[0].l4h, msg[0].l4_len,
+		       MSG_DONTWAIT | MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
 	}
+
+	return 1;
 }
 
 /**
