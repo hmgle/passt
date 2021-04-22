@@ -84,6 +84,10 @@ void udp_sock_handler(struct ctx *c, int s, uint32_t events)
 		struct sockaddr_in *sr4 = (struct sockaddr_in *)&sr;
 		struct sockaddr_in *sl4 = (struct sockaddr_in *)&sl;
 
+		if (ntohl(sr4->sin_addr.s_addr) == INADDR_LOOPBACK ||
+		    ntohl(sr4->sin_addr.s_addr) == INADDR_ANY)
+			sr4->sin_addr.s_addr = c->gw4;
+
 		memcpy(&a6.s6_addr[12], &sr4->sin_addr, sizeof(sr4->sin_addr));
 		uh->source = sr4->sin_port;
 		uh->dest = sl4->sin_port;
@@ -93,6 +97,9 @@ void udp_sock_handler(struct ctx *c, int s, uint32_t events)
 	} else if (sl.ss_family == AF_INET6) {
 		struct sockaddr_in6 *sr6 = (struct sockaddr_in6 *)&sr;
 		struct sockaddr_in6 *sl6 = (struct sockaddr_in6 *)&sl;
+
+		if (IN6_IS_ADDR_LOOPBACK(&sr6->sin6_addr))
+			memcpy(&sr6->sin6_addr, &c->gw6, sizeof(c->gw6));
 
 		uh->source = sr6->sin6_port;
 		uh->dest = sl6->sin6_port;

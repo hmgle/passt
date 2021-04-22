@@ -1008,6 +1008,11 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 
 		memset(&tc[s].a.a4.zero, 0, sizeof(tc[s].a.a4.zero));
 		memset(&tc[s].a.a4.one, 0xff, sizeof(tc[s].a.a4.one));
+
+		if (ntohl(sa4->sin_addr.s_addr) == INADDR_LOOPBACK ||
+		    ntohl(sa4->sin_addr.s_addr) == INADDR_ANY)
+			sa4->sin_addr.s_addr = c->gw4;
+
 		memcpy(&tc[s].a.a4.a, &sa4->sin_addr, sizeof(tc[s].a.a4.a));
 
 		tc[s].sock_port = sa4->sin_port;
@@ -1021,6 +1026,9 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 				     tc[s].tap_port, tc[s].sock_port);
 	} else if (sa_l.ss_family == AF_INET6) {
 		struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&sa_r;
+
+		if (IN6_IS_ADDR_LOOPBACK(&sa6->sin6_addr))
+			memcpy(&sa6->sin6_addr, &c->gw6, sizeof(c->gw6));
 
 		memcpy(&tc[s].a.a6, &sa6->sin6_addr, sizeof(tc[s].a.a6));
 
