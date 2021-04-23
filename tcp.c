@@ -1003,6 +1003,11 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 	if (s == -1)
 		return;
 
+	if (s < c->tcp.fd_min)
+		c->tcp.fd_min = s;
+	if (s > c->tcp.fd_max)
+		c->tcp.fd_max = s;
+
 	if (sa_l.ss_family == AF_INET) {
 		struct sockaddr_in *sa4 = (struct sockaddr_in *)&sa_r;
 
@@ -1444,6 +1449,9 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 int tcp_sock_init(struct ctx *c)
 {
 	in_port_t port;
+
+	c->tcp.fd_min = INT_MAX;
+	c->tcp.fd_max = 0;
 
 	for (port = 0; port < (1 << 15) + (1 << 14); port++) {
 		if (c->v4 && sock_l4_add(c, 4, IPPROTO_TCP, port) < 0)

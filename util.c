@@ -189,6 +189,21 @@ int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
 		return -1;
 	}
 
+#define CHECK_SET_MIN_MAX(ipproto, proto_ctx, fd)			\
+	if (proto == (ipproto)) {					\
+		if (fd < c->proto_ctx.fd_min)				\
+			c->proto_ctx.fd_min = (fd);			\
+		if (fd > c->proto_ctx.fd_max)				\
+			c->proto_ctx.fd_max = (fd);			\
+	}
+
+	CHECK_SET_MIN_MAX(IPPROTO_ICMP,		icmp,	fd);
+	CHECK_SET_MIN_MAX(IPPROTO_ICMPV6,	icmp,	fd);
+	CHECK_SET_MIN_MAX(IPPROTO_TCP,		tcp,	fd);
+	CHECK_SET_MIN_MAX(IPPROTO_UDP,		udp,	fd);
+
+#undef CHECK_SET_MIN_MAX
+
 	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
 		goto epoll_add;
 

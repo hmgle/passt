@@ -135,6 +135,9 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
  */
 int icmp_sock_init(struct ctx *c)
 {
+	c->icmp.fd_min = INT_MAX;
+	c->icmp.fd_max = 0;
+
 	if (c->v4 && (c->icmp.s4 = sock_l4_add(c, 4, IPPROTO_ICMP, 0)) < 0)
 		return -1;
 

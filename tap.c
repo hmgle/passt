@@ -37,9 +37,9 @@
 int tap_send(int fd, void *data, size_t len, int flags)
 {
 	uint32_t vnet_len = htonl(len);
-	send(fd, &vnet_len, 4, 0);
+	send(fd, &vnet_len, 4, MSG_DONTWAIT | MSG_NOSIGNAL);
 
-	return send(fd, data, len, flags);
+	return send(fd, data, len, flags | MSG_DONTWAIT | MSG_NOSIGNAL);
 }
 
 /**

@@ -68,7 +68,8 @@ void udp_sock_handler(struct ctx *c, int s, uint32_t events)
 	struct udphdr *uh;
 	ssize_t n;
 
-	(void)events;
+	if (events == EPOLLERR)
+		return;
 
 	n = recvfrom(s, buf + sizeof(*uh), sizeof(buf) - sizeof(*uh),
 		     MSG_DONTWAIT, (struct sockaddr *)&sr, &slen);
@@ -179,7 +180,11 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 		return count;
 	}
 
-	return sendmmsg(s, mm, count, MSG_DONTWAIT | MSG_NOSIGNAL);
+	count = sendmmsg(s, mm, count, MSG_DONTWAIT | MSG_NOSIGNAL | MSG_ZEROCOPY);
+	if (count < 0)
+		return 1;
+
+	return count;
 }
 
 /**
@@ -191,12 +196,18 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 int udp_sock_init(struct ctx *c)
 {
 	in_port_t port;
-	int s;
+	int s, one = 1;
+
+	c->udp.fd_min = INT_MAX;
+	c->udp.fd_max = 0;
 
 	for (port = 0; port < USHRT_MAX; port++) {
 		if (c->v4) {
 			if ((s = sock_l4_add(c, 4, IPPROTO_UDP, port)) < 0)
 				return -1;
+
+			setsockopt(s, SOL_SOCKET, SO_ZEROCOPY,
+				   &one, sizeof(one));
 
 			udp4_sock_port[port] = s;
 		}
@@ -204,6 +215,9 @@ int udp_sock_init(struct ctx *c)
 		if (c->v6) {
 			if ((s = sock_l4_add(c, 6, IPPROTO_UDP, port)) < 0)
 				return -1;
+
+			setsockopt(s, SOL_SOCKET, SO_ZEROCOPY,
+				   &one, sizeof(one));
 
 			udp6_sock_port[port] = s;
 		}

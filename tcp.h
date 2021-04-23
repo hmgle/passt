@@ -12,9 +12,13 @@ void tcp_timer(struct ctx *c, struct timespec *ts);
 /**
  * struct tcp_ctx - Execution context for TCP routines
  * @hash_secret:	128-bit secret for hash functions, ISN and hash table
+ * @fd_min:		Lowest file descriptor number for TCP ever used
+ * @fd_max:		Highest file descriptor number for TCP ever used
  */
 struct tcp_ctx {
 	uint64_t hash_secret[2];
+	int fd_min;
+	int fd_max;
 };
 
 #endif /* TCP_H */

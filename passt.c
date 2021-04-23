@@ -57,9 +57,11 @@
 
 #define EPOLL_EVENTS		10
 
-#define TAP_NMSG		32  /* maximum messages to buffer from tap */
+#define TAP_BUF_BYTES		(ETH_MAX_MTU * 8)
+#define TAP_BUF_FILL		(TAP_BUF_BYTES - ETH_MAX_MTU - sizeof(uint32_t))
+#define TAP_MSGS		(TAP_BUF_BYTES / sizeof(struct ethhdr) + 1)
 
-#define TIMER_INTERVAL		100 /* ms, for protocol periodic handlers */
+#define TIMER_INTERVAL		20 /* ms, for protocol periodic handlers */
 
 /**
  * sock_unix() - Create and bind AF_UNIX socket, add to epoll list
@@ -515,7 +517,7 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count)
 	return 1;
 }
 
-static char tap_buf[ETH_MAX_MTU * TAP_NMSG];
+static char tap_buf[TAP_BUF_BYTES];
 
 /**
  * tap_handler() - Packet handler for tap file descriptor
@@ -525,32 +527,30 @@ static char tap_buf[ETH_MAX_MTU * TAP_NMSG];
  */
 static int tap_handler(struct ctx *c)
 {
-	int msg_count = 0, same, rcv = 0, i = 0;
-	struct tap_msg msg[UIO_MAXIOV];
-	ssize_t n, rem, fill;
+	struct tap_msg msg[TAP_MSGS];
+	int msg_count, same, i;
 	struct ethhdr *eh;
 	char *p = tap_buf;
+	ssize_t n, rem;
 
-	fill = ETH_MAX_MTU * (TAP_NMSG - 1);
+	while ((n = recv(c->fd_unix, p, TAP_BUF_FILL, MSG_DONTWAIT)) > 0) {
+		msg_count = 0;
 
-	while ((n = recv(c->fd_unix, p, fill, MSG_DONTWAIT)) > 0) {
-		fill -= n;
-		while (n > 0) {
+		while (n > (ssize_t)sizeof(uint32_t)) {
 			ssize_t len = ntohl(*(uint32_t *)p);
 
 			p += sizeof(uint32_t);
 			n -= sizeof(uint32_t);
 
 			if (len < (ssize_t)sizeof(*eh))
-				break;
+				return 0;
 
 			/* At most one packet might not fit in a single read */
 			if (len > n) {
-				rem = recv(c->fd_unix, p + n, fill,
+				rem = recv(c->fd_unix, p + n, len - n,
 					   MSG_DONTWAIT);
-				rcv = errno;
-				if (rem <= 0 || rem + n != len)
-					break;
+				if ((n += rem) != len)
+					return 0;
 			}
 
 			msg[msg_count].start = p;
@@ -559,40 +559,49 @@ static int tap_handler(struct ctx *c)
 			n -= len;
 			p += len;
 		}
-	}
 
-	rcv = errno;
-
-	while (i < msg_count) {
-		eh = (struct ethhdr *)msg[i].start;
+		i = 0;
+		while (i < msg_count) {
+			eh = (struct ethhdr *)msg[i].start;
 			switch (ntohs(eh->h_proto)) {
-		case ETH_P_ARP:
-			tap4_handler(c, msg + i, 1);
-			i++;
-			break;
-		case ETH_P_IP:
-			for (same = 1; i + same < msg_count; same++) {
-				eh = (struct ethhdr *)msg[i + same].start;
-				if (ntohs(eh->h_proto) != ETH_P_IP)
-					break;
-			}
+			case ETH_P_ARP:
+				tap4_handler(c, msg + i, 1);
+				i++;
+				break;
+			case ETH_P_IP:
+				for (same = 1; i + same < msg_count &&
+					       same < UIO_MAXIOV; same++) {
+					struct tap_msg *next = &msg[i + same];
+
+					eh = (struct ethhdr *)next->start;
+					if (ntohs(eh->h_proto) != ETH_P_IP)
+						break;
+				}
+
 				i += tap4_handler(c, msg + i, same);
-			break;
-		case ETH_P_IPV6:
-			for (same = 1; i + same < msg_count; same++) {
-				eh = (struct ethhdr *)msg[i + same].start;
-				if (ntohs(eh->h_proto) != ETH_P_IPV6)
-					break;
-			}
+				break;
+			case ETH_P_IPV6:
+				for (same = 1; i + same < msg_count &&
+					       same < UIO_MAXIOV; same++) {
+					struct tap_msg *next = &msg[i + same];
+
+					eh = (struct ethhdr *)next->start;
+					if (ntohs(eh->h_proto) != ETH_P_IPV6)
+						break;
+				}
+
 				i += tap6_handler(c, msg + i, same);
-			break;
-		default:
-			i++;
-			break;
+				break;
+			default:
+				i++;
+				break;
+			}
 		}
+
+		p = tap_buf;
 	}
 
-	if (n >= 0 || rcv == EINTR || rcv == EAGAIN || rcv == EWOULDBLOCK)
+	if (n >= 0 || errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
 		return 0;
 
 	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_unix, NULL);
@@ -614,8 +623,21 @@ static void sock_handler(struct ctx *c, int fd, uint32_t events)
 
 	sl = sizeof(so);
 
-	if (getsockopt(fd, SOL_SOCKET, SO_PROTOCOL, &so, &sl))
+#define IN(x, proto)	(x >= c->proto.fd_min && x <= c->proto.fd_max)
+
+	if (IN(fd, udp)		&& !IN(fd, icmp)	&& !IN(fd, tcp))
+		so = IPPROTO_UDP;
+	else if (IN(fd, tcp)	&& !IN(fd, icmp)	&& !IN(fd, udp))
+		so = IPPROTO_TCP;
+	else if (IN(fd, icmp)	&& !IN(fd, udp)		&& !IN(fd, tcp))
+		so = IPPROTO_ICMP;	/* Fits ICMPv6 below, too */
+	else if (getsockopt(fd, SOL_SOCKET, SO_PROTOCOL, &so, &sl)) {
+		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, fd, NULL);
+		close(fd);
 		return;
+	}
+
+#undef IN
 
 	debug("%s: packet from socket %i", getprotobynumber(so)->p_name, fd);
 
@@ -771,7 +793,10 @@ loop:
 
 	for (i = 0; i < nfds; i++) {
 		if (events[i].data.fd == c.fd_unix) {
-			if (tap_handler(&c))
+			if (events[i].events	& EPOLLRDHUP	||
+			    events[i].events	& EPOLLHUP	||
+			    events[i].events	& EPOLLERR	||
+			    tap_handler(&c))
 				goto listen;
 		} else {
 			sock_handler(&c, events[i].data.fd, events[i].events);
