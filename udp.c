@@ -180,7 +180,7 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 		return count;
 	}
 
-	count = sendmmsg(s, mm, count, MSG_DONTWAIT | MSG_NOSIGNAL | MSG_ZEROCOPY);
+	count = sendmmsg(s, mm, count, MSG_DONTWAIT | MSG_NOSIGNAL);
 	if (count < 0)
 		return 1;
 
@@ -196,7 +196,7 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 int udp_sock_init(struct ctx *c)
 {
 	in_port_t port;
-	int s, one = 1;
+	int s;
 
 	c->udp.fd_min = INT_MAX;
 	c->udp.fd_max = 0;
@@ -206,18 +206,12 @@ int udp_sock_init(struct ctx *c)
 			if ((s = sock_l4_add(c, 4, IPPROTO_UDP, port)) < 0)
 				return -1;
 
-			setsockopt(s, SOL_SOCKET, SO_ZEROCOPY,
-				   &one, sizeof(one));
-
 			udp4_sock_port[port] = s;
 		}
 
 		if (c->v6) {
 			if ((s = sock_l4_add(c, 6, IPPROTO_UDP, port)) < 0)
 				return -1;
-
-			setsockopt(s, SOL_SOCKET, SO_ZEROCOPY,
-				   &one, sizeof(one));
 
 			udp6_sock_port[port] = s;
 		}
