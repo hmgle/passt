@@ -954,7 +954,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 
 	tcp_act_set(s);
 
-	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
+	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLHUP;
 	ev.data.fd = s;
 
 	tc[s].seq_init_from_tap = ntohl(th->seq);
@@ -1059,7 +1059,7 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 
 	tcp_act_set(s);
 
-	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
+	ev.events = EPOLLRDHUP | EPOLLHUP;
 	ev.data.fd = s;
 	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, s, &ev);
 
@@ -1209,6 +1209,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 {
 	/* TODO: Implement message batching for TCP */
 	struct tcphdr *th = (struct tcphdr *)msg[0].l4h;
+	struct epoll_event ev = { 0 };
 	size_t len = msg[0].l4_len;
 
 	size_t off, skip = 0;
@@ -1272,6 +1273,16 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 
 		tcp_set_state(s, ESTABLISHED);
 		tcp_send_to_tap(c, s, ACK, NULL, 0);
+
+		/* The client might have sent data already, which we didn't
+		 * dequeue waiting for SYN,ACK from tap -- check now.
+		 */
+		tcp_data_from_sock(c, s);
+
+		ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLHUP;
+		ev.data.fd = s;
+		epoll_ctl(c->epollfd, EPOLL_CTL_MOD, s, &ev);
+
 		break;
 	case TAP_SYN_RCVD:
 		if (th->fin) {
@@ -1379,7 +1390,7 @@ static void tcp_connect_finish(struct ctx *c, int s)
 		return;
 
 	/* Drop EPOLLOUT, only used to wait for connect() to complete */
-	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
+	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLHUP;
 	ev.data.fd = s;
 	epoll_ctl(c->epollfd, EPOLL_CTL_MOD, s, &ev);
 
@@ -1400,6 +1411,12 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 	if (tc[s].s == LAST_ACK) {
 		tcp_send_to_tap(c, s, ACK, NULL, 0);
 		tcp_close_and_epoll_del(c, s);
+		return;
+	}
+
+	if (tc[s].s == SOCK_SYN_SENT) {
+		/* This can only be a socket error or a shutdown from remote */
+		tcp_rst(c, s);
 		return;
 	}
 
