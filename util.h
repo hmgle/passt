@@ -8,6 +8,25 @@ void debug(const char *format, ...);
 #define debug(...) { }
 #endif
 
+#define CHECK_SET_MIN_MAX(basename, fd)					\
+	do {								\
+		if ((fd) < basename##min)				\
+			basename##min = (fd);				\
+		if ((fd) > basename##max)				\
+			basename##max = (fd);				\
+	} while (0)
+
+#define CHECK_SET_MIN_MAX_PROTO_FD(proto, ipproto, proto_ctx, fd)	\
+	do {								\
+		if ((proto) == (ipproto))				\
+			CHECK_SET_MIN_MAX(c->proto_ctx.fd_, (fd));	\
+	} while (0)
+
+#define IN_INTERVAL(a, b, x) ((x) >= (a) && (x) <= (b))
+
+#define FD_PROTO(x, proto)						\
+	(IN_INTERVAL(c->proto.fd_min, c->proto.fd_max, (x)))
+
 uint16_t csum_fold(uint32_t sum);
 uint16_t csum_ip4(void *buf, size_t len);
 void csum_tcp4(struct iphdr *iph);

@@ -613,40 +613,39 @@ static int tap_handler(struct ctx *c)
 /**
  * sock_handler() - Event handler for L4 sockets
  * @c:		Execution context
- * @fd:		File descriptor associated to event
+ * @s:		Socket associated to event
  * @events	epoll events
  */
-static void sock_handler(struct ctx *c, int fd, uint32_t events)
+static void sock_handler(struct ctx *c, int s, uint32_t events)
 {
 	socklen_t sl;
-	int so;
+	int proto;
 
-	sl = sizeof(so);
+	sl = sizeof(proto);
 
-#define IN(x, proto)	(x >= c->proto.fd_min && x <= c->proto.fd_max)
+	if (    FD_PROTO(s, udp)   && !FD_PROTO(s, icmp) && !FD_PROTO(s, tcp))
+		proto = IPPROTO_UDP;
+	else if (FD_PROTO(s, tcp)  && !FD_PROTO(s, icmp) && !FD_PROTO(s, udp))
+		proto = IPPROTO_TCP;
+	else if (FD_PROTO(s, icmp) && !FD_PROTO(s, udp)  && !FD_PROTO(s, tcp))
+		proto = IPPROTO_ICMP;	/* Fits ICMPv6 below, too */
+	else if (getsockopt(s, SOL_SOCKET, SO_PROTOCOL, &proto, &sl))
+		proto = -1;
 
-	if (IN(fd, udp)		&& !IN(fd, icmp)	&& !IN(fd, tcp))
-		so = IPPROTO_UDP;
-	else if (IN(fd, tcp)	&& !IN(fd, icmp)	&& !IN(fd, udp))
-		so = IPPROTO_TCP;
-	else if (IN(fd, icmp)	&& !IN(fd, udp)		&& !IN(fd, tcp))
-		so = IPPROTO_ICMP;	/* Fits ICMPv6 below, too */
-	else if (getsockopt(fd, SOL_SOCKET, SO_PROTOCOL, &so, &sl)) {
-		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, fd, NULL);
-		close(fd);
+	if (proto == -1) {
+		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, s, NULL);
+		close(s);
 		return;
 	}
 
-#undef IN
+	debug("%s: packet from socket %i", getprotobynumber(proto)->p_name, s);
 
-	debug("%s: packet from socket %i", getprotobynumber(so)->p_name, fd);
-
-	if (so == IPPROTO_ICMP || so == IPPROTO_ICMPV6)
-		icmp_sock_handler(c, fd, events);
-	else if (so == IPPROTO_TCP)
-		tcp_sock_handler(c, fd, events);
-	else if (so == IPPROTO_UDP)
-		udp_sock_handler(c, fd, events);
+	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
+		icmp_sock_handler(c, s, events);
+	else if (proto == IPPROTO_TCP)
+		tcp_sock_handler(c, s, events);
+	else if (proto == IPPROTO_UDP)
+		udp_sock_handler(c, s, events);
 }
 
 /**

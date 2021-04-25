@@ -1003,10 +1003,8 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 	if (s == -1)
 		return;
 
-	if (s < c->tcp.fd_min)
-		c->tcp.fd_min = s;
-	if (s > c->tcp.fd_max)
-		c->tcp.fd_max = s;
+	CHECK_SET_MIN_MAX(c->tcp.fd_, s);
+	CHECK_SET_MIN_MAX(c->tcp.fd_conn_, s);
 
 	if (sa_l.ss_family == AF_INET) {
 		struct sockaddr_in *sa4 = (struct sockaddr_in *)&sa_r;
@@ -1406,7 +1404,7 @@ static void tcp_connect_finish(struct ctx *c, int s)
 void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 {
 	socklen_t sl;
-	int so;
+	int accept;
 
 	if (tc[s].s == LAST_ACK) {
 		tcp_send_to_tap(c, s, ACK, NULL, 0);
@@ -1414,21 +1412,28 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 		return;
 	}
 
+
 	if (tc[s].s == SOCK_SYN_SENT) {
 		/* This can only be a socket error or a shutdown from remote */
 		tcp_rst(c, s);
 		return;
 	}
+	if (IN_INTERVAL(c->tcp.fd_listen_min, c->tcp.fd_listen_max, s) &&
+	    !IN_INTERVAL(c->tcp.fd_conn_min, c->tcp.fd_conn_max, s))
+		accept = 1;
+	else if (IN_INTERVAL(c->tcp.fd_conn_min, c->tcp.fd_conn_max, s) &&
+		 !IN_INTERVAL(c->tcp.fd_listen_min, c->tcp.fd_listen_max, s))
+		accept = 0;
+	else if (getsockopt(s, SOL_SOCKET, SO_ACCEPTCONN, &accept, &sl))
+		accept = -1;
 
-	sl = sizeof(so);
-	if ((events & EPOLLERR) ||
-	    getsockopt(s, SOL_SOCKET, SO_ACCEPTCONN, &so, &sl)) {
+	if ((events & EPOLLERR) || accept == -1) {
 		if (tc[s].s != CLOSED)
 			tcp_rst(c, s);
 		return;
 	}
 
-	if (so) {
+	if (accept) {
 		tcp_conn_from_sock(c, s);
 		return;
 	}
@@ -1466,15 +1471,24 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 int tcp_sock_init(struct ctx *c)
 {
 	in_port_t port;
+	int s = 0;
 
-	c->tcp.fd_min = INT_MAX;
-	c->tcp.fd_max = 0;
+	c->tcp.fd_min = c->tcp.fd_listen_min = c->tcp.fd_conn_min = INT_MAX;
+	c->tcp.fd_max = c->tcp.fd_listen_max = c->tcp.fd_conn_max = 0;
+	CHECK_SET_MIN_MAX(c->tcp.fd_listen_, s);
 
 	for (port = 0; port < (1 << 15) + (1 << 14); port++) {
-		if (c->v4 && sock_l4_add(c, 4, IPPROTO_TCP, port) < 0)
-			return -1;
-		if (c->v6 && sock_l4_add(c, 6, IPPROTO_TCP, port) < 0)
-			return -1;
+		if (c->v4) {
+			if ((s = sock_l4_add(c, 4, IPPROTO_TCP, port)) < 0)
+				return -1;
+			CHECK_SET_MIN_MAX(c->tcp.fd_listen_, s);
+		}
+
+		if (c->v6) {
+			if ((s = sock_l4_add(c, 6, IPPROTO_TCP, port)) < 0)
+				return -1;
+			CHECK_SET_MIN_MAX(c->tcp.fd_listen_, s);
+		}
 	}
 
 	getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret), GRND_RANDOM);
