@@ -42,10 +42,10 @@ struct ctx {
 	unsigned char mac_guest[ETH_ALEN];
 
 	int v4;
-	unsigned long addr4;
-	unsigned long mask4;
-	unsigned long gw4;
-	unsigned long dns4;
+	uint32_t addr4;
+	uint32_t mask4;
+	uint32_t gw4;
+	uint32_t dns4;
 
 	int v6;
 	struct in6_addr addr6;
