@@ -155,15 +155,15 @@ char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto)
 }
 
 /**
- * sock_l4_add() - Create and bind socket for given L4, add to epoll list
+ * sock_l4() - Create and bind socket for given L4, add to epoll list
  * @c:		Execution context
- * @v:		IP protocol, 4 or 6
+ * @af:		Address family, AF_INET or AF_INET6
  * @proto:	Protocol number, host order
- * @port:	Port, network order
+ * @port:	Port, host order
  *
  * Return: newly created socket, -1 on error
  */
-int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
+int sock_l4(struct ctx *c, int af, uint16_t proto, uint16_t port)
 {
 	struct sockaddr_in addr4 = {
 		.sin_family = AF_INET,
@@ -183,8 +183,7 @@ int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
 	    proto != IPPROTO_ICMP && proto != IPPROTO_ICMPV6)
 		return -1;	/* Not implemented. */
 
-	fd = socket(v == 4 ? AF_INET : AF_INET6,
-		    proto == IPPROTO_TCP ? SOCK_STREAM : SOCK_DGRAM, proto);
+	fd = socket(af, proto == IPPROTO_TCP ? SOCK_STREAM : SOCK_DGRAM, proto);
 	if (fd < 0) {
 		perror("L4 socket");
 		return -1;
@@ -198,7 +197,7 @@ int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
 	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
 		goto epoll_add;
 
-	if (v == 4) {
+	if (af == AF_INET) {
 		sa = (const struct sockaddr *)&addr4;
 		sl = sizeof(addr4);
 	} else {
@@ -207,6 +206,9 @@ int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port)
 
 		setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &one, sizeof(one));
 	}
+
+	if (proto == IPPROTO_UDP && PORT_IS_EPHEMERAL(port))
+		goto epoll_add;
 
 	if (bind(fd, sa, sl) < 0) {
 		/* We'll fail to bind to low ports if we don't have enough

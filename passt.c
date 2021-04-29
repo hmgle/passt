@@ -24,6 +24,7 @@
 #include <ifaddrs.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
+#include <arpa/inet.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/tcp.h>
@@ -33,12 +34,10 @@
 #include <net/ethernet.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <string.h>
 #include <errno.h>
-#include <linux/ip.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <time.h>
@@ -61,7 +60,7 @@
 #define TAP_BUF_FILL		(TAP_BUF_BYTES - ETH_MAX_MTU - sizeof(uint32_t))
 #define TAP_MSGS		(TAP_BUF_BYTES / sizeof(struct ethhdr) + 1)
 
-#define TIMER_INTERVAL		20 /* ms, for protocol periodic handlers */
+#define TIMER_INTERVAL		MIN(TCP_TIMER_INTERVAL, UDP_TIMER_INTERVAL)
 
 /**
  * sock_unix() - Create and bind AF_UNIX socket, add to epoll list
@@ -232,7 +231,7 @@ static void get_addrs(struct ctx *c)
 
 		if (ifa->ifa_addr->sa_family == AF_INET && !v4) {
 			in_addr = (struct sockaddr_in *)ifa->ifa_addr;
-			c->addr4 = in_addr->sin_addr.s_addr;
+			c->addr4_seen = c->addr4 = in_addr->sin_addr.s_addr;
 			in_addr = (struct sockaddr_in *)ifa->ifa_netmask;
 			c->mask4 = in_addr->sin_addr.s_addr;
 			v4 = 1;
@@ -240,6 +239,10 @@ static void get_addrs(struct ctx *c)
 			in6_addr = (struct sockaddr_in6 *)ifa->ifa_addr;
 			memcpy(&c->addr6, &in6_addr->sin6_addr,
 			       sizeof(c->addr6));
+			memcpy(&c->addr6_seen, &in6_addr->sin6_addr,
+			       sizeof(c->addr6_seen));
+			memcpy(&c->addr6_ll_seen, &in6_addr->sin6_addr,
+			       sizeof(c->addr6_seen));
 			v6 = 1;
 		}
 
@@ -310,10 +313,12 @@ static void get_dns(struct ctx *c)
  * @c:		Execution context
  * @msg:	Array of messages with the same L3 protocol
  * @count:	Count of messages with the same L3 protocol
+ * @now:	Current timestamp
  *
  * Return: count of packets consumed by handlers
  */
-static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count)
+static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count,
+			struct timespec *now)
 {
 	char buf_s[INET_ADDRSTRLEN] __attribute((__unused__));
 	char buf_d[INET_ADDRSTRLEN] __attribute((__unused__));
@@ -341,6 +346,8 @@ static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count)
 		eh = (struct ethhdr *)msg[i].start;
 		iph = (struct iphdr *)(eh + 1);
 		l4h = (char *)iph + iph->ihl * 4;
+
+		c->addr4_seen = iph->saddr;
 
 		msg[i].l4h = l4h;
 		msg[i].l4_len = len - ((intptr_t)l4h - (intptr_t)eh);
@@ -397,13 +404,13 @@ static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count)
 	}
 
 	if (iph->protocol == IPPROTO_TCP)
-		return tcp_tap_handler(c, AF_INET, &iph->daddr, msg, i);
+		return tcp_tap_handler(c, AF_INET, &iph->daddr, msg, i, now);
 
 	if (iph->protocol == IPPROTO_UDP)
-		return udp_tap_handler(c, AF_INET, &iph->daddr, msg, i);
+		return udp_tap_handler(c, AF_INET, &iph->daddr, msg, i, now);
 
 	if (iph->protocol == IPPROTO_ICMP)
-		icmp_tap_handler(c, AF_INET, &iph->daddr, msg, 1);
+		icmp_tap_handler(c, AF_INET, &iph->daddr, msg, 1, now);
 
 	return 1;
 }
@@ -413,8 +420,10 @@ static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count)
  * @c:		Execution context
  * @msg:	Array of messages with the same L3 protocol
  * @count:	Count of messages with the same L3 protocol
+ * @now:	Current timestamp
  */
-static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count)
+static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
+			struct timespec *now)
 {
 	char buf_s[INET6_ADDRSTRLEN] __attribute((__unused__));
 	char buf_d[INET6_ADDRSTRLEN] __attribute((__unused__));
@@ -449,7 +458,11 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count)
 		msg[i].l4h = l4h;
 		msg[i].l4_len = len - ((intptr_t)l4h - (intptr_t)eh);
 
-		c->addr6_guest = ip6h->saddr;
+		if (IN6_IS_ADDR_LINKLOCAL(&ip6h->saddr))
+			c->addr6_ll_seen = ip6h->saddr;
+		else
+			c->addr6_seen = ip6h->saddr;
+
 		ip6h->saddr = c->addr6;
 
 		if (proto != IPPROTO_TCP && proto != IPPROTO_UDP)
@@ -506,13 +519,13 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count)
 	}
 
 	if (proto == IPPROTO_TCP)
-		return tcp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, i);
+		return tcp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, i, now);
 
 	if (proto == IPPROTO_UDP)
-		return udp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, i);
+		return udp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, i, now);
 
 	if (proto == IPPROTO_ICMPV6)
-		icmp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, 1);
+		icmp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, 1, now);
 
 	return 1;
 }
@@ -522,10 +535,11 @@ static char tap_buf[TAP_BUF_BYTES];
 /**
  * tap_handler() - Packet handler for tap file descriptor
  * @c:		Execution context
+ * @now:	Current timestamp
  *
  * Return: -ECONNRESET if tap connection was lost, 0 otherwise
  */
-static int tap_handler(struct ctx *c)
+static int tap_handler(struct ctx *c, struct timespec *now)
 {
 	struct tap_msg msg[TAP_MSGS];
 	int msg_count, same, i;
@@ -563,9 +577,12 @@ static int tap_handler(struct ctx *c)
 		i = 0;
 		while (i < msg_count) {
 			eh = (struct ethhdr *)msg[i].start;
+
+			memcpy(c->mac_guest, eh->h_source, ETH_ALEN);
+
 			switch (ntohs(eh->h_proto)) {
 			case ETH_P_ARP:
-				tap4_handler(c, msg + i, 1);
+				tap4_handler(c, msg + i, 1, now);
 				i++;
 				break;
 			case ETH_P_IP:
@@ -578,7 +595,7 @@ static int tap_handler(struct ctx *c)
 						break;
 				}
 
-				i += tap4_handler(c, msg + i, same);
+				i += tap4_handler(c, msg + i, same, now);
 				break;
 			case ETH_P_IPV6:
 				for (same = 1; i + same < msg_count &&
@@ -590,7 +607,7 @@ static int tap_handler(struct ctx *c)
 						break;
 				}
 
-				i += tap6_handler(c, msg + i, same);
+				i += tap6_handler(c, msg + i, same, now);
 				break;
 			default:
 				i++;
@@ -614,9 +631,11 @@ static int tap_handler(struct ctx *c)
  * sock_handler() - Event handler for L4 sockets
  * @c:		Execution context
  * @s:		Socket associated to event
- * @events	epoll events
+ * @events:	epoll events
+ * @now:	Current timestamp
  */
-static void sock_handler(struct ctx *c, int s, uint32_t events)
+static void sock_handler(struct ctx *c, int s, uint32_t events,
+			 struct timespec *now)
 {
 	socklen_t sl;
 	int proto;
@@ -641,29 +660,29 @@ static void sock_handler(struct ctx *c, int s, uint32_t events)
 	debug("%s: packet from socket %i", getprotobynumber(proto)->p_name, s);
 
 	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
-		icmp_sock_handler(c, s, events);
+		icmp_sock_handler(c, s, events, now);
 	else if (proto == IPPROTO_TCP)
-		tcp_sock_handler(c, s, events);
+		tcp_sock_handler(c, s, events, now);
 	else if (proto == IPPROTO_UDP)
-		udp_sock_handler(c, s, events);
+		udp_sock_handler(c, s, events, now);
 }
 
 /**
  * timer_handler() - Run periodic tasks for L4 protocol handlers
  * @c:		Execution context
- * @last:	Timestamp of last run, updated on return
+ * @now:	Current timestamp
  */
-static void timer_handler(struct ctx *c, struct timespec *last)
+static void timer_handler(struct ctx *c, struct timespec *now)
 {
-	struct timespec tmp;
+	if (timespec_diff_ms(now, &c->tcp.timer_run) >= TCP_TIMER_INTERVAL) {
+		tcp_timer(c, now);
+		c->tcp.timer_run = *now;
+	}
 
-	clock_gettime(CLOCK_MONOTONIC, &tmp);
-	if (timespec_diff_ms(&tmp, last) < TIMER_INTERVAL)
-		return;
-
-	tcp_timer(c, &tmp);
-
-	*last = tmp;
+	if (timespec_diff_ms(now, &c->udp.timer_run) >= UDP_TIMER_INTERVAL) {
+		udp_timer(c, now);
+		c->udp.timer_run = *now;
+	}
 }
 
 /**
@@ -690,15 +709,15 @@ int main(int argc, char **argv)
 	char buf6[3][INET6_ADDRSTRLEN];
 	char buf4[4][INET_ADDRSTRLEN];
 	struct epoll_event ev = { 0 };
-	struct timespec last_time;
 	struct ctx c = { 0 };
 	int nfds, i, fd_unix;
 	struct rlimit limit;
+	struct timespec now;
 
 	if (argc != 1)
 		usage(argv[0]);
 
-	if (clock_gettime(CLOCK_MONOTONIC, &last_time)) {
+	if (clock_gettime(CLOCK_MONOTONIC, &now)) {
 		perror("clock_gettime");
 		exit(EXIT_FAILURE);
 	}
@@ -741,6 +760,8 @@ int main(int argc, char **argv)
 	if (c.v6)
 		dhcpv6_init(&c);
 
+	memset(&c.mac_guest, 0xff, sizeof(c.mac_guest));
+
 	if (c.v4) {
 		info("ARP:");
 		info("    address: %02x:%02x:%02x:%02x:%02x:%02x from %s",
@@ -781,8 +802,6 @@ listen:
 	ev.data.fd = c.fd_unix;
 	epoll_ctl(c.epollfd, EPOLL_CTL_ADD, c.fd_unix, &ev);
 
-	clock_gettime(CLOCK_MONOTONIC, &last_time);
-
 loop:
 	nfds = epoll_wait(c.epollfd, events, EPOLL_EVENTS, TIMER_INTERVAL);
 	if (nfds == -1 && errno != EINTR) {
@@ -790,19 +809,22 @@ loop:
 		exit(EXIT_FAILURE);
 	}
 
+	clock_gettime(CLOCK_MONOTONIC, &now);
+
 	for (i = 0; i < nfds; i++) {
 		if (events[i].data.fd == c.fd_unix) {
 			if (events[i].events	& EPOLLRDHUP	||
 			    events[i].events	& EPOLLHUP	||
 			    events[i].events	& EPOLLERR	||
-			    tap_handler(&c))
+			    tap_handler(&c, &now))
 				goto listen;
 		} else {
-			sock_handler(&c, events[i].data.fd, events[i].events);
+			sock_handler(&c, events[i].data.fd, events[i].events,
+				     &now);
 		}
 	}
 
-	timer_handler(&c, &last_time);
+	timer_handler(&c, &now);
 
 	goto loop;
 

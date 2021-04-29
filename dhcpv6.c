@@ -383,7 +383,7 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 	    mlen < sizeof(struct msg_hdr))
 		return -1;
 
-	c->addr6_guest = ip6h->saddr;
+	c->addr6_ll_seen = ip6h->saddr;
 
 	mh = (struct msg_hdr *)(uh + 1);
 	mlen -= sizeof(struct msg_hdr);
@@ -483,6 +483,7 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 
 	resp.hdr.xid = mh->xid;
 	tap_ip_send(c, &c->gw6, IPPROTO_UDP, (char *)&resp, n);
+	c->addr6_seen = c->addr6;
 
 	return 1;
 }

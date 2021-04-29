@@ -188,7 +188,8 @@ can't practically run on the host:
 
 For IPv4, the guest is assigned, via DHCP, the same address as the upstream
 interface of the host, and the same default gateway as the default gateway of
-the host. Addresses are never translated.
+the host. Addresses are translated in case the guest is seen using a different
+address from the assigned one.
 
 For IPv6, the guest is assigned, via SLAAC, the same prefix as the upstream
 interface of the host, the same default route as the default route of the
@@ -196,6 +197,12 @@ host, and, if a DHCPv6 client is running on the guest, also the same address as
 the upstream address of the host. This means that, with a DHCPv6 client on the
 guest, addresses don't need to be translated. Should the client use a different
 address, the destination address is translated for packets going to the guest.
+
+For UDP and TCP, for both IPv4 and IPv6, packets addressed to a loopback address
+are forwarded to the guest with their source address changed to the address of
+the gateway or first hop of the default route. This mapping is reversed as the
+guest replies to those packets (on the same TCP connection, or using destination
+port and address that were used as source for UDP).
 
 ## Protocols
 
@@ -209,9 +216,11 @@ An IGMP proxy is currently work in progress.
 ## Ports
 
 To avoid the need for explicit port mapping configuration, _passt_ binds to all
-unbound non-ephemeral (0-49152) TCP ports and all unbound (0-65536) UDP ports.
-Binding to low ports (0-1023) will fail without additional capabilities, and
-ports already bound (service proxies, etc.) will also not be used.
+unbound non-ephemeral (0-49152) TCP and UDP ports. Binding to low ports (0-1023)
+will fail without additional capabilities, and ports already bound (service
+proxies, etc.) will also not be used.
+
+UDP ephemeral ports are bound dynamically, as the guest uses them.
 
 Service proxies and other services running in the container need to be started
 before _passt_ starts.

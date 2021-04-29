@@ -77,8 +77,6 @@ int arp(struct ctx *c, struct ethhdr *eh, size_t len)
 
 	len = sizeof(*eh) + sizeof(*ah) + sizeof(*am);
 	memcpy(eh->h_dest, eh->h_source, ETH_ALEN);
-	/* HACK */
-	memcpy(c->mac_guest, eh->h_source, ETH_ALEN);
 	memcpy(eh->h_source, c->mac, ETH_ALEN);
 
 	if (tap_send(c->fd_unix, eh, len, 0) < 0)

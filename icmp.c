@@ -38,8 +38,10 @@
  * @c:		Execution context
  * @s:		File descriptor number for socket
  * @events:	epoll events bitmap
+ * @now:	Current timestamp, unused
  */
-void icmp_sock_handler(struct ctx *c, int s, uint32_t events)
+void icmp_sock_handler(struct ctx *c, int s, uint32_t events,
+		       struct timespec *now)
 {
 	struct in6_addr a6 = { .s6_addr = {    0,    0,    0,    0,
 					       0,    0,    0,    0,
@@ -51,6 +53,7 @@ void icmp_sock_handler(struct ctx *c, int s, uint32_t events)
 	ssize_t n;
 
 	(void)events;
+	(void)now;
 
 	n = recvfrom(s, buf, sizeof(buf), MSG_DONTWAIT,
 		     (struct sockaddr *)&sr, &slen);
@@ -79,13 +82,15 @@ void icmp_sock_handler(struct ctx *c, int s, uint32_t events)
  * @af:		Address family, AF_INET or AF_INET6
  * @msg:	Input message
  * @count:	Message count (always 1 for ICMP)
+ * @now:	Current timestamp, unused
  *
  * Return: count of consumed packets (always 1, even if malformed)
  */
 int icmp_tap_handler(struct ctx *c, int af, void *addr,
-		     struct tap_msg *msg, int count)
+		     struct tap_msg *msg, int count, struct timespec *now)
 {
 	(void)count;
+	(void)now;
 
 	if (af == AF_INET) {
 		struct icmphdr *ih = (struct icmphdr *)msg[0].l4h;
@@ -138,10 +143,10 @@ int icmp_sock_init(struct ctx *c)
 	c->icmp.fd_min = INT_MAX;
 	c->icmp.fd_max = 0;
 
-	if (c->v4 && (c->icmp.s4 = sock_l4_add(c, 4, IPPROTO_ICMP, 0)) < 0)
+	if (c->v4 && (c->icmp.s4 = sock_l4(c, AF_INET, IPPROTO_ICMP, 0)) < 0)
 		return -1;
 
-	if (c->v6 && (c->icmp.s6 = sock_l4_add(c, 6, IPPROTO_ICMPV6, 0)) < 0)
+	if (c->v6 && (c->icmp.s6 = sock_l4(c, AF_INET6, IPPROTO_ICMPV6, 0)) < 0)
 		return -1;
 
 	return 0;

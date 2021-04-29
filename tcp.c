@@ -846,16 +846,15 @@ static void tcp_clamp_window(int s, struct tcphdr *th, int len, int init)
  * @addr:	Remote address, pointer to sin_addr or sin6_addr
  * @dstport:	Destination port, connection-wise, network order
  * @srcport:	Source port, connection-wise, network order
+ * @now:	Current timestamp
  *
  * Return: initial TCP sequence
  */
 static uint32_t tcp_seq_init(struct ctx *c, int af, void *addr,
-			     in_port_t dstport, in_port_t srcport)
+			     in_port_t dstport, in_port_t srcport,
+			     struct timespec *now)
 {
-	struct timespec ts = { 0 };
 	uint32_t ns, seq = 0;
-
-	clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	if (af == AF_INET) {
 		struct {
@@ -887,8 +886,8 @@ static uint32_t tcp_seq_init(struct ctx *c, int af, void *addr,
 		seq = siphash_36b((uint8_t *)&in, c->tcp.hash_secret);
 	}
 
-	ns = ts.tv_sec * 1E9;
-	ns += ts.tv_nsec >> 5;	/* 32ns ticks, overflows 32 bits every 137s */
+	ns = now->tv_sec * 1E9;
+	ns += now->tv_nsec >> 5; /* 32ns ticks, overflows 32 bits every 137s */
 
 	return seq + ns;
 }
@@ -900,9 +899,11 @@ static uint32_t tcp_seq_init(struct ctx *c, int af, void *addr,
  * @addr:	Remote address, pointer to sin_addr or sin6_addr
  * @th:		TCP header from tap
  * @len:	Packet length at L4
+ * @now:	Current timestamp
  */
 static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
-			      struct tcphdr *th, size_t len)
+			      struct tcphdr *th, size_t len,
+			      struct timespec *now)
 {
 	struct sockaddr_in addr4 = {
 		.sin_family = AF_INET,
@@ -948,9 +949,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	tc[s].sock_port = th->dest;
 	tc[s].tap_port = th->source;
 
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_sock);
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_tap);
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_ack_tap);
+	tc[s].ts_sock = tc[s].ts_tap = tc[s].ts_ack_tap = *now;
 
 	tcp_act_set(s);
 
@@ -961,7 +960,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	tc[s].seq_from_tap = tc[s].seq_init_from_tap + 1;
 	tc[s].seq_ack_to_tap = tc[s].seq_from_tap;
 
-	tc[s].seq_to_tap = tcp_seq_init(c, af, addr, th->dest, th->source);
+	tc[s].seq_to_tap = tcp_seq_init(c, af, addr, th->dest, th->source, now);
 	tc[s].seq_ack_from_tap = tc[s].seq_to_tap + 1;
 
 	tcp_sock_hash_insert(c, s, af, addr, th->source, th->dest);
@@ -988,8 +987,9 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
  * tcp_conn_from_sock() - Handle new connection request from listening socket
  * @c:		Execution context
  * @fd:		File descriptor number for listening socket
+ * @now:	Current timestamp
  */
-static void tcp_conn_from_sock(struct ctx *c, int fd)
+static void tcp_conn_from_sock(struct ctx *c, int fd, struct timespec *now)
 {
 	struct sockaddr_storage sa_r, sa_l;
 	socklen_t sa_len = sizeof(sa_l);
@@ -1023,7 +1023,8 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 
 		tc[s].seq_to_tap = tcp_seq_init(c, AF_INET, &sa4->sin_addr,
 						tc[s].sock_port,
-						tc[s].tap_port);
+						tc[s].tap_port,
+						now);
 
 		tcp_sock_hash_insert(c, s, AF_INET, &sa4->sin_addr,
 				     tc[s].tap_port, tc[s].sock_port);
@@ -1040,7 +1041,8 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 
 		tc[s].seq_to_tap = tcp_seq_init(c, AF_INET6, &sa6->sin6_addr,
 						tc[s].sock_port,
-						tc[s].tap_port);
+						tc[s].tap_port,
+						now);
 
 		tcp_sock_hash_insert(c, s, AF_INET6, &sa6->sin6_addr,
 				     tc[s].tap_port, tc[s].sock_port);
@@ -1051,9 +1053,7 @@ static void tcp_conn_from_sock(struct ctx *c, int fd)
 	tc[s].tap_window = WINDOW_DEFAULT;
 	tc[s].ws_allowed = 1;
 
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_sock);
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_tap);
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_ack_tap);
+	tc[s].ts_sock = tc[s].ts_tap = tc[s].ts_ack_tap = *now;
 
 	tcp_act_set(s);
 
@@ -1143,10 +1143,11 @@ static void tcp_sock_consume(int s, uint32_t ack_seq)
  * tcp_data_from_sock() - Handle new data from socket, queue to tap, in window
  * @c:		Execution context
  * @s:		File descriptor number for socket
+ * @now:	Current timestamp
  *
  * Return: negative on connection reset, 1 on pending data, 0 otherwise
  */
-static int tcp_data_from_sock(struct ctx *c, int s)
+static int tcp_data_from_sock(struct ctx *c, int s, struct timespec *now)
 {
 	int len, err, offset, left, send;
 
@@ -1188,7 +1189,7 @@ static int tcp_data_from_sock(struct ctx *c, int s)
 	}
 
 out:
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_sock);
+	tc[s].ts_sock = *now;
 
 	return !!left;
 }
@@ -1199,11 +1200,12 @@ out:
  * @af:		Address family, AF_INET or AF_INET6
  * @msg:	Input messages
  * @count:	Message count
+ * @now:	Current timestamp
  *
  * Return: count of consumed packets
  */
 int tcp_tap_handler(struct ctx *c, int af, void *addr,
-		    struct tap_msg *msg, int count)
+		    struct tap_msg *msg, int count, struct timespec *now)
 {
 	/* TODO: Implement message batching for TCP */
 	struct tcphdr *th = (struct tcphdr *)msg[0].l4h;
@@ -1224,7 +1226,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 
 	if ((s = tcp_sock_hash_lookup(c, af, addr, th->source, th->dest)) < 0) {
 		if (th->syn)
-			tcp_conn_from_tap(c, af, addr, th, len);
+			tcp_conn_from_tap(c, af, addr, th, len, now);
 		return 1;
 	}
 
@@ -1235,7 +1237,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 
 	tcp_clamp_window(s, th, len, th->syn && th->ack);
 
-	clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_tap);
+	tc[s].ts_tap = *now;
 
 	if (ntohl(th->seq) < tc[s].seq_from_tap)
 		skip = tc[s].seq_from_tap - ntohl(th->seq);
@@ -1275,7 +1277,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		/* The client might have sent data already, which we didn't
 		 * dequeue waiting for SYN,ACK from tap -- check now.
 		 */
-		tcp_data_from_sock(c, s);
+		tcp_data_from_sock(c, s, now);
 
 		ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLHUP;
 		ev.data.fd = s;
@@ -1298,7 +1300,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		break;
 	case ESTABLISHED:
 	case ESTABLISHED_SOCK_FIN:
-		clock_gettime(CLOCK_MONOTONIC, &tc[s].ts_ack_tap);
+		tc[s].ts_ack_tap = *now;
 
 		if (ntohl(th->seq) > tc[s].seq_from_tap) {
 			tc[s].seq_from_tap = tc[s].seq_ack_to_tap;
@@ -1318,7 +1320,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 				tc[s].seq_to_tap = tc[s].seq_ack_from_tap;
 
 			if (tc[s].s == ESTABLISHED_SOCK_FIN) {
-				if (!tcp_data_from_sock(c, s))
+				if (!tcp_data_from_sock(c, s, now))
 					tcp_set_state(s, CLOSE_WAIT);
 			}
 		}
@@ -1400,8 +1402,10 @@ static void tcp_connect_finish(struct ctx *c, int s)
  * @c:		Execution context
  * @s:		File descriptor number for socket
  * @events:	epoll events bitmap
+ * @now:	Current timestamp
  */
-void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
+void tcp_sock_handler(struct ctx *c, int s, uint32_t events,
+		      struct timespec *now)
 {
 	socklen_t sl;
 	int accept;
@@ -1434,7 +1438,7 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 	}
 
 	if (accept) {
-		tcp_conn_from_sock(c, s);
+		tcp_conn_from_sock(c, s, now);
 		return;
 	}
 
@@ -1444,18 +1448,18 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events)
 	}
 
 	if (tc[s].s == ESTABLISHED)
-		tcp_data_from_sock(c, s);
+		tcp_data_from_sock(c, s, now);
 
 	if (events & EPOLLRDHUP || events & EPOLLHUP) {
 		if (tc[s].s == ESTABLISHED) {
 			tcp_set_state(s, ESTABLISHED_SOCK_FIN);
 			shutdown(s, SHUT_RD);
-			tcp_data_from_sock(c, s);
+			tcp_data_from_sock(c, s, now);
 			tcp_send_to_tap(c, s, FIN | ACK, NULL, 0);
 		} else if (tc[s].s == FIN_WAIT_1) {
 			tcp_set_state(s, FIN_WAIT_1_SOCK_FIN);
 			shutdown(s, SHUT_RD);
-			tcp_data_from_sock(c, s);
+			tcp_data_from_sock(c, s, now);
 			tcp_send_to_tap(c, s, FIN | ACK, NULL, 0);
 			tcp_sock_consume(s, tc[s].seq_ack_from_tap);
 		}
@@ -1477,15 +1481,15 @@ int tcp_sock_init(struct ctx *c)
 	c->tcp.fd_max = c->tcp.fd_listen_max = c->tcp.fd_conn_max = 0;
 	CHECK_SET_MIN_MAX(c->tcp.fd_listen_, s);
 
-	for (port = 0; port < (1 << 15) + (1 << 14); port++) {
+	for (port = 0; !PORT_IS_EPHEMERAL(port); port++) {
 		if (c->v4) {
-			if ((s = sock_l4_add(c, 4, IPPROTO_TCP, port)) < 0)
+			if ((s = sock_l4(c, AF_INET, IPPROTO_TCP, port)) < 0)
 				return -1;
 			CHECK_SET_MIN_MAX(c->tcp.fd_listen_, s);
 		}
 
 		if (c->v6) {
-			if ((s = sock_l4_add(c, 6, IPPROTO_TCP, port)) < 0)
+			if ((s = sock_l4(c, AF_INET6, IPPROTO_TCP, port)) < 0)
 				return -1;
 			CHECK_SET_MIN_MAX(c->tcp.fd_listen_, s);
 		}
@@ -1540,7 +1544,7 @@ static void tcp_timer_one(struct ctx *c, int s, struct timespec *ts)
 			if (tc[s].seq_ack_from_tap < tc[s].seq_to_tap) {
 				tc[s].seq_to_tap = tc[s].seq_ack_from_tap;
 				tc[s].ts_ack_tap = *ts;
-				tcp_data_from_sock(c, s);
+				tcp_data_from_sock(c, s, ts);
 			}
 		}
 

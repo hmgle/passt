@@ -76,7 +76,7 @@ void tap_ip_send(struct ctx *c, struct in6_addr *src, uint8_t proto,
 		iph->frag_off = 0;
 		iph->ttl = 255;
 		iph->protocol = proto;
-		iph->daddr = c->addr4;
+		iph->daddr = c->addr4_seen;
 		memcpy(&iph->saddr, &src->s6_addr[12], 4);
 
 		iph->check = 0;
@@ -104,7 +104,10 @@ void tap_ip_send(struct ctx *c, struct in6_addr *src, uint8_t proto,
 		ip6h->priority = 0;
 
 		ip6h->saddr = *src;
-		ip6h->daddr = c->addr6_guest;
+		if (IN6_IS_ADDR_LINKLOCAL(src))
+			ip6h->daddr = c->addr6_ll_seen;
+		else
+			ip6h->daddr = c->addr6_seen;
 
 		memcpy(data, in, len);
 

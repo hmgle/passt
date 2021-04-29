@@ -22,14 +22,18 @@ void debug(const char *format, ...);
 			CHECK_SET_MIN_MAX(c->proto_ctx.fd_, (fd));	\
 	} while (0)
 
-#define IN_INTERVAL(a, b, x) ((x) >= (a) && (x) <= (b))
+#define MIN(x, y)		(((x) < (y)) ? (x) : (y))
+
+#define IN_INTERVAL(a, b, x)	((x) >= (a) && (x) <= (b))
 
 #define FD_PROTO(x, proto)						\
 	(IN_INTERVAL(c->proto.fd_min, c->proto.fd_max, (x)))
+
+#define PORT_IS_EPHEMERAL(port) ((port) >= (1 << 15) + (1 << 14)) /* RFC 6335 */
 
 uint16_t csum_fold(uint32_t sum);
 uint16_t csum_ip4(void *buf, size_t len);
 void csum_tcp4(struct iphdr *iph);
 char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto);
-int sock_l4_add(struct ctx *c, int v, uint16_t proto, uint16_t port);
+int sock_l4(struct ctx *c, int af, uint16_t proto, uint16_t port);
 int timespec_diff_ms(struct timespec *a, struct timespec *b);
