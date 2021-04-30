@@ -125,24 +125,68 @@ static void udp_sock_handler_local(struct ctx *c, int af, void *sa,
 }
 
 /**
+ * udp_sock_name() - Get address family and port for bound UDP socket
+ * @c:		Execution context
+ * @s:		File descriptor number for socket
+ * @port:	Local port, set on return, network order
+ *
+ * Return: address family, AF_INET or AF_INET6, negative error code on failure
+ */
+static int udp_sock_name(struct ctx *c, int s, in_port_t *port)
+{
+	if (!c->udp.fd_in_seq) {
+		struct sockaddr_storage sa;
+		socklen_t sl;
+
+		sl = sizeof(sa);
+		if (getsockname(s, (struct sockaddr *)&sa, &sl))
+			return -errno;
+
+		if (sa.ss_family == AF_INET) {
+			*port = ((struct sockaddr_in *)&sa)->sin_port;
+			return AF_INET;
+		}
+
+		if (sa.ss_family == AF_INET6) {
+			*port = ((struct sockaddr_in6 *)&sa)->sin6_port;
+			return AF_INET6;
+		}
+
+		return -ENOTSUP;
+	}
+
+	if (c->v4 && c->v6) {
+		*port = htons((s - c->udp.fd_min) / 2);
+		return ((s - c->udp.fd_min) % 2) ? AF_INET6 : AF_INET;
+	}
+
+	*port = htons(s - c->udp.fd_min);
+	return c->v4 ? AF_INET : AF_INET6;
+}
+
+/**
  * udp_sock_handler() - Handle new data from socket
  * @c:		Execution context
  * @s:		File descriptor number for socket
  * @events:	epoll events bitmap
+ * @pkt_buf:	Buffer to receive packets, currently unused
  * @now:	Current timestamp
  */
-void udp_sock_handler(struct ctx *c, int s, uint32_t events,
+void udp_sock_handler(struct ctx *c, int s, uint32_t events, char *pkt_buf,
 		      struct timespec *now)
 {
 	struct in6_addr a6 = { .s6_addr = {    0,    0,    0,    0,
 					       0,    0,    0,    0,
 					       0,    0, 0xff, 0xff,
 					       0,    0,    0,    0 } };
-	struct sockaddr_storage sr, sl;
+	struct sockaddr_storage sr;
 	socklen_t slen = sizeof(sr);
 	char buf[USHRT_MAX];
 	struct udphdr *uh;
 	ssize_t n;
+	int af;
+
+	(void)pkt_buf;
 
 	if (events == EPOLLERR)
 		return;
@@ -153,13 +197,10 @@ void udp_sock_handler(struct ctx *c, int s, uint32_t events,
 		return;
 
 	uh = (struct udphdr *)buf;
+	af = udp_sock_name(c, s, &uh->dest);
 
-	if (getsockname(s, (struct sockaddr *)&sl, &slen))
-		return;
-
-	if (sl.ss_family == AF_INET) {
+	if (af == AF_INET) {
 		struct sockaddr_in *sr4 = (struct sockaddr_in *)&sr;
-		struct sockaddr_in *sl4 = (struct sockaddr_in *)&sl;
 
 		if (ntohl(sr4->sin_addr.s_addr) == INADDR_LOOPBACK ||
 		    ntohl(sr4->sin_addr.s_addr) == INADDR_ANY)
@@ -167,19 +208,16 @@ void udp_sock_handler(struct ctx *c, int s, uint32_t events,
 
 		memcpy(&a6.s6_addr[12], &sr4->sin_addr, sizeof(sr4->sin_addr));
 		uh->source = sr4->sin_port;
-		uh->dest = sl4->sin_port;
 		uh->len = htons(n + sizeof(*uh));
 
 		tap_ip_send(c, &a6, IPPROTO_UDP, buf, n + sizeof(*uh));
-	} else if (sl.ss_family == AF_INET6) {
+	} else if (af == AF_INET6) {
 		struct sockaddr_in6 *sr6 = (struct sockaddr_in6 *)&sr;
-		struct sockaddr_in6 *sl6 = (struct sockaddr_in6 *)&sl;
 
 		if (IN6_IS_ADDR_LOOPBACK(&sr6->sin6_addr))
 			udp_sock_handler_local(c, AF_INET6, sr6, now);
 
 		uh->source = sr6->sin6_port;
-		uh->dest = sl6->sin6_port;
 		uh->len = htons(n + sizeof(*uh));
 
 		tap_ip_send(c, &sr6->sin6_addr, IPPROTO_UDP,
@@ -363,16 +401,22 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
  */
 int udp_sock_init(struct ctx *c)
 {
+	int s, prev = -1;
 	in_port_t port;
-	int s;
 
 	c->udp.fd_min = INT_MAX;
 	c->udp.fd_max = 0;
+	c->udp.fd_in_seq = 1;
 
 	for (port = 0; port < USHRT_MAX; port++) {
 		if (c->v4) {
 			if ((s = sock_l4(c, AF_INET, IPPROTO_UDP, port)) < 0)
 				return -1;
+
+			if (c->udp.fd_in_seq && prev != -1 && s != prev + 1)
+				c->udp.fd_in_seq = 0;
+			else
+				prev = s;
 
 			up4[port].s = s;
 		}
@@ -380,6 +424,11 @@ int udp_sock_init(struct ctx *c)
 		if (c->v6) {
 			if ((s = sock_l4(c, AF_INET6, IPPROTO_UDP, port)) < 0)
 				return -1;
+
+			if (c->udp.fd_in_seq && prev != -1 && s != prev + 1)
+				c->udp.fd_in_seq = 0;
+			else
+				prev = s;
 
 			up6[port].s = s;
 		}
@@ -424,7 +473,8 @@ static void udp_timer_one(struct ctx *c, int af, in_port_t p,
 	if (s != -1) {
 		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, s, NULL);
 		close(s);
-		sock_l4(c, af, IPPROTO_UDP, p);
+		if (sock_l4(c, af, IPPROTO_UDP, p) != s)
+			c->udp.fd_in_seq = 0;
 	}
 }
 

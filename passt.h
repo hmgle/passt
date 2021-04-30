@@ -14,6 +14,8 @@ struct tap_msg {
 	size_t l4_len;
 };
 
+#define SOCK_BUF_BYTES		(ETH_MAX_MTU * 4)
+
 #include "icmp.h"
 #include "tcp.h"
 #include "udp.h"
@@ -62,5 +64,5 @@ struct ctx {
 
 	struct icmp_ctx icmp;
 	struct tcp_ctx tcp;
-	struct tcp_ctx udp;
+	struct udp_ctx udp;
 };

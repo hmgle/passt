@@ -5,7 +5,7 @@
 
 struct ctx;
 
-void tcp_sock_handler(struct ctx *c, int s, uint32_t events,
+void tcp_sock_handler(struct ctx *c, int s, uint32_t events, char *pkt_buf,
 		      struct timespec *now);
 int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		    struct tap_msg *msg, int count, struct timespec *now);

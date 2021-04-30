@@ -1402,13 +1402,16 @@ static void tcp_connect_finish(struct ctx *c, int s)
  * @c:		Execution context
  * @s:		File descriptor number for socket
  * @events:	epoll events bitmap
+ * @pkt_buf:	Buffer to receive packets, currently unused
  * @now:	Current timestamp
  */
-void tcp_sock_handler(struct ctx *c, int s, uint32_t events,
+void tcp_sock_handler(struct ctx *c, int s, uint32_t events, char *pkt_buf,
 		      struct timespec *now)
 {
 	socklen_t sl;
 	int accept;
+
+	(void)pkt_buf;
 
 	if (tc[s].s == LAST_ACK) {
 		tcp_send_to_tap(c, s, ACK, NULL, 0);

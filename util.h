@@ -23,6 +23,7 @@ void debug(const char *format, ...);
 	} while (0)
 
 #define MIN(x, y)		(((x) < (y)) ? (x) : (y))
+#define MAX(x, y)		(((x) > (y)) ? (x) : (y))
 
 #define IN_INTERVAL(a, b, x)	((x) >= (a) && (x) <= (b))
 

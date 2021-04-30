@@ -189,11 +189,6 @@ int sock_l4(struct ctx *c, int af, uint16_t proto, uint16_t port)
 		return -1;
 	}
 
-	CHECK_SET_MIN_MAX_PROTO_FD(proto, IPPROTO_ICMP,		icmp,	fd);
-	CHECK_SET_MIN_MAX_PROTO_FD(proto, IPPROTO_ICMPV6,	icmp,	fd);
-	CHECK_SET_MIN_MAX_PROTO_FD(proto, IPPROTO_TCP,		tcp,	fd);
-	CHECK_SET_MIN_MAX_PROTO_FD(proto, IPPROTO_UDP,		udp,	fd);
-
 	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
 		goto epoll_add;
 
@@ -207,16 +202,29 @@ int sock_l4(struct ctx *c, int af, uint16_t proto, uint16_t port)
 		setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &one, sizeof(one));
 	}
 
+	CHECK_SET_MIN_MAX_PROTO_FD(proto, IPPROTO_ICMP,		icmp,	fd);
+	CHECK_SET_MIN_MAX_PROTO_FD(proto, IPPROTO_ICMPV6,	icmp,	fd);
+	CHECK_SET_MIN_MAX_PROTO_FD(proto, IPPROTO_TCP,		tcp,	fd);
+	CHECK_SET_MIN_MAX_PROTO_FD(proto, IPPROTO_UDP,		udp,	fd);
+
 	if (proto == IPPROTO_UDP && PORT_IS_EPHEMERAL(port))
 		goto epoll_add;
 
 	if (bind(fd, sa, sl) < 0) {
 		/* We'll fail to bind to low ports if we don't have enough
 		 * capabilities, and we'll fail to bind on already bound ports,
-		 * this is fine.
+		 * this is fine. If this isn't the socket with the lowest number
+		 * for a given protocol, leave it open, to avoid unnecessary
+		 * holes in the numbering.
 		 */
-		close(fd);
-		return 0;
+		if ((proto == IPPROTO_TCP && fd == c->tcp.fd_min) ||
+		    (proto == IPPROTO_UDP && fd == c->udp.fd_min) ||
+		    ((proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6) &&
+		     fd == c->icmp.fd_min)) {
+			close(fd);
+			return 0;
+		}
+		return fd;
 	}
 
 	if (proto == IPPROTO_TCP && listen(fd, 128) < 0) {

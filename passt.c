@@ -60,6 +60,9 @@
 #define TAP_BUF_FILL		(TAP_BUF_BYTES - ETH_MAX_MTU - sizeof(uint32_t))
 #define TAP_MSGS		(TAP_BUF_BYTES / sizeof(struct ethhdr) + 1)
 
+#define PKT_BUF_BYTES		MAX(TAP_BUF_BYTES, SOCK_BUF_BYTES)
+static char pkt_buf		[PKT_BUF_BYTES];
+
 #define TIMER_INTERVAL		MIN(TCP_TIMER_INTERVAL, UDP_TIMER_INTERVAL)
 
 /**
@@ -530,8 +533,6 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 	return 1;
 }
 
-static char tap_buf[TAP_BUF_BYTES];
-
 /**
  * tap_handler() - Packet handler for tap file descriptor
  * @c:		Execution context
@@ -544,7 +545,7 @@ static int tap_handler(struct ctx *c, struct timespec *now)
 	struct tap_msg msg[TAP_MSGS];
 	int msg_count, same, i;
 	struct ethhdr *eh;
-	char *p = tap_buf;
+	char *p = pkt_buf;
 	ssize_t n, rem;
 
 	while ((n = recv(c->fd_unix, p, TAP_BUF_FILL, MSG_DONTWAIT)) > 0) {
@@ -615,7 +616,7 @@ static int tap_handler(struct ctx *c, struct timespec *now)
 			}
 		}
 
-		p = tap_buf;
+		p = pkt_buf;
 	}
 
 	if (n >= 0 || errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
@@ -660,11 +661,11 @@ static void sock_handler(struct ctx *c, int s, uint32_t events,
 	debug("%s: packet from socket %i", getprotobynumber(proto)->p_name, s);
 
 	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
-		icmp_sock_handler(c, s, events, now);
+		icmp_sock_handler(c, s, events, pkt_buf, now);
 	else if (proto == IPPROTO_TCP)
-		tcp_sock_handler(c, s, events, now);
+		tcp_sock_handler( c, s, events, pkt_buf, now);
 	else if (proto == IPPROTO_UDP)
-		udp_sock_handler(c, s, events, now);
+		udp_sock_handler( c, s, events, pkt_buf, now);
 }
 
 /**

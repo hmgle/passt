@@ -38,9 +38,10 @@
  * @c:		Execution context
  * @s:		File descriptor number for socket
  * @events:	epoll events bitmap
+ * @pkt_buf:	Buffer to receive packets, currently unused
  * @now:	Current timestamp, unused
  */
-void icmp_sock_handler(struct ctx *c, int s, uint32_t events,
+void icmp_sock_handler(struct ctx *c, int s, uint32_t events, char *pkt_buf,
 		       struct timespec *now)
 {
 	struct in6_addr a6 = { .s6_addr = {    0,    0,    0,    0,
@@ -53,6 +54,7 @@ void icmp_sock_handler(struct ctx *c, int s, uint32_t events,
 	ssize_t n;
 
 	(void)events;
+	(void)pkt_buf;
 	(void)now;
 
 	n = recvfrom(s, buf, sizeof(buf), MSG_DONTWAIT,
