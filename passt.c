@@ -721,8 +721,8 @@ void usage(const char *name)
 int main(int argc, char **argv)
 {
 	struct epoll_event events[EPOLL_EVENTS];
-	char buf6[3][INET6_ADDRSTRLEN];
-	char buf4[4][INET_ADDRSTRLEN];
+	char buf6[INET6_ADDRSTRLEN];
+	char buf4[INET_ADDRSTRLEN];
 	struct epoll_event ev = { 0 };
 	struct ctx c = { 0 };
 	int nfds, i, fd_unix;
@@ -784,22 +784,22 @@ int main(int argc, char **argv)
 		     c.ifn);
 		info("DHCP:");
 		info("    assign: %s",
-		     inet_ntop(AF_INET, &c.addr4, buf4[0], sizeof(buf4[0])));
+		     inet_ntop(AF_INET, &c.addr4,  buf4, sizeof(buf4)));
 		info("    mask: %s",
-		     inet_ntop(AF_INET, &c.mask4, buf4[0], sizeof(buf4[0])));
+		     inet_ntop(AF_INET, &c.mask4,  buf4, sizeof(buf4)));
 		info("    router: %s",
-		     inet_ntop(AF_INET, &c.gw4,   buf4[2], sizeof(buf4[2])));
+		     inet_ntop(AF_INET, &c.gw4,    buf4, sizeof(buf4)));
 		info("    DNS: %s",
-		     inet_ntop(AF_INET, &c.dns4,  buf4[3], sizeof(buf4[3])));
+		     inet_ntop(AF_INET, &c.dns4,   buf4, sizeof(buf4)));
 	}
 	if (c.v6) {
 		info("NDP/DHCPv6:");
 		info("    assign: %s",
-		     inet_ntop(AF_INET6, &c.addr6, buf6[0], sizeof(buf6[0])));
+		     inet_ntop(AF_INET6, &c.addr6, buf6, sizeof(buf6)));
 		info("    router: %s",
-		     inet_ntop(AF_INET6, &c.gw6,   buf6[1], sizeof(buf6[1])));
+		     inet_ntop(AF_INET6, &c.gw6,   buf6, sizeof(buf6)));
 		info("    DNS: %s",
-		     inet_ntop(AF_INET6, &c.dns6,  buf6[2], sizeof(buf6[2])));
+		     inet_ntop(AF_INET6, &c.dns6,  buf6, sizeof(buf6)));
 	}
 
 listen:
