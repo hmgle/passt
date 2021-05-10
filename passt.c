@@ -757,10 +757,6 @@ int main(int argc, char **argv)
 	openlog("passt", LOG_PERROR, LOG_DAEMON);
 #else
 	openlog("passt", 0, LOG_DAEMON);
-	if (daemon(0, 0)) {
-		fprintf(stderr, "Failed to fork into background\n");
-		exit(EXIT_FAILURE);
-	}
 #endif
 
 	get_routes(&c);
@@ -811,6 +807,13 @@ listen:
 	info("as follows:");
 	info("    kvm ... -net socket,connect="
 	     UNIX_SOCK_PATH " -net nic,model=virtio");
+
+#ifndef DEBUG
+	if (daemon(0, 0)) {
+		fprintf(stderr, "Failed to fork into background\n");
+		exit(EXIT_FAILURE);
+	}
+#endif
 
 	c.fd_unix = accept(fd_unix, NULL, NULL);
 	ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
