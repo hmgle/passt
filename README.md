@@ -233,6 +233,11 @@ before _passt_ starts.
         cd passt
         make
 
+  * to make _passt_ not fork into background when it starts, and to get verbose
+    debug information, build with:
+
+            CFLAGS="-DDEBUG" make
+
 * a static build for x86_64 as of the latest commit is also available for
   convenience [here](https://passt.top/builds/static/). These binaries are
   simply built with:
