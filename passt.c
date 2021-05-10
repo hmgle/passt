@@ -65,6 +65,20 @@ static char pkt_buf		[PKT_BUF_BYTES];
 
 #define TIMER_INTERVAL		MIN(TCP_TIMER_INTERVAL, UDP_TIMER_INTERVAL)
 
+#ifdef DEBUG
+static char *ip_proto_str[IPPROTO_SCTP + 1] = {
+	[IPPROTO_ICMP]		= "ICMP",
+	[IPPROTO_TCP]		= "TCP",
+	[IPPROTO_UDP]		= "UDP",
+	[IPPROTO_ICMPV6]	= "ICMPV6",
+	[IPPROTO_SCTP]		= "SCTP",
+};
+
+#define IP_PROTO_STR(n)							\
+	(((n) <= IPPROTO_SCTP && ip_proto_str[(n)]) ? ip_proto_str[(n)] : "?")
+
+#endif
+
 /**
  * sock_unix() - Create and bind AF_UNIX socket, add to epoll list
  *
@@ -394,7 +408,7 @@ static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 			return 1;
 
 		debug("%s from tap: %s:%i -> %s:%i (%i packet%s)",
-		      getprotobynumber(iph->protocol)->p_name,
+		      IP_PROTO_STR(iph->protocol),
 		      inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
 		      ntohs(uh->source),
 		      inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
@@ -513,7 +527,7 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 			return 1;
 
 		debug("%s from tap: [%s]:%i\n\t-> [%s]:%i (%i packet%s)",
-		      getprotobynumber(proto)->p_name,
+		      IP_PROTO_STR(proto),
 		      inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
 		      ntohs(uh->source),
 		      inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)),
@@ -658,7 +672,7 @@ static void sock_handler(struct ctx *c, int s, uint32_t events,
 		return;
 	}
 
-	debug("%s: packet from socket %i", getprotobynumber(proto)->p_name, s);
+	debug("%s: packet from socket %i", IP_PROTO_STR(proto), s);
 
 	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
 		icmp_sock_handler(c, s, events, pkt_buf, now);
