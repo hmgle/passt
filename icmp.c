@@ -101,6 +101,9 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 			.sin_addr.s_addr = htonl(INADDR_ANY),
 		};
 
+		if (c->icmp.s4 < 0)
+			return 1;
+
 		if (msg[0].l4_len < sizeof(*ih) || ih->type != ICMP_ECHO)
 			return 1;
 
@@ -117,6 +120,9 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 			.sin6_addr = IN6ADDR_ANY_INIT,
 		};
 		struct icmp6hdr *ih = (struct icmp6hdr *)msg[0].l4h;
+
+		if (c->icmp.s6 < 0)
+			return 1;
 
 		if (msg[0].l4_len < sizeof(*ih) ||
 		    (ih->icmp6_type != 128 && ih->icmp6_type != 129))
@@ -142,14 +148,22 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
  */
 int icmp_sock_init(struct ctx *c)
 {
+	int fail = 0;
+
 	c->icmp.fd_min = INT_MAX;
 	c->icmp.fd_max = 0;
 
 	if (c->v4 && (c->icmp.s4 = sock_l4(c, AF_INET, IPPROTO_ICMP, 0)) < 0)
-		return -1;
+		fail = 1;
 
 	if (c->v6 && (c->icmp.s6 = sock_l4(c, AF_INET6, IPPROTO_ICMPV6, 0)) < 0)
-		return -1;
+		fail = 1;
+
+	if (fail) {
+		warn("Cannot open \"ping\" socket. You might need to:");
+		warn("  sysctl -w net.ipv4.ping_group_range=\"0 2147483647\"");
+		warn("...continuing without echo request/reply support.");
+	}
 
 	return 0;
 }
