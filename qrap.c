@@ -33,6 +33,7 @@ static char *qemu_names[] = {
 #ifdef ARCH
 	"qemu-system-" ARCH,
 #endif
+	"/usr/libexec/qemu-kvm",
 	NULL,
 };
 
@@ -135,11 +136,11 @@ valid_args:
 	close(s);
 
 	if (qemu_argc) {
-		char *name;
+		char **name;
 
-		for (name = qemu_names[0]; name; name++) {
-			qemu_argv[0] = name;
-			execvp(name, qemu_argv);
+		for (name = qemu_names; *name; name++) {
+			qemu_argv[0] = *name;
+			execvp(*name, qemu_argv);
 			if (errno != ENOENT) {
 				perror("execvp");
 				usage(argv[0]);
