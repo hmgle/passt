@@ -64,11 +64,11 @@ void usage(const char *name)
 int main(int argc, char **argv)
 {
 	char *qemu_argv[ARG_MAX], net_id[ARG_MAX] = { 0 }, *net_id_end;
+	int i, s, qemu_argc = 0, in_netdev = 0, has_socket = 0;
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
 		.sun_path = UNIX_SOCK_PATH,
 	};
-	int i, s, qemu_argc = 0;
 	char fd_str[ARG_MAX];
 	long fd;
 
@@ -93,9 +93,14 @@ int main(int argc, char **argv)
 	for (qemu_argc = 1, i = 1; i < argc; i++) {
 		char *p;
 
-		if (!strcmp(argv[i], "-net") || (!strcmp(argv[i], "-netdev"))) {
-			i++;
-			continue;
+		if (in_netdev) {
+			in_netdev = 0;
+			if (strstr(argv[i], ",socket") ||
+			    strstr(argv[i], "socket,"))
+				has_socket = 1;
+		} else if (!strcmp(argv[i], "-net") ||
+			   !strcmp(argv[i], "-netdev")) {
+			in_netdev = 1;
 		}
 
 		if (!*net_id && (p = strstr(argv[i], ",netdev=")))
@@ -104,17 +109,20 @@ int main(int argc, char **argv)
 		qemu_argv[qemu_argc++] = argv[i];
 	}
 
-	if (*net_id) {
-		net_id_end = strpbrk(net_id, ", ");
-		if (net_id_end)
-			*net_id_end = 0;
-	}
 
-	qemu_argv[qemu_argc++] = "-netdev";
-	snprintf(fd_str, ARG_MAX, "socket,fd=%u,id=%s", DEFAULT_FD,
-		 *net_id ? net_id : "hostnet0");
-	qemu_argv[qemu_argc++] = fd_str;
-	qemu_argv[qemu_argc] = NULL;
+	if (!has_socket) {
+		if (*net_id) {
+			net_id_end = strpbrk(net_id, ", ");
+			if (net_id_end)
+				*net_id_end = 0;
+		}
+
+		qemu_argv[qemu_argc++] = "-netdev";
+		snprintf(fd_str, ARG_MAX, "socket,fd=%u,id=%s", DEFAULT_FD,
+			 *net_id ? net_id : "hostnet0");
+		qemu_argv[qemu_argc++] = fd_str;
+		qemu_argv[qemu_argc] = NULL;
+	}
 
 valid_args:
 	s = socket(AF_UNIX, SOCK_STREAM, 0);
