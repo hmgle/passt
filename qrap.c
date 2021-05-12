@@ -62,7 +62,7 @@ static const struct pci_dev {
 	int last;
 } pci_devs[] = {
 	{ "pc-q35",	"virtio-net-pci",
-		"bus=pci.", ",addr=0x0",	3,			16 },
+		"bus=pci.", ",addr=0x0",	1,			16 },
 	{ "pc-",	"virtio-net-pci",
 		"bus=pci.0,addr=0x", "",	2, /* 1: ISA bridge */	16 },
 	{ "s390-ccw",	"virtio-net-ccw",
