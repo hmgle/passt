@@ -27,6 +27,9 @@
 
 #include "passt.h"
 
+#define STRINGIFY(x)	#x
+#define STR(x)		STRINGIFY(x)
+
 static char *qemu_names[] = {
 	"kvm",
 	"qemu-kvm",
@@ -35,6 +38,36 @@ static char *qemu_names[] = {
 #endif
 	"/usr/libexec/qemu-kvm",
 	NULL,
+};
+
+static const struct drop_arg {
+	char *name;
+	char *val;
+} drop_args[] = {
+	{ "-netdev",	NULL },
+	{ "-net",	NULL },
+	{ "-device",	"virtio-net-pci," },
+	{ "-device",	"virtio-net-ccw," },
+	{ "-device",	"e1000," },
+	{ "-device",	"rtl8139," },
+	{ 0 },
+};
+
+static const struct pci_dev {
+	char *mach;
+	char *name;
+	char *template;
+	char *template_post;
+	int first;
+	int last;
+} pci_devs[] = {
+	{ "pc-q35",	"virtio-net-pci",
+		"bus=pci.", ",addr=0x0",	3,			16 },
+	{ "pc-",	"virtio-net-pci",
+		"bus=pci.0,addr=0x", "",	2, /* 1: ISA bridge */	16 },
+	{ "s390-ccw",	"virtio-net-ccw",
+		"devno=fe.0.", "",		1,			16 },
+	{ 0 },
 };
 
 #define DEFAULT_FD	5
@@ -63,13 +96,13 @@ void usage(const char *name)
  */
 int main(int argc, char **argv)
 {
-	char *qemu_argv[ARG_MAX], net_id[ARG_MAX] = { 0 }, *net_id_end;
-	int i, s, qemu_argc = 0, in_netdev = 0, has_socket = 0;
+	char *qemu_argv[ARG_MAX], dev_str[ARG_MAX];
+	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0;
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
 		.sun_path = UNIX_SOCK_PATH,
 	};
-	char fd_str[ARG_MAX];
+	const struct pci_dev *dev = NULL;
 	long fd;
 
 	if (argc >= 3) {
@@ -90,39 +123,73 @@ int main(int argc, char **argv)
 	}
 
 	fd = DEFAULT_FD;
-	for (qemu_argc = 1, i = 1; i < argc; i++) {
-		char *p;
 
-		if (in_netdev) {
-			in_netdev = 0;
-			if (strstr(argv[i], ",socket") ||
-			    strstr(argv[i], "socket,"))
-				has_socket = 1;
-		} else if (!strcmp(argv[i], "-net") ||
-			   !strcmp(argv[i], "-netdev")) {
-			in_netdev = 1;
+	for (i = 1; i < argc - 1; i++) {
+		if (strcmp(argv[i], "-machine"))
+			continue;
+
+		for (dev = pci_devs; dev->mach; dev++) {
+			if (strstr(argv[i + 1], dev->mach) == argv[i + 1])
+				break;
+		}
+	}
+
+	if (!dev || !dev->mach)
+		dev = pci_devs;
+
+	for (qemu_argc = 1, i = 1; i < argc; i++) {
+		const struct drop_arg *a;
+
+		for (a = drop_args; a->name; a++) {
+			if (!strcmp(argv[i], a->name)) {
+				if (!a->val)
+					break;
+
+				if (i + 1 < argc &&
+				    strstr(argv[i + 1], a->val) == argv[i + 1])
+					break;
+			}
+		}
+		if (a->name) {
+			i++;
+			continue;
 		}
 
-		if (!*net_id && (p = strstr(argv[i], ",netdev=")))
-			strncpy(net_id, p + strlen(",netdev="), ARG_MAX);
+		if (!strcmp(argv[i], "-device") && i + 1 < argc) {
+			char *p;
+			long n;
+
+			has_dev = 1;
+
+			if ((p = strstr(argv[i + 1], dev->template))) {
+				n = strtol(p + strlen(dev->template), NULL, 16);
+				if (!errno)
+					addr_map |= (1 << n);
+			}
+		}
 
 		qemu_argv[qemu_argc++] = argv[i];
 	}
 
-
-	if (!has_socket) {
-		if (*net_id) {
-			net_id_end = strpbrk(net_id, ", ");
-			if (net_id_end)
-				*net_id_end = 0;
-		}
-
-		qemu_argv[qemu_argc++] = "-netdev";
-		snprintf(fd_str, ARG_MAX, "socket,fd=%u,id=%s", DEFAULT_FD,
-			 *net_id ? net_id : "hostnet0");
-		qemu_argv[qemu_argc++] = fd_str;
-		qemu_argv[qemu_argc] = NULL;
+	for (i = dev->first; i < dev->last; i++) {
+		if (!(addr_map & (1 << i)))
+			break;
 	}
+	if (i == dev->last) {
+		fprintf(stderr, "Couldn't find free address for device\n");
+		usage(argv[0]);
+	}
+
+	if (has_dev) {
+		qemu_argv[qemu_argc++] = "-device";
+		snprintf(dev_str, ARG_MAX, "%s,%s%x%s,netdev=hostnet0",
+			 dev->name, dev->template, i, dev->template_post);
+		qemu_argv[qemu_argc++] = dev_str;
+	}
+
+	qemu_argv[qemu_argc++] = "-netdev";
+	qemu_argv[qemu_argc++] = "socket,fd=" STR(DEFAULT_FD) ",id=hostnet0";
+	qemu_argv[qemu_argc] = NULL;
 
 valid_args:
 	s = socket(AF_UNIX, SOCK_STREAM, 0);
