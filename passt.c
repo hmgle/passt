@@ -797,7 +797,7 @@ int main(int argc, char **argv)
 #if DEBUG
 	openlog("passt", LOG_PERROR, LOG_DAEMON);
 #else
-	openlog("passt", 0, LOG_DAEMON);
+	openlog("passt", isatty(fileno(stdout)) ? 0 : LOG_PERROR, LOG_DAEMON);
 #endif
 
 	get_routes(&c);
@@ -870,7 +870,7 @@ listen:
 	     " -net nic,model=virtio", sock_index);
 
 #ifndef DEBUG
-	if (daemon(0, 0)) {
+	if (isatty(fileno(stdout)) && daemon(0, 0)) {
 		fprintf(stderr, "Failed to fork into background\n");
 		exit(EXIT_FAILURE);
 	}
