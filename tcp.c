@@ -1418,17 +1418,18 @@ static void tcp_connect_finish(struct ctx *c, int s)
 void tcp_sock_handler(struct ctx *c, int s, uint32_t events, char *pkt_buf,
 		      struct timespec *now)
 {
+	int accept = -1;
 	socklen_t sl;
-	int accept;
 
 	(void)pkt_buf;
+
+	sl = sizeof(accept);
 
 	if (tc[s].s == LAST_ACK) {
 		tcp_send_to_tap(c, s, ACK, NULL, 0);
 		tcp_close_and_epoll_del(c, s);
 		return;
 	}
-
 
 	if (tc[s].s == SOCK_SYN_SENT) {
 		/* This can only be a socket error or a shutdown from remote */
