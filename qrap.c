@@ -49,6 +49,7 @@ static const struct drop_arg {
 	{ "-device",	"virtio-net-pci," },
 	{ "-device",	"virtio-net-ccw," },
 	{ "-device",	"e1000," },
+	{ "-device",	"e1000e," },
 	{ "-device",	"rtl8139," },
 	{ 0 },
 };
