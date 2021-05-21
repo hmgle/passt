@@ -319,7 +319,7 @@
 #include "siphash.h"
 
 /* Approximately maximum number of open descriptors per process */
-#define MAX_CONNS			(256 * 1024)
+#define MAX_CONNS			(1024 * 1024)
 
 #define TCP_HASH_TABLE_LOAD		70		/* % */
 #define TCP_HASH_TABLE_SIZE		(MAX_CONNS * 100 / TCP_HASH_TABLE_LOAD)
@@ -924,6 +924,11 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	if (s < 0)
 		return;
 
+	if (s >= MAX_CONNS) {
+		close(s);
+		return;
+	}
+
 	tc[s].mss_guest = tcp_opt_get(th, len, OPT_MSS, NULL, NULL);
 	if (tc[s].mss_guest < 0)
 		tc[s].mss_guest = MSS_DEFAULT;
@@ -1002,6 +1007,11 @@ static void tcp_conn_from_sock(struct ctx *c, int fd, struct timespec *now)
 	s = accept4(fd, (struct sockaddr *)&sa_r, &sa_len, SOCK_NONBLOCK);
 	if (s == -1)
 		return;
+
+	if (s >= MAX_CONNS) {
+		close(s);
+		return;
+	}
 
 	CHECK_SET_MIN_MAX(c->tcp.fd_, s);
 	CHECK_SET_MIN_MAX(c->tcp.fd_conn_, s);

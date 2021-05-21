@@ -787,7 +787,7 @@ int main(int argc, char **argv)
 
 	fd_unix = sock_unix();
 
-	if (icmp_sock_init(&c) || tcp_sock_init(&c) || udp_sock_init(&c))
+	if (icmp_sock_init(&c) || udp_sock_init(&c) || tcp_sock_init(&c))
 		exit(EXIT_FAILURE);
 
 	if (c.v6)
