@@ -876,8 +876,10 @@ loop:
 			if (events[i].events	& EPOLLRDHUP	||
 			    events[i].events	& EPOLLHUP	||
 			    events[i].events	& EPOLLERR	||
-			    tap_handler(&c, &now))
+			    tap_handler(&c, &now)) {
+				close(c.fd_unix);
 				goto listen;
+			}
 		} else {
 			sock_handler(&c, events[i].data.fd, events[i].events,
 				     &now);
