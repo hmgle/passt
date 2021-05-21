@@ -53,6 +53,7 @@
 #include "icmp.h"
 #include "tcp.h"
 #include "udp.h"
+#include "pcap.h"
 
 #define EPOLL_EVENTS		10
 
@@ -601,6 +602,8 @@ static int tap_handler(struct ctx *c, struct timespec *now)
 					return 0;
 			}
 
+			pcap(p, len);
+
 			msg[msg_count].start = p;
 			msg[msg_count++].len = len;
 
@@ -791,6 +794,8 @@ int main(int argc, char **argv)
 		dhcpv6_init(&c);
 
 	memset(&c.mac_guest, 0xff, sizeof(c.mac_guest));
+
+	pcap_init();
 
 	if (c.v4) {
 		info("ARP:");

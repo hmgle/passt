@@ -25,6 +25,7 @@
 
 #include "passt.h"
 #include "util.h"
+#include "pcap.h"
 
 /**
  * tap_send() - Send frame and qemu socket header with indication of length
@@ -38,6 +39,8 @@ int tap_send(int fd, void *data, size_t len, int flags)
 {
 	uint32_t vnet_len = htonl(len);
 	send(fd, &vnet_len, 4, MSG_DONTWAIT | MSG_NOSIGNAL);
+
+	pcap(data, len);
 
 	return send(fd, data, len, flags | MSG_DONTWAIT | MSG_NOSIGNAL);
 }
