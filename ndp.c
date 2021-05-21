@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
+#include <arpa/inet.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
@@ -21,7 +22,6 @@
 #include <linux/udp.h>
 #include <net/if.h>
 #include <net/if_arp.h>
-#include <arpa/inet.h>
 
 #include "passt.h"
 #include "util.h"
@@ -76,6 +76,9 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		memcpy(p, c->mac, ETH_ALEN);
 		p += 6;
 	} else if (ih->icmp6_type == RS) {
+		size_t len = 0;
+		int i, n;
+
 		info("NDP: received RS, sending RA");
 		ihr->icmp6_type = RA;
 		ihr->icmp6_code = 0;
@@ -95,13 +98,48 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		memcpy(p, &c->addr6, 8);	/* prefix */
 		p += 16;
 
-		*p++ = 25;			/* RDNS */
-		*p++ = 3;			/* length */
-		p += 2;
-		*(uint32_t *)p = htonl(60);	/* lifetime */
-		p += 4;
-		memcpy(p, &c->dns6, 16);	/* address */
-		p += 16;
+		for (n = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[n]); n++);
+		if (n) {
+			*p++ = 25;			/* RDNSS */
+			*p++ = 1 + 2 * n;		/* length */
+			p += 2;				/* reserved */
+			*(uint32_t *)p = htonl(60);	/* lifetime */
+			p += 4;
+
+			for (i = 0; i < n; i++) {
+				memcpy(p, &c->dns6[i], 16);	/* address */
+				p += 16;
+			}
+		}
+
+		for (n = 0; *c->dns_search[n].n; n++)
+			len += strlen(c->dns_search[n].n) + 2;
+		if (len) {
+			*p++ = 31;			/* DNSSL */
+			*p++ = 2 + (len + 8 - 1) / 8;	/* length */
+			p += 2;				/* reserved */
+			*(uint32_t *)p = htonl(60);	/* lifetime */
+			p += 4;
+
+			for (i = 0; i < n; i++) {
+				char *dot;
+
+				*(p++) = '.';
+
+				strncpy((char *)p, c->dns_search[i].n,
+					sizeof(buf) -
+					((intptr_t)p - (intptr_t)buf));
+				for (dot = (char *)p - 1; *dot; dot++) {
+					if (*dot == '.')
+						*dot = strcspn(dot + 1, ".");
+				}
+				p += strlen(c->dns_search[i].n);
+				*(p++) = 0;
+			}
+
+			memset(p, 0, len % 8);		/* padding */
+			p += len % 8;
+		}
 
 		*p++ = 1;			/* source ll */
 		*p++ = 1;			/* length */

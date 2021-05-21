@@ -20,6 +20,12 @@ struct tap_msg {
 #include "tcp.h"
 #include "udp.h"
 
+#include <resolv.h>	/* For MAXNS below */
+
+struct fqdn {
+	char n[NS_MAXDNAME];
+};
+
 /**
  * struct ctx - Execution context
  * @epollfd:		file descriptor for epoll instance
@@ -31,13 +37,14 @@ struct tap_msg {
  * @addr4_seen:		Latest IPv4 address seen as source from tap
  * @mask4:		IPv4 netmask, network order
  * @gw4:		Default IPv4 gateway, network order
- * @dns4:		IPv4 DNS address, network order
+ * @dns4:		IPv4 DNS addresses, zero-terminated, network order
+ * @dns_search:		DNS search list
  * @v6:			Enable IPv6 transport
  * @addr6:		IPv6 address for external, routable interface
  * @addr6_seen:		Latest IPv6 global/site address seen as source from tap
  * @addr6_ll_seen:	Latest IPv6 link-local address seen as source from tap
  * @gw6:		Default IPv6 gateway
- * @dns4:		IPv6 DNS address
+ * @dns4:		IPv4 DNS addresses, zero-terminated
  * @ifn:		Name of routable interface
  */
 struct ctx {
@@ -51,14 +58,16 @@ struct ctx {
 	uint32_t addr4_seen;
 	uint32_t mask4;
 	uint32_t gw4;
-	uint32_t dns4;
+	uint32_t dns4[MAXNS + 1];
+
+	struct fqdn dns_search[MAXDNSRCH];
 
 	int v6;
 	struct in6_addr addr6;
 	struct in6_addr addr6_seen;
 	struct in6_addr addr6_ll_seen;
 	struct in6_addr gw6;
-	struct in6_addr dns6;
+	struct in6_addr dns6[MAXNS + 1];
 
 	char ifn[IF_NAMESIZE];
 

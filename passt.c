@@ -299,30 +299,49 @@ out:
  */
 static void get_dns(struct ctx *c)
 {
+	struct in6_addr *dns6 = &c->dns6[0];
+	struct fqdn *s = c->dns_search;
+	uint32_t *dns4 = &c->dns4[0];
 	char buf[BUFSIZ], *p, *end;
-	int dns4 = 0, dns6 = 0;
 	FILE *r;
 
 	r = fopen("/etc/resolv.conf", "r");
-	while (fgets(buf, BUFSIZ, r) && !(dns4 && dns6)) {
-		if (!strstr(buf, "nameserver "))
-			continue;
-		p = strrchr(buf, ' ');
-		end = strpbrk(buf, "%\n");
-		if (end)
-			*end = 0;
-		if (p && inet_pton(AF_INET, p + 1, &c->dns4))
-			dns4 = 1;
-		if (p && inet_pton(AF_INET6, p + 1, &c->dns6))
-			dns6 = 1;
+	while (fgets(buf, BUFSIZ, r)) {
+		if (strstr(buf, "nameserver ") == buf) {
+			p = strrchr(buf, ' ');
+			if (!p)
+				continue;
+
+			end = strpbrk(buf, "%\n");
+			if (end)
+				*end = 0;
+
+			if (dns4 - &c->dns4[0] < ARRAY_SIZE(c->dns4) &&
+			    inet_pton(AF_INET, p + 1, dns4))
+				dns4++;
+
+			if (dns6 - &c->dns6[0] < ARRAY_SIZE(c->dns6) &&
+			    inet_pton(AF_INET6, p + 1, dns6))
+				dns6++;
+		} else if (strstr(buf, "search ") == buf &&
+			   s == c->dns_search) {
+			end = strpbrk(buf, "\n");
+			if (end)
+				*end = 0;
+
+			p = strtok(buf, " \t");
+			while ((p = strtok(NULL, " \t")) &&
+			       s - c->dns_search < ARRAY_SIZE(c->dns_search)) {
+				strncpy(s->n, p, sizeof(c->dns_search[0]));
+				s++;
+			}
+		}
 	}
 
 	fclose(r);
-	if (dns4 || dns6)
-		return;
 
-	err("Couldn't get any nameserver address");
-	exit(EXIT_FAILURE);
+	if (dns4 == c->dns4 && dns6 == c->dns6)
+		warn("Couldn't get any nameserver address");
 }
 
 /**
@@ -785,8 +804,17 @@ int main(int argc, char **argv)
 		     inet_ntop(AF_INET, &c.mask4,  buf4, sizeof(buf4)));
 		info("    router: %s",
 		     inet_ntop(AF_INET, &c.gw4,    buf4, sizeof(buf4)));
-		info("    DNS: %s",
-		     inet_ntop(AF_INET, &c.dns4,   buf4, sizeof(buf4)));
+		for (i = 0; c.dns4[i]; i++) {
+			if (!i)
+				info("    DNS:");
+			inet_ntop(AF_INET, &c.dns4[i], buf4, sizeof(buf4));
+			info("        %s", buf4);
+		}
+		for (i = 0; *c.dns_search[i].n; i++) {
+			if (!i)
+				info("        search:");
+			info("            %s", c.dns_search[i].n);
+		}
 	}
 	if (c.v6) {
 		info("NDP/DHCPv6:");
@@ -794,8 +822,17 @@ int main(int argc, char **argv)
 		     inet_ntop(AF_INET6, &c.addr6, buf6, sizeof(buf6)));
 		info("    router: %s",
 		     inet_ntop(AF_INET6, &c.gw6,   buf6, sizeof(buf6)));
-		info("    DNS: %s",
-		     inet_ntop(AF_INET6, &c.dns6,  buf6, sizeof(buf6)));
+		for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c.dns6[i]); i++) {
+			if (!i)
+				info("    DNS:");
+			inet_ntop(AF_INET6, &c.dns6[i], buf6, sizeof(buf6));
+			info("        %s", buf6);
+		}
+		for (i = 0; *c.dns_search[i].n; i++) {
+			if (!i)
+				info("        search:");
+			info("            %s", c.dns_search[i].n);
+		}
 	}
 
 listen:

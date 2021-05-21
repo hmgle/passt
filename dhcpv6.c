@@ -15,13 +15,13 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <arpa/inet.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/udp.h>
 #include <net/if.h>
 #include <net/if_arp.h>
-#include <arpa/inet.h>
 
 #include "passt.h"
 #include "tap.h"
@@ -43,6 +43,7 @@ struct opt_hdr {
 # define OPT_STATUS_CODE	13
 # define  STATUS_NOTONLINK	4
 # define OPT_DNS_SERVERS	23
+# define OPT_DNS_SEARCH		24
 #else
 # define OPT_CLIENTID		__bswap_constant_16(1)
 # define OPT_SERVERID		__bswap_constant_16(2)
@@ -52,6 +53,7 @@ struct opt_hdr {
 # define OPT_STATUS_CODE	__bswap_constant_16(13)
 # define  STATUS_NOTONLINK	__bswap_constant_16(4)
 # define OPT_DNS_SERVERS	__bswap_constant_16(23)
+# define OPT_DNS_SEARCH		__bswap_constant_16(24)
 #endif
 #define   STR_NOTONLINK		"Prefix not appropriate for link."
 
@@ -157,11 +159,21 @@ struct opt_status_code {
 /**
  * struct opt_dns_servers - DNS Recursive Name Server option (RFC 3646)
  * @hdr:		Option header
- * @addr:		IPv6 DNS address
+ * @addr:		IPv6 DNS addresses
  */
 struct opt_dns_servers {
 	struct opt_hdr hdr;
-	struct in6_addr addr;
+	struct in6_addr addr[MAXNS];
+};
+
+/**
+ * struct opt_dns_servers - Domain Search List option (RFC 3646)
+ * @hdr:		Option header
+ * @list:		NULL-separated list of domain names
+ */
+struct opt_dns_search {
+	struct opt_hdr hdr;
+	char list[MAXDNSRCH * NS_MAXDNAME];
 };
 
 /**
@@ -200,8 +212,9 @@ static const struct udphdr uh_resp = {
  * @server_id:		Server Identifier option
  * @ia_na:		Non-temporary Address option
  * @ia_addr:		Address for IA_NA
- * @dns_servers:	DNS Recursive Name Server option
- * @client_id:		Client Identifier, variable length, must be at the end
+ * @client_id:		Client Identifier, variable length
+ * @dns_servers:	DNS Recursive Name Server, here just for storage size
+ * @dns_search:		Domain Search List, here just for storage size
  */
 static struct resp_t {
 	struct udphdr  uh;
@@ -211,6 +224,8 @@ static struct resp_t {
 	struct opt_ia_na ia_na;
 	struct opt_ia_addr ia_addr;
 	struct opt_client_id client_id;
+	struct opt_dns_servers dns_servers;
+	struct opt_dns_search dns_search;
 } __attribute__((__packed__)) resp = {
 	uh_resp,
 	{ 0 },
@@ -226,9 +241,16 @@ static struct resp_t {
 	  IN6ADDR_ANY_INIT, (uint32_t)~0U, (uint32_t)~0U
 	},
 
-
 	{ { OPT_CLIENTID,	0, },
 	  { 0 }
+	},
+
+	{ { OPT_DNS_SERVERS,	0, },
+	  { IN6ADDR_ANY_INIT }
+	},
+
+	{ { OPT_DNS_SEARCH,	0, },
+	  { 0 },
 	},
 };
 
@@ -350,6 +372,67 @@ ia_ta:
 	}
 
 	return NULL;
+}
+
+/**
+ * dhcpv6_dns_fill() - Fill in DNS Servers and Domain Search list options
+ * @c:		Execution context
+ * @buf:	Response message buffer where options will be appended
+ * @offset:	Offset in message buffer for new options
+ *
+ * Return: updated length of response message buffer.
+ */
+static size_t dhcpv6_dns_fill(struct ctx *c, char *buf, int offset)
+{
+	struct opt_dns_servers *srv = NULL;
+	struct opt_dns_search *srch = NULL;
+	int i;
+
+	for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[i]); i++) {
+		if (!i) {
+			srv = (struct opt_dns_servers *)(buf + offset);
+			offset += sizeof(struct opt_hdr);
+			srv->hdr.t = OPT_DNS_SERVERS;
+			srv->hdr.l = 0;
+		}
+
+		memcpy(&srv->addr[i], &c->dns6[i], sizeof(srv->addr[i]));
+		srv->hdr.l += sizeof(srv->addr[i]);
+		offset += sizeof(srv->addr[i]);
+	}
+
+	if (srv)
+		srv->hdr.l = htons(srv->hdr.l);
+
+	for (i = 0; *c->dns_search[i].n; i++) {
+		char *p;
+
+		if (!i) {
+			srch = (struct opt_dns_search *)(buf + offset);
+			offset += sizeof(struct opt_hdr);
+			srch->hdr.t = OPT_DNS_SEARCH;
+			srch->hdr.l = 0;
+			p = srch->list;
+			*p = 0;
+		}
+
+		p = stpcpy(p + 1, c->dns_search[i].n);
+		*(p++) = 0;
+		srch->hdr.l += strlen(c->dns_search[i].n) + 2;
+		offset += strlen(c->dns_search[i].n) + 2;
+	}
+
+	if (srch) {
+		for (i = 0; i < srch->hdr.l; i++) {
+			if (srch->list[i] == '.' || !srch->list[i]) {
+				srch->list[i] = strcspn(srch->list + i + 1,
+							".");
+			}
+		}
+		srch->hdr.l = htons(srch->hdr.l);
+	}
+
+	return offset;
 }
 
 /**
@@ -478,10 +561,14 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 
 	memcpy(&resp.client_id, client_id,
 	       ntohs(client_id->l) + sizeof(struct opt_hdr));
-	resp.uh.len = htons(n = offsetof(struct resp_t, client_id) +
-				sizeof(struct opt_hdr) + ntohs(client_id->l));
+
+	n = offsetof(struct resp_t, client_id) +
+	    sizeof(struct opt_hdr) + ntohs(client_id->l);
+	n = dhcpv6_dns_fill(c, (char *)&resp, n);
+	resp.uh.len = htons(n);
 
 	resp.hdr.xid = mh->xid;
+
 	tap_ip_send(c, &c->gw6, IPPROTO_UDP, (char *)&resp, n);
 	c->addr6_seen = c->addr6;
 
@@ -489,7 +576,7 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 }
 
 /**
- * dhcpv6() - Initialise DUID and addresses for DHCPv6 server
+ * dhcpv6_init() - Initialise DUID and addresses for DHCPv6 server
  * @c:		Execution context
  */
 void dhcpv6_init(struct ctx *c)

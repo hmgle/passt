@@ -22,11 +22,16 @@ void debug(const char *format, ...);
 			CHECK_SET_MIN_MAX(c->proto_ctx.fd_, (fd));	\
 	} while (0)
 
+#ifndef MIN
 #define MIN(x, y)		(((x) < (y)) ? (x) : (y))
+#endif
+#ifndef MAX
 #define MAX(x, y)		(((x) > (y)) ? (x) : (y))
+#endif
+
+#define ARRAY_SIZE(a)		((int)(sizeof(a) / sizeof((a)[0])))
 
 #define IN_INTERVAL(a, b, x)	((x) >= (a) && (x) <= (b))
-
 #define FD_PROTO(x, proto)						\
 	(IN_INTERVAL(c->proto.fd_min, c->proto.fd_max, (x)))
 

@@ -45,7 +45,6 @@ struct opt {
 static struct opt opts[255] = {
 	[1]  = { 0, 4, {                      0 }, 0, { 0 }, },	/* Mask */
 	[3]  = { 0, 4, {                      0 }, 0, { 0 }, },	/* Router */
-	[6]  = { 0, 4, {                      0 }, 0, { 0 }, },	/* DNS */
 	[51] = { 0, 4, { 0xff, 0xff, 0xff, 0xff }, 0, { 0 }, },	/* Lease time */
 	[53] = { 0, 1, {                      0 }, 0, { 0 }, },	/* Type */
 #define DHCPDISCOVER	1
@@ -155,6 +154,92 @@ static int fill(struct msg *m)
 }
 
 /**
+ * opt_dns_search_dup_ptr() - Look for possible domain name compression pointer
+ * @buf:	Current option buffer with existing labels
+ * @cmp:	Portion of domain name being added
+ * @len:	Length of current option buffer
+ *
+ * Return: offset to corresponding compression pointer if any, -1 if not found
+ */
+static int opt_dns_search_dup_ptr(unsigned char *buf, char *cmp, size_t len)
+{
+	unsigned int i;
+
+	for (i = 0; i < len; i++) {
+		if (buf[i] == 0 &&
+		    len - i - 1 >= strlen(cmp) &&
+		    !memcmp(buf + i + 1, cmp, strlen(cmp)))
+			return i;
+
+		if ((buf[i] & 0xc0) == 0xc0 &&
+		    len - i - 2 >= strlen(cmp) &&
+		    !memcmp(buf + i + 2, cmp, strlen(cmp)))
+			return i + 1;
+	}
+
+	return -1;
+}
+
+/**
+ * opt_set_dns_search() - Fill data and set length for Domain Search option
+ * @c:		Execution context
+ * @max_len:	Maximum total length of option buffer
+ */
+static void opt_set_dns_search(struct ctx *c, size_t max_len)
+{
+	char buf[NS_MAXDNAME];
+	int i;
+
+	opts[119].slen = 0;
+
+	for (i = 0; i < 255; i++)
+		max_len -= opts[i].slen;
+
+	for (i = 0; *c->dns_search[i].n; i++) {
+		unsigned int n;
+		int dup = -1;
+		char *p;
+
+		buf[0] = 0;
+		for (p = c->dns_search[i].n, n = 1; *p; p++) {
+			if (*p == '.') {
+				/* RFC 1035 4.1.4 Message compression */
+				dup = opt_dns_search_dup_ptr(opts[119].s, p + 1,
+							     opts[119].slen);
+
+				if (dup >= 0) {
+					buf[n++] = '\xc0';
+					buf[n++] = dup;
+					break;
+				} else {
+					buf[n++] = '.';
+				}
+			} else {
+				buf[n++] = *p;
+			}
+		}
+
+		/* The compression pointer is also an end of label */
+		if (dup < 0)
+			buf[n++] = 0;
+
+		if (n >= max_len)
+			break;
+
+		memcpy(opts[119].s + opts[119].slen, buf, n);
+		opts[119].slen += n;
+		max_len -= n;
+	}
+
+	for (i = 0; i < opts[119].slen; i++) {
+		if (!opts[119].s[i] || opts[119].s[i] == '.') {
+			opts[119].s[i] = strcspn((char *)opts[119].s + i + 1,
+						 ".\xc0");
+		}
+	}
+}
+
+/**
  * dhcp() - Check if this is a DHCP message, reply as needed
  * @c:		Execution context
  * @len:	Total L2 packet length
@@ -213,10 +298,16 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	m->yiaddr = c->addr4;
 	*(unsigned long *)opts[1].s =  c->mask4;
 	*(unsigned long *)opts[3].s =  c->gw4;
-	*(unsigned long *)opts[6].s =  c->dns4;
 	*(unsigned long *)opts[54].s = c->gw4;
 
-	uh->len = htons(len = offsetof(struct msg, o) + fill(m));
+	for (i = 0, opts[6].slen = 0; c->dns4[i]; i++) {
+		((uint32_t *)opts[6].s)[i] = c->dns4[i];
+		opts[6].slen += sizeof(uint32_t);
+	}
+
+	opt_set_dns_search(c, sizeof(m->o));
+
+	uh->len = htons(len = offsetof(struct msg, o) + fill(m) + sizeof(*uh));
 	uh->check = 0;
 	uh->source = htons(67);
 	uh->dest = htons(68);
