@@ -1,4 +1,5 @@
-#define UNIX_SOCK_PATH	"/tmp/passt.socket"
+#define UNIX_SOCK_MAX		100
+#define UNIX_SOCK_PATH		"/tmp/passt_%i.socket"
 
 /**
  * struct tap_msg - Generic message descriptor for arrays of messages
@@ -25,6 +26,8 @@ struct tap_msg {
 struct fqdn {
 	char n[NS_MAXDNAME];
 };
+
+#include <net/if.h>
 
 /**
  * struct ctx - Execution context

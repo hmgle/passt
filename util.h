@@ -29,6 +29,9 @@ void debug(const char *format, ...);
 #define MAX(x, y)		(((x) > (y)) ? (x) : (y))
 #endif
 
+#define STRINGIFY(x)	#x
+#define STR(x)		STRINGIFY(x)
+
 #define ARRAY_SIZE(a)		((int)(sizeof(a) / sizeof((a)[0])))
 
 #define IN_INTERVAL(a, b, x)	((x) >= (a) && (x) <= (b))
@@ -36,6 +39,10 @@ void debug(const char *format, ...);
 	(IN_INTERVAL(c->proto.fd_min, c->proto.fd_max, (x)))
 
 #define PORT_IS_EPHEMERAL(port) ((port) >= (1 << 15) + (1 << 14)) /* RFC 6335 */
+
+#include <linux/ipv6.h>
+#include <net/if.h>
+#include <linux/ip.h>
 
 uint16_t csum_fold(uint32_t sum);
 uint16_t csum_ip4(void *buf, size_t len);

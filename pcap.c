@@ -20,6 +20,10 @@
 #include <time.h>
 #include <net/ethernet.h>
 #include <unistd.h>
+#include <net/if.h>
+
+#include "passt.h"
+#include "util.h"
 
 #ifdef DEBUG
 
@@ -77,9 +81,9 @@ void pcap(char *pkt, size_t len)
 	write(pcap_fd, pkt, len);
 }
 
-void pcap_init(void)
+void pcap_init(int sock_index)
 {
-	char name[] = PCAP_PREFIX PCAP_ISO8601_STR ".pcap";
+	char name[] = PCAP_PREFIX PCAP_ISO8601_STR STR(UNIX_SOCK_MAX) ".pcap";
 	struct timeval tv;
 	struct tm *tm;
 
@@ -88,12 +92,18 @@ void pcap_init(void)
 	strftime(name + strlen(PCAP_PREFIX), sizeof(PCAP_ISO8601_STR) - 1,
 		 PCAP_ISO8601_FORMAT, tm);
 
+	snprintf(name + strlen(PCAP_PREFIX) + strlen(PCAP_ISO8601_STR),
+		 sizeof(name) - strlen(PCAP_PREFIX) - strlen(PCAP_ISO8601_STR),
+		 "_%i.pcap", sock_index);
+
 	pcap_fd = open(name, O_WRONLY | O_CREAT | O_APPEND | O_DSYNC,
 		       S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	if (pcap_fd == -1) {
 		perror("open");
 		return;
 	}
+
+	info("Saving packet capture at %s", name);
 
 	write(pcap_fd, &pcap_hdr, sizeof(pcap_hdr));
 }

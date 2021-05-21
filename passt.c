@@ -20,7 +20,6 @@
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/uio.h>
-#include <sys/un.h>
 #include <ifaddrs.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
@@ -30,6 +29,7 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/icmpv6.h>
+#include <linux/un.h>
 #include <linux/if_link.h>
 #include <net/ethernet.h>
 #include <stdlib.h>
@@ -82,30 +82,49 @@ static char *ip_proto_str[IPPROTO_SCTP + 1] = {
 
 /**
  * sock_unix() - Create and bind AF_UNIX socket, add to epoll list
+ * @index:	Index used in socket path, filled on success
  *
  * Return: newly created socket, doesn't return on error
  */
-static int sock_unix(void)
+static int sock_unix(int *index)
 {
-	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0), ex;
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
-		.sun_path = UNIX_SOCK_PATH,
 	};
+	int i, ret;
 
 	if (fd < 0) {
 		perror("UNIX socket");
 		exit(EXIT_FAILURE);
 	}
 
-	unlink(UNIX_SOCK_PATH);
-	if (bind(fd, (const struct sockaddr *)&addr, sizeof(addr)) < 0) {
+	for (i = 1; i < UNIX_SOCK_MAX; i++) {
+		snprintf(addr.sun_path, UNIX_PATH_MAX, UNIX_SOCK_PATH, i);
+
+		ex = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
+		ret = connect(ex, (const struct sockaddr *)&addr, sizeof(addr));
+		if (!ret || errno != ECONNREFUSED) {
+			close(ex);
+			continue;
+		}
+		close(ex);
+
+		unlink(addr.sun_path);
+		if (!bind(fd, (const struct sockaddr *)&addr, sizeof(addr)))
+			break;
+	}
+
+	if (i == UNIX_SOCK_MAX) {
 		perror("UNIX socket bind");
 		exit(EXIT_FAILURE);
 	}
 
-	chmod(UNIX_SOCK_PATH,
+	info("UNIX domain socket bound at %s\n", addr.sun_path);
+	chmod(addr.sun_path,
 	      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+
+	*index = i;
 
 	return fd;
 }
@@ -743,11 +762,11 @@ void usage(const char *name)
 int main(int argc, char **argv)
 {
 	struct epoll_event events[EPOLL_EVENTS];
+	int nfds, i, fd_unix, sock_index;
 	char buf6[INET6_ADDRSTRLEN];
 	char buf4[INET_ADDRSTRLEN];
 	struct epoll_event ev = { 0 };
 	struct ctx c = { 0 };
-	int nfds, i, fd_unix;
 	struct rlimit limit;
 	struct timespec now;
 
@@ -785,7 +804,7 @@ int main(int argc, char **argv)
 	get_addrs(&c);
 	get_dns(&c);
 
-	fd_unix = sock_unix();
+	fd_unix = sock_unix(&sock_index);
 
 	if (icmp_sock_init(&c) || udp_sock_init(&c) || tcp_sock_init(&c))
 		exit(EXIT_FAILURE);
@@ -795,7 +814,7 @@ int main(int argc, char **argv)
 
 	memset(&c.mac_guest, 0xff, sizeof(c.mac_guest));
 
-	pcap_init();
+	pcap_init(sock_index);
 
 	if (c.v4) {
 		info("ARP:");
@@ -841,14 +860,14 @@ int main(int argc, char **argv)
 	}
 
 listen:
-	listen(fd_unix, 1);
+	listen(fd_unix, 0);
 	info("You can now start qrap:");
 	info("    ./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio");
 	info("or directly qemu, patched with:");
 	info("    qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch");
 	info("as follows:");
-	info("    kvm ... -net socket,connect="
-	     UNIX_SOCK_PATH " -net nic,model=virtio");
+	info("    kvm ... -net socket,connect=" UNIX_SOCK_PATH
+	     " -net nic,model=virtio", sock_index);
 
 #ifndef DEBUG
 	if (daemon(0, 0)) {
@@ -858,6 +877,7 @@ listen:
 #endif
 
 	c.fd_unix = accept(fd_unix, NULL, NULL);
+
 	ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
 	ev.data.fd = c.fd_unix;
 	epoll_ctl(c.epollfd, EPOLL_CTL_ADD, c.fd_unix, &ev);
