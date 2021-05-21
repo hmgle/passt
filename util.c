@@ -17,7 +17,6 @@
 #include <arpa/inet.h>
 #include <net/ethernet.h>
 #include <net/if.h>
-#include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <sys/epoll.h>
@@ -205,6 +204,9 @@ int sock_l4(struct ctx *c, int af, uint16_t proto, uint16_t port)
 	CHECK_SET_MIN_MAX_PROTO_FD(proto, IPPROTO_UDP,		udp,	fd);
 
 	if (proto == IPPROTO_UDP && PORT_IS_EPHEMERAL(port))
+		goto epoll_add;
+
+	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
 		goto epoll_add;
 
 	if (bind(fd, sa, sl) < 0) {

@@ -105,7 +105,8 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		struct icmphdr *ih = (struct icmphdr *)msg[0].l4h;
 		struct sockaddr_in sa = {
 			.sin_family = AF_INET,
-			.sin_addr = *(struct in_addr *)addr,
+			.sin_addr = { .s_addr = INADDR_ANY },
+			.sin_port = ih->un.echo.id,
 		};
 
 		if (msg[0].l4_len < sizeof(*ih) || ih->type != ICMP_ECHO)
@@ -114,6 +115,9 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		if ((s = icmp_s_v4[ntohs(ih->un.echo.id)]) < 0)
 			return 1;
 
+		bind(s, (struct sockaddr *)&sa, sizeof(sa));
+
+		sa.sin_addr = *(struct in_addr *)addr;
 		sendto(s, msg[0].l4h, msg[0].l4_len,
 		       MSG_DONTWAIT | MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
@@ -121,7 +125,8 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		struct icmp6hdr *ih = (struct icmp6hdr *)msg[0].l4h;
 		struct sockaddr_in6 sa = {
 			.sin6_family = AF_INET6,
-			.sin6_addr = *(struct in6_addr *)addr,
+			.sin6_addr = IN6ADDR_ANY_INIT,
+			.sin6_port = ih->icmp6_identifier,
 		};
 
 		if (msg[0].l4_len < sizeof(*ih) ||
@@ -131,6 +136,9 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		if ((s = icmp_s_v6[ntohs(ih->icmp6_identifier)]) < 0)
 			return 1;
 
+		bind(s, (struct sockaddr *)&sa, sizeof(sa));
+
+		sa.sin6_addr = *(struct in6_addr *)addr;
 		sendto(s, msg[0].l4h, msg[0].l4_len,
 		       MSG_DONTWAIT | MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
