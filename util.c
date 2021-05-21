@@ -189,9 +189,6 @@ int sock_l4(struct ctx *c, int af, uint16_t proto, uint16_t port)
 		return -1;
 	}
 
-	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
-		goto epoll_add;
-
 	if (af == AF_INET) {
 		sa = (const struct sockaddr *)&addr4;
 		sl = sizeof(addr4);

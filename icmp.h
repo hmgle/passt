@@ -11,14 +11,10 @@ int icmp_sock_init(struct ctx *c);
 
 /**
  * struct icmp_ctx - Execution context for ICMP routines
- * @s4:		ICMP socket number
- * @s6:		ICMPv6 socket number
  * @fd_min:	Lowest file descriptor number for ICMP/ICMPv6 ever used
  * @fd_max:	Highest file descriptor number for ICMP/ICMPv6 ever used
  */
 struct icmp_ctx {
-	int s4;
-	int s6;
 	int fd_min;
 	int fd_max;
 };

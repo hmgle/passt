@@ -33,6 +33,10 @@
 #include "util.h"
 #include "icmp.h"
 
+/* Indexed by ICMP echo identifier */
+static int icmp_s_v4[USHRT_MAX];
+static int icmp_s_v6[USHRT_MAX];
+
 /**
  * icmp_sock_handler() - Handle new data from socket
  * @c:		Execution context
@@ -91,48 +95,43 @@ void icmp_sock_handler(struct ctx *c, int s, uint32_t events, char *pkt_buf,
 int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		     struct tap_msg *msg, int count, struct timespec *now)
 {
+	int s;
+
 	(void)count;
 	(void)now;
+	(void)c;
 
 	if (af == AF_INET) {
 		struct icmphdr *ih = (struct icmphdr *)msg[0].l4h;
 		struct sockaddr_in sa = {
 			.sin_family = AF_INET,
-			.sin_addr.s_addr = htonl(INADDR_ANY),
+			.sin_addr = *(struct in_addr *)addr,
 		};
-
-		if (c->icmp.s4 < 0)
-			return 1;
 
 		if (msg[0].l4_len < sizeof(*ih) || ih->type != ICMP_ECHO)
 			return 1;
 
-		sa.sin_port = ih->un.echo.id;
-		bind(c->icmp.s4, (struct sockaddr *)&sa, sizeof(sa));
+		if ((s = icmp_s_v4[ntohs(ih->un.echo.id)]) < 0)
+			return 1;
 
-		sa.sin_addr = *(struct in_addr *)addr;
-		sendto(c->icmp.s4, msg[0].l4h, msg[0].l4_len,
+		sendto(s, msg[0].l4h, msg[0].l4_len,
 		       MSG_DONTWAIT | MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
 	} else if (af == AF_INET6) {
+		struct icmp6hdr *ih = (struct icmp6hdr *)msg[0].l4h;
 		struct sockaddr_in6 sa = {
 			.sin6_family = AF_INET6,
-			.sin6_addr = IN6ADDR_ANY_INIT,
+			.sin6_addr = *(struct in6_addr *)addr,
 		};
-		struct icmp6hdr *ih = (struct icmp6hdr *)msg[0].l4h;
-
-		if (c->icmp.s6 < 0)
-			return 1;
 
 		if (msg[0].l4_len < sizeof(*ih) ||
 		    (ih->icmp6_type != 128 && ih->icmp6_type != 129))
 			return 1;
 
-		sa.sin6_port = ih->icmp6_identifier;
-		bind(c->icmp.s6, (struct sockaddr *)&sa, sizeof(sa));
+		if ((s = icmp_s_v6[ntohs(ih->icmp6_identifier)]) < 0)
+			return 1;
 
-		sa.sin6_addr = *(struct in6_addr *)addr;
-		sendto(c->icmp.s6, msg[0].l4h, msg[0].l4_len,
+		sendto(s, msg[0].l4h, msg[0].l4_len,
 		       MSG_DONTWAIT | MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
 	}
@@ -148,21 +147,31 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
  */
 int icmp_sock_init(struct ctx *c)
 {
-	int fail = 0;
+	int i, fail = 0;
 
 	c->icmp.fd_min = INT_MAX;
 	c->icmp.fd_max = 0;
 
-	if (c->v4 && (c->icmp.s4 = sock_l4(c, AF_INET, IPPROTO_ICMP, 0)) < 0)
-		fail = 1;
+	if (c->v4) {
+		for (i = 0; i < USHRT_MAX; i++) {
+			icmp_s_v4[i] = sock_l4(c, AF_INET, IPPROTO_ICMP, i);
+			if (icmp_s_v4[i] < 0)
+				fail = 1;
+		}
+	}
 
-	if (c->v6 && (c->icmp.s6 = sock_l4(c, AF_INET6, IPPROTO_ICMPV6, 0)) < 0)
-		fail = 1;
+	if (c->v6) {
+		for (i = 0; i < USHRT_MAX; i++) {
+			icmp_s_v6[i] = sock_l4(c, AF_INET6, IPPROTO_ICMPV6, i);
+			if (icmp_s_v6[i] < 0)
+				fail = 1;
+		}
+	}
 
 	if (fail) {
-		warn("Cannot open \"ping\" socket. You might need to:");
+		warn("Cannot open some \"ping\" sockets. You might need to:");
 		warn("  sysctl -w net.ipv4.ping_group_range=\"0 2147483647\"");
-		warn("...continuing without echo request/reply support.");
+		warn("...echo requests/replies might fail.");
 	}
 
 	return 0;
