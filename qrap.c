@@ -14,21 +14,22 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/un.h>
 #include <errno.h>
 #include <linux/if_ether.h>
 #include <linux/ipv6.h>
 #include <linux/limits.h>
+#include <linux/un.h>
 #include <limits.h>
-#include <net/if.h>
+#include <fcntl.h>
+#include <net/if_arp.h>
 
 #include "passt.h"
-
-#define STRINGIFY(x)	#x
-#define STR(x)		STRINGIFY(x)
+#include "util.h"
+#include "arp.h"
 
 static char *qemu_names[] = {
 	"kvm",
@@ -101,10 +102,32 @@ int main(int argc, char **argv)
 	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0;
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
-		.sun_path = UNIX_SOCK_PATH,
 	};
 	const struct pci_dev *dev = NULL;
 	long fd;
+	struct {
+		uint32_t vnet_len;
+		struct ethhdr eh;
+		struct arphdr ah;
+		struct arpmsg am;
+	} probe = {
+		htonl(42),
+		{
+			.h_dest   = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
+			.h_source = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
+			.h_proto  = htons(ETH_P_ARP),
+		},
+		{	.ar_hrd = htons(ARPHRD_ETHER),
+			.ar_pro = htons(ETH_P_IP),
+			.ar_hln = ETH_ALEN,
+			.ar_pln = 4,
+			.ar_op  = htons(ARPOP_REQUEST),
+		},
+		{
+			.sha = { 0 }, .sip = { 0 }, .tha = { 0 }, .tip = { 0 },
+		},
+	};
+	char probe_r;
 
 	if (argc >= 3) {
 		fd = strtol(argv[1], NULL, 0);
@@ -193,13 +216,32 @@ int main(int argc, char **argv)
 	qemu_argv[qemu_argc] = NULL;
 
 valid_args:
-	s = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (s < 0) {
-		perror("socket");
-		exit(EXIT_FAILURE);
+	for (i = 1; i < UNIX_SOCK_MAX; i++) {
+		struct timeval tv = { .tv_sec = 0, .tv_usec = 100 * 1000 };
+
+		s = socket(AF_UNIX, SOCK_STREAM, 0);
+		setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+		if (s < 0) {
+			perror("socket");
+			exit(EXIT_FAILURE);
+		}
+
+		snprintf(addr.sun_path, UNIX_PATH_MAX, UNIX_SOCK_PATH, i);
+		if (!connect(s, (const struct sockaddr *)&addr, sizeof(addr)) &&
+		    send(s, &probe, sizeof(probe), 0) == sizeof(probe) &&
+		    recv(s, &probe_r, 1, MSG_PEEK) > 0) {
+			tv.tv_usec = 0;
+			setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+			break;
+		}
+
+		perror("send");
+
+		close(s);
 	}
 
-	if (connect(s, (const struct sockaddr *)&addr, sizeof(addr)) < 0) {
+	if (i == UNIX_SOCK_MAX) {
 		perror("connect");
 		exit(EXIT_FAILURE);
 	}

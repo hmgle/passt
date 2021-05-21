@@ -26,20 +26,7 @@
 #include "dhcp.h"
 #include "util.h"
 #include "tap.h"
-
-/**
- * struct arpmsg - 802.2 ARP IPv4 payload
- * @sha:	Sender hardware address
- * @sip:	Sender IP address
- * @tha:	Target hardware address
- * @tip:	Target IP address
- */
-struct arpmsg {
-	unsigned char sha[ETH_ALEN];
-	unsigned char sip[4];
-	unsigned char tha[ETH_ALEN];
-	unsigned char tip[4];
-} __attribute__((__packed__));
+#include "arp.h"
 
 /**
  * arp() - Check if this is an ARP message, reply as needed
