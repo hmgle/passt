@@ -48,6 +48,9 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 	char buf[BUFSIZ] = { 0 };
 	uint8_t proto, *p;
 
+	if (len < sizeof(*ehr) + sizeof(*ip6h) + sizeof(ih))
+		return 0;
+
 	ih = (struct icmp6hdr *)ipv6_l4hdr(ip6h, &proto);
 	if (!ih)
 		return -1;
@@ -61,6 +64,10 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 	ihr = (struct icmp6hdr *)(ip6hr + 1);
 
 	if (ih->icmp6_type == NS) {
+		if (len < sizeof(*ehr) + sizeof(*ip6h) + sizeof(ih) +
+			  sizeof(struct in6_addr))
+			return -1;
+
 		info("NDP: received NS, sending NA");
 		ihr->icmp6_type = NA;
 		ihr->icmp6_code = 0;
@@ -69,10 +76,10 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		ihr->icmp6_override = 1;
 
 		p = (unsigned char *)(ihr + 1);
-		memcpy(p, &c->gw6, sizeof(c->gw6));	/* target address */
+		memcpy(p, ih + 1, sizeof(struct in6_addr)); /* target address */
 		p += 16;
-		*p++ = 2;			/* target ll */
-		*p++ = 1;			/* length */
+		*p++ = 2;				    /* target ll */
+		*p++ = 1;				    /* length */
 		memcpy(p, c->mac, ETH_ALEN);
 		p += 6;
 	} else if (ih->icmp6_type == RS) {
