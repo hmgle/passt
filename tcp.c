@@ -1465,6 +1465,8 @@ void tcp_sock_handler(struct ctx *c, int s, uint32_t events, char *pkt_buf,
 			tcp_data_from_sock(c, s, now);
 			tcp_send_to_tap(c, s, FIN | ACK, NULL, 0);
 			tcp_sock_consume(s, tc[s].seq_ack_from_tap);
+		} else {
+			tcp_close_and_epoll_del(c, s);
 		}
 	}
 }
