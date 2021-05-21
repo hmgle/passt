@@ -407,8 +407,8 @@ static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 		if (msg[0].len < sizeof(*uh))
 			return 1;
 
-		debug("%s from tap: %s:%i -> %s:%i (%i packet%s)",
-		      IP_PROTO_STR(iph->protocol),
+		debug("%s (%i) from tap: %s:%i -> %s:%i (%i packet%s)",
+		      IP_PROTO_STR(iph->protocol), iph->protocol,
 		      inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
 		      ntohs(uh->source),
 		      inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
@@ -526,8 +526,8 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 		if (msg[0].len < sizeof(*uh))
 			return 1;
 
-		debug("%s from tap: [%s]:%i\n\t-> [%s]:%i (%i packet%s)",
-		      IP_PROTO_STR(proto),
+		debug("%s (%i) from tap: [%s]:%i\n\t-> [%s]:%i (%i packet%s)",
+		      IP_PROTO_STR(proto), proto,
 		      inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
 		      ntohs(uh->source),
 		      inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)),
@@ -672,7 +672,7 @@ static void sock_handler(struct ctx *c, int s, uint32_t events,
 		return;
 	}
 
-	debug("%s: packet from socket %i", IP_PROTO_STR(proto), s);
+	debug("%s (%i): packet from socket %i", IP_PROTO_STR(proto), proto, s);
 
 	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6)
 		icmp_sock_handler(c, s, events, pkt_buf, now);
