@@ -22,10 +22,35 @@
 #include <sys/epoll.h>
 #include <syslog.h>
 #include <stdarg.h>
+#include <string.h>
+#include <time.h>
 
 #include "passt.h"
 #include "util.h"
 
+#ifdef DEBUG
+#define logfn(name, level)						\
+void name(const char *format, ...) {					\
+	char ts[sizeof("Mmm dd hh:mm:ss.")];				\
+	struct timespec tp;						\
+	struct tm *tm;							\
+	va_list args;							\
+									\
+	clock_gettime(CLOCK_REALTIME, &tp);				\
+	tm = gmtime(&tp.tv_sec);					\
+	strftime(ts, sizeof(ts), "%b %d %T.", tm);			\
+									\
+	fprintf(stderr, "%s%04lu: ", ts, tp.tv_nsec / (1000 * 1000));	\
+	va_start(args, format);						\
+	vsyslog(level, format, args);					\
+	va_end(args);							\
+	va_start(args, format);						\
+	vfprintf(stderr, format, args); 				\
+	va_end(args);							\
+	if (format[strlen(format)] != '\n')				\
+		fprintf(stderr, "\n");					\
+}
+#else
 #define logfn(name, level)						\
 void name(const char *format, ...) {					\
 	va_list args;							\
@@ -34,6 +59,7 @@ void name(const char *format, ...) {					\
 	vsyslog(level, format, args);					\
 	va_end(args);							\
 }
+#endif
 
 logfn(err,   LOG_ERR)
 logfn(warn,  LOG_WARNING)

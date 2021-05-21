@@ -795,7 +795,7 @@ int main(int argc, char **argv)
 	}
 
 #if DEBUG
-	openlog("passt", LOG_PERROR, LOG_DAEMON);
+	openlog("passt", 0, LOG_DAEMON);
 #else
 	openlog("passt", isatty(fileno(stdout)) ? 0 : LOG_PERROR, LOG_DAEMON);
 #endif
