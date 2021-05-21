@@ -109,7 +109,7 @@ int main(int argc, char **argv)
 	if (argc >= 3) {
 		fd = strtol(argv[1], NULL, 0);
 		if (fd >= 3 && fd < INT_MAX && !errno) {
-			char env_path[ARG_MAX], *p, command[ARG_MAX];
+			char env_path[ARG_MAX + 1], *p, command[ARG_MAX];
 
 			strncpy(env_path, getenv("PATH"), ARG_MAX);
 			p = strtok(env_path, ":");
