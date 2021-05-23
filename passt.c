@@ -104,7 +104,7 @@ static int sock_unix(int *index)
 
 		ex = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
 		ret = connect(ex, (const struct sockaddr *)&addr, sizeof(addr));
-		if (!ret || errno != ECONNREFUSED) {
+		if (!ret || (errno != ENOENT && errno != ECONNREFUSED)) {
 			close(ex);
 			continue;
 		}
