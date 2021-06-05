@@ -798,10 +798,13 @@ static int tcp_send_to_tap(struct ctx *c, int s, int flags, char *in, int len)
 	th->source = tc[s].sock_port;
 	th->dest = tc[s].tap_port;
 
-	if (!err)
-		th->window = htons(info.tcpi_snd_wnd >> info.tcpi_snd_wscale);
-	else
-		th->window = WINDOW_DEFAULT;
+	if (!err) {
+		/* First value sent by receiver is not scaled */
+		th->window = htons(info.tcpi_snd_wnd >>
+				   ((flags & SYN) ? 0 : info.tcpi_snd_wscale));
+	} else {
+		th->window = htons(WINDOW_DEFAULT);
+	}
 
 	th->urg_ptr = 0;
 	th->check = 0;
