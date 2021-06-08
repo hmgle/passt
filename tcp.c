@@ -327,7 +327,7 @@
 #define MAX_WS				10
 #define MAX_WINDOW			(1 << (16 + (MAX_WS)))
 #define MSS_DEFAULT			536
-#define WINDOW_DEFAULT			4380
+#define WINDOW_DEFAULT			14600		/* RFC 6928 */
 
 #define SYN_TIMEOUT			240000		/* ms */
 #define ACK_TIMEOUT			3000
@@ -401,6 +401,7 @@ struct tcp_conn;
  * @ws_allowed:		Window scaling allowed
  * @ws:			Window scaling factor
  * @tap_window:		Last window size received from tap, scaled
+ * @no_snd_wnd:		Kernel won't report window (without commit 8f7baad7f035)
  * @ts_sock:		Last activity timestamp from socket for timeout purposes
  * @ts_tap:		Last activity timestamp from tap for timeout purposes
  * @ts_ack_tap:		Last ACK segment timestamp from tap for timeout purposes
@@ -434,6 +435,7 @@ struct tcp_conn {
 	int ws_allowed;
 	int ws;
 	int tap_window;
+	int no_snd_wnd;
 
 	struct timespec ts_sock;
 	struct timespec ts_tap;
@@ -748,13 +750,18 @@ static int tcp_send_to_tap(struct ctx *c, int s, int flags, char *in, int len)
 		data += OPT_MSS_LEN - 2;
 		th->doff += OPT_MSS_LEN / 4;
 
-		if (tc[s].ws_allowed && (ws = info.tcpi_snd_wscale)) {
+		/* Check if kernel includes commit:
+		 *	8f7baad7f035 ("tcp: Add snd_wnd to TCP_INFO")
+		 */
+		tc[s].no_snd_wnd = !info.tcpi_snd_wnd;
+
+		if (tc[s].ws_allowed && (ws = info.tcpi_snd_wscale) &&
+		    !tc[s].no_snd_wnd) {
 			*data++ = OPT_NOP;
 
 			*data++ = OPT_WS;
 			*data++ = OPT_WS_LEN;
-			*data = ws;
-			*data += OPT_WS_LEN - 2;
+			*data++ = ws;
 
 			th->doff += (1 + OPT_WS_LEN) / 4;
 		}
@@ -798,10 +805,10 @@ static int tcp_send_to_tap(struct ctx *c, int s, int flags, char *in, int len)
 	th->source = tc[s].sock_port;
 	th->dest = tc[s].tap_port;
 
-	if (!err) {
+	if (!err && !tc[s].no_snd_wnd) {
 		/* First value sent by receiver is not scaled */
 		th->window = htons(info.tcpi_snd_wnd >>
-				   ((flags & SYN) ? 0 : info.tcpi_snd_wscale));
+				   (th->syn ? 0 : info.tcpi_snd_wscale));
 	} else {
 		th->window = htons(WINDOW_DEFAULT);
 	}
@@ -1343,6 +1350,8 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 				     msg[0].l4h + off + skip, len - off - skip,
 				     th->psh ? 0 : MSG_MORE))
 			break;
+
+		tcp_data_from_sock(c, s, now);
 
 		if (th->fin) {
 			shutdown(s, SHUT_WR);
