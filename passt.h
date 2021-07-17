@@ -15,27 +15,76 @@ struct tap_msg {
 	size_t l4_len;
 };
 
-#define SOCK_BUF_BYTES		(ETH_MAX_MTU * 4)
+union epoll_ref;
 
 #include "icmp.h"
 #include "tcp.h"
 #include "udp.h"
 
+/**
+ * union epoll_ref - Breakdown of reference for epoll socket bookkeeping
+ * @proto:	IP protocol number
+ * @s:		Socket number (implies 2^24 limit on number of descriptors)
+ * @tcp:	TCP-specific reference part
+ * @udp:	UDP-specific reference part
+ * @icmp:	ICMP-specific reference part
+ * @data:	Data handled by protocol handlers
+ * @u64:	Opaque reference for epoll_ctl() and epoll_wait()
+ */
+union epoll_ref {
+	struct {
+		uint32_t	proto:8,
+				s:24;
+		union {
+			union tcp_epoll_ref tcp;
+			union udp_epoll_ref udp;
+			union icmp_epoll_ref icmp;
+			uint32_t data;
+		};
+	};
+	uint64_t u64;
+};
+
+#define TAP_BUF_BYTES		(ETH_MAX_MTU * 3)
+#define TAP_BUF_FILL		(TAP_BUF_BYTES - ETH_MAX_MTU - sizeof(uint32_t))
+#define TAP_MSGS		(TAP_BUF_BYTES / sizeof(struct ethhdr) + 1)
+
+#define PKT_BUF_BYTES		MAX(TAP_BUF_BYTES, 0)
+extern char pkt_buf		[PKT_BUF_BYTES];
+
+#ifdef DEBUG
+extern char *ip_proto_str[];
+#define IP_PROTO_STR(n)							\
+	(((n) <= IPPROTO_SCTP && ip_proto_str[(n)]) ? ip_proto_str[(n)] : "?")
+#endif
+
 #include <resolv.h>	/* For MAXNS below */
 
+/**
+ * struct fqdn - Representation of fully-qualified domain name
+ * @n:		Domain name string
+ */
 struct fqdn {
 	char n[NS_MAXDNAME];
 };
 
 #include <net/if.h>
 
+enum passt_modes {
+	MODE_PASST,
+	MODE_PASTA,
+};
+
 /**
  * struct ctx - Execution context
- * @epollfd:		file descriptor for epoll instance
- * @fd_unix:		AF_UNIX socket for tap file descriptor
- * @v4:			Enable IPv4 transport
+ * @mode:		Operation mode, qemu/UNIX domain socket or namespace/tap
+ * @pasta_pid:		Target PID of namespace for pasta mode
+ * @epollfd:		File descriptor for epoll instance
+ * @fd_tap_listen:	File descriptor for listening AF_UNIX socket, if any
+ * @fd_tap:		File descriptor for AF_UNIX socket or tuntap device
  * @mac:		Host MAC address
  * @mac_guest:		Guest MAC address
+ * @v4:			Enable IPv4 transport
  * @addr4:		IPv4 address for external, routable interface
  * @addr4_seen:		Latest IPv4 address seen as source from tap
  * @mask4:		IPv4 netmask, network order
@@ -49,10 +98,17 @@ struct fqdn {
  * @gw6:		Default IPv6 gateway
  * @dns4:		IPv4 DNS addresses, zero-terminated
  * @ifn:		Name of routable interface
+ * @tcp:		Context for TCP protocol handler
+ * @udp:		Context for UDP protocol handler
+ * @icmp:		Context for ICMP protocol handler
  */
 struct ctx {
+	enum passt_modes mode;
+	int pasta_pid;
+
 	int epollfd;
-	int fd_unix;
+	int fd_tap_listen;
+	int fd_tap;
 	unsigned char mac[ETH_ALEN];
 	unsigned char mac_guest[ETH_ALEN];
 
@@ -74,7 +130,7 @@ struct ctx {
 
 	char ifn[IF_NAMESIZE];
 
-	struct icmp_ctx icmp;
 	struct tcp_ctx tcp;
 	struct udp_ctx udp;
+	struct icmp_ctx icmp;
 };

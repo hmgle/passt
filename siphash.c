@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /* PASST - Plug A Simple Socket Transport
+ *  for qemu/UNIX domain socket mode
+ *
+ * PASTA - Pack A Subtle Tap Abstraction
+ *  for network namespace/tap device mode
  *
  * siphash.c - SipHash routines
  *

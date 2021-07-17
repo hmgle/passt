@@ -3,7 +3,7 @@
 
 #define UDP_TIMER_INTERVAL		1000 /* ms */
 
-void udp_sock_handler(struct ctx *c, int s, uint32_t events, char *pkt_buf,
+void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		      struct timespec *now);
 int udp_tap_handler(struct ctx *c, int af, void *addr,
 		    struct tap_msg *msg, int count, struct timespec *now);
@@ -11,16 +11,40 @@ int udp_sock_init(struct ctx *c);
 void udp_timer(struct ctx *c, struct timespec *ts);
 
 /**
+ * union udp_epoll_ref - epoll reference portion for TCP connections
+ * @bound:		Set if this file descriptor is a bound socket
+ * @splice:		Set if descriptor is associated to "spliced" connection
+ * @v6:			Set for IPv6 sockets or connections
+ * @port:		Source port for connected sockets, bound port otherwise
+ * @u32:		Opaque u32 value of reference
+ */
+union udp_epoll_ref {
+	struct {
+		uint32_t	bound:1,
+				splice:3,
+#define UDP_TO_NS		1
+#define	UDP_TO_INIT		2
+#define UDP_BACK_TO_NS		3
+#define UDP_BACK_TO_INIT	4
+
+				v6:1,
+				port:16;
+	};
+	uint32_t u32;
+};
+
+
+/**
  * struct udp_ctx - Execution context for UDP
- * @fd_min:		Lowest file descriptor number for UDP ever used
- * @fd_max:		Highest file descriptor number for UDP ever used
- * @fd_in_seq:		1 if all socket numbers are in sequence, 0 otherwise
+ * @port_to_tap:	Ports bound host/init-side, packets to guest/tap
+ * @port_to_init:	Ports bound namespace-side, spliced to init
+ * @port_to_ns:		Ports bound init-side, spliced to namespace
  * @timer_run:		Timestamp of most recent timer run
  */
 struct udp_ctx {
-	int fd_min;
-	int fd_max;
-	int fd_in_seq;
+	uint8_t port_to_tap	[USHRT_MAX / 8];
+	uint8_t port_to_init	[USHRT_MAX / 8];
+	uint8_t port_to_ns	[USHRT_MAX / 8];
 	struct timespec timer_run;
 };
 

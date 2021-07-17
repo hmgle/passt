@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /* PASST - Plug A Simple Socket Transport
+ *  for qemu/UNIX domain socket mode
+ *
+ * PASTA - Pack A Subtle Tap Abstraction
+ *  for network namespace/tap device mode
  *
  * ndp.c - NDP support for PASST
  *
@@ -23,8 +27,8 @@
 #include <net/if.h>
 #include <net/if_arp.h>
 
-#include "passt.h"
 #include "util.h"
+#include "passt.h"
 #include "tap.h"
 
 #define RS	133
@@ -175,7 +179,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 	memcpy(ehr->h_source, c->mac, ETH_ALEN);
 	ehr->h_proto = htons(ETH_P_IPV6);
 
-	if (tap_send(c->fd_unix, ehr, len, 0) < 0)
+	if (tap_send(c, ehr, len, 0) < 0)
 		perror("NDP: send");
 
 	return 1;

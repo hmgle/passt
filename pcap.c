@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /* PASST - Plug A Simple Socket Transport
+ *  for qemu/UNIX domain socket mode
  *
- * pcap.c - Packet capture for PASST
+ * PASTA - Pack A Subtle Tap Abstraction
+ *  for network namespace/tap device mode
+ *
+ * pcap.c - Packet capture for PASST/PASTA
  *
  * Copyright (c) 2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
- *
  */
 
 #include <stdio.h>
@@ -22,18 +25,19 @@
 #include <unistd.h>
 #include <net/if.h>
 
-#include "passt.h"
 #include "util.h"
+#include "passt.h"
 
 #ifdef DEBUG
 
 #define PCAP_PREFIX		"/tmp/passt_"
+#define PCAP_PREFIX_PASTA	"/tmp/pasta_"
 #define PCAP_ISO8601_FORMAT	"%FT%H:%M:%SZ"
 #define PCAP_ISO8601_STR	"YYYY-MM-ddTHH:mm:ssZ"
 
 #define PCAP_VERSION_MINOR 4
 
-static int pcap_fd = 1;
+static int pcap_fd = -1;
 
 /* See pcap.h from libpcap, or pcap-savefile(5) */
 static struct {
@@ -64,6 +68,11 @@ struct pcap_pkthdr {
 	uint32_t len;
 };
 
+/**
+ * pcap() - Capture a single frame to pcap file
+ * @pkt:	Pointer to data buffer, including L2 headers
+ * @len:	L2 packet length
+ */
 void pcap(char *pkt, size_t len)
 {
 	struct pcap_pkthdr h;
@@ -81,11 +90,22 @@ void pcap(char *pkt, size_t len)
 	write(pcap_fd, pkt, len);
 }
 
-void pcap_init(int sock_index)
+/**
+ * pcap_init() - Initialise pcap file
+ * @c:		Execution context
+ * @index:	pcap name index: passt instance number or pasta target pid
+ */
+void pcap_init(struct ctx *c, int index)
 {
-	char name[] = PCAP_PREFIX PCAP_ISO8601_STR STR(UNIX_SOCK_MAX) ".pcap";
+	char name[] = PCAP_PREFIX PCAP_ISO8601_STR STR(UINT_MAX) ".pcap";
 	struct timeval tv;
 	struct tm *tm;
+
+	if (pcap_fd != -1)
+		close(pcap_fd);
+
+	if (c->mode == MODE_PASTA)
+		memcpy(name, PCAP_PREFIX_PASTA, sizeof(PCAP_PREFIX_PASTA));
 
 	gettimeofday(&tv, NULL);
 	tm = localtime(&tv.tv_sec);
@@ -94,7 +114,7 @@ void pcap_init(int sock_index)
 
 	snprintf(name + strlen(PCAP_PREFIX) + strlen(PCAP_ISO8601_STR),
 		 sizeof(name) - strlen(PCAP_PREFIX) - strlen(PCAP_ISO8601_STR),
-		 "_%i.pcap", sock_index);
+		 "_%i.pcap", index);
 
 	pcap_fd = open(name, O_WRONLY | O_CREAT | O_APPEND | O_DSYNC,
 		       S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);

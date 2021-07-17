@@ -1,2 +1,2 @@
 void pcap(char *pkt, size_t len);
-void pcap_init(int sock_index);
+void pcap_init(struct ctx *c, int sock_index);

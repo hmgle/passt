@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /* PASST - Plug A Simple Socket Transport
+ *  for qemu/UNIX domain socket mode
+ *
+ * PASTA - Pack A Subtle Tap Abstraction
+ *  for network namespace/tap device mode
  *
  * dhcpv6.c - Minimalistic DHCPv6 server for PASST
  *
  * Copyright (c) 2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
- *
  */
 
 #include <stdio.h>
@@ -23,9 +26,9 @@
 #include <net/if.h>
 #include <net/if_arp.h>
 
+#include "util.h"
 #include "passt.h"
 #include "tap.h"
-#include "util.h"
 
 /**
  * struct opt_hdr - DHCPv6 option header
