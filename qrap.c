@@ -27,8 +27,8 @@
 #include <fcntl.h>
 #include <net/if_arp.h>
 
-#include "passt.h"
 #include "util.h"
+#include "passt.h"
 #include "arp.h"
 
 static char *qemu_names[] = {
@@ -41,6 +41,11 @@ static char *qemu_names[] = {
 	NULL,
 };
 
+/**
+ * struct drop_arg - Drop matching arguments on command line
+ * @name:	Option name
+ * @val:	Substring in option value, NULL matches any value
+ */
 static const struct drop_arg {
 	char *name;
 	char *val;
@@ -55,6 +60,15 @@ static const struct drop_arg {
 	{ 0 },
 };
 
+/**
+ * struct pci_dev - PCI devices to add on command line depending on machine name
+ * @mach:		Machine name
+ * @name:		Device ("-device") name to insert
+ * @template:		Prefix for device specification (first part of address)
+ * @template_post:	Suffix for device specification (last part of address)
+ * @first:		First usable PCI address
+ * @last:		Last usable PCI address
+ */
 static const struct pci_dev {
 	char *mach;
 	char *name;
@@ -64,7 +78,7 @@ static const struct pci_dev {
 	int last;
 } pci_devs[] = {
 	{ "pc-q35",	"virtio-net-pci",
-		"bus=pci.", ",addr=0x0",	1,			16 },
+		"bus=pci.", ",addr=0x0",	3, /* 2: hotplug bus */	16 },
 	{ "pc-",	"virtio-net-pci",
 		"bus=pci.0,addr=0x", "",	2, /* 1: ISA bridge */	16 },
 	{ "s390-ccw",	"virtio-net-ccw",
@@ -98,8 +112,9 @@ void usage(const char *name)
  */
 int main(int argc, char **argv)
 {
-	char *qemu_argv[ARG_MAX], dev_str[ARG_MAX];
+	struct timeval tv = { .tv_sec = 0, .tv_usec = 100 * 1000 };
 	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0;
+	char *qemu_argv[ARG_MAX], dev_str[ARG_MAX];
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
 	};
@@ -130,6 +145,7 @@ int main(int argc, char **argv)
 	char probe_r;
 
 	if (argc >= 3) {
+		errno = 0;
 		fd = strtol(argv[1], NULL, 0);
 		if (fd >= 3 && fd < INT_MAX && !errno) {
 			char env_path[ARG_MAX + 1], *p, command[ARG_MAX];
@@ -217,8 +233,6 @@ int main(int argc, char **argv)
 
 valid_args:
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
-		struct timeval tv = { .tv_sec = 0, .tv_usec = 100 * 1000 };
-
 		s = socket(AF_UNIX, SOCK_STREAM, 0);
 		setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
@@ -228,15 +242,16 @@ valid_args:
 		}
 
 		snprintf(addr.sun_path, UNIX_PATH_MAX, UNIX_SOCK_PATH, i);
-		if (!connect(s, (const struct sockaddr *)&addr, sizeof(addr)) &&
-		    send(s, &probe, sizeof(probe), 0) == sizeof(probe) &&
-		    recv(s, &probe_r, 1, MSG_PEEK) > 0) {
-			tv.tv_usec = 0;
-			setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+		if (connect(s, (const struct sockaddr *)&addr, sizeof(addr)))
+			perror("connect");
+		else if (send(s, &probe, sizeof(probe), 0) != sizeof(probe))
+			perror("send");
+		else if (recv(s, &probe_r, 1, MSG_PEEK) <= 0)
+			perror("recv");
+		else
 			break;
-		}
 
-		perror("send");
+		fprintf(stderr, "Probe of %s failed\n", addr.sun_path);
 
 		close(s);
 	}
@@ -245,6 +260,10 @@ valid_args:
 		perror("connect");
 		exit(EXIT_FAILURE);
 	}
+
+	tv.tv_usec = 0;
+	setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+	fprintf(stderr, "Connected to %s\n", addr.sun_path);
 
 	if (dup2(s, (int)fd) < 0) {
 		perror("dup");
