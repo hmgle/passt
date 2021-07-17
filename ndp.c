@@ -127,7 +127,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 			len += strlen(c->dns_search[n].n) + 2;
 		if (len) {
 			*p++ = 31;			/* DNSSL */
-			*p++ = 2 + (len + 8 - 1) / 8;	/* length */
+			*p++ = (len + 8 - 1) / 8 + 1;	/* length */
 			p += 2;				/* reserved */
 			*(uint32_t *)p = htonl(60);	/* lifetime */
 			p += 4;
@@ -148,8 +148,8 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 				*(p++) = 0;
 			}
 
-			memset(p, 0, len % 8);		/* padding */
-			p += len % 8;
+			memset(p, 0, 8 - len % 8);	/* padding */
+			p += 8 - len % 8;
 		}
 
 		*p++ = 1;			/* source ll */
