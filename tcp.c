@@ -363,7 +363,7 @@
 #define WINDOW_DEFAULT			14600		/* RFC 6928 */
 
 #define SYN_TIMEOUT			240000		/* ms */
-#define ACK_TIMEOUT			10000
+#define ACK_TIMEOUT			2000
 #define ACK_INTERVAL			50
 #define ACT_TIMEOUT			7200000
 #define FIN_TIMEOUT			240000
@@ -1403,6 +1403,9 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		if (off < sizeof(*th) || off > __len)
 			break;
 
+		if (!i && (!th->ack || len != off))
+			break;
+
 		__this = ntohl(th->ack_seq);
 
 		if (!i || __this - __seq_max < MAX_WINDOW)
@@ -1515,7 +1518,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		if (skip < len - off &&
 		    tcp_send_to_sock(c, conn,
 				     msg[0].l4h + off + skip, len - off - skip,
-				     th->psh ? 0 : MSG_MORE))
+				     (count > 1) ? MSG_MORE : 0))
 			return 1;
 
 		if (count == 1)
