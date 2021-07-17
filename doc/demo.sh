@@ -84,18 +84,21 @@ nft add chain "${ns}_nat" postrouting '{ type nat hook postrouting priority -100
 nft add rule "${ns}_nat" postrouting ip saddr "${ipv4_ns}" masquerade
 
 ipv6_addr="$(ipv6_devaddr "$(ipv6_dev)")"
-ipv6_passt="$(ipv6_mangle "${ipv6_addr}" ${ns_idx})"
-ndp_setup "${ipv6_passt}" "veth_${ns}"
-ip -n "${ns}" addr add "${ipv6_passt}/$(ipv6_mask "${ipv6_addr}")" dev "veth_${ns}"
-ip addr add "${ipv6_addr}" dev "veth_${ns}"
-ip route add "${ipv6_passt}" dev "veth_${ns}"
-passt_ll="$(ipv6_ll_addr "veth_${ns}")"
-main_ll="$(get_token "link/ether" $(ip -o li sh "veth_${ns}"))"
-ip neigh add "${passt_ll%%/*}" dev "veth_${ns}" lladdr "${main_ll}"
-ip -n "${ns}" route add default via "${passt_ll%%/*}" dev "veth_${ns}"
+if [ -n "${ipv6_addr}" ]; then
+	ipv6_passt="$(ipv6_mangle "${ipv6_addr}" ${ns_idx})"
+	ndp_setup "${ipv6_passt}" "veth_${ns}"
+	ip -n "${ns}" addr add "${ipv6_passt}/$(ipv6_mask "${ipv6_addr}")" dev "veth_${ns}"
+	ip addr add "${ipv6_addr}" dev "veth_${ns}"
+	ip route add "${ipv6_passt}" dev "veth_${ns}"
+	passt_ll="$(ipv6_ll_addr "veth_${ns}")"
+	main_ll="$(get_token "link/ether" $(ip -o li sh "veth_${ns}"))"
+	ip neigh add "${passt_ll%%/*}" dev "veth_${ns}" lladdr "${main_ll}"
+	ip -n "${ns}" route add default via "${passt_ll%%/*}" dev "veth_${ns}"
 
-sysctl -w net.ipv6.conf.all.forwarding=1
-
+	sysctl -w net.ipv6.conf.all.forwarding=1
+else
+	ipv6_passt=
+fi
 
 ethtool -K "veth_${ns}" tx off
 ip netns exec "${ns}" ethtool -K "veth_${ns}" tx off
