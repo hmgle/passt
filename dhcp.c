@@ -48,6 +48,7 @@ struct opt {
 static struct opt opts[255] = {
 	[1]  = { 0, 4, {                      0 }, 0, { 0 }, },	/* Mask */
 	[3]  = { 0, 4, {                      0 }, 0, { 0 }, },	/* Router */
+	[26] = { 0, 2, {             0xff, 0xf0 }, 0, { 0 }, },	/* MTU */
 	[51] = { 0, 4, { 0xff, 0xff, 0xff, 0xff }, 0, { 0 }, },	/* Lease time */
 	[53] = { 0, 1, {                      0 }, 0, { 0 }, },	/* Type */
 #define DHCPDISCOVER	1
