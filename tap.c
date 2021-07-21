@@ -509,7 +509,7 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 }
 
 /**
- * tap_handler_passt() - Packet handler for tuntap file descriptor
+ * tap_handler_pasta() - Packet handler for tuntap file descriptor
  * @c:		Execution context
  * @now:	Current timestamp
  *
