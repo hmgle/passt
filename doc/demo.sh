@@ -68,6 +68,8 @@ ip netns add "${ns}"
 ip link del "veth_${ns}" 2>/dev/null || :
 ip link add "veth_${ns}" up netns "${ns}" type veth peer name "veth_${ns}"
 ip link set dev "veth_${ns}" up
+ip link set dev "veth_${ns}" mtu 65535
+ip -n "${ns}" link set dev "veth_${ns}" mtu 65535
 ip -n "${ns}" link set dev lo up
 
 ipv4_main="192.0.2.$(((ns_idx - 1) * 4 + 1))"
