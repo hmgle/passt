@@ -1814,7 +1814,8 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	if (ref.tcp.v6) {
 		struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&sa;
 
-		if (IN6_IS_ADDR_LOOPBACK(&sa6->sin6_addr))
+		if (IN6_IS_ADDR_LOOPBACK(&sa6->sin6_addr) ||
+		    !memcmp(&sa6->sin6_addr, &c->addr6_seen, sizeof(c->addr6)))
 			memcpy(&sa6->sin6_addr, &c->gw6, sizeof(c->gw6));
 
 		memcpy(&conn->a.a6, &sa6->sin6_addr, sizeof(conn->a.a6));
@@ -1835,7 +1836,8 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		memset(&conn->a.a4.one, 0xff, sizeof(conn->a.a4.one));
 
 		if (ntohl(sa4->sin_addr.s_addr) == INADDR_LOOPBACK ||
-		    ntohl(sa4->sin_addr.s_addr) == INADDR_ANY)
+		    ntohl(sa4->sin_addr.s_addr) == INADDR_ANY ||
+		    sa4->sin_addr.s_addr == c->addr4_seen)
 			sa4->sin_addr.s_addr = c->gw4;
 
 		memcpy(&conn->a.a4.a, &sa4->sin_addr, sizeof(conn->a.a4.a));
