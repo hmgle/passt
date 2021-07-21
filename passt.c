@@ -410,6 +410,18 @@ static void timer_handler(struct ctx *c, struct timespec *now)
 }
 
 /**
+ * proto_update_l2_buf() - Update scatter-gather L2 buffers in protocol handlers
+ * @eth_d:	Ethernet destination address, NULL if unchanged
+ * @eth_s:	Ethernet source address, NULL if unchanged
+ * @ip_da:	Pointer to IPv4 destination address, NULL if unchanged
+ */
+void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
+			 uint32_t *ip_da)
+{
+	udp_update_l2_buf(eth_d, eth_s, ip_da);
+}
+
+/**
  * usage_passt() - Print usage for "passt" mode and exit
  * @name:	Executable name
  */
@@ -498,6 +510,8 @@ int main(int argc, char **argv)
 	get_addrs(&c);
 	get_dns(&c);
 	get_bound_ports(&c);
+
+	proto_update_l2_buf(c.mac_guest, c.mac, &c.addr4);
 
 	if (udp_sock_init(&c) || tcp_sock_init(&c))
 		exit(EXIT_FAILURE);

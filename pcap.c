@@ -12,10 +12,12 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -91,6 +93,65 @@ void pcap(char *pkt, size_t len)
 }
 
 /**
+ * pcapm() - Capture multiple frames from message header to pcap file
+ * @mh:		Pointer to sendmsg() message header buffer
+ */
+void pcapm(struct msghdr *mh)
+{
+	struct pcap_pkthdr h;
+	struct timeval tv;
+	unsigned int i;
+
+	if (pcap_fd == -1)
+		return;
+
+	gettimeofday(&tv, NULL);
+	h.tv_sec = tv.tv_sec;
+	h.tv_usec = tv.tv_usec;
+
+	for (i = 0; i < mh->msg_iovlen; i++) {
+		struct iovec *iov = &mh->msg_iov[i];
+
+		h.caplen = h.len = iov->iov_len - 4;
+		write(pcap_fd, &h, sizeof(h));
+
+		write(pcap_fd, (char *)iov->iov_base + 4, iov->iov_len - 4);
+	}
+}
+
+/**
+ * pcapm() - Capture multiple frames from multiple message headers to pcap file
+ * @mmh:	Pointer to first sendmmsg() header
+ */
+void pcapmm(struct mmsghdr *mmh, unsigned int vlen)
+{
+	struct pcap_pkthdr h;
+	struct timeval tv;
+	unsigned int i, j;
+
+	if (pcap_fd == -1)
+		return;
+
+	gettimeofday(&tv, NULL);
+	h.tv_sec = tv.tv_sec;
+	h.tv_usec = tv.tv_usec;
+
+	for (i = 0; i < vlen; i++) {
+		struct msghdr *mh = &mmh[i].msg_hdr;
+
+		for (j = 0; j < mh->msg_iovlen; j++) {
+			struct iovec *iov = &mh->msg_iov[j];
+
+			h.caplen = h.len = iov->iov_len - 4;
+			write(pcap_fd, &h, sizeof(h));
+
+			write(pcap_fd, (char *)iov->iov_base + 4,
+			      iov->iov_len - 4);
+		}
+	}
+}
+
+/**
  * pcap_init() - Initialise pcap file
  * @c:		Execution context
  * @index:	pcap name index: passt instance number or pasta target pid
@@ -129,10 +190,27 @@ void pcap_init(struct ctx *c, int index)
 }
 
 #else /* DEBUG */
-void pcap(char *pkt, size_t len) {
+void pcap(char *pkt, size_t len)
+{
 	(void)pkt;
 	(void)len;
 }
 
-void pcap_init(void) { }
+void pcapm(struct msghdr *mh)
+{
+	(void)mh;
+}
+
+void pcapmm(struct mmsghdr *mmh, unsigned int vlen)
+{
+	(void)mmh;
+	(void)vlen;
+}
+
+void pcap_init(struct ctx *c, int sock_index)
+{
+	(void)c;
+	(void)sock_index;
+
+}
 #endif

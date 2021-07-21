@@ -77,6 +77,29 @@ logfn(debug, LOG_DEBUG)
 #endif
 
 /**
+ * sum_16b() - Calculate sum of 16-bit words
+ * @buf:	Input buffer
+ * @len:	Buffer length
+ *
+ * Return: 32-bit sum of 16-bit words
+*/
+uint32_t sum_16b(void *buf, size_t len)
+{
+	uint32_t sum = 0;
+	uint16_t *p = buf;
+	size_t len1 = len / 2;
+	size_t off;
+
+	for (off = 0; off < len1; off++, p++)
+		sum += *p;
+
+	if (len % 2)
+		sum += *p & 0xff;
+
+	return sum;
+}
+
+/**
  * csum_fold() - Fold long sum for IP and TCP checksum
  * @sum:	Original long sum
  *
@@ -91,7 +114,7 @@ uint16_t csum_fold(uint32_t sum)
 }
 
 /**
- * csum_ipv4() - Calculate IPv4 checksum
+ * csum_ip4() - Calculate IPv4 checksum
  * @buf:	Packet buffer, L3 headers
  * @len:	Total L3 packet length
  *
@@ -99,22 +122,11 @@ uint16_t csum_fold(uint32_t sum)
  */
 uint16_t csum_ip4(void *buf, size_t len)
 {
-	uint32_t sum = 0;
-	uint16_t *p = buf;
-	size_t len1 = len / 2;
-	size_t off;
-
-	for (off = 0; off < len1; off++, p++)
-		sum += *p;
-
-	if (len % 2)
-		sum += *p & 0xff;
-
-	return ~csum_fold(sum);
+	return ~csum_fold(sum_16b(buf, len));
 }
 
 /**
- * csum_ipv4() - Calculate TCP checksum for IPv4 and set in place
+ * csum_tcp4() - Calculate TCP checksum for IPv4 and set in place
  * @iph:	Packet buffer, IP header
  */
 void csum_tcp4(struct iphdr *iph)

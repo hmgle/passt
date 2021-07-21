@@ -134,3 +134,6 @@ struct ctx {
 	struct udp_ctx udp;
 	struct icmp_ctx icmp;
 };
+
+void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
+			 uint32_t *ip_da);

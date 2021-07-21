@@ -113,9 +113,11 @@
 #include "util.h"
 #include "passt.h"
 #include "tap.h"
+#include "pcap.h"
 
 #define UDP_CONN_TIMEOUT	180 /* s, timeout for ephemeral or local bind */
 #define UDP_SPLICE_FRAMES	128
+#define UDP_TAP_FRAMES		64
 
 /**
  * struct udp_tap_port - Port tracking based on tap-facing source port
@@ -168,10 +170,78 @@ enum udp_act_type {
 /* Activity-based aging for bindings */
 static uint8_t udp_act[IP_VERSIONS][UDP_ACT_TYPE_MAX][USHRT_MAX / 8];
 
-/* recvmmsg()/sendmmsg() data */
+/* Static buffers */
+
+/**
+ * udp4_l2_buf_t - Pre-cooked IPv4 packet buffers for tap connections
+ * @s_in:	Source socket address, filled in by recvmmsg()
+ * @psum:	Partial IP header checksum (excluding tot_len and saddr)
+ * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
+ * @eh:		Pre-filled Ethernet header
+ * @iph:	Pre-filled IP header (except for tot_len and saddr)
+ * @uh:		Headroom for UDP header
+ * @data:	Storage for UDP payload
+ */
+__extension__  static struct udp4_l2_buf_t {
+	struct sockaddr_in s_in;
+	uint32_t psum;
+
+	uint32_t vnet_len;
+	struct ethhdr eh;
+	struct iphdr iph;
+	struct udphdr uh;
+	uint8_t data[USHRT_MAX - sizeof(struct udphdr)];
+} __attribute__ ((packed, aligned(__alignof__(unsigned int))))
+udp4_l2_buf[UDP_TAP_FRAMES] = {
+	[ 0 ... UDP_TAP_FRAMES - 1 ] = {
+		{ 0 }, 0, 0, L2_BUF_ETH_IP4_INIT, L2_BUF_IP4_INIT(IPPROTO_UDP),
+		{ 0 }, { 0 },
+	},
+};
+
+/**
+ * udp4_l2_buf_t - Pre-cooked IPv6 packet buffers for tap connections
+ * @s_in6:	Source socket address, filled in by recvmmsg()
+ * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
+ * @eh:		Pre-filled Ethernet header
+ * @ip6h:	Pre-filled IP header (except for payload_len and addresses)
+ * @uh:		Headroom for UDP header
+ * @data:	Storage for UDP payload
+ */
+__extension__ struct udp6_l2_buf_t {
+	struct sockaddr_in6 s_in6;
+
+	uint32_t vnet_len;
+	struct ethhdr eh;
+	struct ipv6hdr ip6h;
+	struct udphdr uh;
+	uint8_t data[USHRT_MAX -
+		     (sizeof(struct ipv6hdr) + sizeof(struct udphdr))];
+} __attribute__ ((packed, aligned(__alignof__(unsigned int))))
+udp6_l2_buf[UDP_TAP_FRAMES] = {
+	[ 0 ... UDP_TAP_FRAMES - 1 ] = {
+		{ 0 }, 0, L2_BUF_ETH_IP6_INIT, L2_BUF_IP6_INIT(IPPROTO_UDP),
+		{ 0 }, { 0 },
+	},
+};
+
 static struct sockaddr_storage udp_splice_namebuf;
 static uint8_t udp_splice_buf[UDP_SPLICE_FRAMES][USHRT_MAX];
 
+/* recvmmsg()/sendmmsg() data for tap */
+static struct iovec	udp4_l2_iov_sock	[UDP_TAP_FRAMES];
+static struct iovec	udp6_l2_iov_sock	[UDP_TAP_FRAMES];
+
+static struct iovec	udp4_l2_iov_tap		[UDP_TAP_FRAMES];
+static struct iovec	udp6_l2_iov_tap		[UDP_TAP_FRAMES];
+
+static struct mmsghdr	udp4_l2_mh_sock		[UDP_TAP_FRAMES];
+static struct mmsghdr	udp6_l2_mh_sock		[UDP_TAP_FRAMES];
+
+static struct mmsghdr	udp4_l2_mh_tap		[UDP_TAP_FRAMES];
+static struct mmsghdr	udp6_l2_mh_tap		[UDP_TAP_FRAMES];
+
+/* recvmmsg()/sendmmsg() data for "spliced" connections */
 static struct iovec	udp_splice_iov_recv	[UDP_SPLICE_FRAMES];
 static struct mmsghdr	udp_splice_mmh_recv	[UDP_SPLICE_FRAMES];
 
@@ -180,6 +250,118 @@ static struct mmsghdr	udp_splice_mmh_send	[UDP_SPLICE_FRAMES];
 
 static struct iovec	udp_splice_iov_sendto	[UDP_SPLICE_FRAMES];
 static struct mmsghdr	udp_splice_mmh_sendto	[UDP_SPLICE_FRAMES];
+
+/**
+ * udp_update_check4() - Update checksum with variable parts from stored one
+ * @buf:	L2 packet buffer with final IPv4 header
+ */
+static void udp_update_check4(struct udp4_l2_buf_t *buf)
+{
+	uint32_t sum = buf->psum;
+
+	sum += buf->iph.tot_len;
+	sum += (buf->iph.saddr >> 16) & 0xffff;
+	sum += buf->iph.saddr & 0xffff;
+
+	buf->iph.check = (uint16_t)~csum_fold(sum);
+}
+
+/**
+ * udp_update_l2_buf() - Update L2 buffers with Ethernet and IPv4 addresses
+ * @eth_d:	Ethernet destination address, NULL if unchanged
+ * @eth_s:	Ethernet source address, NULL if unchanged
+ * @ip_da:	Pointer to IPv4 destination address, NULL if unchanged
+ */
+void udp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
+		       uint32_t *ip_da)
+{
+	int i;
+
+	for (i = 0; i < UDP_TAP_FRAMES; i++) {
+		struct udp4_l2_buf_t *b4 = &udp4_l2_buf[i];
+		struct udp6_l2_buf_t *b6 = &udp6_l2_buf[i];
+
+		if (eth_d) {
+			memcpy(b4->eh.h_dest, eth_d, ETH_ALEN);
+			memcpy(b6->eh.h_dest, eth_d, ETH_ALEN);
+		}
+
+		if (eth_s) {
+			memcpy(b4->eh.h_source, eth_s, ETH_ALEN);
+			memcpy(b6->eh.h_source, eth_s, ETH_ALEN);
+		}
+
+		if (ip_da) {
+			b4->iph.daddr = *ip_da;
+			if (!i) {
+				b4->iph.saddr = 0;
+				b4->iph.tot_len = 0;
+				b4->iph.check = 0;
+				b4->psum = sum_16b(&b4->iph, 20);
+			} else {
+				b4->psum = udp4_l2_buf[0].psum;
+			}
+		}
+	}
+}
+
+/**
+ * udp_sock4_iov_init() - Initialise scatter-gather L2 buffers for IPv4 sockets
+ */
+static void udp_sock4_iov_init(void)
+{
+	struct mmsghdr *h;
+	int i;
+
+	for (i = 0, h = udp4_l2_mh_sock; i < UDP_TAP_FRAMES; i++, h++) {
+		struct msghdr *mh = &h->msg_hdr;
+
+		mh->msg_name			= &udp4_l2_buf[i].s_in;
+		mh->msg_namelen			= sizeof(udp4_l2_buf[i].s_in);
+
+		udp4_l2_iov_sock[i].iov_base	= udp4_l2_buf[i].data;
+		udp4_l2_iov_sock[i].iov_len	= sizeof(udp4_l2_buf[i].data);
+		mh->msg_iov			= &udp4_l2_iov_sock[i];
+		mh->msg_iovlen			= 1;
+	}
+
+	for (i = 0, h = udp4_l2_mh_tap; i < UDP_TAP_FRAMES; i++, h++) {
+		struct msghdr *mh = &h->msg_hdr;
+
+		udp4_l2_iov_tap[i].iov_base	= &udp4_l2_buf[i].vnet_len;
+		mh->msg_iov			= &udp4_l2_iov_tap[i];
+		mh->msg_iovlen			= 1;
+	}
+}
+
+/**
+ * udp_sock6_iov_init() - Initialise scatter-gather L2 buffers for IPv6 sockets
+ */
+static void udp_sock6_iov_init(void)
+{
+	struct mmsghdr *h;
+	int i;
+
+	for (i = 0, h = udp6_l2_mh_sock; i < UDP_TAP_FRAMES; i++, h++) {
+		struct msghdr *mh = &h->msg_hdr;
+
+		mh->msg_name			= &udp6_l2_buf[i].s_in6;
+		mh->msg_namelen			= sizeof(struct sockaddr_in6);
+
+		udp6_l2_iov_sock[i].iov_base	= udp6_l2_buf[i].data;
+		udp6_l2_iov_sock[i].iov_len	= sizeof(udp6_l2_buf[i].data);
+		mh->msg_iov			= &udp6_l2_iov_sock[i];
+		mh->msg_iovlen			= 1;
+	}
+
+	for (i = 0, h = udp6_l2_mh_tap; i < UDP_TAP_FRAMES; i++, h++) {
+		struct msghdr *mh = &h->msg_hdr;
+
+		udp6_l2_iov_tap[i].iov_base	= &udp6_l2_buf[i].vnet_len;
+		mh->msg_iov			= &udp6_l2_iov_tap[i];
+		mh->msg_iovlen			= 1;
+	}
+}
 
 /**
  * udp_splice_connect() - Create and connect socket for "spliced" binding
@@ -417,11 +599,9 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		      struct timespec *now)
 {
-	struct sockaddr_storage sr;
-	socklen_t sl = sizeof(sr);
-	char buf[USHRT_MAX];
-	struct udphdr *uh;
-	ssize_t n;
+	int i, iov_in_msg, msg_i = 0;
+	struct msghdr *cur_mh;
+	ssize_t n, msglen;
 
 	if (events == EPOLLERR)
 		return;
@@ -431,52 +611,158 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		return;
 	}
 
-	uh = (struct udphdr *)buf;
-
-	n = recvfrom(ref.s, buf + sizeof(*uh), sizeof(buf) - sizeof(*uh), 0,
-		     (struct sockaddr *)&sr, &sl);
-	if (n < 0)
-		return;
-
-	uh->dest = htons(ref.udp.port);
-	uh->len = htons(n + sizeof(*uh));
-
 	if (ref.udp.v6) {
-		struct sockaddr_in6 *sr6 = (struct sockaddr_in6 *)&sr;
+		n = recvmmsg(ref.s, udp6_l2_mh_sock, UDP_TAP_FRAMES, 0, NULL);
+		if (n <= 0)
+			return;
 
-		if (IN6_IS_ADDR_LOOPBACK(&sr6->sin6_addr)) {
-			in_port_t src = htons(sr6->sin6_port);
+		cur_mh = &udp6_l2_mh_tap[msg_i].msg_hdr;
+		cur_mh->msg_iov = &udp6_l2_iov_tap[0];
+		msg_i = msglen = iov_in_msg = 0;
+		/* TODO: Explicit AVX2 vectorisation of this loop */
+		for (i = 0; i < n; i++) {
+			struct udp6_l2_buf_t *b = &udp6_l2_buf[i];
+			size_t ip_len, iov_len;
 
-			memcpy(&sr6->sin6_addr, &c->gw6, sizeof(c->gw6));
-			udp_tap_map[V6][src].ts_local = now->tv_sec;
-			bitmap_set(udp_act[V6][UDP_ACT_TAP], src);
+			ip_len = udp6_l2_mh_sock[i].msg_len +
+				 sizeof(b->ip6h) + sizeof(b->uh);
+
+			b->ip6h.payload_len = htons(udp6_l2_mh_sock[i].msg_len +
+						    sizeof(b->uh));
+
+			if (IN6_IS_ADDR_LOOPBACK(&b->s_in6.sin6_addr) ||
+			    !memcmp(&b->s_in6.sin6_addr, &c->addr6_seen,
+				    sizeof(c->addr6))) {
+				in_port_t src = htons(b->s_in6.sin6_port);
+
+				b->ip6h.daddr = c->addr6_seen;
+				b->ip6h.saddr = c->gw6;
+
+				udp_tap_map[V6][src].ts_local = now->tv_sec;
+				bitmap_set(udp_act[V6][UDP_ACT_TAP], src);
+			} else if (IN6_IS_ADDR_LINKLOCAL(&b->s_in6.sin6_addr)) {
+				b->ip6h.daddr = c->addr6_ll_seen;
+				b->ip6h.saddr = b->s_in6.sin6_addr;
+			} else {
+				b->ip6h.daddr = c->addr6_seen;
+				b->ip6h.saddr = b->s_in6.sin6_addr;
+			}
+
+			b->uh.source = b->s_in6.sin6_port;
+			b->uh.dest = htons(ref.udp.port);
+			b->uh.len = b->ip6h.payload_len;
+
+			b->ip6h.hop_limit = IPPROTO_UDP;
+			b->ip6h.version = 0;
+			b->ip6h.nexthdr = 0;
+			b->uh.check = 0;
+			b->uh.check = csum_ip4(&b->ip6h, ip_len);
+			b->ip6h.version = 6;
+			b->ip6h.nexthdr = IPPROTO_UDP;
+			b->ip6h.hop_limit = 255;
+
+			if (c->mode == MODE_PASTA) {
+				ip_len += sizeof(struct ethhdr);
+				write(c->fd_tap, &b->eh, ip_len);
+				pcap((char *)&b->eh, ip_len);
+				continue;
+			}
+
+			b->vnet_len = htonl(ip_len + sizeof(struct ethhdr));
+			iov_len = sizeof(uint32_t) + sizeof(struct ethhdr) +
+				  ip_len;
+			udp6_l2_iov_tap[i].iov_len = iov_len;
+
+			/* With bigger messages, qemu closes the connection. */
+			if (iov_in_msg && msglen + iov_len > SHRT_MAX) {
+				cur_mh->msg_iovlen = iov_in_msg;
+
+				cur_mh = &udp6_l2_mh_tap[++msg_i].msg_hdr;
+				msglen = iov_in_msg = 0;
+				cur_mh->msg_iov = &udp6_l2_iov_tap[i];
+			}
+
+			msglen += iov_len;
+			iov_in_msg++;
 		}
 
-		uh->source = sr6->sin6_port;
+		if (c->mode == MODE_PASTA)
+			return;
 
-		tap_ip_send(c, &sr6->sin6_addr, IPPROTO_UDP,
-			    buf, n + sizeof(*uh));
+		cur_mh->msg_iovlen = iov_in_msg;
+
+		sendmmsg(c->fd_tap, udp6_l2_mh_tap, msg_i + 1,
+			 MSG_NOSIGNAL | MSG_DONTWAIT);
+		pcapmm(udp6_l2_mh_tap, msg_i + 1);
 	} else {
-		struct in6_addr a6 = { .s6_addr = {    0,    0,    0,    0,
-						       0,    0,    0,    0,
-						       0,    0, 0xff, 0xff,
-						       0,    0,    0,    0 } };
-		struct sockaddr_in *sr4 = (struct sockaddr_in *)&sr;
+		n = recvmmsg(ref.s, udp4_l2_mh_sock, UDP_TAP_FRAMES, 0, NULL);
+		if (n <= 0)
+			return;
 
-		if (ntohl(sr4->sin_addr.s_addr) == INADDR_LOOPBACK ||
-		    ntohl(sr4->sin_addr.s_addr) == INADDR_ANY) {
-			in_port_t src = htons(sr4->sin_port);
+		cur_mh = &udp4_l2_mh_tap[msg_i].msg_hdr;
+		cur_mh->msg_iov = &udp4_l2_iov_tap[0];
+		msg_i = msglen = iov_in_msg = 0;
+		/* TODO: Explicit AVX2 vectorisation of this loop */
+		for (i = 0; i < n; i++) {
+			struct udp4_l2_buf_t *b = &udp4_l2_buf[i];
+			size_t ip_len, iov_len;
 
-			sr4->sin_addr.s_addr = c->gw4;
-			udp_tap_map[V4][src].ts_local = now->tv_sec;
-			bitmap_set(udp_act[V4][UDP_ACT_TAP], src);
+			ip_len = udp4_l2_mh_sock[i].msg_len +
+				 sizeof(b->iph) + sizeof(b->uh);
+
+			b->iph.tot_len = htons(ip_len);
+
+			if (ntohl(b->s_in.sin_addr.s_addr) == INADDR_LOOPBACK ||
+			    ntohl(b->s_in.sin_addr.s_addr) == INADDR_ANY ||
+			    b->s_in.sin_addr.s_addr == c->addr4_seen) {
+				in_port_t src = htons(b->s_in.sin_port);
+
+				b->iph.saddr = c->gw4;
+				udp_tap_map[V4][src].ts_local = now->tv_sec;
+				bitmap_set(udp_act[V4][UDP_ACT_TAP], src);
+			} else {
+				b->iph.saddr = b->s_in.sin_addr.s_addr;
+			}
+
+			udp_update_check4(b);
+			b->uh.source = b->s_in.sin_port;
+			b->uh.dest = htons(ref.udp.port);
+			b->uh.len = ntohs(udp4_l2_mh_sock[i].msg_len +
+					  sizeof(b->uh));
+
+			if (c->mode == MODE_PASTA) {
+				ip_len += sizeof(struct ethhdr);
+				write(c->fd_tap, &b->eh, ip_len);
+				pcap((char *)&b->eh, ip_len);
+				continue;
+			}
+
+			b->vnet_len = htonl(ip_len + sizeof(struct ethhdr));
+			iov_len = sizeof(uint32_t) + sizeof(struct ethhdr) +
+				  ip_len;
+			udp4_l2_iov_tap[i].iov_len = iov_len;
+
+			/* With bigger messages, qemu closes the connection. */
+			if (iov_in_msg && msglen + iov_len > SHRT_MAX) {
+				cur_mh->msg_iovlen = iov_in_msg;
+
+				cur_mh = &udp4_l2_mh_tap[++msg_i].msg_hdr;
+				msglen = iov_in_msg = 0;
+				cur_mh->msg_iov = &udp4_l2_iov_tap[i];
+			}
+
+			msglen += iov_len;
+			iov_in_msg++;
 		}
 
-		memcpy(&a6.s6_addr[12], &sr4->sin_addr, sizeof(sr4->sin_addr));
+		if (c->mode == MODE_PASTA)
+			return;
 
-		uh->source = sr4->sin_port;
+		cur_mh->msg_iovlen = iov_in_msg;
 
-		tap_ip_send(c, &a6, IPPROTO_UDP, buf, n + sizeof(*uh));
+		sendmmsg(c->fd_tap, udp4_l2_mh_tap, msg_i + 1,
+			 MSG_NOSIGNAL | MSG_DONTWAIT);
+		pcapmm(udp4_l2_mh_tap, msg_i + 1);
 	}
 }
 
@@ -533,6 +819,7 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 				return count;
 
 			udp_tap_map[V4][src].sock = s;
+			udp_tap_map[V4][src].ts = s;
 			bitmap_set(udp_act[V4][UDP_ACT_TAP], src);
 		}
 
@@ -718,6 +1005,12 @@ int udp_sock_init(struct ctx *c)
 		}
 	}
 
+	if (c->v4)
+		udp_sock4_iov_init();
+
+	if (c->v6)
+		udp_sock6_iov_init();
+
 	if (c->mode == MODE_PASTA) {
 		udp_splice_iov_init();
 		clone(udp_sock_init_ns, ns_fn_stack + sizeof(ns_fn_stack) / 2,
@@ -772,7 +1065,7 @@ static void udp_timer_one(struct ctx *c, int v6, enum udp_act_type type,
 		return;
 	}
 
-	if (s != -1) {
+	if (s > 0) {
 		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, s, NULL);
 		close(s);
 		bitmap_clear(udp_act[v6 ? V6 : V4][type], port);

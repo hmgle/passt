@@ -219,7 +219,10 @@ static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 		iph = (struct iphdr *)(eh + 1);
 		l4h = (char *)iph + iph->ihl * 4;
 
-		c->addr4_seen = iph->saddr;
+		if (c->addr4_seen != iph->saddr) {
+			c->addr4_seen = iph->saddr;
+			proto_update_l2_buf(NULL, NULL, &c->addr4_seen);
+		}
 
 		msg[i].l4h = l4h;
 		msg[i].l4_len = len - ((intptr_t)l4h - (intptr_t)eh);
@@ -332,10 +335,14 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 		msg[i].l4h = l4h;
 		msg[i].l4_len = len - ((intptr_t)l4h - (intptr_t)eh);
 
-		if (IN6_IS_ADDR_LINKLOCAL(&ip6h->saddr))
+		if (IN6_IS_ADDR_LINKLOCAL(&ip6h->saddr)) {
 			c->addr6_ll_seen = ip6h->saddr;
-		else
+
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->addr6_seen))
+				c->addr6_seen = ip6h->saddr;
+		} else {
 			c->addr6_seen = ip6h->saddr;
+		}
 
 		ip6h->saddr = c->addr6;
 
@@ -458,7 +465,10 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 	while (i < msg_count) {
 		eh = (struct ethhdr *)msg[i].start;
 
-		memcpy(c->mac_guest, eh->h_source, ETH_ALEN);
+		if (memcmp(c->mac_guest, eh->h_source, ETH_ALEN)) {
+			memcpy(c->mac_guest, eh->h_source, ETH_ALEN);
+			proto_update_l2_buf(c->mac_guest, NULL, NULL);
+		}
 
 		switch (ntohs(eh->h_proto)) {
 		case ETH_P_ARP:
@@ -516,7 +526,10 @@ static int tap_handler_pasta(struct ctx *c, struct timespec *now)
 
 		pcap(msg.start, msg.len);
 
-		memcpy(c->mac_guest, eh->h_source, ETH_ALEN);
+		if (memcmp(c->mac_guest, eh->h_source, ETH_ALEN)) {
+			memcpy(c->mac_guest, eh->h_source, ETH_ALEN);
+			proto_update_l2_buf(c->mac_guest, NULL, NULL);
+		}
 
 		switch (ntohs(eh->h_proto)) {
 		case ETH_P_ARP:

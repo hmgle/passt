@@ -52,6 +52,64 @@ void debug(const char *format, ...);
 
 #define NS_FN_STACK_SIZE	(RLIMIT_STACK_VAL * 1024 / 4)
 
+#if __BYTE_ORDER == __BIG_ENDIAN
+#define L2_BUF_ETH_IP4_INIT						\
+	{								\
+		.h_dest		= { 0 },				\
+		.h_source	= { 0 },				\
+		.h_proto	= ETH_P_IP,				\
+	}
+#else
+#define L2_BUF_ETH_IP4_INIT						\
+	{								\
+		.h_dest		= { 0 },				\
+		.h_source	= { 0 },				\
+		.h_proto	= __bswap_constant_16(ETH_P_IP),	\
+	}
+#endif
+
+#if __BYTE_ORDER == __BIG_ENDIAN
+#define L2_BUF_ETH_IP6_INIT						\
+	{								\
+		.h_dest		= { 0 },				\
+		.h_source	= { 0 },				\
+		.h_proto	= ETH_P_IPV6,				\
+	}
+#else
+#define L2_BUF_ETH_IP6_INIT						\
+	{								\
+		.h_dest		= { 0 },				\
+		.h_source	= { 0 },				\
+		.h_proto	= __bswap_constant_16(ETH_P_IPV6),	\
+	}
+#endif
+
+#define L2_BUF_IP4_INIT(proto)						\
+	{								\
+		.version	= 4,					\
+		.ihl		= 5,					\
+		.tos		= 0,					\
+		.tot_len	= 0,					\
+		.id		= 0,					\
+		.frag_off	= 0,					\
+		.ttl		= 255,					\
+		.protocol	= (proto),				\
+		.saddr		= 0,					\
+		.daddr		= 0,					\
+	}
+
+#define L2_BUF_IP6_INIT(proto)						\
+	{								\
+		.priority	= 0,					\
+		.version	= 6,					\
+		.flow_lbl	= { 0 },				\
+		.payload_len	= 0,					\
+		.nexthdr	= (proto),				\
+		.hop_limit	= 255,					\
+		.saddr		= IN6ADDR_ANY_INIT,			\
+		.daddr		= IN6ADDR_ANY_INIT,			\
+	}
+
 #include <linux/ipv6.h>
 #include <net/if.h>
 #include <linux/ip.h>
@@ -59,6 +117,7 @@ void debug(const char *format, ...);
 
 struct ctx;
 
+uint32_t sum_16b(void *buf, size_t len);
 uint16_t csum_fold(uint32_t sum);
 uint16_t csum_ip4(void *buf, size_t len);
 void csum_tcp4(struct iphdr *iph);
