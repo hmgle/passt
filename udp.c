@@ -890,19 +890,24 @@ int udp_sock_init_ns(void *arg)
 
 	ns_enter(c->pasta_pid);
 
-	for (port = 0; port < USHRT_MAX; port++) {
-		if (!bitmap_isset(c->udp.port_to_init, port))
-			continue;
+	if (c->v4) {
+		uref.v6 = 0;
+		for (port = 0; port < USHRT_MAX; port++) {
+			if (!bitmap_isset(c->udp.port4_to_init, port))
+				continue;
 
-		uref.port = port;
-
-		if (c->v4) {
-			uref.v6 = 0;
+			uref.port = port;
 			sock_l4(c, AF_INET, IPPROTO_UDP, port, 1, uref.u32);
 		}
+	}
 
-		if (c->v6) {
-			uref.v6 = 1;
+	if (c->v6) {
+		uref.v6 = 1;
+		for (port = 0; port < USHRT_MAX; port++) {
+			if (!bitmap_isset(c->udp.port6_to_init, port))
+				continue;
+
+			uref.port = port;
 			sock_l4(c, AF_INET6, IPPROTO_UDP, port, 1, uref.u32);
 		}
 	}
@@ -976,40 +981,45 @@ int udp_sock_init(struct ctx *c)
 	in_port_t port;
 	int s;
 
-	for (port = 0; port < USHRT_MAX; port++) {
-		if (bitmap_isset(c->udp.port_to_ns, port))
-			uref.splice = UDP_TO_NS;
-		else if (bitmap_isset(c->udp.port_to_tap, port))
-			uref.splice = 0;
-		else
-			continue;
+	if (c->v4) {
+		uref.v6 = 0;
+		for (port = 0; port < USHRT_MAX; port++) {
+			if (bitmap_isset(c->udp.port4_to_ns, port))
+				uref.splice = UDP_TO_NS;
+			else if (bitmap_isset(c->udp.port4_to_tap, port))
+				uref.splice = 0;
+			else
+				continue;
 
-		uref.port = port;
-
-		if (c->v4) {
-			uref.v6 = 0;
+			uref.port = port;
 			s = sock_l4(c, AF_INET, IPPROTO_UDP, port,
 				    uref.splice == UDP_TO_NS, uref.u32);
-
 			if (!uref.splice && s > 0)
 				udp_tap_map[V4][port].sock = s;
 		}
 
-		if (c->v6) {
-			uref.v6 = 1;
+		udp_sock4_iov_init();
+	}
+
+	if (c->v6) {
+		uref.v6 = 1;
+		for (port = 0; port < USHRT_MAX; port++) {
+			if (bitmap_isset(c->udp.port6_to_ns, port))
+				uref.splice = UDP_TO_NS;
+			else if (bitmap_isset(c->udp.port6_to_tap, port))
+				uref.splice = 0;
+			else
+				continue;
+
+			uref.port = port;
 			s = sock_l4(c, AF_INET6, IPPROTO_UDP, port,
 				    uref.splice == UDP_TO_NS, uref.u32);
-
 			if (!uref.splice && s > 0)
 				udp_tap_map[V6][port].sock = s;
 		}
-	}
 
-	if (c->v4)
-		udp_sock4_iov_init();
-
-	if (c->v6)
 		udp_sock6_iov_init();
+	}
 
 	if (c->mode == MODE_PASTA) {
 		udp_splice_iov_init();

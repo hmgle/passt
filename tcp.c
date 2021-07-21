@@ -1770,7 +1770,8 @@ static int tcp_splice_new(struct ctx *c, struct tcp_splice_conn *conn,
 	struct tcp_splice_connect_ns_arg ns_arg = { c, conn, v6, port, 0 };
 	char ns_fn_stack[NS_FN_STACK_SIZE];
 
-	if (bitmap_isset(c->tcp.port_to_ns, port)) {
+	if ((!v6 && bitmap_isset(c->tcp.port4_to_ns, port)) ||
+	    (v6 && bitmap_isset(c->tcp.port6_to_ns, port))) {
 		clone(tcp_splice_connect_ns,
 		      ns_fn_stack + sizeof(ns_fn_stack) / 2,
 		      CLONE_VM | CLONE_VFORK | CLONE_FILES | SIGCHLD,
@@ -2082,19 +2083,24 @@ static int tcp_sock_init_ns(void *arg)
 
 	ns_enter(c->pasta_pid);
 
-	for (port = 0; !PORT_IS_EPHEMERAL(port); port++) {
-		if (!bitmap_isset(c->tcp.port_to_init, port))
-			continue;
+	if (c->v4) {
+		tref.v6 = 0;
+		for (port = 0; port < USHRT_MAX; port++) {
+			if (!bitmap_isset(c->tcp.port4_to_init, port))
+				continue;
 
-		tref.index = port;
-
-		if (c->v4) {
-			tref.v6 = 0;
+			tref.index = port;
 			sock_l4(c, AF_INET, IPPROTO_TCP, port, 1, tref.u32);
 		}
+	}
 
-		if (c->v6) {
-			tref.v6 = 1;
+	if (c->v6) {
+		tref.v6 = 1;
+		for (port = 0; port < USHRT_MAX; port++) {
+			if (!bitmap_isset(c->tcp.port6_to_init, port))
+				continue;
+
+			tref.index = port;
 			sock_l4(c, AF_INET6, IPPROTO_TCP, port, 1, tref.u32);
 		}
 	}
@@ -2116,24 +2122,33 @@ int tcp_sock_init(struct ctx *c)
 
 	getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret), GRND_RANDOM);
 
-	for (port = 0; !PORT_IS_EPHEMERAL(port); port++) {
-		if (bitmap_isset(c->tcp.port_to_ns, port))
-			tref.splice = 1;
-		else if (bitmap_isset(c->tcp.port_to_tap, port))
-			tref.splice = 0;
-		else
-			continue;
+	if (c->v4) {
+		tref.v6 = 0;
+		for (port = 0; port < USHRT_MAX; port++) {
+			if (bitmap_isset(c->tcp.port4_to_ns, port))
+				tref.splice = 1;
+			else if (bitmap_isset(c->tcp.port4_to_tap, port))
+				tref.splice = 0;
+			else
+				continue;
 
-		tref.index = port;
-
-		if (c->v4) {
-			tref.v6 = 0;
+			tref.index = port;
 			sock_l4(c, AF_INET, IPPROTO_TCP, port, tref.splice,
 				tref.u32);
 		}
+	}
 
-		if (c->v6) {
-			tref.v6 = 1;
+	if (c->v6) {
+		tref.v6 = 1;
+		for (port = 0; port < USHRT_MAX; port++) {
+			if (bitmap_isset(c->tcp.port6_to_ns, port))
+				tref.splice = 1;
+			else if (bitmap_isset(c->tcp.port6_to_tap, port))
+				tref.splice = 0;
+			else
+				continue;
+
+			tref.index = port;
 			sock_l4(c, AF_INET6, IPPROTO_TCP, port, tref.splice,
 				tref.u32);
 		}

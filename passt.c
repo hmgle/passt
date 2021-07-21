@@ -326,13 +326,21 @@ static int get_bound_ports_ns(void *arg)
 	ns_enter(c->pasta_pid);
 
 	if (c->v4) {
-		procfs_scan_listen("tcp", c->tcp.port_to_ns);
-		procfs_scan_listen("udp", c->udp.port_to_ns);
+		procfs_scan_listen("tcp", c->tcp.port4_to_tap);
+		procfs_scan_listen("tcp", c->udp.port4_to_tap);
+		procfs_scan_listen("udp", c->udp.port4_to_tap);
 	}
 
 	if (c->v6) {
-		procfs_scan_listen("tcp6", c->tcp.port_to_ns);
-		procfs_scan_listen("udp6", c->udp.port_to_ns);
+		if (c->v4) {
+			procfs_scan_listen("tcp6", c->tcp.port4_to_ns);
+			procfs_scan_listen("tcp6", c->udp.port4_to_ns);
+			procfs_scan_listen("udp6", c->udp.port4_to_ns);
+		}
+
+		procfs_scan_listen("tcp6", c->tcp.port6_to_ns);
+		procfs_scan_listen("tcp6", c->udp.port6_to_ns);
+		procfs_scan_listen("udp6", c->udp.port6_to_ns);
 	}
 
 	return 0;
@@ -346,23 +354,23 @@ static void get_bound_ports(struct ctx *c)
 {
 	char ns_fn_stack[NS_FN_STACK_SIZE];
 
-	if (c->mode == MODE_PASST) {
-		memset(c->tcp.port_to_tap, 0xff, PORT_EPHEMERAL_MIN / 8);
-		memset(c->udp.port_to_tap, 0xff, PORT_EPHEMERAL_MIN / 8);
-		return;
-	}
-
 	clone(get_bound_ports_ns, ns_fn_stack + sizeof(ns_fn_stack) / 2,
 	      CLONE_VM | CLONE_VFORK | CLONE_FILES | SIGCHLD, (void *)c);
 
 	if (c->v4) {
-		procfs_scan_listen("tcp", c->tcp.port_to_init);
-		procfs_scan_listen("udp", c->udp.port_to_init);
+		procfs_scan_listen("tcp", c->tcp.port4_to_init);
+		procfs_scan_listen("udp", c->udp.port4_to_init);
 	}
 
 	if (c->v6) {
-		procfs_scan_listen("tcp6", c->tcp.port_to_init);
-		procfs_scan_listen("udp6", c->udp.port_to_init);
+		if (c->v4) {
+			procfs_scan_listen("tcp6", c->tcp.port4_to_init);
+			procfs_scan_listen("udp6", c->udp.port4_to_init);
+		}
+
+		procfs_scan_listen("tcp6", c->tcp.port6_to_init);
+		procfs_scan_listen("udp6", c->udp.port6_to_init);
+
 	}
 }
 
@@ -509,7 +517,15 @@ int main(int argc, char **argv)
 	get_routes(&c);
 	get_addrs(&c);
 	get_dns(&c);
-	get_bound_ports(&c);
+
+	if (c.mode == MODE_PASST) {
+		memset(&c.tcp.port4_to_tap, 0xff, PORT_EPHEMERAL_MIN / 8);
+		memset(&c.tcp.port6_to_tap, 0xff, PORT_EPHEMERAL_MIN / 8);
+		memset(&c.udp.port4_to_tap, 0xff, PORT_EPHEMERAL_MIN / 8);
+		memset(&c.udp.port6_to_tap, 0xff, PORT_EPHEMERAL_MIN / 8);
+	} else {
+		get_bound_ports(&c);
+	}
 
 	proto_update_l2_buf(c.mac_guest, c.mac, &c.addr4);
 
