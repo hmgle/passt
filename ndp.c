@@ -162,6 +162,11 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 
 	len = (uintptr_t)p - (uintptr_t)ihr - sizeof(*ihr);
 
+	if (IN6_IS_ADDR_LINKLOCAL(&ip6h->saddr))
+		c->addr6_ll_seen = ip6h->saddr;
+	else
+		c->addr6_seen = ip6h->saddr;
+
 	ip6hr->daddr = ip6h->saddr;
 	ip6hr->saddr = c->gw6;
 	ip6hr->payload_len = htons(sizeof(*ihr) + len);
