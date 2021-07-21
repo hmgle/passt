@@ -1385,7 +1385,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 
 	conn = tcp_hash_lookup(c, af, addr, htons(th->source), htons(th->dest));
 	if (!conn) {
-		if (th->syn)
+		if (th->syn && !th->ack)
 			tcp_conn_from_tap(c, af, addr, th, len, now);
 		return 1;
 	}
