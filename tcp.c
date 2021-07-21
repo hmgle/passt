@@ -357,7 +357,7 @@
 #define TCP_HASH_TABLE_SIZE		(MAX_TAP_CONNS * 100 /		\
 					 TCP_HASH_TABLE_LOAD)
 
-#define MAX_WS				8
+#define MAX_WS				9
 #define MAX_WINDOW			(1 << (16 + (MAX_WS)))
 #define MSS_DEFAULT			536
 #define WINDOW_DEFAULT			14600		/* RFC 6928 */
