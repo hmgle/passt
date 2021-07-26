@@ -11,8 +11,8 @@
 struct tap_msg {
 	char *start;
 	char *l4h;
-	size_t len;
-	size_t l4_len;
+	uint16_t len;
+	uint16_t l4_len;
 };
 
 union epoll_ref;
@@ -45,7 +45,7 @@ union epoll_ref {
 	uint64_t u64;
 };
 
-#define TAP_BUF_BYTES		(ETH_MAX_MTU * 3)
+#define TAP_BUF_BYTES		(ETH_MAX_MTU * 128)
 #define TAP_BUF_FILL		(TAP_BUF_BYTES - ETH_MAX_MTU - sizeof(uint32_t))
 #define TAP_MSGS		(TAP_BUF_BYTES / sizeof(struct ethhdr) + 1)
 

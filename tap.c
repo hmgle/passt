@@ -50,6 +50,8 @@
 #include "dhcpv6.h"
 #include "pcap.h"
 
+static struct tap_msg tap_msgs[TAP_MSGS];
+
 /**
  * tap_send() - Send frame, with qemu socket header if needed
  * @c:		Execution context
@@ -442,7 +444,6 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 static int tap_handler_passt(struct ctx *c, struct timespec *now)
 {
 	int msg_count = 0, same, i = 0, first_v4 = 1, first_v6 = 1;
-	struct tap_msg msg[TAP_MSGS];
 	struct ethhdr *eh;
 	char *p = pkt_buf;
 	ssize_t n, rem;
@@ -476,15 +477,15 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 
 		pcap(p, len);
 
-		msg[msg_count].start = p;
-		msg[msg_count++].len = len;
+		tap_msgs[msg_count].start = p;
+		tap_msgs[msg_count++].len = len;
 
 		n -= len;
 		p += len;
 	}
 
 	while (i < msg_count) {
-		eh = (struct ethhdr *)msg[i].start;
+		eh = (struct ethhdr *)tap_msgs[i].start;
 
 		if (memcmp(c->mac_guest, eh->h_source, ETH_ALEN)) {
 			memcpy(c->mac_guest, eh->h_source, ETH_ALEN);
@@ -493,33 +494,33 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 
 		switch (ntohs(eh->h_proto)) {
 		case ETH_P_ARP:
-			tap4_handler(c, msg + i, 1, now, 1);
+			tap4_handler(c, tap_msgs + i, 1, now, 1);
 			i++;
 			break;
 		case ETH_P_IP:
 			for (same = 1; i + same < msg_count &&
 				       same < UIO_MAXIOV; same++) {
-				struct tap_msg *next = &msg[i + same];
+				struct tap_msg *next = &tap_msgs[i + same];
 
 				eh = (struct ethhdr *)next->start;
 				if (ntohs(eh->h_proto) != ETH_P_IP)
 					break;
 			}
 
-			i += tap4_handler(c, msg + i, same, now, first_v4);
+			i += tap4_handler(c, tap_msgs + i, same, now, first_v4);
 			first_v4 = 0;
 			break;
 		case ETH_P_IPV6:
 			for (same = 1; i + same < msg_count &&
 				       same < UIO_MAXIOV; same++) {
-				struct tap_msg *next = &msg[i + same];
+				struct tap_msg *next = &tap_msgs[i + same];
 
 				eh = (struct ethhdr *)next->start;
 				if (ntohs(eh->h_proto) != ETH_P_IPV6)
 					break;
 			}
 
-			i += tap6_handler(c, msg + i, same, now, first_v6);
+			i += tap6_handler(c, tap_msgs + i, same, now, first_v6);
 			first_v6 = 0;
 			break;
 		default:
