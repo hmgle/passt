@@ -469,6 +469,7 @@ struct tcp_tap_conn {
 	uint32_t seq_from_tap;
 	uint32_t seq_ack_to_tap;
 	uint32_t seq_init_from_tap;
+	uint32_t seq_init_to_tap;
 	uint64_t tcpi_acked_last;
 
 	int ws_allowed;
@@ -934,7 +935,8 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 
 	memcpy(data, in, len);
 
-	tap_ip_send(c, &conn->a.a6, IPPROTO_TCP, buf, th->doff * 4 + len);
+	tap_ip_send(c, &conn->a.a6, IPPROTO_TCP, buf, th->doff * 4 + len,
+		    conn->seq_init_to_tap);
 
 	return 0;
 }
@@ -1116,6 +1118,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	conn->seq_ack_to_tap = conn->seq_from_tap;
 
 	conn->seq_to_tap = tcp_seq_init(c, af, addr, th->dest, th->source, now);
+	conn->seq_init_to_tap = conn->seq_to_tap;
 	conn->seq_ack_from_tap = conn->seq_to_tap + 1;
 
 	tcp_hash_insert(c, conn, af, addr);
@@ -1828,6 +1831,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 						conn->sock_port,
 						conn->tap_port,
 						now);
+		conn->seq_init_to_tap = conn->seq_to_tap;
 
 		tcp_hash_insert(c, conn, AF_INET6, &sa6->sin6_addr);
 	} else {
@@ -1850,6 +1854,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 						conn->sock_port,
 						conn->tap_port,
 						now);
+		conn->seq_init_to_tap = conn->seq_to_tap;
 
 		tcp_hash_insert(c, conn, AF_INET, &sa4->sin_addr);
 	}

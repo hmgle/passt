@@ -98,7 +98,7 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			icmp_id_map[V6][id].seq = seq;
 		}
 
-		tap_ip_send(c, &sr6->sin6_addr, IPPROTO_ICMPV6, buf, n);
+		tap_ip_send(c, &sr6->sin6_addr, IPPROTO_ICMPV6, buf, n, 0);
 	} else {
 		struct sockaddr_in *sr4 = (struct sockaddr_in *)&sr;
 		struct icmphdr *ih = (struct icmphdr *)buf;
@@ -115,7 +115,7 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 
 		memcpy(&a6.s6_addr[12], &sr4->sin_addr, sizeof(sr4->sin_addr));
 
-		tap_ip_send(c, &a6, IPPROTO_ICMP, buf, n);
+		tap_ip_send(c, &a6, IPPROTO_ICMP, buf, n, 0);
 	}
 }
 

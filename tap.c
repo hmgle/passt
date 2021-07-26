@@ -91,9 +91,10 @@ int tap_send(struct ctx *c, void *data, size_t len, int vnet_pre)
  * @proto:	L4 protocol number
  * @in:		Payload
  * @len:	L4 payload length
+ * @flow:	Flow label for TCP over IPv6
  */
 void tap_ip_send(struct ctx *c, struct in6_addr *src, uint8_t proto,
-		 char *in, size_t len)
+		 char *in, size_t len, uint32_t flow)
 {
 	char buf[USHRT_MAX];
 	char *pkt = buf + 4;
@@ -161,21 +162,30 @@ void tap_ip_send(struct ctx *c, struct in6_addr *src, uint8_t proto,
 			struct tcphdr *th = (struct tcphdr *)(ip6h + 1);
 
 			th->check = 0;
-			th->check = csum_ip4(ip6h, len + sizeof(*ip6h));
+			th->check = csum_unaligned(ip6h, len + sizeof(*ip6h),
+						   0);
 		} else if (proto == IPPROTO_UDP) {
 			struct udphdr *uh = (struct udphdr *)(ip6h + 1);
 
 			uh->check = 0;
-			uh->check = csum_ip4(ip6h, len + sizeof(*ip6h));
+			uh->check = csum_unaligned(ip6h, len + sizeof(*ip6h),
+						   0);
 		} else if (proto == IPPROTO_ICMPV6) {
 			struct icmp6hdr *ih = (struct icmp6hdr *)(ip6h + 1);
 
 			ih->icmp6_cksum = 0;
-			ih->icmp6_cksum = csum_ip4(ip6h, len + sizeof(*ip6h));
+			ih->icmp6_cksum = csum_unaligned(ip6h,
+							 len + sizeof(*ip6h),
+							 0);
 		}
 		ip6h->version = 6;
 		ip6h->nexthdr = proto;
 		ip6h->hop_limit = 255;
+		if (flow) {
+			ip6h->flow_lbl[0] = (flow >> 16) & 0xf;
+			ip6h->flow_lbl[1] = (flow >> 8) & 0xff;
+			ip6h->flow_lbl[2] = (flow >> 0) & 0xff;
+		}
 
 		tap_send(c, buf, len + sizeof(*ip6h) + sizeof(*eh), 1);
 	}
