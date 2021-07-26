@@ -1075,13 +1075,14 @@ static void tcp_rst(struct ctx *c, struct tcp_tap_conn *conn);
 static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 			   int flags, char *in, int len)
 {
+	uint32_t ack_offset = conn->seq_from_tap - conn->seq_ack_to_tap;
 	char buf[USHRT_MAX] = { 0 }, *data;
 	struct tcp_info info = { 0 };
 	socklen_t sl = sizeof(info);
 	struct tcphdr *th;
 	int ws = 0, err;
 
-	if (conn->seq_from_tap == conn->seq_ack_to_tap && !flags && len) {
+	if (ack_offset < conn->tcpi_snd_wnd / 10 && !flags) {
 		err = 0;
 		info.tcpi_bytes_acked = conn->tcpi_acked_last;
 		info.tcpi_snd_wnd = conn->tcpi_snd_wnd;
