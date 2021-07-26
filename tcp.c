@@ -2652,7 +2652,7 @@ static void tcp_timer_one(struct ctx *c, struct tcp_tap_conn *conn,
 			  struct timespec *ts)
 {
 	int ack_tap_ms = timespec_diff_ms(ts, &conn->ts_ack_tap);
-	int sock_ms = timespec_diff_ms(ts, &conn->ts_tap);
+	int sock_ms = timespec_diff_ms(ts, &conn->ts_sock);
 	int tap_ms = timespec_diff_ms(ts, &conn->ts_tap);
 
 	switch (conn->state) {
@@ -2693,7 +2693,8 @@ static void tcp_timer_one(struct ctx *c, struct tcp_tap_conn *conn,
 				}
 
 				conn->seq_to_tap = conn->seq_ack_from_tap;
-				tcp_data_from_sock(c, conn, ts);
+				if (sock_ms > ACK_TIMEOUT)
+					tcp_data_from_sock(c, conn, ts);
 			}
 		}
 
