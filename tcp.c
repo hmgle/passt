@@ -2291,13 +2291,13 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		tcp_hash_insert(c, conn, AF_INET6, &sa6->sin6_addr);
 	} else {
 		struct sockaddr_in *sa4 = (struct sockaddr_in *)&sa;
+		in_addr_t s_addr = ntohl(sa4->sin_addr.s_addr);
 
 		memset(&conn->a.a4.zero,   0, sizeof(conn->a.a4.zero));
 		memset(&conn->a.a4.one, 0xff, sizeof(conn->a.a4.one));
 
-		if (ntohl(sa4->sin_addr.s_addr) == INADDR_LOOPBACK ||
-		    ntohl(sa4->sin_addr.s_addr) == INADDR_ANY ||
-		    sa4->sin_addr.s_addr == c->addr4_seen)
+		if (s_addr >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
+		    s_addr == INADDR_ANY || s_addr == c->addr4_seen)
 			sa4->sin_addr.s_addr = c->gw4;
 
 		memcpy(&conn->a.a4.a, &sa4->sin_addr, sizeof(conn->a.a4.a));

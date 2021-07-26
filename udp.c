@@ -728,15 +728,16 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		for (i = 0; i < n; i++) {
 			struct udp4_l2_buf_t *b = &udp4_l2_buf[i];
 			size_t ip_len, iov_len;
+			in_addr_t s_addr;
 
 			ip_len = udp4_l2_mh_sock[i].msg_len +
 				 sizeof(b->iph) + sizeof(b->uh);
 
 			b->iph.tot_len = htons(ip_len);
 
-			if (ntohl(b->s_in.sin_addr.s_addr) == INADDR_LOOPBACK ||
-			    ntohl(b->s_in.sin_addr.s_addr) == INADDR_ANY ||
-			    b->s_in.sin_addr.s_addr == c->addr4_seen) {
+			s_addr = ntohl(b->s_in.sin_addr.s_addr);
+			if (s_addr >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
+			    s_addr == INADDR_ANY || s_addr == c->addr4_seen) {
 				in_port_t src = htons(b->s_in.sin_port);
 
 				b->iph.saddr = c->gw4;
