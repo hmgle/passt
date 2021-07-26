@@ -61,7 +61,7 @@ struct opt_hdr {
 #define   STR_NOTONLINK		"Prefix not appropriate for link."
 
 	uint16_t l;
-} __attribute__((__packed__));
+};
 
 #if __BYTE_ORDER == __BIG_ENDIAN
 # define OPT_SIZE_CONV(x)	(x)
@@ -333,9 +333,6 @@ ia_ta:
 
 	while ((ia = dhcpv6_opt(ia, ia_type, &__len))) {
 		size_t ia_len = ntohs(ia->l);
-
-		if (ia_len > __len)
-			return NULL;
 
 		if (ia_type == OPT_IA_NA) {
 			struct opt_ia_na *opts = (struct opt_ia_na *)ia + 1;
