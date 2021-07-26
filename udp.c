@@ -125,11 +125,13 @@
  * @sock:	Socket bound to source port used as index
  * @ts:		Activity timestamp from tap, used for socket aging
  * @ts_local:	Timestamp of tap packet to gateway address, aging for local bind
+ * @loopback:	Whether local bind should use loopback address as source
  */
 struct udp_tap_port {
 	int sock;
 	time_t ts;
 	time_t ts_local;
+	int loopback;
 };
 
 /**
@@ -201,7 +203,7 @@ udp4_l2_buf[UDP_TAP_FRAMES] = {
 };
 
 /**
- * udp4_l2_buf_t - Pre-cooked IPv6 packet buffers for tap connections
+ * udp6_l2_buf_t - Pre-cooked IPv6 packet buffers for tap connections
  * @s_in6:	Source socket address, filled in by recvmmsg()
  * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
  * @eh:		Pre-filled Ethernet header
@@ -644,19 +646,25 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			b->ip6h.payload_len = htons(udp6_l2_mh_sock[i].msg_len +
 						    sizeof(b->uh));
 
-			if (IN6_IS_ADDR_LOOPBACK(&b->s_in6.sin6_addr) ||
-			    !memcmp(&b->s_in6.sin6_addr, &c->addr6_seen,
-				    sizeof(c->addr6))) {
+			if (IN6_IS_ADDR_LINKLOCAL(&b->s_in6.sin6_addr)) {
+				b->ip6h.daddr = c->addr6_ll_seen;
+				b->ip6h.saddr = b->s_in6.sin6_addr;
+			} else if (IN6_IS_ADDR_LOOPBACK(&b->s_in6.sin6_addr) ||
+				   !memcmp(&b->s_in6.sin6_addr, &c->addr6_seen,
+					   sizeof(c->addr6))) {
 				in_port_t src = htons(b->s_in6.sin6_port);
 
-				b->ip6h.daddr = c->addr6_seen;
+				b->ip6h.daddr = c->addr6_ll_seen;
 				b->ip6h.saddr = c->gw6;
 
 				udp_tap_map[V6][src].ts_local = now->tv_sec;
+
+				if (IN6_IS_ADDR_LOOPBACK(&b->s_in6.sin6_addr))
+					udp_tap_map[V6][src].loopback = 1;
+				else
+					udp_tap_map[V6][src].loopback = 0;
+
 				bitmap_set(udp_act[V6][UDP_ACT_TAP], src);
-			} else if (IN6_IS_ADDR_LINKLOCAL(&b->s_in6.sin6_addr)) {
-				b->ip6h.daddr = c->addr6_ll_seen;
-				b->ip6h.saddr = b->s_in6.sin6_addr;
 			} else {
 				b->ip6h.daddr = c->addr6_seen;
 				b->ip6h.saddr = b->s_in6.sin6_addr;
@@ -733,6 +741,12 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 
 				b->iph.saddr = c->gw4;
 				udp_tap_map[V4][src].ts_local = now->tv_sec;
+
+				if (b->s_in.sin_addr.s_addr == c->addr4_seen)
+					udp_tap_map[V4][src].loopback = 0;
+				else
+					udp_tap_map[V4][src].loopback = 1;
+
 				bitmap_set(udp_act[V4][UDP_ACT_TAP], src);
 			} else {
 				b->iph.saddr = b->s_in.sin_addr.s_addr;
@@ -840,8 +854,12 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 		udp_tap_map[V4][src].ts = now->tv_sec;
 
 		if (s_in.sin_addr.s_addr == c->gw4 &&
-		    udp_tap_map[V4][dst].ts_local)
-			s_in.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		    udp_tap_map[V4][dst].ts_local) {
+			if (udp_tap_map[V4][dst].loopback)
+				s_in.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+			else
+				s_in.sin_addr.s_addr = c->addr4_seen;
+		}
 	} else {
 		s_in6 = (struct sockaddr_in6) {
 			.sin6_family = AF_INET6,
@@ -868,8 +886,12 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 		udp_tap_map[V6][src].ts = now->tv_sec;
 
 		if (!memcmp(addr, &c->gw6, sizeof(c->gw6)) &&
-		    udp_tap_map[V6][dst].ts_local)
-			s_in6.sin6_addr = in6addr_loopback;
+		    udp_tap_map[V6][dst].ts_local) {
+			if (udp_tap_map[V6][dst].loopback)
+				s_in6.sin6_addr = in6addr_loopback;
+			else
+				s_in6.sin6_addr = c->addr6_seen;
+		}
 	}
 
 	for (i = 0; i < count; i++) {
@@ -911,7 +933,8 @@ int udp_sock_init_ns(void *arg)
 				continue;
 
 			uref.port = port;
-			sock_l4(c, AF_INET, IPPROTO_UDP, port, 1, uref.u32);
+			sock_l4(c, AF_INET, IPPROTO_UDP, port, BIND_LOOPBACK,
+				uref.u32);
 		}
 	}
 
@@ -922,7 +945,8 @@ int udp_sock_init_ns(void *arg)
 				continue;
 
 			uref.port = port;
-			sock_l4(c, AF_INET6, IPPROTO_UDP, port, 1, uref.u32);
+			sock_l4(c, AF_INET6, IPPROTO_UDP, port, BIND_LOOPBACK,
+				uref.u32);
 		}
 	}
 
@@ -992,24 +1016,31 @@ int udp_sock_init(struct ctx *c)
 {
 	union udp_epoll_ref uref = { .bound = 1 };
 	char ns_fn_stack[NS_FN_STACK_SIZE];
+	enum bind_type tap_bind;
 	in_port_t port;
 	int s;
 
 	if (c->v4) {
 		uref.v6 = 0;
 		for (port = 0; port < USHRT_MAX; port++) {
-			if (bitmap_isset(c->udp.port4_to_ns, port))
-				uref.splice = UDP_TO_NS;
-			else if (bitmap_isset(c->udp.port4_to_tap, port))
-				uref.splice = 0;
-			else
-				continue;
-
 			uref.port = port;
-			s = sock_l4(c, AF_INET, IPPROTO_UDP, port,
-				    uref.splice == UDP_TO_NS, uref.u32);
-			if (!uref.splice && s > 0)
-				udp_tap_map[V4][port].sock = s;
+
+			if (bitmap_isset(c->udp.port4_to_ns, port)) {
+				uref.splice = UDP_TO_NS;
+				sock_l4(c, AF_INET, IPPROTO_UDP, port,
+					BIND_LOOPBACK, uref.u32);
+				tap_bind = BIND_EXT;
+			} else {
+				tap_bind = BIND_ANY;
+			}
+
+			if (bitmap_isset(c->udp.port4_to_tap, port)) {
+				uref.splice = 0;
+				s = sock_l4(c, AF_INET, IPPROTO_UDP, port,
+					    tap_bind, uref.u32);
+				if (s > 0)
+					udp_tap_map[V4][port].sock = s;
+			}
 		}
 
 		udp_sock4_iov_init();
@@ -1018,18 +1049,24 @@ int udp_sock_init(struct ctx *c)
 	if (c->v6) {
 		uref.v6 = 1;
 		for (port = 0; port < USHRT_MAX; port++) {
-			if (bitmap_isset(c->udp.port6_to_ns, port))
-				uref.splice = UDP_TO_NS;
-			else if (bitmap_isset(c->udp.port6_to_tap, port))
-				uref.splice = 0;
-			else
-				continue;
-
 			uref.port = port;
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, port,
-				    uref.splice == UDP_TO_NS, uref.u32);
-			if (!uref.splice && s > 0)
-				udp_tap_map[V6][port].sock = s;
+
+			if (bitmap_isset(c->udp.port6_to_ns, port)) {
+				uref.splice = UDP_TO_NS;
+				sock_l4(c, AF_INET6, IPPROTO_UDP, port,
+					BIND_LOOPBACK, uref.u32);
+				tap_bind = BIND_EXT;
+			} else {
+				tap_bind = BIND_ANY;
+			}
+
+			if (bitmap_isset(c->udp.port6_to_tap, port)) {
+				uref.splice = 0;
+				s = sock_l4(c, AF_INET6, IPPROTO_UDP, port,
+					    tap_bind, uref.u32);
+				if (s > 0)
+					udp_tap_map[V6][port].sock = s;
+			}
 		}
 
 		udp_sock6_iov_init();

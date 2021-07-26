@@ -329,14 +329,26 @@ static int get_bound_ports_ns(void *arg)
 		procfs_scan_listen("tcp", c->tcp.port4_to_tap);
 		procfs_scan_listen("tcp", c->udp.port4_to_tap);
 		procfs_scan_listen("udp", c->udp.port4_to_tap);
+
+		procfs_scan_listen("tcp", c->tcp.port4_to_ns);
+		procfs_scan_listen("tcp", c->udp.port4_to_ns);
+		procfs_scan_listen("udp", c->udp.port4_to_ns);
 	}
 
 	if (c->v6) {
 		if (c->v4) {
+			procfs_scan_listen("tcp6", c->tcp.port4_to_tap);
+			procfs_scan_listen("tcp6", c->udp.port4_to_tap);
+			procfs_scan_listen("udp6", c->udp.port4_to_tap);
+
 			procfs_scan_listen("tcp6", c->tcp.port4_to_ns);
 			procfs_scan_listen("tcp6", c->udp.port4_to_ns);
 			procfs_scan_listen("udp6", c->udp.port4_to_ns);
 		}
+
+		procfs_scan_listen("tcp6", c->tcp.port6_to_tap);
+		procfs_scan_listen("tcp6", c->udp.port6_to_tap);
+		procfs_scan_listen("udp6", c->udp.port6_to_tap);
 
 		procfs_scan_listen("tcp6", c->tcp.port6_to_ns);
 		procfs_scan_listen("tcp6", c->udp.port6_to_ns);
@@ -359,16 +371,19 @@ static void get_bound_ports(struct ctx *c)
 
 	if (c->v4) {
 		procfs_scan_listen("tcp", c->tcp.port4_to_init);
+		procfs_scan_listen("tcp", c->udp.port4_to_init);
 		procfs_scan_listen("udp", c->udp.port4_to_init);
 	}
 
 	if (c->v6) {
 		if (c->v4) {
 			procfs_scan_listen("tcp6", c->tcp.port4_to_init);
+			procfs_scan_listen("tcp6", c->udp.port4_to_init);
 			procfs_scan_listen("udp6", c->udp.port4_to_init);
 		}
 
 		procfs_scan_listen("tcp6", c->tcp.port6_to_init);
+		procfs_scan_listen("tcp6", c->udp.port6_to_init);
 		procfs_scan_listen("udp6", c->udp.port6_to_init);
 
 	}

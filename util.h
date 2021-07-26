@@ -115,11 +115,17 @@ void debug(const char *format, ...);
 #include <linux/ip.h>
 #include <limits.h>
 
+enum bind_type {
+	BIND_ANY = 0,
+	BIND_LOOPBACK,
+	BIND_EXT,
+};
+
 struct ctx;
 
 char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto);
-int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port, int lo,
-	    uint32_t data);
+int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
+	    enum bind_type bind_addr, uint32_t data);
 int timespec_diff_ms(struct timespec *a, struct timespec *b);
 void bitmap_set(uint8_t *map, int bit);
 void bitmap_clear(uint8_t *map, int bit);

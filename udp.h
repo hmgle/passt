@@ -35,7 +35,6 @@ union udp_epoll_ref {
 	uint32_t u32;
 };
 
-
 /**
  * struct udp_ctx - Execution context for UDP
  * @port6_to_tap:	IPv6 ports bound host/init-side, packets to guest/tap

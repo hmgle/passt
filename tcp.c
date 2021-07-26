@@ -2095,7 +2095,8 @@ static int tcp_sock_init_ns(void *arg)
 				continue;
 
 			tref.index = port;
-			sock_l4(c, AF_INET, IPPROTO_TCP, port, 1, tref.u32);
+			sock_l4(c, AF_INET, IPPROTO_TCP, port, BIND_LOOPBACK,
+				tref.u32);
 		}
 	}
 
@@ -2106,7 +2107,8 @@ static int tcp_sock_init_ns(void *arg)
 				continue;
 
 			tref.index = port;
-			sock_l4(c, AF_INET6, IPPROTO_TCP, port, 1, tref.u32);
+			sock_l4(c, AF_INET6, IPPROTO_TCP, port, BIND_LOOPBACK,
+				tref.u32);
 		}
 	}
 
@@ -2123,6 +2125,7 @@ int tcp_sock_init(struct ctx *c)
 {
 	union tcp_epoll_ref tref = { .listen = 1 };
 	char ns_fn_stack[NS_FN_STACK_SIZE];
+	enum bind_type tap_bind;
 	in_port_t port;
 
 	getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret), GRND_RANDOM);
@@ -2130,33 +2133,49 @@ int tcp_sock_init(struct ctx *c)
 	if (c->v4) {
 		tref.v6 = 0;
 		for (port = 0; port < USHRT_MAX; port++) {
-			if (bitmap_isset(c->tcp.port4_to_ns, port))
-				tref.splice = 1;
-			else if (bitmap_isset(c->tcp.port4_to_tap, port))
-				tref.splice = 0;
-			else
-				continue;
-
 			tref.index = port;
-			sock_l4(c, AF_INET, IPPROTO_TCP, port, tref.splice,
-				tref.u32);
+
+			if (bitmap_isset(c->tcp.port4_to_ns, port)) {
+				tref.splice = 1;
+				sock_l4(c, AF_INET, IPPROTO_TCP, port,
+					BIND_LOOPBACK, tref.u32);
+				tap_bind = BIND_EXT;
+			} else {
+				tap_bind = BIND_ANY;
+			}
+
+			if (bitmap_isset(c->tcp.port4_to_tap, port)) {
+				tref.splice = 0;
+				sock_l4(c, AF_INET, IPPROTO_TCP, port,
+					tap_bind, tref.u32);
+			}
 		}
+
+		tcp_sock4_iov_init();
 	}
 
 	if (c->v6) {
 		tref.v6 = 1;
 		for (port = 0; port < USHRT_MAX; port++) {
-			if (bitmap_isset(c->tcp.port6_to_ns, port))
-				tref.splice = 1;
-			else if (bitmap_isset(c->tcp.port6_to_tap, port))
-				tref.splice = 0;
-			else
-				continue;
-
 			tref.index = port;
-			sock_l4(c, AF_INET6, IPPROTO_TCP, port, tref.splice,
-				tref.u32);
+
+			if (bitmap_isset(c->tcp.port6_to_ns, port)) {
+				tref.splice = 1;
+				sock_l4(c, AF_INET6, IPPROTO_TCP, port,
+					BIND_LOOPBACK, tref.u32);
+				tap_bind = BIND_EXT;
+			} else {
+				tap_bind = BIND_ANY;
+			}
+
+			if (bitmap_isset(c->tcp.port6_to_tap, port)) {
+				tref.splice = 0;
+				sock_l4(c, AF_INET6, IPPROTO_TCP, port,
+					tap_bind, tref.u32);
+			}
 		}
+
+		tcp_sock6_iov_init();
 	}
 
 	if (c->mode == MODE_PASTA) {

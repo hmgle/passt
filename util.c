@@ -125,13 +125,13 @@ char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto)
  * @af:		Address family, AF_INET or AF_INET6
  * @proto:	Protocol number
  * @port:	Port, host order
- * @lo:		Bind to loopback address only, if set
+ * @bind_type:	Type of address for binding
  * @data:	epoll reference portion for protocol handlers
  *
  * Return: newly created socket, -1 on error
  */
-int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port, int lo,
-	    uint32_t data)
+int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
+	    enum bind_type bind_addr, uint32_t data)
 {
 	union epoll_ref ref = { .proto = proto, .data = data };
 	struct sockaddr_in addr4 = {
@@ -161,16 +161,20 @@ int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port, int lo,
 	ref.s = fd;
 
 	if (af == AF_INET) {
-		if (lo)
+		if (bind_addr == BIND_LOOPBACK)
 			addr4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		else if (bind_addr == BIND_EXT)
+			addr4.sin_addr.s_addr = c->addr4;
 		else
 			addr4.sin_addr.s_addr = htonl(INADDR_ANY);
 
 		sa = (const struct sockaddr *)&addr4;
 		sl = sizeof(addr4);
 	} else {
-		if (lo)
+		if (bind_addr == BIND_LOOPBACK)
 			addr6.sin6_addr = in6addr_loopback;
+		else if (bind_addr == BIND_EXT)
+			addr6.sin6_addr = c->addr6;
 		else
 			addr6.sin6_addr = in6addr_any;
 
