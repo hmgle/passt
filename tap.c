@@ -41,6 +41,7 @@
 #include <linux/icmp.h>
 #include <linux/icmpv6.h>
 
+#include "checksum.h"
 #include "util.h"
 #include "passt.h"
 #include "arp.h"
@@ -122,7 +123,7 @@ void tap_ip_send(struct ctx *c, struct in6_addr *src, uint8_t proto,
 		memcpy(&iph->saddr, &src->s6_addr[12], 4);
 
 		iph->check = 0;
-		iph->check = csum_ip4(iph, iph->ihl * 4);
+		iph->check = csum_unaligned(iph, iph->ihl * 4, 0);
 
 		memcpy(data, in, len);
 

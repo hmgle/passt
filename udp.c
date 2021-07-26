@@ -110,6 +110,7 @@
 #include <linux/udp.h>
 #include <time.h>
 
+#include "checksum.h"
 #include "util.h"
 #include "passt.h"
 #include "tap.h"
@@ -210,6 +211,11 @@ udp4_l2_buf[UDP_TAP_FRAMES] = {
  */
 __extension__ struct udp6_l2_buf_t {
 	struct sockaddr_in6 s_in6;
+#ifdef __AVX2__
+	/* Align ip6h to 32-byte boundary. */
+	uint8_t pad[64 - (sizeof(struct sockaddr_in6) + sizeof(struct ethhdr) +
+			  sizeof(uint32_t))];
+#endif
 
 	uint32_t vnet_len;
 	struct ethhdr eh;
@@ -217,10 +223,18 @@ __extension__ struct udp6_l2_buf_t {
 	struct udphdr uh;
 	uint8_t data[USHRT_MAX -
 		     (sizeof(struct ipv6hdr) + sizeof(struct udphdr))];
+#ifdef __AVX2__
+} __attribute__ ((packed, aligned(32)))
+#else
 } __attribute__ ((packed, aligned(__alignof__(unsigned int))))
+#endif
 udp6_l2_buf[UDP_TAP_FRAMES] = {
 	[ 0 ... UDP_TAP_FRAMES - 1 ] = {
-		{ 0 }, 0, L2_BUF_ETH_IP6_INIT, L2_BUF_IP6_INIT(IPPROTO_UDP),
+		{ 0 },
+#ifdef __AVX2__
+		{ 0 },
+#endif
+		0, L2_BUF_ETH_IP6_INIT, L2_BUF_IP6_INIT(IPPROTO_UDP),
 		{ 0 }, { 0 },
 	},
 };
@@ -656,7 +670,7 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			b->ip6h.version = 0;
 			b->ip6h.nexthdr = 0;
 			b->uh.check = 0;
-			b->uh.check = csum_ip4(&b->ip6h, ip_len);
+			b->uh.check = csum(&b->ip6h, ip_len, 0);
 			b->ip6h.version = 6;
 			b->ip6h.nexthdr = IPPROTO_UDP;
 			b->ip6h.hop_limit = 255;

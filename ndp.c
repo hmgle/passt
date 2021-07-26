@@ -27,6 +27,7 @@
 #include <net/if.h>
 #include <net/if_arp.h>
 
+#include "checksum.h"
 #include "util.h"
 #include "passt.h"
 #include "tap.h"
@@ -172,8 +173,8 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 	ip6hr->payload_len = htons(sizeof(*ihr) + len);
 	ip6hr->hop_limit = IPPROTO_ICMPV6;
 	ihr->icmp6_cksum = 0;
-	ihr->icmp6_cksum = csum_ip4(ip6hr, sizeof(*ip6hr) +
-					   sizeof(*ihr) + len);
+	ihr->icmp6_cksum = csum_unaligned(ip6hr, sizeof(*ip6hr) +
+						 sizeof(*ihr) + len, 0);
 
 	ip6hr->version = 6;
 	ip6hr->nexthdr = IPPROTO_ICMPV6;

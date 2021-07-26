@@ -3,8 +3,23 @@ CFLAGS += -DRLIMIT_STACK_VAL=$(shell ulimit -s)
 
 all: passt pasta passt4netns qrap
 
-passt: passt.c passt.h arp.c arp.h dhcp.c dhcp.h dhcpv6.c dhcpv6.h pcap.c pcap.h  ndp.c ndp.h siphash.c siphash.h tap.c tap.h icmp.c icmp.h tcp.c tcp.h udp.c udp.h util.c util.h
-	$(CC) $(CFLAGS) passt.c arp.c dhcp.c dhcpv6.c pcap.c ndp.c siphash.c tap.c icmp.c tcp.c udp.c util.c -o passt
+avx2: CFLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
+avx2: clean all
+
+avx2_debug: CFLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops -DDEBUG -g
+avx2_debug: clean all
+
+static: CFLAGS += -static
+static: clean all
+
+debug: CFLAGS += -static -DDEBUG -g
+debug: clean all
+
+passt: passt.c passt.h arp.c arp.h checksum.c checksum.h dhcp.c dhcp.h \
+	dhcpv6.c dhcpv6.h pcap.c pcap.h ndp.c ndp.h siphash.c siphash.h \
+	tap.c tap.h icmp.c icmp.h tcp.c tcp.h udp.c udp.h util.c util.h
+	$(CC) $(CFLAGS) passt.c arp.c checksum.c dhcp.c dhcpv6.c pcap.c ndp.c \
+		siphash.c tap.c icmp.c tcp.c udp.c util.c -o passt
 
 pasta: passt
 	ln -s passt pasta

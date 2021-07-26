@@ -24,6 +24,7 @@
 #include <net/if.h>
 #include <arpa/inet.h>
 
+#include "checksum.h"
 #include "util.h"
 #include "passt.h"
 #include "dhcp.h"
@@ -320,7 +321,7 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	iph->daddr = c->addr4;
 	iph->saddr = c->gw4;
 	iph->check = 0;
-	iph->check = csum_ip4(iph, iph->ihl * 4);
+	iph->check = csum_unaligned(iph, iph->ihl * 4, 0);
 
 	len += sizeof(*eh);
 	memcpy(eh->h_dest, eh->h_source, ETH_ALEN);
