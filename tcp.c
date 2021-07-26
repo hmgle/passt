@@ -1830,13 +1830,12 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 	/* TODO: Implement message batching for TCP */
 	struct tcphdr *th = (struct tcphdr *)msg[0].l4h;
 	size_t len = msg[0].l4_len;
+	uint32_t ack_seq;
 
 	struct tcp_tap_conn *conn;
 	struct epoll_event ev;
 	size_t off, skip = 0;
 	int ws, i;
-
-	uint32_t __seq_max;
 
 	if (len < sizeof(*th))
 		return 1;
@@ -1853,10 +1852,10 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 	}
 
 	/* TODO: Partial ACK coalescing, merge with message coalescing */
+	ack_seq = ntohl(th->ack_seq);
 	for (i = 0; conn->state == ESTABLISHED && i < count; i++) {
 		struct tcphdr *__th = (struct tcphdr *)msg[i].l4h;
 		size_t __len = msg[i].l4_len;
-		uint32_t __this;
 
 		if (__len < sizeof(*th))
 			break;
@@ -1865,19 +1864,11 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		if (off < sizeof(*th) || off > __len)
 			break;
 
-		if (!i && (!th->ack || len != off))
-			break;
+		if (!th->ack)
+			continue;
 
-		__this = ntohl(th->ack_seq);
-
-		if (!i || __this - __seq_max < MAX_WINDOW)
-			__seq_max = __this;
-
-		if ((!th->ack || len != off) && i) {
-			tcp_sock_consume(conn, __seq_max);
-			conn->ts_tap = *now;
-			return i;
-		}
+		if (ntohl(th->ack_seq) - ack_seq < MAX_WINDOW)
+			ack_seq = ntohl(th->ack_seq);
 	}
 
 	if (th->rst) {
@@ -1885,7 +1876,8 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		return 1;
 	}
 
-	tcp_clamp_window(conn, th, len, th->syn && th->ack);
+	if (count == 1)
+		tcp_clamp_window(conn, th, len, th->syn && th->ack);
 
 	conn->ts_tap = *now;
 
@@ -1966,13 +1958,12 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		}
 
 		if (th->ack) {
-			tcp_sock_consume(conn, ntohl(th->ack_seq));
+			if (count == 1)
+				tcp_sock_consume(conn, ack_seq);
 
 			if (conn->state == ESTABLISHED_SOCK_FIN) {
 				if (!tcp_data_from_sock(c, conn, now))
 					tcp_tap_state(conn, CLOSE_WAIT);
-			} else {
-				tcp_data_from_sock(c, conn, now);
 			}
 		}
 
