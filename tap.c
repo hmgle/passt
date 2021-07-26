@@ -134,6 +134,11 @@ void tap_ip_send(struct ctx *c, struct in6_addr *src, uint8_t proto,
 			struct udphdr *uh = (struct udphdr *)(iph + 1);
 
 			uh->check = 0;
+		} else if (iph->protocol == IPPROTO_ICMP) {
+			struct icmphdr *ih = (struct icmphdr *)(iph + 1);
+
+			ih->checksum = 0;
+			ih->checksum = csum_unaligned(ih, len, 0);
 		}
 
 		tap_send(c, buf, len + sizeof(*iph) + sizeof(*eh), 1);

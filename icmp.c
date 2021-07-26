@@ -87,10 +87,17 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		struct sockaddr_in6 *sr6 = (struct sockaddr_in6 *)&sr;
 		struct icmp6hdr *ih = (struct icmp6hdr *)buf;
 
+		id = ntohs(ih->icmp6_identifier);
+
+		/* If bind() fails e.g. because of a broken SELinux policy, this
+		 * might happen. Fix up the identifier to match the sent one.
+		 */
+		if (id != ref.icmp.id)
+			ih->icmp6_identifier = htons(ref.icmp.id);
+
 		/* In PASTA mode, we'll get any reply we send, discard them. */
 		if (c->mode == MODE_PASTA) {
 			seq = ntohs(ih->icmp6_sequence);
-			id = ntohs(ih->icmp6_identifier);
 
 			if (icmp_id_map[V6][id].seq == seq)
 				return;
@@ -103,9 +110,12 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		struct sockaddr_in *sr4 = (struct sockaddr_in *)&sr;
 		struct icmphdr *ih = (struct icmphdr *)buf;
 
+		id = ntohs(ih->un.echo.id);
+		if (id != ref.icmp.id)
+			ih->un.echo.id = htons(ref.icmp.id);
+
 		if (c->mode == MODE_PASTA) {
 			seq = ntohs(ih->un.echo.sequence);
-			id = ntohs(ih->un.echo.id);
 
 			if (icmp_id_map[V4][id].seq == seq)
 				return;
@@ -148,7 +158,7 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		if (msg[0].l4_len < sizeof(*ih) || ih->type != ICMP_ECHO)
 			return 1;
 
-		id = ntohs(ih->un.echo.id);
+		iref.id = id = ntohs(ih->un.echo.id);
 
 		if ((s = icmp_id_map[V4][id].sock) <= 0) {
 			s = sock_l4(c, AF_INET, IPPROTO_ICMP, id, 0, iref.u32);
@@ -177,7 +187,7 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		    (ih->icmp6_type != 128 && ih->icmp6_type != 129))
 			return 1;
 
-		id = ntohs(ih->icmp6_identifier);
+		iref.id = id = ntohs(ih->icmp6_identifier);
 		if ((s = icmp_id_map[V6][id].sock) <= 0) {
 			s = sock_l4(c, AF_INET6, IPPROTO_ICMPV6, id, 0,
 				    iref.u32);

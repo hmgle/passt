@@ -15,10 +15,12 @@ void icmp_timer(struct ctx *c, struct timespec *ts);
  * union icmp_epoll_ref - epoll reference portion for ICMP tracking
  * @v6:			Set for IPv6 sockets or connections
  * @u32:		Opaque u32 value of reference
+ * @id:			Associated echo identifier, needed if bind() fails
  */
 union icmp_epoll_ref {
 	struct {
-		uint32_t	v6:1;
+		uint32_t	v6:1,
+				id:16;
 	};
 	uint32_t u32;
 };
