@@ -343,13 +343,17 @@
 #include <linux/tcp.h>
 #include <time.h>
 
+#include "checksum.h"
 #include "util.h"
 #include "passt.h"
 #include "tap.h"
 #include "siphash.h"
+#include "pcap.h"
 
 #define MAX_TAP_CONNS			(128 * 1024)
 #define MAX_SPLICE_CONNS		(128 * 1024)
+
+#define TCP_TAP_FRAMES			64
 
 #define PIPE_SIZE			(1024 * 1024)
 
@@ -503,8 +507,101 @@ struct tcp_splice_conn {
 	int v6;
 };
 
-/* Socket receive buffer */
-static char sock_buf[MAX_WINDOW];
+/* Static buffers */
+
+/**
+ * tcp4_l2_buf_t - Pre-cooked IPv4 packet buffers for tap connections
+ * @psum:	Partial IP header checksum (excluding tot_len and saddr)
+ * @psum:	Partial TCP header checksum (excluding length and saddr)
+ * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
+ * @eh:		Pre-filled Ethernet header
+ * @iph:	Pre-filled IP header (except for tot_len and saddr)
+ * @uh:		Headroom for TCP header
+ * @data:	Storage for TCP payload
+ */
+__extension__  static struct tcp4_l2_buf_t {
+	uint32_t psum;		/* 0 */
+	uint32_t tsum;		/* 4 */
+#ifdef __AVX2__
+	uint8_t pad[18];	/* 8, align th to 32 bytes */
+#endif
+
+	uint32_t vnet_len;	/* 26 */
+	struct ethhdr eh;	/* 30 */
+	struct iphdr iph;	/* 44 */
+	struct tcphdr th;	/* 64 */
+	uint8_t data[USHRT_MAX - sizeof(struct tcphdr)];
+#ifdef __AVX2__
+} __attribute__ ((packed, aligned(32)))
+#else
+} __attribute__ ((packed, aligned(__alignof__(unsigned int))))
+#endif
+tcp4_l2_buf[TCP_TAP_FRAMES] = {
+	[ 0 ... TCP_TAP_FRAMES - 1 ] = {
+		0, 0,
+#ifdef __AVX2__
+		{ 0 },
+#endif
+		0, L2_BUF_ETH_IP4_INIT, L2_BUF_IP4_INIT(IPPROTO_TCP),
+		{ .doff = sizeof(struct tcphdr) / 4, .ack = 1 }, { 0 },
+	},
+};
+
+static int tcp4_l2_buf_mss;
+static int tcp4_l2_buf_mss_nr_set;
+static int tcp4_l2_buf_mss_tap;
+static int tcp4_l2_buf_mss_tap_nr_set;
+
+/**
+ * tcp6_l2_buf_t - Pre-cooked IPv6 packet buffers for tap connections
+ * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
+ * @eh:		Pre-filled Ethernet header
+ * @ip6h:	Pre-filled IP header (except for payload_len and addresses)
+ * @th:		Headroom for TCP header
+ * @data:	Storage for TCP payload
+ */
+__extension__ struct tcp6_l2_buf_t {
+#ifdef __AVX2__
+	uint8_t pad[14];	/* 0	align ip6h to 32 bytes */
+#else
+	uint8_t pad[2];		/*	align ip6h to 4 bytes	0 */
+#endif
+	uint32_t vnet_len;	/* 14				2 */
+	struct ethhdr eh;	/* 18				6 */
+	struct ipv6hdr ip6h;	/* 32				20 */
+	struct tcphdr th;	/* 72				60 */
+	uint8_t data[USHRT_MAX -
+		     (sizeof(struct ipv6hdr) + sizeof(struct tcphdr))];
+#ifdef __AVX2__
+} __attribute__ ((packed, aligned(32)))
+#else
+} __attribute__ ((packed, aligned(__alignof__(unsigned int))))
+#endif
+tcp6_l2_buf[TCP_TAP_FRAMES] = {
+	[ 0 ... TCP_TAP_FRAMES - 1 ] = {
+		{ 0 },
+		0, L2_BUF_ETH_IP6_INIT, L2_BUF_IP6_INIT(IPPROTO_TCP),
+		{ .doff = sizeof(struct tcphdr) / 4, .ack = 1 }, { 0 },
+	},
+};
+
+static int tcp6_l2_buf_mss;
+static int tcp6_l2_buf_mss_nr_set;
+static int tcp6_l2_buf_mss_tap;
+static int tcp6_l2_buf_mss_tap_nr_set;
+
+/* recvmmsg()/sendmmsg() data for tap */
+static struct iovec	tcp4_l2_iov_sock	[TCP_TAP_FRAMES + 1];
+static struct iovec	tcp6_l2_iov_sock	[TCP_TAP_FRAMES + 1];
+static char 		tcp_buf_discard		[MAX_WINDOW];
+
+static struct iovec	tcp4_l2_iov_tap		[TCP_TAP_FRAMES];
+static struct iovec	tcp6_l2_iov_tap		[TCP_TAP_FRAMES];
+
+static struct msghdr	tcp4_l2_mh_sock;
+static struct msghdr	tcp6_l2_mh_sock;
+
+static struct mmsghdr	tcp_l2_mh_tap		[TCP_TAP_FRAMES];
 
 /* Bitmap, activity monitoring needed for connection via tap */
 static uint8_t tcp_act[MAX_TAP_CONNS / 8] = { 0 };
@@ -538,6 +635,148 @@ static void tcp_splice_state(struct tcp_splice_conn *conn, enum tcp_state state)
 	debug("TCP: index %i: %s -> %s",
 	      conn - ts, tcp_state_str[conn->state], tcp_state_str[state]);
 	conn->state = state;
+}
+
+/**
+ * tcp_update_check_ip4() - Update IPv4 with variable parts from stored one
+ * @buf:	L2 packet buffer with final IPv4 header
+ */
+static void tcp_update_check_ip4(struct tcp4_l2_buf_t *buf)
+{
+	uint32_t sum = buf->psum;
+
+	sum += buf->iph.tot_len;
+	sum += (buf->iph.saddr >> 16) & 0xffff;
+	sum += buf->iph.saddr & 0xffff;
+
+	buf->iph.check = (uint16_t)~csum_fold(sum);
+}
+
+/**
+ * tcp_update_check_tcp4() - Update TCP checksum from stored one
+ * @buf:	L2 packet buffer with final IPv4 header
+ */
+static void tcp_update_check_tcp4(struct tcp4_l2_buf_t *buf)
+{
+	uint16_t tlen = ntohs(buf->iph.tot_len) - 20;
+	uint32_t sum = buf->tsum;
+
+	sum += (buf->iph.saddr >> 16) & 0xffff;
+	sum += buf->iph.saddr & 0xffff;
+	sum += htons(ntohs(buf->iph.tot_len) - 20);
+
+	buf->th.check = 0;
+	buf->th.check = csum(&buf->th, tlen, sum);
+}
+
+/**
+ * tcp_update_check_tcp6() - Calculate TCP checksum for IPv6
+ * @buf:	L2 packet buffer with final IPv6 header
+ */
+static void tcp_update_check_tcp6(struct tcp6_l2_buf_t *buf)
+{
+	int len = ntohs(buf->ip6h.payload_len) + sizeof(struct ipv6hdr);
+
+	buf->ip6h.hop_limit = IPPROTO_TCP;
+	buf->ip6h.version = 0;
+	buf->ip6h.nexthdr = 0;
+
+	buf->th.check = 0;
+	buf->th.check = csum(&buf->ip6h, len, 0);
+
+	buf->ip6h.hop_limit = 255;
+	buf->ip6h.version = 6;
+	buf->ip6h.nexthdr = IPPROTO_TCP;
+}
+
+/**
+ * tcp_update_l2_buf() - Update L2 buffers with Ethernet and IPv4 addresses
+ * @eth_d:	Ethernet destination address, NULL if unchanged
+ * @eth_s:	Ethernet source address, NULL if unchanged
+ * @ip_da:	Pointer to IPv4 destination address, NULL if unchanged
+ */
+void tcp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
+		       uint32_t *ip_da)
+{
+	int i;
+
+	for (i = 0; i < TCP_TAP_FRAMES; i++) {
+		struct tcp4_l2_buf_t *b4 = &tcp4_l2_buf[i];
+		struct tcp6_l2_buf_t *b6 = &tcp6_l2_buf[i];
+
+		if (eth_d) {
+			memcpy(b4->eh.h_dest, eth_d, ETH_ALEN);
+			memcpy(b6->eh.h_dest, eth_d, ETH_ALEN);
+		}
+
+		if (eth_s) {
+			memcpy(b4->eh.h_source, eth_s, ETH_ALEN);
+			memcpy(b6->eh.h_source, eth_s, ETH_ALEN);
+		}
+
+		if (ip_da) {
+			b4->iph.daddr = *ip_da;
+			if (!i) {
+				b4->iph.saddr = 0;
+				b4->iph.tot_len = 0;
+				b4->iph.check = 0;
+				b4->psum = sum_16b(&b4->iph, 20);
+
+				b4->tsum = ((*ip_da >> 16) & 0xffff) +
+					   (*ip_da & 0xffff) +
+					   htons(IPPROTO_TCP);
+			} else {
+				b4->psum = tcp4_l2_buf[0].psum;
+				b4->tsum = tcp4_l2_buf[0].tsum;
+			}
+		}
+	}
+}
+
+/**
+ * tcp_sock4_iov_init() - Initialise scatter-gather L2 buffers for IPv4 sockets
+ */
+static void tcp_sock4_iov_init(void)
+{
+	struct iovec *iov;
+	int i;
+
+	tcp4_l2_iov_sock[0].iov_base = tcp_buf_discard;
+	for (i = 0, iov = tcp4_l2_iov_sock + 1; i < TCP_TAP_FRAMES;
+	     i++, iov++) {
+		iov->iov_base = &tcp4_l2_buf[i].data;
+		iov->iov_len = MSS_DEFAULT;
+	}
+
+	tcp4_l2_mh_sock.msg_iov = tcp4_l2_iov_sock;
+
+	for (i = 0, iov = tcp4_l2_iov_tap; i < TCP_TAP_FRAMES; i++, iov++) {
+		iov->iov_base = &tcp4_l2_buf[i].vnet_len;
+		iov->iov_len = MSS_DEFAULT;
+	}
+}
+
+/**
+ * tcp_sock6_iov_init() - Initialise scatter-gather L2 buffers for IPv6 sockets
+ */
+static void tcp_sock6_iov_init(void)
+{
+	struct iovec *iov;
+	int i;
+
+	tcp6_l2_iov_sock[0].iov_base = tcp_buf_discard;
+	for (i = 0, iov = tcp6_l2_iov_sock + 1; i < TCP_TAP_FRAMES;
+	     i++, iov++) {
+		iov->iov_base = &tcp6_l2_buf[i].data;
+		iov->iov_len = MSS_DEFAULT;
+	}
+
+	tcp6_l2_mh_sock.msg_iov = tcp6_l2_iov_sock;
+
+	for (i = 0, iov = tcp6_l2_iov_tap; i < TCP_TAP_FRAMES; i++, iov++) {
+		iov->iov_base = &tcp6_l2_buf[i].vnet_len;
+		iov->iov_len = MSS_DEFAULT;
+	}
 }
 
 /**
@@ -846,6 +1085,7 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		err = 0;
 		info.tcpi_bytes_acked = conn->tcpi_acked_last;
 		info.tcpi_snd_wnd = conn->tcpi_snd_wnd;
+		info.tcpi_snd_wscale = conn->ws;
 	} else {
 		err = getsockopt(conn->sock, SOL_TCP, TCP_INFO, &info, &sl);
 		if (err && !(flags & RST)) {
@@ -979,8 +1219,19 @@ static void tcp_clamp_window(struct tcp_tap_conn *conn, struct tcphdr *th,
 	} else {
 		unsigned int window = ntohs(th->window) << conn->ws;
 
-		if (conn->tap_window == window && conn->window_clamped)
-			return;
+		if (conn->window_clamped) {
+			if (conn->tap_window == window)
+				return;
+
+			/* Discard +/- 1% updates to spare some syscalls. */
+			if ((window > conn->tap_window &&
+			     window * 99 / 100 < conn->tap_window) ||
+			    (window < conn->tap_window &&
+			     window * 101 / 100 > conn->tap_window)) {
+				conn->tap_window = window;
+				return;
+			}
+		}
 
 		conn->tap_window = window;
 		if (window < 256)
@@ -1087,6 +1338,10 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	conn->mss_guest = tcp_opt_get(th, len, OPT_MSS, NULL, NULL);
 	if (conn->mss_guest < 0)
 		conn->mss_guest = MSS_DEFAULT;
+
+	if (c->mode == MODE_PASST && c->v6 && conn->mss_guest > SHRT_MAX)
+		conn->mss_guest = SHRT_MAX;
+
 	sl = sizeof(conn->mss_guest);
 	setsockopt(s, SOL_TCP, TCP_MAXSEG, &conn->mss_guest, sl);
 
@@ -1271,6 +1526,7 @@ static void tcp_sock_consume(struct tcp_tap_conn *conn, uint32_t ack_seq)
 	 * needed from the buffer, and we won't rewind back to a lower ACK
 	 * sequence.
 	 */
+
 	if (to_ack > MAX_WINDOW)
 		return;
 
@@ -1286,69 +1542,272 @@ static void tcp_sock_consume(struct tcp_tap_conn *conn, uint32_t ack_seq)
  * @conn:	Connection pointer
  * @now:	Current timestamp
  *
- * Return: negative on connection reset, 1 on pending data, 0 otherwise
+ * Return: negative on connection reset, 0 otherwise
  */
 static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 			      struct timespec *now)
 {
-	uint32_t offset = conn->seq_to_tap - conn->seq_ack_from_tap;
-	int len, err, left, send, s = conn->sock;
+	int mss_tap, fill_bufs, send_bufs = 0, last_len, msg_len, iov_rem = 0;
+	int *buf_mss, *buf_mss_nr_set, *buf_mss_tap, *buf_mss_tap_nr_set;
+	int send, len, plen, v4 = IN6_IS_ADDR_V4MAPPED(&conn->a.a6);
+	socklen_t sl = sizeof(struct tcp_info);
+	struct mmsghdr *mh = tcp_l2_mh_tap;
+	int s = conn->sock, i, ret = 0;
+	struct iovec *iov, *iov_tap;
+	uint32_t already_sent;
+	struct tcp_info info;
 
-	if (!conn->tap_window || offset >= conn->tap_window)
+	already_sent = conn->seq_to_tap - conn->seq_ack_from_tap;
+
+	if (!conn->tap_window || already_sent >= conn->tap_window)
 		return 1;
 
-	len = recv(s, sock_buf,
-		   /* TODO: Drop 64KiB limit (needed for responsiveness) once
-		    * tap-side coalescing and zero-copy are fully implemented.
-		    */
-		   MIN(64 * 1024, conn->tap_window),
-		   /* Don't dequeue until acknowledged by guest */
-		   MSG_DONTWAIT | MSG_PEEK);
+	fill_bufs = DIV_ROUND_UP(conn->tap_window - already_sent,
+				 conn->mss_guest);
+	if (fill_bufs > TCP_TAP_FRAMES)
+		fill_bufs = TCP_TAP_FRAMES;
 
-	if (len < 0) {
-		if (errno != EAGAIN && errno != EWOULDBLOCK) {
-			tcp_rst(c, conn);
-			return -errno;
-		}
-		return 0;
+	/* Adjust iovec length for recvmsg() based on what was set last time. */
+	if (v4) {
+		iov = tcp4_l2_iov_sock + 1;
+		buf_mss = &tcp4_l2_buf_mss;
+		buf_mss_nr_set = &tcp4_l2_buf_mss_nr_set;
+	} else {
+		iov = tcp6_l2_iov_sock + 1;
+		buf_mss = &tcp6_l2_buf_mss;
+		buf_mss_nr_set = &tcp6_l2_buf_mss_nr_set;
+	}
+	if (*buf_mss != conn->mss_guest) {
+		for (i = 0; i < fill_bufs; i++)
+			iov[i].iov_len = conn->mss_guest;
+		*buf_mss = conn->mss_guest;
+		*buf_mss_nr_set = fill_bufs - 1;
+	} else if (*buf_mss_nr_set < fill_bufs) {
+		for (i = *buf_mss_nr_set; i < fill_bufs; i++)
+			iov[i].iov_len = conn->mss_guest;
+		*buf_mss_nr_set = fill_bufs - 1;
 	}
 
-	if (len == 0) {
-		if (conn->state >= ESTABLISHED_SOCK_FIN)
-			return 0;
+	/* First buffer is to discard data, last one may be partially filled. */
+	iov[-1].iov_len = already_sent;
+	iov_rem = (conn->tap_window - already_sent) % conn->mss_guest;
+	if (iov_rem && fill_bufs < TCP_TAP_FRAMES)
+		iov[fill_bufs - 1].iov_len = iov_rem;
+	if (v4)
+		tcp4_l2_mh_sock.msg_iovlen = fill_bufs + 1;
+	else
+		tcp6_l2_mh_sock.msg_iovlen = fill_bufs + 1;
 
-		tcp_tap_state(conn, ESTABLISHED_SOCK_FIN);
-		if ((err = tcp_send_to_tap(c, conn, FIN | ACK, NULL, 0)))
-			return err;
+	/* Don't dequeue until acknowledged by guest. */
+	len = recvmsg(s, v4 ? &tcp4_l2_mh_sock : &tcp6_l2_mh_sock, MSG_PEEK);
+	if (len < 0)
+		goto err;
 
-		left = 0;
+	if (!len)
+		goto zero_len;
+
+	send = len - already_sent;
+	if (send <= 0)
+		goto out_restore_iov;
+
+	send_bufs = DIV_ROUND_UP(send, conn->mss_guest);
+	last_len = send - (send_bufs - 1) * conn->mss_guest;
+
+	/* Adjust iovec length for sending based on what was set last time. */
+	if (v4) {
+		mss_tap = conn->mss_guest +
+			  offsetof(struct tcp4_l2_buf_t, data) -
+			  offsetof(struct tcp4_l2_buf_t, vnet_len);
+
+		iov_tap = tcp4_l2_iov_tap;
+		buf_mss_tap = &tcp4_l2_buf_mss_tap;
+		buf_mss_tap_nr_set = &tcp4_l2_buf_mss_tap_nr_set;
+	} else {
+		mss_tap = conn->mss_guest +
+			  offsetof(struct tcp6_l2_buf_t, data) -
+			  offsetof(struct tcp6_l2_buf_t, vnet_len);
+
+		iov_tap = tcp6_l2_iov_tap;
+		buf_mss_tap = &tcp6_l2_buf_mss_tap;
+		buf_mss_tap_nr_set = &tcp6_l2_buf_mss_tap_nr_set;
+	}
+	if (*buf_mss_tap != mss_tap) {
+		for (i = 0; i < send_bufs; i++)
+			iov_tap[i].iov_len = mss_tap;
+		*buf_mss_tap = mss_tap;
+		*buf_mss_tap_nr_set = send_bufs;
+	} else if (*buf_mss_tap_nr_set < send_bufs) {
+		for (i = *buf_mss_tap_nr_set; i < send_bufs; i++)
+			iov_tap[i].iov_len = mss_tap;
+		*buf_mss_tap_nr_set = send_bufs;
+	}
+
+	iov_tap[send_bufs - 1].iov_len = mss_tap - conn->mss_guest + last_len;
+
+	/* Likely, some new data was acked too. */
+	if (conn->seq_from_tap != conn->seq_ack_to_tap) {
+		if (getsockopt(conn->sock, SOL_TCP, TCP_INFO, &info, &sl))
+			goto err;
+
+		conn->tcpi_acked_last = info.tcpi_bytes_acked;
+		conn->seq_ack_to_tap = info.tcpi_bytes_acked +
+				       conn->seq_init_from_tap;
+	} else {
+		info.tcpi_snd_wscale = conn->ws;
+		info.tcpi_snd_wnd = conn->tcpi_snd_wnd;
+	}
+
+	if (v4)
+		mh->msg_hdr.msg_iov = tcp4_l2_iov_tap;
+	else
+		mh->msg_hdr.msg_iov = tcp6_l2_iov_tap;
+	mh->msg_hdr.msg_iovlen = 0;
+	plen = conn->mss_guest;
+	msg_len = 0;
+	for (i = 0; i < send_bufs; i++) {
+		int iov_len, ip_len;
+
+		if (i == send_bufs - 1)
+			plen = last_len;
+
+		if (v4) {
+			struct tcp4_l2_buf_t *b = &tcp4_l2_buf[i];
+
+			ip_len = plen + sizeof(struct iphdr) +
+				 sizeof(struct tcphdr);
+
+			b->iph.tot_len = htons(ip_len);
+			b->iph.saddr = conn->a.a4.a.s_addr;
+			b->iph.daddr = c->addr4_seen;
+			if (!i || i == send_bufs - 1)
+				tcp_update_check_ip4(b);
+			else
+				b->iph.check = tcp4_l2_buf[0].iph.check;
+
+			b->th.source = htons(conn->sock_port);
+			b->th.dest = htons(conn->tap_port);
+			b->th.seq = htonl(conn->seq_to_tap);
+			b->th.ack_seq = htonl(conn->seq_ack_to_tap);
+
+			if (conn->no_snd_wnd) {
+				b->th.window = htons(WINDOW_DEFAULT);
+			} else {
+				b->th.window = htons(info.tcpi_snd_wnd >>
+						     info.tcpi_snd_wscale);
+				conn->tcpi_snd_wnd = info.tcpi_snd_wnd;
+			}
+
+			tcp_update_check_tcp4(b);
+
+			if (c->mode == MODE_PASTA) {
+				ip_len += sizeof(struct ethhdr);
+				write(c->fd_tap, &b->eh, ip_len);
+				pcap((char *)&b->eh, ip_len);
+
+				conn->seq_to_tap += plen;
+				continue;
+			}
+
+			b->vnet_len = htonl(sizeof(struct ethhdr) + ip_len);
+		} else {
+			struct tcp6_l2_buf_t *b = &tcp6_l2_buf[i];
+			uint32_t flow = conn->seq_init_to_tap;
+
+			ip_len = plen + sizeof(struct ipv6hdr) +
+				 sizeof(struct tcphdr);
+
+			b->ip6h.payload_len = htons(plen +
+						    sizeof(struct tcphdr));
+			b->ip6h.saddr = conn->a.a6;
+			if (IN6_IS_ADDR_LINKLOCAL(&b->ip6h.saddr))
+				b->ip6h.daddr = c->addr6_ll_seen;
+			else
+				b->ip6h.daddr = c->addr6_seen;
+
+			b->th.source = htons(conn->sock_port);
+			b->th.dest = htons(conn->tap_port);
+			b->th.seq = htonl(conn->seq_to_tap);
+			b->th.ack_seq = htonl(conn->seq_ack_to_tap);
+
+			if (conn->no_snd_wnd) {
+				b->th.window = htons(WINDOW_DEFAULT);
+			} else {
+				b->th.window = htons(info.tcpi_snd_wnd >>
+						     info.tcpi_snd_wscale);
+				conn->tcpi_snd_wnd = info.tcpi_snd_wnd;
+			}
+
+			memset(b->ip6h.flow_lbl, 0, 3);
+			tcp_update_check_tcp6(b);
+
+			b->ip6h.flow_lbl[0] = (flow >> 16) & 0xf;
+			b->ip6h.flow_lbl[1] = (flow >> 8) & 0xff;
+			b->ip6h.flow_lbl[2] = (flow >> 0) & 0xff;
+
+			if (c->mode == MODE_PASTA) {
+				ip_len += sizeof(struct ethhdr);
+				write(c->fd_tap, &b->eh, ip_len);
+				pcap((char *)&b->eh, ip_len);
+
+				conn->seq_to_tap += plen;
+				continue;
+			}
+
+			b->vnet_len = htonl(sizeof(struct ethhdr) + ip_len);
+		}
+
+		iov_len = sizeof(uint32_t) + sizeof(struct ethhdr) + ip_len;
+
+		/* Switch to a new message if this one is too long for qemu. */
+		if (msg_len && msg_len + iov_len > SHRT_MAX) {
+			mh++;
+			mh->msg_hdr.msg_iovlen = 0;
+			msg_len = 0;
+			if (v4)
+				mh->msg_hdr.msg_iov = &tcp4_l2_iov_tap[i];
+			else
+				mh->msg_hdr.msg_iov = &tcp6_l2_iov_tap[i];
+		}
+		mh->msg_hdr.msg_iovlen++;
+		msg_len += iov_len;
+
+		conn->seq_to_tap += plen;
+	}
+
+	if (c->mode == MODE_PASTA)
 		goto out;
+
+	sendmmsg(c->fd_tap, tcp_l2_mh_tap, mh - tcp_l2_mh_tap + 1,
+		 MSG_NOSIGNAL | MSG_DONTWAIT);
+	pcapmm(tcp_l2_mh_tap, mh - tcp_l2_mh_tap + 1);
+
+	goto out;
+
+err:
+	if (errno != EAGAIN && errno != EWOULDBLOCK) {
+		tcp_rst(c, conn);
+		ret = -errno;
 	}
+	goto out_restore_iov;
 
-	left = len - offset;
-	while (left && (offset + conn->mss_guest <= conn->tap_window)) {
-		if (left < conn->mss_guest)
-			send = left;
-		else
-			send = conn->mss_guest;
+zero_len:
+	if (conn->state >= ESTABLISHED_SOCK_FIN)
+		goto out_restore_iov;
 
-		if (offset + send > MAX_WINDOW) {
-			tcp_rst(c, conn);
-			return -EIO;
-		}
-
-		err = tcp_send_to_tap(c, conn, 0, sock_buf + offset, send);
-		if (err)
-			return err;
-
-		offset += send;
-		left -= send;
-	}
+	tcp_tap_state(conn, ESTABLISHED_SOCK_FIN);
+	tcp_send_to_tap(c, conn, FIN | ACK, NULL, 0);
+	goto out_restore_iov;
 
 out:
 	conn->ts_sock = *now;
 
-	return !!left;
+out_restore_iov:
+	if (iov_rem)
+		iov[fill_bufs - 1].iov_len = conn->mss_guest;
+	if (send_bufs)
+		iov_tap[send_bufs - 1].iov_len = mss_tap;
+
+	return ret;
 }
 
 /**
@@ -1445,6 +1904,11 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		conn->mss_guest = tcp_opt_get(th, len, OPT_MSS, NULL, NULL);
 		if (conn->mss_guest < 0)
 			conn->mss_guest = MSS_DEFAULT;
+
+		/* Don't upset qemu */
+		if (c->mode == MODE_PASST && c->v6 &&
+		    conn->mss_guest > SHRT_MAX)
+			conn->mss_guest = SHRT_MAX;
 
 		ws = tcp_opt_get(th, len, OPT_WS, NULL, NULL);
 		if (ws > MAX_WS) {

@@ -441,6 +441,7 @@ static void timer_handler(struct ctx *c, struct timespec *now)
 void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 			 uint32_t *ip_da)
 {
+	tcp_update_l2_buf(eth_d, eth_s, ip_da);
 	udp_update_l2_buf(eth_d, eth_s, ip_da);
 }
 

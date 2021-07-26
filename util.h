@@ -29,6 +29,8 @@ void debug(const char *format, ...);
 #define MAX(x, y)		(((x) > (y)) ? (x) : (y))
 #endif
 
+#define DIV_ROUND_UP(n, d)	(((n) + (d) - 1) / (d))
+
 #define SWAP(a, b)							\
 	do {								\
 		typeof(a) __x = (a); (a) = (b); (b) = __x;		\

@@ -14,6 +14,8 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		    struct tap_msg *msg, int count, struct timespec *now);
 int tcp_sock_init(struct ctx *c);
 void tcp_timer(struct ctx *c, struct timespec *ts);
+void tcp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
+		       uint32_t *ip_da);
 
 /**
  * union tcp_epoll_ref - epoll reference portion for TCP connections
