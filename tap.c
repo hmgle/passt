@@ -197,11 +197,12 @@ void tap_ip_send(struct ctx *c, struct in6_addr *src, uint8_t proto,
  * @msg:	Array of messages with the same L3 protocol
  * @count:	Count of messages with the same L3 protocol
  * @now:	Current timestamp
+ * @first:	First call for an IPv4 packet in this batch
  *
  * Return: count of packets consumed by handlers
  */
 static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count,
-			struct timespec *now)
+			struct timespec *now, int first)
 {
 	char buf_s[INET_ADDRSTRLEN] __attribute((__unused__));
 	char buf_d[INET_ADDRSTRLEN] __attribute((__unused__));
@@ -230,7 +231,7 @@ static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 		iph = (struct iphdr *)(eh + 1);
 		l4h = (char *)iph + iph->ihl * 4;
 
-		if (c->addr4_seen != iph->saddr) {
+		if (first && c->addr4_seen != iph->saddr) {
 			c->addr4_seen = iph->saddr;
 			proto_update_l2_buf(NULL, NULL, &c->addr4_seen);
 		}
@@ -307,11 +308,12 @@ static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count,
  * @msg:	Array of messages with the same L3 protocol
  * @count:	Count of messages with the same L3 protocol
  * @now:	Current timestamp
+ * @first:	First call for an IPv6 packet in this batch
  *
  * Return: count of packets consumed by handlers
  */
 static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
-			struct timespec *now)
+			struct timespec *now, int first)
 {
 	char buf_s[INET6_ADDRSTRLEN] __attribute((__unused__));
 	char buf_d[INET6_ADDRSTRLEN] __attribute((__unused__));
@@ -346,13 +348,16 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 		msg[i].l4h = l4h;
 		msg[i].l4_len = len - ((intptr_t)l4h - (intptr_t)eh);
 
-		if (IN6_IS_ADDR_LINKLOCAL(&ip6h->saddr)) {
-			c->addr6_ll_seen = ip6h->saddr;
+		if (first) {
+			if (IN6_IS_ADDR_LINKLOCAL(&ip6h->saddr)) {
+				c->addr6_ll_seen = ip6h->saddr;
 
-			if (IN6_IS_ADDR_UNSPECIFIED(&c->addr6_seen))
+				if (IN6_IS_ADDR_UNSPECIFIED(&c->addr6_seen)) {
+					c->addr6_seen = ip6h->saddr;
+				}
+			} else {
 				c->addr6_seen = ip6h->saddr;
-		} else {
-			c->addr6_seen = ip6h->saddr;
+			}
 		}
 
 		ip6h->saddr = c->addr6;
@@ -431,7 +436,7 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
  */
 static int tap_handler_passt(struct ctx *c, struct timespec *now)
 {
-	int msg_count = 0, same, i = 0;
+	int msg_count = 0, same, i = 0, first_v4 = 1, first_v6 = 1;
 	struct tap_msg msg[TAP_MSGS];
 	struct ethhdr *eh;
 	char *p = pkt_buf;
@@ -483,7 +488,7 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 
 		switch (ntohs(eh->h_proto)) {
 		case ETH_P_ARP:
-			tap4_handler(c, msg + i, 1, now);
+			tap4_handler(c, msg + i, 1, now, 1);
 			i++;
 			break;
 		case ETH_P_IP:
@@ -496,7 +501,8 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 					break;
 			}
 
-			i += tap4_handler(c, msg + i, same, now);
+			i += tap4_handler(c, msg + i, same, now, first_v4);
+			first_v4 = 0;
 			break;
 		case ETH_P_IPV6:
 			for (same = 1; i + same < msg_count &&
@@ -508,7 +514,8 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 					break;
 			}
 
-			i += tap6_handler(c, msg + i, same, now);
+			i += tap6_handler(c, msg + i, same, now, first_v6);
+			first_v6 = 0;
 			break;
 		default:
 			i++;
@@ -544,13 +551,13 @@ static int tap_handler_pasta(struct ctx *c, struct timespec *now)
 
 		switch (ntohs(eh->h_proto)) {
 		case ETH_P_ARP:
-			tap4_handler(c, &msg, 1, now);
+			tap4_handler(c, &msg, 1, now, 1);
 			break;
 		case ETH_P_IP:
-			tap4_handler(c, &msg, 1, now);
+			tap4_handler(c, &msg, 1, now, 1);
 			break;
 		case ETH_P_IPV6:
-			tap6_handler(c, &msg, 1, now);
+			tap6_handler(c, &msg, 1, now, 1);
 			break;
 		}
 	}
