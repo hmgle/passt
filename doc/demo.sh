@@ -19,7 +19,7 @@ get_token() {
 	unset IFS
 }
 
-ipv6_dev() { get_token "dev" $(ip -o -6 ro show default); }
+ipv6_dev() { get_token "dev" $(ip -o -6 ro show default | grep via); }
 ipv6_devaddr() { get_token "inet6" $(ip -o -6 ad sh dev "${1}" scope global); }
 ipv6_ll_addr() { get_token "inet6" $(ip -o -6 ad sh dev "${1}" scope link); }
 ipv6_mask() { echo ${1#*/}; }
