@@ -48,7 +48,7 @@ void name(const char *format, ...) {					\
 	tm = gmtime(&tp.tv_sec);					\
 	strftime(ts, sizeof(ts), "%b %d %T.", tm);			\
 									\
-	fprintf(stderr, "%s%04lu: ", ts, tp.tv_nsec / (1000 * 1000));	\
+	fprintf(stderr, "%s%04lu: ", ts, tp.tv_nsec / (100 * 1000));	\
 	va_start(args, format);						\
 	vsyslog(level, format, args);					\
 	va_end(args);							\
