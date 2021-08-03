@@ -1545,12 +1545,16 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 	already_sent = conn->seq_to_tap - conn->seq_ack_from_tap;
 
 	if (!conn->tap_window || already_sent >= conn->tap_window)
-		return 1;
+		return 0;
 
 	fill_bufs = DIV_ROUND_UP(conn->tap_window - already_sent,
 				 conn->mss_guest);
-	if (fill_bufs > TCP_TAP_FRAMES)
+	if (fill_bufs > TCP_TAP_FRAMES) {
 		fill_bufs = TCP_TAP_FRAMES;
+		iov_rem = 0;
+	} else {
+		iov_rem = (conn->tap_window - already_sent) % conn->mss_guest;
+	}
 
 	/* Adjust iovec length for recvmsg() based on what was set last time. */
 	if (v4) {
@@ -1562,21 +1566,16 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 		buf_mss = &tcp6_l2_buf_mss;
 		buf_mss_nr_set = &tcp6_l2_buf_mss_nr_set;
 	}
-	if (*buf_mss != conn->mss_guest) {
-		for (i = 0; i < fill_bufs; i++)
-			iov[i].iov_len = conn->mss_guest;
-		*buf_mss = conn->mss_guest;
-		*buf_mss_nr_set = fill_bufs - 1;
-	} else if (*buf_mss_nr_set < fill_bufs) {
-		for (i = *buf_mss_nr_set; i < fill_bufs; i++)
-			iov[i].iov_len = conn->mss_guest;
-		*buf_mss_nr_set = fill_bufs - 1;
-	}
+	if (*buf_mss != conn->mss_guest)
+		*buf_mss_nr_set = 0;
+	for (i = *buf_mss_nr_set; i < fill_bufs; i++)
+		iov[i].iov_len = conn->mss_guest;
+	*buf_mss = conn->mss_guest;
+	*buf_mss_nr_set = fill_bufs - 1;
 
 	/* First buffer is to discard data, last one may be partially filled. */
 	iov[-1].iov_len = already_sent;
-	iov_rem = (conn->tap_window - already_sent) % conn->mss_guest;
-	if (iov_rem && fill_bufs < TCP_TAP_FRAMES)
+	if (iov_rem)
 		iov[fill_bufs - 1].iov_len = iov_rem;
 	if (v4)
 		tcp4_l2_mh_sock.msg_iovlen = fill_bufs + 1;
@@ -1616,27 +1615,28 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 		buf_mss_tap = &tcp6_l2_buf_mss_tap;
 		buf_mss_tap_nr_set = &tcp6_l2_buf_mss_tap_nr_set;
 	}
-	if (*buf_mss_tap != mss_tap) {
-		for (i = 0; i < send_bufs; i++)
-			iov_tap[i].iov_len = mss_tap;
-		*buf_mss_tap = mss_tap;
-		*buf_mss_tap_nr_set = send_bufs;
-	} else if (*buf_mss_tap_nr_set < send_bufs) {
-		for (i = *buf_mss_tap_nr_set; i < send_bufs; i++)
-			iov_tap[i].iov_len = mss_tap;
-		*buf_mss_tap_nr_set = send_bufs;
-	}
+	if (*buf_mss_tap != mss_tap)
+		*buf_mss_tap_nr_set = 0;
+	for (i = *buf_mss_tap_nr_set; i < send_bufs; i++)
+		iov_tap[i].iov_len = mss_tap;
+	*buf_mss_tap = mss_tap;
+	*buf_mss_tap_nr_set = send_bufs;
 
 	iov_tap[send_bufs - 1].iov_len = mss_tap - conn->mss_guest + last_len;
 
 	/* Likely, some new data was acked too. */
 	if (conn->seq_from_tap != conn->seq_ack_to_tap) {
-		if (getsockopt(conn->sock, SOL_TCP, TCP_INFO, &info, &sl))
-			goto err;
+		if (conn->no_snd_wnd) {
+			conn->seq_ack_to_tap = conn->seq_from_tap;
+		} else {
+			if (getsockopt(conn->sock, SOL_TCP, TCP_INFO, &info,
+				       &sl))
+				goto err;
 
-		conn->tcpi_acked_last = info.tcpi_bytes_acked;
-		conn->seq_ack_to_tap = info.tcpi_bytes_acked +
-				       conn->seq_init_from_tap;
+			conn->tcpi_acked_last = info.tcpi_bytes_acked;
+			conn->seq_ack_to_tap = info.tcpi_bytes_acked +
+					       conn->seq_init_from_tap;
+		}
 	} else {
 		info.tcpi_snd_wscale = conn->ws;
 		info.tcpi_snd_wnd = conn->tcpi_snd_wnd;
@@ -1776,11 +1776,14 @@ err:
 	goto out_restore_iov;
 
 zero_len:
-	if (conn->state >= ESTABLISHED_SOCK_FIN)
-		goto out_restore_iov;
+	if (conn->state == FIN_WAIT_1) {
+		tcp_tap_state(conn, FIN_WAIT_1_SOCK_FIN);
+	} else if (conn->state < ESTABLISHED_SOCK_FIN) {
+		tcp_tap_state(conn, ESTABLISHED_SOCK_FIN);
+		shutdown(conn->sock, SHUT_RD);
+		tcp_send_to_tap(c, conn, FIN | ACK, NULL, 0);
+	}
 
-	tcp_tap_state(conn, ESTABLISHED_SOCK_FIN);
-	tcp_send_to_tap(c, conn, FIN | ACK, NULL, 0);
 	goto out_restore_iov;
 
 out:
@@ -1807,10 +1810,11 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 			      struct tap_msg *msg, int count,
 			      struct timespec *now)
 {
+	int i, iov_i, keep = -1, ack = 0, fin = 0, retr = 0;
 	struct msghdr mh = { .msg_iov = tcp_tap_iov };
 	uint32_t max_ack_seq = conn->seq_ack_from_tap;
 	uint32_t seq_from_tap = conn->seq_from_tap;
-	int i, iov_i, keep = -1, ack = 0, fin = 0;
+	uint16_t max_ack_seq_wnd;
 	ssize_t len;
 
 	for (i = 0, iov_i = 0; i < count; i++) {
@@ -1840,16 +1844,32 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 
 		seq = ntohl(th->seq);
 		ack_seq = ntohl(th->ack_seq);
+		if (!i) {
+			if (count == 1)
+				max_ack_seq_wnd = ntohs(th->window);
+			else
+				max_ack_seq_wnd = ntohs(th->window) - 1;
+		}
 
 		if (th->ack) {
 			ack = 1;
 			if (ack_seq - conn->seq_ack_from_tap < MAX_WINDOW &&
-			    ack_seq - max_ack_seq < MAX_WINDOW)
+			    ack_seq - max_ack_seq < MAX_WINDOW) {
+
+				/* Fast re-transmit */
+				retr = !len && ack_seq == max_ack_seq &&
+				       max_ack_seq_wnd == ntohs(th->window);
+
+				max_ack_seq_wnd = ntohs(th->window);
 				max_ack_seq = ack_seq;
+			}
 		}
 
 		if (th->fin)
 			fin = 1;
+
+		if (!len)
+			continue;
 
 		seq_offset = seq_from_tap - seq;
 		/* Use data from this buffer only in these two cases:
@@ -1858,7 +1878,6 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		 * |--------| <-- len            |--------| <-- len
 		 * '----' <-- offset             ' <-- offset
 		 * ^ seq                         ^ seq
-		 *
 		 *        (offset >= 0, seq + len > seq_from_tap)
 		 *
 		 * discard in these two cases:
@@ -1900,6 +1919,11 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		tcp_sock_consume(conn, max_ack_seq);
 	}
 
+	if (retr) {
+		conn->seq_to_tap = max_ack_seq;
+		tcp_data_from_sock(c, conn, now);
+	}
+
 	if (!iov_i) {
 		if (keep != -1) {
 			tcp_send_to_tap(c, conn, ACK, NULL, 0);
@@ -1926,7 +1950,8 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 	}
 
 	conn->seq_from_tap += len;
-	tcp_send_to_tap(c, conn, 0, NULL, 0);
+	if (!fin)
+		tcp_send_to_tap(c, conn, 0, NULL, 0);
 
 fin:
 	if (conn->state == ESTABLISHED_SOCK_FIN && ack &&
@@ -1935,11 +1960,12 @@ fin:
 
 	if (fin) {
 		shutdown(conn->sock, SHUT_WR);
-		if (conn->state == ESTABLISHED)
+		if (conn->state == ESTABLISHED) {
 			tcp_tap_state(conn, FIN_WAIT_1);
-		else
+			tcp_data_from_sock(c, conn, now);
+		} else {
 			tcp_tap_state(conn, LAST_ACK);
-		return;
+		}
 	}
 }
 
@@ -2023,12 +2049,12 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		conn->seq_ack_to_tap = conn->seq_from_tap;
 
 		tcp_tap_state(conn, ESTABLISHED);
-		tcp_send_to_tap(c, conn, ACK, NULL, 0);
 
 		/* The client might have sent data already, which we didn't
 		 * dequeue waiting for SYN,ACK from tap -- check now.
 		 */
 		tcp_data_from_sock(c, conn, now);
+		tcp_send_to_tap(c, conn, 0, NULL, 0);
 
 		ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
 		ref.s = conn->sock;
@@ -2055,11 +2081,13 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 	case CLOSE_WAIT:
 		tcp_data_from_tap(c, conn, msg, count, now);
 		return count;
+	case FIN_WAIT_1:
+		tcp_send_to_tap(c, conn, ACK, NULL, 0);
+		break;
 	case FIN_WAIT_1_SOCK_FIN:
 		if (th->ack)
 			tcp_tap_destroy(c, conn);
 		break;
-	case FIN_WAIT_1:
 	case TAP_SYN_SENT:
 	case LAST_ACK:
 	case SPLICE_ACCEPTED:
@@ -2570,9 +2598,9 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			tcp_tap_state(conn, FIN_WAIT_1_SOCK_FIN);
 			shutdown(conn->sock, SHUT_RD);
 			tcp_data_from_sock(c, conn, now);
-			tcp_send_to_tap(c, conn, FIN | ACK, NULL, 0);
 			tcp_sock_consume(conn, conn->seq_ack_from_tap);
-		} else {
+			tcp_send_to_tap(c, conn, FIN | ACK, NULL, 0);
+		} else if (conn->state != ESTABLISHED_SOCK_FIN) {
 			tcp_tap_destroy(c, conn);
 		}
 	}
@@ -2731,7 +2759,7 @@ static void tcp_timer_one(struct ctx *c, struct tcp_tap_conn *conn,
 
 		if (sock_ms > ACK_INTERVAL) {
 			if (conn->seq_from_tap > conn->seq_ack_to_tap)
-				tcp_send_to_tap(c, conn, ACK, NULL, 0);
+				tcp_send_to_tap(c, conn, 0, NULL, 0);
 		}
 
 		if (ack_tap_ms > ACK_TIMEOUT) {
