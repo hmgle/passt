@@ -189,10 +189,13 @@ int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
 	if (bind(fd, sa, sl) < 0) {
 		/* We'll fail to bind to low ports if we don't have enough
 		 * capabilities, and we'll fail to bind on already bound ports,
-		 * this is fine.
+		 * this is fine. This might also fail for ICMP because of a
+		 * broken SELinux policy, see icmp_tap_handler().
 		 */
-		close(fd);
-		return 0;
+		if (proto != IPPROTO_ICMP && proto != IPPROTO_ICMPV6) {
+			close(fd);
+			return 0;
+		}
 	}
 
 	if (proto == IPPROTO_TCP && listen(fd, 128) < 0) {
