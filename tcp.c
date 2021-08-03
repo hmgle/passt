@@ -1081,15 +1081,17 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 	uint32_t ack_offset = conn->seq_from_tap - conn->seq_ack_to_tap;
 	char buf[USHRT_MAX] = { 0 }, *data;
 	struct tcp_info info = { 0 };
+	int ws = 0, err, ack_pending;
 	socklen_t sl = sizeof(info);
 	struct tcphdr *th;
-	int ws = 0, err;
 
-	if (ack_offset < conn->tcpi_snd_wnd / 10 && !flags) {
+	if (!ack_offset && !flags) {
 		err = 0;
 		info.tcpi_bytes_acked = conn->tcpi_acked_last;
 		info.tcpi_snd_wnd = conn->tcpi_snd_wnd;
 		info.tcpi_snd_wscale = conn->ws;
+	} else if (conn->no_snd_wnd && !(flags & SYN)) {
+		err = 0;
 	} else {
 		err = getsockopt(conn->sock, SOL_TCP, TCP_INFO, &info, &sl);
 		if (err && !(flags & RST)) {
@@ -1135,21 +1137,32 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		conn->seq_to_tap += len;
 	}
 
-	if (!err && ((info.tcpi_bytes_acked > conn->tcpi_acked_last) ||
-		     (flags & ACK) || len)) {
+	if (conn->no_snd_wnd) {
+		ack_pending = (conn->seq_from_tap - conn->seq_ack_to_tap) <
+			      MAX_WINDOW;
+	} else {
+		ack_pending = info.tcpi_bytes_acked > conn->tcpi_acked_last;
+	}
+
+	if (!err && (ack_pending || (flags & ACK) || len)) {
 		th->ack = 1;
 
-		conn->seq_ack_to_tap = info.tcpi_bytes_acked +
-				       conn->seq_init_from_tap;
-
-		if (conn->state == LAST_ACK) {
-			conn->seq_ack_to_tap = conn->seq_from_tap + 1;
-			th->seq = htonl(ntohl(th->seq) + 1);
+		if (conn->no_snd_wnd) {
+			conn->seq_ack_to_tap = conn->seq_from_tap;
+		} else {
+			conn->seq_ack_to_tap = info.tcpi_bytes_acked +
+					       conn->seq_init_from_tap;
+			conn->tcpi_acked_last = info.tcpi_bytes_acked;
 		}
 
-		th->ack_seq = htonl(conn->seq_ack_to_tap);
+		if (conn->state == LAST_ACK ||
+		    conn->state == FIN_WAIT_1_SOCK_FIN)
+			conn->seq_ack_to_tap = conn->seq_from_tap + 1;
 
-		conn->tcpi_acked_last = info.tcpi_bytes_acked;
+		if (conn->state == LAST_ACK)
+			th->seq = htonl(ntohl(th->seq) + 1);
+
+		th->ack_seq = htonl(conn->seq_ack_to_tap);
 	} else {
 		if (!len && !flags)
 			return 0;
