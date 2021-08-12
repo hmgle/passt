@@ -36,7 +36,6 @@
 #include "util.h"
 #include "passt.h"
 
-#ifdef DEBUG
 #define logfn(name, level)						\
 void name(const char *format, ...) {					\
 	char ts[sizeof("Mmm dd hh:mm:ss.")];				\
@@ -44,37 +43,33 @@ void name(const char *format, ...) {					\
 	struct tm *tm;							\
 	va_list args;							\
 									\
-	clock_gettime(CLOCK_REALTIME, &tp);				\
-	tm = gmtime(&tp.tv_sec);					\
-	strftime(ts, sizeof(ts), "%b %d %T.", tm);			\
+	if (setlogmask(0) & LOG_MASK(LOG_DEBUG)) {			\
+		clock_gettime(CLOCK_REALTIME, &tp);			\
+		tm = gmtime(&tp.tv_sec);				\
+		strftime(ts, sizeof(ts), "%b %d %T.", tm);		\
 									\
-	fprintf(stderr, "%s%04lu: ", ts, tp.tv_nsec / (100 * 1000));	\
-	va_start(args, format);						\
-	vsyslog(level, format, args);					\
-	va_end(args);							\
-	va_start(args, format);						\
-	vfprintf(stderr, format, args); 				\
-	va_end(args);							\
-	if (format[strlen(format)] != '\n')				\
-		fprintf(stderr, "\n");					\
-}
-#else
-#define logfn(name, level)						\
-void name(const char *format, ...) {					\
-	va_list args;							\
+		fprintf(stderr, "%s%04lu: ", ts,			\
+			tp.tv_nsec / (100 * 1000));			\
+	}								\
 									\
 	va_start(args, format);						\
 	vsyslog(level, format, args);					\
 	va_end(args);							\
+									\
+	if (setlogmask(0) & LOG_MASK(LOG_DEBUG) ||			\
+	    setlogmask(0) == LOG_MASK(LOG_EMERG)) {			\
+		va_start(args, format);					\
+		vfprintf(stderr, format, args); 			\
+		va_end(args);						\
+		if (format[strlen(format)] != '\n')			\
+			fprintf(stderr, "\n");				\
+	}								\
 }
-#endif
 
 logfn(err,   LOG_ERR)
 logfn(warn,  LOG_WARNING)
 logfn(info,  LOG_INFO)
-#ifdef DEBUG
 logfn(debug, LOG_DEBUG)
-#endif
 
 /**
  * ipv6_l4hdr() - Find pointer to L4 header in IPv6 packet and extract protocol
@@ -171,12 +166,16 @@ int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
 		sa = (const struct sockaddr *)&addr4;
 		sl = sizeof(addr4);
 	} else {
-		if (bind_addr == BIND_LOOPBACK)
+		if (bind_addr == BIND_LOOPBACK) {
 			addr6.sin6_addr = in6addr_loopback;
-		else if (bind_addr == BIND_EXT)
+		} else if (bind_addr == BIND_EXT) {
 			addr6.sin6_addr = c->addr6;
-		else
+		} else if (bind_addr == BIND_LL) {
+			addr6.sin6_addr = c->addr6_ll;
+			addr6.sin6_scope_id = if_nametoindex(c->ifn);
+		} else {
 			addr6.sin6_addr = in6addr_any;
+		}
 
 		sa = (const struct sockaddr *)&addr6;
 		sl = sizeof(addr6);

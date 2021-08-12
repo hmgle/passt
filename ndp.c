@@ -64,6 +64,9 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 	    ih->icmp6_type < RS || ih->icmp6_type > NA)
 		return 0;
 
+	if (c->no_ndp)
+		return 1;
+
 	ehr = (struct ethhdr *)buf;
 	ip6hr = (struct ipv6hdr *)(ehr + 1);
 	ihr = (struct icmp6hdr *)(ip6hr + 1);
@@ -91,6 +94,9 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		size_t len = 0;
 		int i, n;
 
+		if (c->no_ra)
+			return 1;
+
 		info("NDP: received RS, sending RA");
 		ihr->icmp6_type = RA;
 		ihr->icmp6_code = 0;
@@ -109,6 +115,14 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		p += 8;
 		memcpy(p, &c->addr6, 8);	/* prefix */
 		p += 16;
+
+		if (c->mtu) {
+			*p++ = 5;			/* type */
+			*p++ = 1;			/* length */
+			p += 2;				/* reserved */
+			*(uint32_t *)p = htonl(c->mtu);	/* MTU */
+			p += 4;
+		}
 
 		for (n = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[n]); n++);
 		if (n) {

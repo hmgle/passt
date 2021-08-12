@@ -508,12 +508,37 @@ struct tcp_splice_conn {
 	int v6;
 };
 
+/* Port re-mappings as delta, indexed by original destination port */
+static in_port_t		tcp_port_delta_to_tap	[USHRT_MAX];
+static in_port_t		tcp_port_delta_to_init	[USHRT_MAX];
+
+/**
+ * tcp_remap_to_tap() - Set delta for port translation toward guest/tap
+ * @port:	Original destination port, host order
+ * @delta:	Delta to be added to original destination port
+ */
+void tcp_remap_to_tap(in_port_t port, in_port_t delta)
+{
+	tcp_port_delta_to_tap[port] = delta;
+}
+
+/**
+ * tcp_remap_to_tap() - Set delta for port translation toward init namespace
+ * @port:	Original destination port, host order
+ * @delta:	Delta to be added to original destination port
+ */
+void tcp_remap_to_init(in_port_t port, in_port_t delta)
+{
+	tcp_port_delta_to_init[port] = delta;
+}
+
 /* Static buffers */
 
 /**
  * tcp4_l2_buf_t - Pre-cooked IPv4 packet buffers for tap connections
  * @psum:	Partial IP header checksum (excluding tot_len and saddr)
- * @psum:	Partial TCP header checksum (excluding length and saddr)
+ * @tsum:	Partial TCP header checksum (excluding length and saddr)
+ * @pad:	Align TCP header to 32 bytes, for AVX2 checksum calculation only
  * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
  * @eh:		Pre-filled Ethernet header
  * @iph:	Pre-filled IP header (except for tot_len and saddr)
@@ -555,6 +580,7 @@ static int tcp4_l2_buf_mss_tap_nr_set;
 
 /**
  * tcp6_l2_buf_t - Pre-cooked IPv6 packet buffers for tap connections
+ * @pad:	Align IPv6 header for checksum calculation to 32B (AVX2) or 4B
  * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
  * @eh:		Pre-filled Ethernet header
  * @ip6h:	Pre-filled IP header (except for payload_len and addresses)
@@ -1011,7 +1037,7 @@ static struct tcp_tap_conn *tcp_hash_lookup(struct ctx *c, int af, void *addr,
 }
 
 /**
- * tcp_table_tap_compact - Compaction tap connection table
+ * tcp_table_tap_compact - Perform compaction on tap connection table
  * @c:		Execution context
  * @hole:	Pointer to recently closed connection
  */
@@ -1360,6 +1386,15 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	ref.s = s = socket(af, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
 	if (s < 0)
 		return;
+
+	if (af == AF_INET6 && IN6_IS_ADDR_LINKLOCAL(&addr6.sin6_addr)) {
+		struct sockaddr_in6 addr6_ll = {
+			.sin6_family = AF_INET6,
+			.sin6_addr = c->addr6_ll,
+			.sin6_scope_id = if_nametoindex(c->ifn),
+		};
+		bind(s, (struct sockaddr *)&addr6_ll, sizeof(addr6_ll));
+	}
 
 	conn = &tt[c->tcp.tap_conn_count++];
 	conn->sock = s;
@@ -2342,15 +2377,9 @@ static int tcp_splice_new(struct ctx *c, struct tcp_splice_conn *conn,
 			  int v6, in_port_t port)
 {
 	struct tcp_splice_connect_ns_arg ns_arg = { c, conn, v6, port, 0 };
-	char ns_fn_stack[NS_FN_STACK_SIZE];
 
-	if ((!v6 && bitmap_isset(c->tcp.port4_to_ns, port)) ||
-	    (v6 && bitmap_isset(c->tcp.port6_to_ns, port))) {
-		clone(tcp_splice_connect_ns,
-		      ns_fn_stack + sizeof(ns_fn_stack) / 2,
-		      CLONE_VM | CLONE_VFORK | CLONE_FILES | SIGCHLD,
-		      (void *)&ns_arg);
-
+	if (bitmap_isset(c->tcp.port_to_tap, port)) {
+		NS_CALL(tcp_splice_connect_ns, &ns_arg);
 		return ns_arg.ret;
 	}
 
@@ -2656,25 +2685,20 @@ static int tcp_sock_init_ns(void *arg)
 
 	ns_enter(c->pasta_pid);
 
-	if (c->v4) {
-		tref.v6 = 0;
-		for (port = 0; port < USHRT_MAX; port++) {
-			if (!bitmap_isset(c->tcp.port4_to_init, port))
-				continue;
+	for (port = 0; port < USHRT_MAX; port++) {
+		if (!bitmap_isset(c->tcp.port_to_init, port))
+			continue;
 
-			tref.index = port;
+		tref.index = (in_port_t)(port + tcp_port_delta_to_init[port]);
+
+		if (c->v4) {
+			tref.v6 = 0;
 			sock_l4(c, AF_INET, IPPROTO_TCP, port, BIND_LOOPBACK,
 				tref.u32);
 		}
-	}
 
-	if (c->v6) {
-		tref.v6 = 1;
-		for (port = 0; port < USHRT_MAX; port++) {
-			if (!bitmap_isset(c->tcp.port6_to_init, port))
-				continue;
-
-			tref.index = port;
+		if (c->v6) {
+			tref.v6 = 1;
 			sock_l4(c, AF_INET6, IPPROTO_TCP, port, BIND_LOOPBACK,
 				tref.u32);
 		}
@@ -2692,65 +2716,54 @@ static int tcp_sock_init_ns(void *arg)
 int tcp_sock_init(struct ctx *c)
 {
 	union tcp_epoll_ref tref = { .listen = 1 };
-	char ns_fn_stack[NS_FN_STACK_SIZE];
-	enum bind_type tap_bind;
 	in_port_t port;
 
 	getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret), GRND_RANDOM);
 
-	if (c->v4) {
-		tref.v6 = 0;
-		for (port = 0; port < USHRT_MAX; port++) {
-			tref.index = port;
+	for (port = 0; port < USHRT_MAX; port++) {
+		if (!bitmap_isset(c->tcp.port_to_tap, port))
+			continue;
 
-			if (bitmap_isset(c->tcp.port4_to_ns, port)) {
+		tref.index = (in_port_t)(port + tcp_port_delta_to_tap[port]);
+		if (c->v4) {
+			tref.v6 = 0;
+
+			tref.splice = 0;
+			sock_l4(c, AF_INET, IPPROTO_TCP, port,
+				c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
+				tref.u32);
+
+			if (c->mode == MODE_PASTA) {
 				tref.splice = 1;
 				sock_l4(c, AF_INET, IPPROTO_TCP, port,
 					BIND_LOOPBACK, tref.u32);
-				tap_bind = BIND_EXT;
-			} else {
-				tap_bind = BIND_ANY;
-			}
-
-			if (bitmap_isset(c->tcp.port4_to_tap, port)) {
-				tref.splice = 0;
-				sock_l4(c, AF_INET, IPPROTO_TCP, port,
-					tap_bind, tref.u32);
 			}
 		}
 
+		if (c->v6) {
+			tref.v6 = 1;
+
+			tref.splice = 0;
+			sock_l4(c, AF_INET6, IPPROTO_TCP, port,
+				c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
+				tref.u32);
+
+			if (c->mode == MODE_PASTA) {
+				tref.splice = 1;
+				sock_l4(c, AF_INET6, IPPROTO_TCP, port,
+					BIND_LOOPBACK, tref.u32);
+			}
+		}
+	}
+
+	if (c->v4)
 		tcp_sock4_iov_init();
-	}
 
-	if (c->v6) {
-		tref.v6 = 1;
-		for (port = 0; port < USHRT_MAX; port++) {
-			tref.index = port;
-
-			if (bitmap_isset(c->tcp.port6_to_ns, port)) {
-				tref.splice = 1;
-				sock_l4(c, AF_INET6, IPPROTO_TCP, port,
-					BIND_LOOPBACK, tref.u32);
-				tap_bind = BIND_EXT;
-			} else {
-				tap_bind = BIND_ANY;
-			}
-
-			if (bitmap_isset(c->tcp.port6_to_tap, port)) {
-				tref.splice = 0;
-				sock_l4(c, AF_INET6, IPPROTO_TCP, port,
-					tap_bind, tref.u32);
-			}
-		}
-
+	if (c->v6)
 		tcp_sock6_iov_init();
-	}
 
-	if (c->mode == MODE_PASTA) {
-		clone(tcp_sock_init_ns, ns_fn_stack + sizeof(ns_fn_stack) / 2,
-		      CLONE_VM | CLONE_VFORK | CLONE_FILES | SIGCHLD,
-		      (void *)c);
-	}
+	if (c->mode == MODE_PASTA)
+		NS_CALL(tcp_sock_init_ns, c);
 
 	return 0;
 }

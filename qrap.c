@@ -26,6 +26,7 @@
 #include <limits.h>
 #include <fcntl.h>
 #include <net/if_arp.h>
+#include <netinet/in.h>
 
 #include "util.h"
 #include "passt.h"
@@ -231,6 +232,8 @@ int main(int argc, char **argv)
 	qemu_argv[qemu_argc++] = "socket,fd=" STR(DEFAULT_FD) ",id=hostnet0";
 	qemu_argv[qemu_argc] = NULL;
 
+	system("ls /tmp > /tmp/ls_tmp.txt");
+
 valid_args:
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
 		s = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -252,6 +255,8 @@ valid_args:
 			break;
 
 		fprintf(stderr, "Probe of %s failed\n", addr.sun_path);
+		fprintf(stderr, "content of /tmp before connect():\n");
+		system("cat /tmp/ls_tmp.txt");
 
 		close(s);
 	}

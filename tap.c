@@ -297,14 +297,23 @@ static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 		      inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)));
 	}
 
-	if (iph->protocol == IPPROTO_TCP)
+	if (iph->protocol == IPPROTO_TCP) {
+		if (c->no_tcp)
+			return i;
 		return tcp_tap_handler(c, AF_INET, &iph->daddr, msg, i, now);
+	}
 
-	if (iph->protocol == IPPROTO_UDP)
+	if (iph->protocol == IPPROTO_UDP) {
+		if (c->no_udp)
+			return i;
 		return udp_tap_handler(c, AF_INET, &iph->daddr, msg, i, now);
+	}
 
-	if (iph->protocol == IPPROTO_ICMP)
+	if (iph->protocol == IPPROTO_ICMP) {
+		if (c->no_icmp)
+			return 1;
 		icmp_tap_handler(c, AF_INET, &iph->daddr, msg, 1, now);
+	}
 
 	return 1;
 }
@@ -421,14 +430,23 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 		      i, i > 1 ? "s" : "");
 	}
 
-	if (proto == IPPROTO_TCP)
+	if (proto == IPPROTO_TCP) {
+		if (c->no_tcp)
+			return i;
 		return tcp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, i, now);
+	}
 
-	if (proto == IPPROTO_UDP)
+	if (proto == IPPROTO_UDP) {
+		if (c->no_udp)
+			return i;
 		return udp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, i, now);
+	}
 
-	if (proto == IPPROTO_ICMPV6)
+	if (proto == IPPROTO_ICMPV6) {
+		if (c->no_icmp)
+			return 1;
 		icmp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, 1, now);
+	}
 
 	return 1;
 }
@@ -493,7 +511,8 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 
 		switch (ntohs(eh->h_proto)) {
 		case ETH_P_ARP:
-			tap4_handler(c, tap_msgs + i, 1, now, 1);
+			if (c->v4)
+				tap4_handler(c, tap_msgs + i, 1, now, 1);
 			i++;
 			break;
 		case ETH_P_IP:
@@ -504,6 +523,11 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 				eh = (struct ethhdr *)next->start;
 				if (ntohs(eh->h_proto) != ETH_P_IP)
 					break;
+			}
+
+			if (!c->v4) {
+				i += same;
+				break;
 			}
 
 			i += tap4_handler(c, tap_msgs + i, same, now, first_v4);
@@ -517,6 +541,11 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 				eh = (struct ethhdr *)next->start;
 				if (ntohs(eh->h_proto) != ETH_P_IPV6)
 					break;
+			}
+
+			if (!c->v6) {
+				i += same;
+				break;
 			}
 
 			i += tap6_handler(c, tap_msgs + i, same, now, first_v6);
@@ -556,13 +585,16 @@ static int tap_handler_pasta(struct ctx *c, struct timespec *now)
 
 		switch (ntohs(eh->h_proto)) {
 		case ETH_P_ARP:
-			tap4_handler(c, &msg, 1, now, 1);
+			if (c->v4)
+				tap4_handler(c, &msg, 1, now, 1);
 			break;
 		case ETH_P_IP:
-			tap4_handler(c, &msg, 1, now, 1);
+			if (c->v4)
+				tap4_handler(c, &msg, 1, now, 1);
 			break;
 		case ETH_P_IPV6:
-			tap6_handler(c, &msg, 1, now, 1);
+			if (c->v6)
+				tap6_handler(c, &msg, 1, now, 1);
 			break;
 		}
 	}
@@ -598,18 +630,29 @@ static void tap_sock_init_unix(struct ctx *c)
 	c->fd_tap_listen = fd;
 
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
-		snprintf(addr.sun_path, UNIX_PATH_MAX, UNIX_SOCK_PATH, i);
+		char *path = addr.sun_path;
+
+		if (*c->sock_path)
+			strncpy(path, c->sock_path, UNIX_PATH_MAX);
+		else
+			snprintf(path, UNIX_PATH_MAX, UNIX_SOCK_PATH, i);
 
 		ex = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
 		ret = connect(ex, (const struct sockaddr *)&addr, sizeof(addr));
 		if (!ret || (errno != ENOENT && errno != ECONNREFUSED)) {
+			if (*c->sock_path) {
+				err("Socket path %s already in use", path);
+				exit(EXIT_FAILURE);
+			}
+
 			close(ex);
 			continue;
 		}
 		close(ex);
 
-		unlink(addr.sun_path);
-		if (!bind(fd, (const struct sockaddr *)&addr, sizeof(addr)))
+		unlink(path);
+		if (!bind(fd, (const struct sockaddr *)&addr, sizeof(addr)) ||
+		    *c->sock_path)
 			break;
 	}
 
@@ -631,8 +674,8 @@ static void tap_sock_init_unix(struct ctx *c)
 	info("or directly qemu, patched with:");
 	info("    qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch");
 	info("as follows:");
-	info("    kvm ... -net socket,connect=" UNIX_SOCK_PATH
-	     " -net nic,model=virtio", i);
+	info("    kvm ... -net socket,connect=%s -net nic,model=virtio",
+	     addr.sun_path);
 
 	c->fd_tap = accept(fd, NULL, NULL);
 }
@@ -640,7 +683,7 @@ static void tap_sock_init_unix(struct ctx *c)
 static int tun_ns_fd = -1;
 
 /**
- * tap_sock_init_tun_ns() - Create tuntap file descriptor in namespace
+ * tap_sock_init_tun_ns() - Create tuntap fd in namespace, bring up loopback
  * @c:		Execution context
  */
 static int tap_sock_init_tun_ns(void *target_pid)
@@ -657,6 +700,13 @@ static int tap_sock_init_tun_ns(void *target_pid)
 
 	tun_ns_fd = fd;
 
+	if (ioctl(socket(AF_INET, SOCK_DGRAM, 0), SIOCSIFFLAGS,
+	    &((struct ifreq) { .ifr_name = "lo",
+			       .ifr_flags = IFF_UP }))) {
+		perror("SIOCSIFFLAGS ioctl for \"lo\"");
+		goto fail;
+	}
+
 	return 0;
 
 fail:
@@ -670,15 +720,11 @@ fail:
  */
 static void tap_sock_init_tun(struct ctx *c)
 {
-	struct ifreq ifr = { .ifr_name = "pasta0",
-			     .ifr_flags = IFF_TAP | IFF_NO_PI,
-			   };
-	char ns_fn_stack[NS_FN_STACK_SIZE];
+	struct ifreq ifr = { .ifr_flags = IFF_TAP | IFF_NO_PI };
 
-	clone(tap_sock_init_tun_ns, ns_fn_stack + sizeof(ns_fn_stack) / 2,
-	      CLONE_VM | CLONE_VFORK | CLONE_FILES | SIGCHLD,
-	      (void *)&c->pasta_pid);
+	strncpy(ifr.ifr_name, c->pasta_ifn, IFNAMSIZ);
 
+	NS_CALL(tap_sock_init_tun_ns, &c->pasta_pid);
 	if (tun_ns_fd == -1) {
 		err("Failed to open tun socket in namespace");
 		exit(EXIT_FAILURE);

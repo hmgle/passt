@@ -24,13 +24,12 @@
 #include <fcntl.h>
 #include <time.h>
 #include <net/ethernet.h>
+#include <netinet/in.h>
 #include <unistd.h>
 #include <net/if.h>
 
 #include "util.h"
 #include "passt.h"
-
-#ifdef DEBUG
 
 #define PCAP_PREFIX		"/tmp/passt_"
 #define PCAP_PREFIX_PASTA	"/tmp/pasta_"
@@ -165,52 +164,35 @@ void pcap_init(struct ctx *c, int index)
 	if (pcap_fd != -1)
 		close(pcap_fd);
 
-	if (c->mode == MODE_PASTA)
-		memcpy(name, PCAP_PREFIX_PASTA, sizeof(PCAP_PREFIX_PASTA));
+	if (!*c->pcap)
+		return;
 
-	gettimeofday(&tv, NULL);
-	tm = localtime(&tv.tv_sec);
-	strftime(name + strlen(PCAP_PREFIX), sizeof(PCAP_ISO8601_STR) - 1,
-		 PCAP_ISO8601_FORMAT, tm);
+	if (*c->pcap == 1) {
+		if (c->mode == MODE_PASTA)
+			memcpy(name, PCAP_PREFIX_PASTA,
+			       sizeof(PCAP_PREFIX_PASTA));
 
-	snprintf(name + strlen(PCAP_PREFIX) + strlen(PCAP_ISO8601_STR),
-		 sizeof(name) - strlen(PCAP_PREFIX) - strlen(PCAP_ISO8601_STR),
-		 "_%i.pcap", index);
+		gettimeofday(&tv, NULL);
+		tm = localtime(&tv.tv_sec);
+		strftime(name + strlen(PCAP_PREFIX),
+			 sizeof(PCAP_ISO8601_STR) - 1, PCAP_ISO8601_FORMAT, tm);
 
-	pcap_fd = open(name, O_WRONLY | O_CREAT | O_APPEND | O_DSYNC,
+		snprintf(name + strlen(PCAP_PREFIX) + strlen(PCAP_ISO8601_STR),
+			 sizeof(name) - strlen(PCAP_PREFIX) -
+					strlen(PCAP_ISO8601_STR),
+			 "_%i.pcap", index);
+
+		strncpy(c->pcap, name, PATH_MAX);
+	}
+
+	pcap_fd = open(c->pcap, O_WRONLY | O_CREAT | O_TRUNC | O_DSYNC,
 		       S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	if (pcap_fd == -1) {
 		perror("open");
 		return;
 	}
 
-	info("Saving packet capture at %s", name);
+	info("Saving packet capture at %s", c->pcap);
 
 	write(pcap_fd, &pcap_hdr, sizeof(pcap_hdr));
 }
-
-#else /* DEBUG */
-void pcap(char *pkt, size_t len)
-{
-	(void)pkt;
-	(void)len;
-}
-
-void pcapm(struct msghdr *mh)
-{
-	(void)mh;
-}
-
-void pcapmm(struct mmsghdr *mmh, unsigned int vlen)
-{
-	(void)mmh;
-	(void)vlen;
-}
-
-void pcap_init(struct ctx *c, int sock_index)
-{
-	(void)c;
-	(void)sock_index;
-
-}
-#endif

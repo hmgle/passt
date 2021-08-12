@@ -11,6 +11,8 @@ int udp_sock_init(struct ctx *c);
 void udp_timer(struct ctx *c, struct timespec *ts);
 void udp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 		       uint32_t *ip_da);
+void udp_remap_to_tap(in_port_t port, in_port_t delta);
+void udp_remap_to_init(in_port_t port, in_port_t delta);
 
 /**
  * union udp_epoll_ref - epoll reference portion for TCP connections
@@ -37,20 +39,13 @@ union udp_epoll_ref {
 
 /**
  * struct udp_ctx - Execution context for UDP
- * @port6_to_tap:	IPv6 ports bound host/init-side, packets to guest/tap
- * @port4_to_init:	IPv4 ports bound namespace-side, spliced to init
- * @port6_to_init:	IPv6 ports bound namespace-side, spliced to init
- * @port4_to_ns:	IPv4 ports bound init-side, spliced to namespace
- * @port6_to_ns:	IPv6 ports bound init-side, spliced to namespace
+ * @port_to_tap:	Ports bound host-side, data to tap or ns L4 socket
+ * @port_to_init:	Ports bound namespace-side, data to init L4 socket
  * @timer_run:		Timestamp of most recent timer run
  */
 struct udp_ctx {
-	uint8_t port4_to_tap	[USHRT_MAX / 8];
-	uint8_t port6_to_tap	[USHRT_MAX / 8];
-	uint8_t port4_to_init	[USHRT_MAX / 8];
-	uint8_t port6_to_init	[USHRT_MAX / 8];
-	uint8_t port4_to_ns	[USHRT_MAX / 8];
-	uint8_t port6_to_ns	[USHRT_MAX / 8];
+	uint8_t port_to_tap		[USHRT_MAX / 8];
+	uint8_t port_to_init		[USHRT_MAX / 8];
 	struct timespec timer_run;
 };
 

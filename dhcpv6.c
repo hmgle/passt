@@ -461,6 +461,9 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 	if (!uh || proto != IPPROTO_UDP || uh->dest != htons(547))
 		return 0;
 
+	if (c->no_dhcpv6)
+		return 1;
+
 	if (!IN6_IS_ADDR_MULTICAST(&ip6h->daddr))
 		return -1;
 

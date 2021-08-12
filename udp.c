@@ -51,7 +51,8 @@
  *       - send packet to udp4_splice_map[5000].ns_conn_sock
  *     - otherwise:
  *       - create new socket udp_splice_map[V4][5000].ns_conn_sock
- *       - connect in namespace to 127.0.0.1:80
+ *       - connect in namespace to 127.0.0.1:80 (note: this destination port
+ *         might be remapped to another port instead)
  *       - get source port of new connected socket (10000) with getsockname()
  *       - add to epoll with reference: index = 10000, splice: UDP_BACK_TO_INIT
  *       - set udp_splice_map[V4][10000].init_bound_sock to s
@@ -74,7 +75,8 @@
  *       - send packet to udp4_splice_map[2000].init_conn_sock
  *     - otherwise:
  *       - create new socket udp_splice_map[V4][2000].init_conn_sock
- *       - connect in init to 127.0.0.1:22,
+ *       - connect in init to 127.0.0.1:22 (note: this destination port
+ *         might be remapped to another port instead)
  *       - get source port of new connected socket (4000) with getsockname()
  *       - add to epoll with reference: index = 4000, splice = UDP_BACK_TO_NS
  *       - set udp_splice_map[V4][4000].ns_bound_sock to s
@@ -162,6 +164,12 @@ struct udp_splice_port {
 /* Port tracking, arrays indexed by packet source port (host order) */
 static struct udp_tap_port	udp_tap_map	[IP_VERSIONS][USHRT_MAX];
 static struct udp_splice_port	udp_splice_map	[IP_VERSIONS][USHRT_MAX];
+
+/* Port re-mappings as delta, indexed by original destination port */
+static in_port_t		udp_port_delta_to_tap	[USHRT_MAX];
+static in_port_t		udp_port_delta_from_tap	[USHRT_MAX];
+static in_port_t		udp_port_delta_to_init	[USHRT_MAX];
+static in_port_t		udp_port_delta_from_init[USHRT_MAX];
 
 enum udp_act_type {
 	UDP_ACT_TAP,
@@ -266,6 +274,28 @@ static struct mmsghdr	udp_splice_mmh_send	[UDP_SPLICE_FRAMES];
 
 static struct iovec	udp_splice_iov_sendto	[UDP_SPLICE_FRAMES];
 static struct mmsghdr	udp_splice_mmh_sendto	[UDP_SPLICE_FRAMES];
+
+/**
+ * udp_remap_to_tap() - Set delta for port translation to/from guest/tap
+ * @port:	Original destination port, host order
+ * @delta:	Delta to be added to original destination port
+ */
+void udp_remap_to_tap(in_port_t port, in_port_t delta)
+{
+	udp_port_delta_to_tap[port] = delta;
+	udp_port_delta_from_tap[port + delta] = USHRT_MAX - delta;
+}
+
+/**
+ * udp_remap_to_init() - Set delta for port translation to/from init namespace
+ * @port:	Original destination port, host order
+ * @delta:	Delta to be added to original destination port
+ */
+void udp_remap_to_init(in_port_t port, in_port_t delta)
+{
+	udp_port_delta_to_init[port] = delta;
+	udp_port_delta_from_init[port + delta] = USHRT_MAX - delta;
+}
 
 /**
  * udp_update_check4() - Update checksum with variable parts from stored one
@@ -506,7 +536,6 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 	struct msghdr *mh = &udp_splice_mmh_recv[0].msg_hdr;
 	struct sockaddr_storage *sa_s = mh->msg_name;
 	in_port_t src, dst = ref.udp.port, send_dst;
-	char ns_fn_stack[NS_FN_STACK_SIZE];
 	int s, v6 = ref.udp.v6, n, i;
 
 	if (!(events & EPOLLIN))
@@ -529,16 +558,14 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 
 	switch (ref.udp.splice) {
 	case UDP_TO_NS:
+		src += udp_port_delta_from_init[src];
+
 		if (!(s = udp_splice_map[v6][src].ns_conn_sock)) {
 			struct udp_splice_connect_ns_arg arg = {
 				c, v6, ref.s, src, dst, -1,
 			};
 
-			clone(udp_splice_connect_ns,
-			      ns_fn_stack + sizeof(ns_fn_stack) / 2,
-			      CLONE_VM | CLONE_VFORK | CLONE_FILES | SIGCHLD,
-			      (void *)&arg);
-
+			NS_CALL(udp_splice_connect_ns, &arg);
 			if ((s = arg.s) < 0)
 				return;
 		}
@@ -551,6 +578,8 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 		send_dst = udp_splice_map[v6][dst].init_dst_port;
 		break;
 	case UDP_TO_INIT:
+		src += udp_port_delta_from_tap[src];
+
 		if (!(s = udp_splice_map[v6][src].init_conn_sock)) {
 			s = udp_splice_connect(c, v6, ref.s, src, dst,
 					       UDP_BACK_TO_NS);
@@ -867,16 +896,28 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 			.sin6_port = uh->dest,
 			.sin6_addr = *(struct in6_addr *)addr,
 		};
+		enum bind_type bind_to = BIND_ANY;
 
 		sa = (struct sockaddr *)&s_in6;
 		sl = sizeof(s_in6);
+
+		if (!memcmp(addr, &c->gw6, sizeof(c->gw6)) &&
+		    udp_tap_map[V6][dst].ts_local) {
+			if (udp_tap_map[V6][dst].loopback)
+				s_in6.sin6_addr = in6addr_loopback;
+			else
+				s_in6.sin6_addr = c->addr6_seen;
+		} else if (IN6_IS_ADDR_LINKLOCAL(&s_in6.sin6_addr)) {
+			bind_to = BIND_LL;
+		}
 
 		if (!(s = udp_tap_map[V6][src].sock)) {
 			union udp_epoll_ref uref = { .bound = 1, .v6 = 1,
 						      .port = src
 						   };
 
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, src, 0, uref.u32);
+			s = sock_l4(c, AF_INET6, IPPROTO_UDP, src, bind_to,
+				    uref.u32);
 			if (s <= 0)
 				return count;
 
@@ -885,14 +926,6 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 		}
 
 		udp_tap_map[V6][src].ts = now->tv_sec;
-
-		if (!memcmp(addr, &c->gw6, sizeof(c->gw6)) &&
-		    udp_tap_map[V6][dst].ts_local) {
-			if (udp_tap_map[V6][dst].loopback)
-				s_in6.sin6_addr = in6addr_loopback;
-			else
-				s_in6.sin6_addr = c->addr6_seen;
-		}
 	}
 
 	for (i = 0; i < count; i++) {
@@ -923,30 +956,25 @@ int udp_sock_init_ns(void *arg)
 {
 	union udp_epoll_ref uref = { .bound = 1, .splice = UDP_TO_INIT };
 	struct ctx *c = (struct ctx *)arg;
-	in_port_t port;
+	in_port_t dst;
 
 	ns_enter(c->pasta_pid);
 
-	if (c->v4) {
-		uref.v6 = 0;
-		for (port = 0; port < USHRT_MAX; port++) {
-			if (!bitmap_isset(c->udp.port4_to_init, port))
-				continue;
+	for (dst = 0; dst < USHRT_MAX; dst++) {
+		if (!bitmap_isset(c->udp.port_to_init, dst))
+			continue;
 
-			uref.port = port;
-			sock_l4(c, AF_INET, IPPROTO_UDP, port, BIND_LOOPBACK,
+		uref.port = dst + udp_port_delta_to_init[dst];
+
+		if (c->v4) {
+			uref.v6 = 0;
+			sock_l4(c, AF_INET, IPPROTO_UDP, dst, BIND_LOOPBACK,
 				uref.u32);
 		}
-	}
 
-	if (c->v6) {
-		uref.v6 = 1;
-		for (port = 0; port < USHRT_MAX; port++) {
-			if (!bitmap_isset(c->udp.port6_to_init, port))
-				continue;
-
-			uref.port = port;
-			sock_l4(c, AF_INET6, IPPROTO_UDP, port, BIND_LOOPBACK,
+		if (c->v6) {
+			uref.v6 = 1;
+			sock_l4(c, AF_INET6, IPPROTO_UDP, dst, BIND_LOOPBACK,
 				uref.u32);
 		}
 	}
@@ -1016,68 +1044,56 @@ static void udp_splice_iov_init(void)
 int udp_sock_init(struct ctx *c)
 {
 	union udp_epoll_ref uref = { .bound = 1 };
-	char ns_fn_stack[NS_FN_STACK_SIZE];
-	enum bind_type tap_bind;
-	in_port_t port;
+	in_port_t dst;
 	int s;
 
-	if (c->v4) {
-		uref.v6 = 0;
-		for (port = 0; port < USHRT_MAX; port++) {
-			uref.port = port;
+	for (dst = 0; dst < USHRT_MAX; dst++) {
+		if (!bitmap_isset(c->udp.port_to_tap, dst))
+			continue;
 
-			if (bitmap_isset(c->udp.port4_to_ns, port)) {
+		uref.port = dst + udp_port_delta_to_tap[dst];
+
+		if (c->v4) {
+			uref.splice = 0;
+			uref.v6 = 0;
+			s = sock_l4(c, AF_INET, IPPROTO_UDP, dst,
+				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
+				    uref.u32);
+			if (s > 0)
+				udp_tap_map[V4][uref.port].sock = s;
+
+			if (c->mode == MODE_PASTA) {
 				uref.splice = UDP_TO_NS;
-				sock_l4(c, AF_INET, IPPROTO_UDP, port,
+				sock_l4(c, AF_INET, IPPROTO_UDP, dst,
 					BIND_LOOPBACK, uref.u32);
-				tap_bind = BIND_EXT;
-			} else {
-				tap_bind = BIND_ANY;
-			}
-
-			if (bitmap_isset(c->udp.port4_to_tap, port)) {
-				uref.splice = 0;
-				s = sock_l4(c, AF_INET, IPPROTO_UDP, port,
-					    tap_bind, uref.u32);
-				if (s > 0)
-					udp_tap_map[V4][port].sock = s;
 			}
 		}
+		if (c->v6) {
+			uref.splice = 0;
+			uref.v6 = 1;
+			s = sock_l4(c, AF_INET6, IPPROTO_UDP, dst,
+				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
+				    uref.u32);
+			if (s > 0)
+				udp_tap_map[V6][uref.port].sock = s;
 
+			if (c->mode == MODE_PASTA) {
+				uref.splice = UDP_TO_NS;
+				sock_l4(c, AF_INET6, IPPROTO_UDP, dst,
+					BIND_LOOPBACK, uref.u32);
+			}
+		}
+	}
+
+	if (c->v4)
 		udp_sock4_iov_init();
-	}
 
-	if (c->v6) {
-		uref.v6 = 1;
-		for (port = 0; port < USHRT_MAX; port++) {
-			uref.port = port;
-
-			if (bitmap_isset(c->udp.port6_to_ns, port)) {
-				uref.splice = UDP_TO_NS;
-				sock_l4(c, AF_INET6, IPPROTO_UDP, port,
-					BIND_LOOPBACK, uref.u32);
-				tap_bind = BIND_EXT;
-			} else {
-				tap_bind = BIND_ANY;
-			}
-
-			if (bitmap_isset(c->udp.port6_to_tap, port)) {
-				uref.splice = 0;
-				s = sock_l4(c, AF_INET6, IPPROTO_UDP, port,
-					    tap_bind, uref.u32);
-				if (s > 0)
-					udp_tap_map[V6][port].sock = s;
-			}
-		}
-
+	if (c->v6)
 		udp_sock6_iov_init();
-	}
 
 	if (c->mode == MODE_PASTA) {
 		udp_splice_iov_init();
-		clone(udp_sock_init_ns, ns_fn_stack + sizeof(ns_fn_stack) / 2,
-		      CLONE_VM | CLONE_VFORK | CLONE_FILES | SIGCHLD,
-		      (void *)c);
+		NS_CALL(udp_sock_init_ns, c);
 	}
 
 	return 0;

@@ -52,11 +52,9 @@ union epoll_ref {
 #define PKT_BUF_BYTES		MAX(TAP_BUF_BYTES, 0)
 extern char pkt_buf		[PKT_BUF_BYTES];
 
-#ifdef DEBUG
 extern char *ip_proto_str[];
 #define IP_PROTO_STR(n)							\
 	(((n) <= IPPROTO_SCTP && ip_proto_str[(n)]) ? ip_proto_str[(n)] : "?")
-#endif
 
 #include <resolv.h>	/* For MAXNS below */
 
@@ -69,6 +67,7 @@ struct fqdn {
 };
 
 #include <net/if.h>
+#include <linux/un.h>
 
 enum passt_modes {
 	MODE_PASST,
@@ -79,6 +78,12 @@ enum passt_modes {
  * struct ctx - Execution context
  * @mode:		Operation mode, qemu/UNIX domain socket or namespace/tap
  * @pasta_pid:		Target PID of namespace for pasta mode
+ * @debug:		Enable debug mode
+ * @quiet:		Don't print informational messages
+ * @foreground:		Run in foreground, don't log to stderr by default
+ * @stderr:		Force logging to stderr
+ * @sock_path:		Path for UNIX domain socket
+ * @pcap:		Path for packet capture file
  * @epollfd:		File descriptor for epoll instance
  * @fd_tap_listen:	File descriptor for listening AF_UNIX socket, if any
  * @fd_tap:		File descriptor for AF_UNIX socket or tuntap device
@@ -93,18 +98,36 @@ enum passt_modes {
  * @dns_search:		DNS search list
  * @v6:			Enable IPv6 transport
  * @addr6:		IPv6 address for external, routable interface
+ * @addr6_ll:		Link-local IPv6 address on external, routable interface
  * @addr6_seen:		Latest IPv6 global/site address seen as source from tap
  * @addr6_ll_seen:	Latest IPv6 link-local address seen as source from tap
  * @gw6:		Default IPv6 gateway
  * @dns4:		IPv4 DNS addresses, zero-terminated
  * @ifn:		Name of routable interface
+ * @pasta_ifn:		Name of namespace interface for pasta
+ * @no_tcp:		Disable TCP operation
  * @tcp:		Context for TCP protocol handler
+ * @no_tcp:		Disable UDP operation
  * @udp:		Context for UDP protocol handler
+ * @no_icmp:		Disable ICMP operation
  * @icmp:		Context for ICMP protocol handler
+ * @mtu:		MTU passed via DHCP/NDP
+ * @no_dns:		Do not assign any DNS server via DHCP/DHCPv6/NDP
+ * @no_dns_search:	Do not assign any DNS domain search via DHCP/DHCPv6/NDP
+ * @no_dhcp:		Disable DHCP server
+ * @no_dhcpv6:		Disable DHCPv6 server
+ * @no_ndp:		Disable NDP handler altogether
+ * @no_ra:		Disable router advertisements
  */
 struct ctx {
 	enum passt_modes mode;
 	int pasta_pid;
+	int debug;
+	int quiet;
+	int foreground;
+	int stderr;
+	char sock_path[UNIX_PATH_MAX];
+	char pcap[PATH_MAX];
 
 	int epollfd;
 	int fd_tap_listen;
@@ -123,16 +146,29 @@ struct ctx {
 
 	int v6;
 	struct in6_addr addr6;
+	struct in6_addr addr6_ll;
 	struct in6_addr addr6_seen;
 	struct in6_addr addr6_ll_seen;
 	struct in6_addr gw6;
 	struct in6_addr dns6[MAXNS + 1];
 
 	char ifn[IF_NAMESIZE];
+	char pasta_ifn[IF_NAMESIZE];
 
+	int no_tcp;
 	struct tcp_ctx tcp;
+	int no_udp;
 	struct udp_ctx udp;
+	int no_icmp;
 	struct icmp_ctx icmp;
+
+	int mtu;
+	int no_dns;
+	int no_dns_search;
+	int no_dhcp;
+	int no_dhcpv6;
+	int no_ndp;
+	int no_ra;
 };
 
 void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,

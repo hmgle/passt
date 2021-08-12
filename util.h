@@ -1,12 +1,7 @@
 void err(const char *format, ...);
 void warn(const char *format, ...);
 void info(const char *format, ...);
-
-#ifdef DEBUG
 void debug(const char *format, ...);
-#else
-#define debug(...) { }
-#endif
 
 #define CHECK_SET_MIN_MAX(basename, fd)					\
 	do {								\
@@ -53,6 +48,14 @@ void debug(const char *format, ...);
 #define PORT_IS_EPHEMERAL(port) ((port) >= PORT_EPHEMERAL_MIN)
 
 #define NS_FN_STACK_SIZE	(RLIMIT_STACK_VAL * 1024 / 4)
+#define NS_CALL(fn, arg)						\
+	do {								\
+		char ns_fn_stack[NS_FN_STACK_SIZE];			\
+									\
+		clone((fn), ns_fn_stack + sizeof(ns_fn_stack) / 2,	\
+		      CLONE_VM | CLONE_VFORK | CLONE_FILES | SIGCHLD,	\
+		      (void *)(arg));					\
+	} while (0)
 
 #if __BYTE_ORDER == __BIG_ENDIAN
 #define L2_BUF_ETH_IP4_INIT						\
@@ -120,6 +123,7 @@ void debug(const char *format, ...);
 enum bind_type {
 	BIND_ANY = 0,
 	BIND_LOOPBACK,
+	BIND_LL,
 	BIND_EXT,
 };
 

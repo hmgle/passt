@@ -272,6 +272,9 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	if (uh->dest != htons(67))
 		return 0;
 
+	if (c->no_dhcp)
+		return 1;
+
 	mlen = len - sizeof(*eh) - iph->ihl * 4 - sizeof(*uh);
 	if (mlen != ntohs(uh->len) - sizeof(*uh) ||
 	    mlen < offsetof(struct msg, o) ||
@@ -304,6 +307,12 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	*(unsigned long *)opts[1].s =  c->mask4;
 	*(unsigned long *)opts[3].s =  c->gw4;
 	*(unsigned long *)opts[54].s = c->gw4;
+
+	if (c->mtu) {
+		opts[26].slen = 2;
+		opts[26].s[0] = c->mtu / 256;
+		opts[26].s[1] = c->mtu % 256;
+	}
 
 	for (i = 0, opts[6].slen = 0; c->dns4[i]; i++) {
 		((uint32_t *)opts[6].s)[i] = c->dns4[i];

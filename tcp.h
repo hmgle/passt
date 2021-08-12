@@ -16,6 +16,8 @@ int tcp_sock_init(struct ctx *c);
 void tcp_timer(struct ctx *c, struct timespec *ts);
 void tcp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 		       uint32_t *ip_da);
+void tcp_remap_to_tap(in_port_t port, in_port_t delta);
+void tcp_remap_to_init(in_port_t port, in_port_t delta);
 
 /**
  * union tcp_epoll_ref - epoll reference portion for TCP connections
@@ -40,24 +42,16 @@ union tcp_epoll_ref {
  * @hash_secret:	128-bit secret for hash functions, ISN and hash table
  * @tap_conn_count:	Count of tap connections in connection table
  * @splice_conn_count:	Count of spliced connections in connection table
- * @port4_to_tap:	IPv4 ports bound host/init-side, packets to guest/tap
- * @port6_to_tap:	IPv6 ports bound host/init-side, packets to guest/tap
- * @port4_to_init:	IPv4 ports bound namespace-side, spliced to init
- * @port6_to_init:	IPv6 ports bound namespace-side, spliced to init
- * @port4_to_ns:	IPv4 ports bound init-side, spliced to namespace
- * @port6_to_ns:	IPv6 ports bound init-side, spliced to namespace
+ * @port_to_tap:	Ports bound host-side, packets to tap or spliced
+ * @port_to_init:	Ports bound namespace-side, spliced to init
  * @timer_run:		Timestamp of most recent timer run
  */
 struct tcp_ctx {
 	uint64_t hash_secret[2];
 	int tap_conn_count;
 	int splice_conn_count;
-	uint8_t port4_to_tap	[USHRT_MAX / 8];
-	uint8_t port6_to_tap	[USHRT_MAX / 8];
-	uint8_t port4_to_init	[USHRT_MAX / 8];
-	uint8_t port6_to_init	[USHRT_MAX / 8];
-	uint8_t port4_to_ns	[USHRT_MAX / 8];
-	uint8_t port6_to_ns	[USHRT_MAX / 8];
+	uint8_t port_to_tap	[USHRT_MAX / 8];
+	uint8_t port_to_init	[USHRT_MAX / 8];
 	struct timespec timer_run;
 };
 
