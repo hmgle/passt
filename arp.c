@@ -63,6 +63,10 @@ int arp(struct ctx *c, struct ethhdr *eh, size_t len)
 	if (*((uint32_t *)&am->sip) && !memcmp(am->sip, am->tip, 4))
 		return 1;
 
+	/* Don't resolve our own address, either. */
+	if (!memcmp(am->tip, &c->addr4, 4))
+		return 1;
+
 	ah->ar_op = htons(ARPOP_REPLY);
 	memcpy(am->tha, am->sha, ETH_ALEN);
 	memcpy(am->sha, c->mac, ETH_ALEN);
