@@ -1,6 +1,8 @@
 CFLAGS += -Wall -Wextra -pedantic
 CFLAGS += -DRLIMIT_STACK_VAL=$(shell ulimit -s)
 
+prefix ?= /usr/local
+
 all: passt pasta passt4netns qrap
 
 avx2: CFLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
@@ -18,6 +20,7 @@ passt: passt.c passt.h arp.c arp.h checksum.c checksum.h conf.c conf.h \
 
 pasta: passt
 	ln -s passt pasta
+	ln -s passt.1 pasta.1
 
 passt4netns: passt
 	ln -s passt passt4netns
@@ -27,4 +30,16 @@ qrap: qrap.c passt.h
 
 .PHONY: clean
 clean:
-	-${RM} passt *.o qrap pasta passt4netns
+	-${RM} passt *.o qrap pasta pasta.1 passt4netns
+
+install: passt pasta qrap
+	cp -d passt pasta qrap $(prefix)/bin
+	cp -d passt.1 pasta.1 qrap.1 $(prefix)/man/man1
+
+uninstall:
+	-${RM} $(prefix)/bin/passt
+	-${RM} $(prefix)/bin/pasta
+	-${RM} $(prefix)/bin/qrap
+	-${RM} $(prefix)/man/man1/passt.1
+	-${RM} $(prefix)/man/man1/pasta.1
+	-${RM} $(prefix)/man/man1/qrap.1
