@@ -2,7 +2,7 @@
 
 /* PASST - Plug A Simple Socket Transport
  *
- * qrap.c - qemu wrapper connecting UNIX domain socket to socket file descriptor
+ * qrap.c - qemu wrapper connecting UNIX domain socket to file descriptor
  *
  * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
@@ -95,7 +95,7 @@ static const struct pci_dev {
  */
 void usage(const char *name)
 {
-	fprintf(stderr, "Usage: %s [FDNUM QEMU_CMD] ...\n", name);
+	fprintf(stderr, "Usage: %s [FDNUM QEMU_CMD] [QEMU_ARG]...\n", name);
 	fprintf(stderr, "\n");
 	fprintf(stderr, "If first and second arguments aren't a socket number\n"
 			"and a path, %s will try to locate a qemu binary\n"
