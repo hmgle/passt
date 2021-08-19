@@ -154,6 +154,18 @@ static void pasta_child_handler(int signal)
 }
 
 /**
+ * pasta_wait_for_ns() - Busy loop until we can enter the target namespace
+ * @target_pid:	PID of process associated with target namespace
+ *
+ * Return: 0
+ */
+static int pasta_wait_for_ns(void *target_pid)
+{
+	while (ns_enter(*(int *)target_pid));
+	return 0;
+}
+
+/**
  * pasta_start_ns() - Fork shell in new namespace if target PID is not given
  * @c:		Execution context
  */
@@ -178,8 +190,10 @@ static void pasta_start_ns(struct ctx *c)
 		exit(EXIT_FAILURE);
 	}
 
-	if ((pasta_child_pid = c->pasta_pid))
+	if ((pasta_child_pid = c->pasta_pid)) {
+		NS_CALL(pasta_wait_for_ns, &pasta_child_pid);
 		return;
+	}
 
 	if (unshare(CLONE_NEWNET | CLONE_NEWUSER)) {
 		perror("unshare");
