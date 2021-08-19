@@ -525,7 +525,7 @@ static void get_dns(struct ctx *c)
 	FILE *r;
 
 	dns4_set = !!*dns4;
-	dns6_set = !IN6_IS_ADDR_UNSPECIFIED(&dns6);
+	dns6_set = !IN6_IS_ADDR_UNSPECIFIED(dns6);
 	dnss_set = !!*s->n || c->no_dns_search;
 	dns_set = dns4_set || dns6_set || c->no_dns;
 
