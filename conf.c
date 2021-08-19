@@ -612,9 +612,9 @@ static void usage(const char *name)
 	info(   "    if FILE is not given, log to:");
 
 	if (strstr(name, "pasta") || strstr(name, "passt4netns"))
-		info("      pasta_ISO8601-TIMESTAMP_INSTANCE-NUMBER.pcap");
+		info("      /tmp/pasta_ISO8601-TIMESTAMP_INSTANCE-NUMBER.pcap");
 	else
-		info("      passt_ISO8601-TIMESTAMP_INSTANCE-NUMBER.pcap");
+		info("      /tmp/passt_ISO8601-TIMESTAMP_INSTANCE-NUMBER.pcap");
 
 	info(   "  -m, --mtu MTU	Assign MTU via DHCP/NDP");
 	info(   "    default: no MTU assigned via DHCP/NDP options");
@@ -662,7 +662,7 @@ static void usage(const char *name)
 	info(   "    SPEC can be:");
 	info(   "      'none': don't forward any ports");
 	info(   "      'all': forward all unbound, non-ephemeral ports");
-	info(   "      a comma-separated of ports, optionally ranged with '-'");
+	info(   "      a comma-separated list, optionally ranged with '-'");
 	info(   "        and optional target ports after ':'. Examples:");
 	info(   "        -t 22		Forward local port 22 to 22 on guest");
 	info(   "        -t 22:23	Forward local port 22 to 23 on guest");
@@ -686,7 +686,7 @@ pasta_ports:
 	info(   "    SPEC can be:");
 	info(   "      'none': don't forward any ports");
 	info(   "      'auto': forward all ports currently bound in namespace");
-	info(   "      a comma-separated of ports, optionally ranged with '-'");
+	info(   "      a comma-separated list, optionally ranged with '-'");
 	info(   "        and optional target ports after ':'. Examples:");
 	info(   "        -t 22	Forward local port 22 to port 22 in netns");
 	info(   "        -t 22:23	Forward local port 22 to port 23");
