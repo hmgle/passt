@@ -57,6 +57,12 @@ int arp(struct ctx *c, struct ethhdr *eh, size_t len)
 	    ah->ar_op != htons(ARPOP_REQUEST))
 		return 1;
 
+	/* Discard announcements (but not 0.0.0.0 "probes"): we might have the
+	 * same IP address, hide that.
+	 */
+	if (*((uint32_t *)&am->sip) && !memcmp(am->sip, am->tip, 4))
+		return 1;
+
 	ah->ar_op = htons(ARPOP_REPLY);
 	memcpy(am->tha, am->sha, ETH_ALEN);
 	memcpy(am->sha, c->mac, ETH_ALEN);
