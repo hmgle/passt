@@ -1,0 +1,707 @@
+.TH passt 1
+
+.SH NAME
+.B passt
+\- Unprivileged user-mode network connectivity for virtual machines
+.br
+.B pasta
+\- Unprivileged user-mode network connectivity for network namespaces
+
+.SH SYNOPSIS
+.B passt
+[\fIOPTION\fR]...
+.br
+.B pasta
+[\fIOPTION\fR]... [\fITARGET_PID\fR]
+
+.SH DESCRIPTION
+
+.SS passt
+
+.B passt
+(\fIP\fRlug \fIA\fR \fIS\fRimple \fIS\fRocket \fIT\fRransport) provides full,
+quasi-native network connectivity to virtual machines in user-mode without
+requiring any capabilities or privileges.
+
+The data plane implements a translation layer between a Layer-2 virtual network
+interface and native Layer-4 (TCP, UDP, ping) sockets on the host, giving the
+illusion that application processes residing on the guest are running on the
+local host, from a networking perspective.
+
+Built-in ARP, DHCP, NDP, and DHCPv6 implementations are designed to provide the
+guest with a network configuration that tightly resembles the host native
+configuration. With the default options, guest and host share IP addresses,
+routes, and port bindings.
+
+Port forwarding and translation allow networking services running in the guest
+to be reachable from both local and remote hosts.
+
+Unlike \fBslirp4netns\fR(1), \fBpasst\fR doesn't implement a full TCP stack: the
+TCP translation layer has no stateful data buffering and operates by reflecting
+one peer's observed parameters (congestion window size, acknowledged data, etc.)
+to the corresponding peer.
+
+Currently, the only supported hypervisor is \fBqemu\fR(1), connecting to
+\fBpasst\fR by means of a UNIX domain socket. This configuration can be obtained
+via out-of-tree qemu patches, available at: 
+
+	\fIhttps://passt.top/passt/tree/qemu\fR
+
+or with the \fBqrap\fR(1) wrapper.
+
+.SS pasta
+
+.B pasta
+(\fIP\fRack \fIA\fR \fIS\fRubtle \fIT\fRap \fIA\fRbstraction) provides
+equivalent functionality to network namespaces, as the one offered by
+\fBpasst\fR for virtual machines.
+
+If TARGET_PID is given, \fBpasta\fR associates to the user and network namespace
+of the corresponding process. Otherwise, \fBpasta\fR creates a new user and
+network namespace, and spawns an interactive shell within this context. A
+\fItap\fR device within the network namespace is created to provide network
+connectivity.
+
+For local TCP and UDP traffic only, \fBpasta\fR also implements a bypass path
+directly mapping Layer-4 sockets between \fIinit\fR and target namespaces,
+for performance reasons.
+
+.SH OPTIONS
+
+.TP
+.BR \-d ", " \-\-debug
+Be verbose, don't run in background.
+
+.TP
+.BR \-q ", " \-\-quiet
+Don't print informational messages.
+
+.TP
+.BR \-f ", " \-\-foreground
+Don't run in background.
+Default is to fork into background, if started from an interactive terminal.
+
+.TP
+.BR \-e ", " \-\-stderr
+Log to standard error too.
+Default is to log to system logger only, if started from an interactive
+terminal, and to both system logger and standard error otherwise.
+
+.TP
+.BR \-h ", " \-\-help
+Display a help message and exit.
+
+.TP
+.BR \-p ", " \-\-pcap " " \fIfile
+Capture tap-facing (that is, guest-side or namespace-side) network packets to
+\fIfile\fR in \fBpcap\fR format.
+
+If \fIfile\fR is not given, capture packets to
+
+	\fB/tmp/passt_\fIISO8601-timestamp\fR_\fIinstance-number\fB.pcap\fR
+
+in \fBpasst\fR mode and to
+
+	\fB/tmp/pasta_\fIISO8601-timestamp\fR_\fIinstance-number\fB.pcap\fR
+
+in \fBpasta\fR mode, where \fIinstance-number\fR is a progressive count of
+other detected instances running on the same host.
+
+.TP
+.BR \-m ", " \-\-mtu " " \fImtu
+Assign \fImtu\fR via DHCP (option 26) and NDP (option type 5).
+By default, no MTU options will be sent.
+
+.TP
+.BR \-a ", " \-\-address " " \fIaddr
+Assign IPv4 \fIaddr\fR via DHCP (\fByiaddr\fR), or \fIaddr\fR via DHCPv6 (option
+5) and an \fIaddr\fR-based prefix via NDP Router Advertisement (option type 3)
+for an IPv6 \fIaddr\fR.
+This option can be specified zero (for defaults) to two times (once for IPv4,
+once for IPv6).
+By default, assigned IPv4 and IPv6 addresses are taken from the host interface
+with the first default route.
+
+.TP
+.BR \-n ", " \-\-netmask " " \fImask
+Assign IPv4 netmask \fImask\fR, expressed as dot-decimal or number of bits, via
+DHCP (option 1).
+By default, the netmask associated to the host address matching the assigned one
+is used. If there's no matching address on the host, the netmask is determined
+according to the CIDR block of the assigned address (RFC 4632).
+
+.TP
+.BR \-M ", " \-\-mac-addr " " \fIaddr
+Use source MAC address \fIaddr\fR when communicating to the guest or to the
+target namespace.
+Default is to use the MAC address of the interface with the first default route
+on the host.
+
+.TP
+.BR \-g ", " \-\-gateway " " \fIaddr
+Assign IPv4 \fIaddr\fR as default gateway via DHCP (option 3), or IPv6
+\fIaddr\fR as source for NDP Router Advertisement and DHCPv6 messages.
+This option can be specified zero (for defaults) to two times (once for IPv4,
+once for IPv6).
+By default, IPv4 and IPv6 addresses are taken from the host interface with the
+first default route.
+
+Note: these addresses are also used as source address for packets directed to
+the guest or to the target namespace having a loopback or local source address,
+to allow mapping of local traffic to guest and target namespace. See the
+\fBNOTES\fR below for more details about this mechanism.
+
+.TP
+.BR \-i ", " \-\-interface " " \fIname
+Use host interface \fIname\fR to derive addresses and routes.
+Default is to use the interface with the first default route.
+
+.TP
+.BR \-D ", " \-\-dns " " \fIaddr
+Assign IPv4 \fIaddr\fR via DHCP (option 23) or IPv6 \fIaddr\fR via NDP Router
+Advertisement (option type 25) and DHCPv6 (option 23) as DNS resolver.
+This option can be specified multiple times, and a single, empty option disables
+DNS options altogether.
+In \fBpasst\fR mode, default is to use addresses from \fI/etc/resolv.conf\fR,
+and, in \fBpasta\fR mode, no addresses are sent by default.
+.TP
+.BR \-S ", " \-\-search " " \fIlist
+Assign space-separated \fIlist\fR via DHCP (option 119), via NDP Router
+Advertisement (option type 31) and DHCPv6 (option 24) as DNS domain search list.
+A single, empty option disables sending the DNS domain search list.
+In \fBpasst\fR mode, default is to use the search list from
+\fI/etc/resolv.conf\fR, and, in \fBpasta\fR mode, no list is sent by default.
+
+.TP
+.BR \-\-no-tcp
+Disable the TCP protocol handler. No TCP connections will be accepted host-side,
+and TCP packets coming from guest or target namespace will be silently dropped.
+
+.TP
+.BR \-\-no-udp
+Disable the UDP protocol handler. No UDP traffic coming from the host side will
+be forwarded, and UDP packets coming from guest or target namespace will be
+silently dropped.
+
+.TP
+.BR \-\-no-icmp
+Disable the ICMP/ICMPv6 echo handler. ICMP and ICMPv6 echo requests coming from
+guest or target namespace will be silently dropped.
+
+.TP
+.BR \-\-no-dhcp
+Disable the DHCP server. DHCP client requests coming from guest or target
+namespace will be silently dropped.
+
+.TP
+.BR \-\-no-ndp
+Disable NDP responses. NDP messages coming from guest or target namespace will
+be ignored.
+
+.TP
+.BR \-\-no-dhcpv6
+Disable the DHCPv6 server. DHCPv6 client requests coming from guest or target
+namespace will be silently dropped.
+
+.TP
+.BR \-\-no-ra
+Disable Router Advertisements. Router Solicitations coming from guest or target
+namespace will be ignored.
+
+.TP
+.BR \-4 ", " \-\-ipv4-only
+Enable IPv4-only operation. IPv6 traffic will be ignored.
+By default, IPv6 operation is enabled as long as at least an IPv6 default route
+and an interface address are configured on a given host interface.
+
+.TP
+.BR \-4 ", " \-\-ipv6-only
+Enable IPv6-only operation. IPv4 traffic will be ignored.
+By default, IPv4 operation is enabled as long as at least an IPv4 default route
+and an interface address are configured on a given host interface.
+
+.SS \fBpasst\fR-only options
+
+.TP
+.BR \-s ", " \-\-socket " " \fIpath
+Path for UNIX domain socket used by \fBqemu\fR(1) or \fBqrap\fR(1) to connect to
+\fBpasst\fR.
+Default is to probe a free socket, not accepting connections, starting from
+\fI/tmp/passt_1.socket\fR to \fI/tmp/passt_64.socket\fR.
+
+.TP
+.BR \-t ", " \-\-tcp-ports " " \fIspec
+Configure TCP port forwarding to guest. \fIspec\fR can be one of:
+.RS
+
+.TP
+.BR none
+Don't forward any ports
+
+.TP
+.BR all
+Forward all unbound, non-ephemeral ports, as permitted by current capabilities.
+For low (< 1024) ports, see \fBNOTES\fR.
+
+.TP
+.BR ports
+A comma-separated list of ports, optionally ranged with \fI-\fR, and,
+optionally, with target ports after \fI:\fR, if they differ. Examples:
+.RS
+.TP
+-t 22
+Forward local port 22 to 22 on the guest
+.TP
+-t 22:23
+Forward local port 22 to port 23 on the guest
+.TP
+-t 22,25
+Forward local ports 22 and 25 to ports 22 and 25 on the guest
+.TP
+-t 22-80
+Forward local ports 22 to 80 to corresponding ports on the guest
+.TP
+-t 22-80-32:90
+Forward local ports 22 to 80 to corresponding ports on the guest plus 10
+.RE
+
+Default is \fBnone\fR.
+.RE
+
+.TP
+.BR \-u ", " \-\-udp-ports " " \fIspec
+Configure UDP port forwarding to guest. \fIspec\fR is as described for TCP
+above.
+
+Note: unless overridden, UDP ports with numbers corresponding to forwarded TCP
+port numbers are forwarded too, without, however, any port translation. IPv6
+bound ports are also forwarded for IPv4.
+
+Default is \fBnone\fR.
+
+.SS \fBpasta\fR-only options
+
+.TP
+.BR \-I ", " \-\-ns-ifname " " \fIname
+Name of tap interface to be created in target namespace.
+By default, the same interface name as the external, routable interface is used.
+
+.TP
+.BR \-t ", " \-\-tcp-ports " " \fIspec
+Configure TCP port forwarding to namespace. \fIspec\fR can be one of:
+.RS
+
+.TP
+.BR none
+Don't forward any ports
+
+.TP
+.BR auto
+Forward all ports currently bound in the namespace. The list of ports is derived
+from listening sockets reported by \fI/proc/net/tcp\fR and \fI/proc/net/tcp6\fR,
+see \fBproc\fR(5).
+
+.TP
+.BR ports
+A comma-separated list of ports, optionally ranged with \fI-\fR, and,
+optionally, with target ports after \fI:\fR, if they differ. Examples:
+.RS
+.TP
+-t 22
+Forward local port 22 to 22 in the target namespace
+.TP
+-t 22:23
+Forward local port 22 to port 23 in the target namespace
+.TP
+-t 22,25
+Forward local ports 22 and 25 to ports 22 and 25 in the target namespace
+.TP
+-t 22-80
+Forward local ports 22 to 80 to corresponding ports in the target namespace
+.TP
+-t 22-80-32:90
+Forward local ports 22 to 80 to corresponding ports plus 10 in the target
+namespace
+.RE
+
+IPv6 bound ports are also forwarded for IPv4.
+
+Default is \fBauto\fR.
+.RE
+
+.TP
+.BR \-u ", " \-\-udp-ports " " \fIspec
+Configure UDP port forwarding to guest. \fIspec\fR is as described for TCP
+above, and the list of ports is derived from listening sockets reported by
+\fI/proc/net/udp\fR and \fI/proc/net/udp6\fR, see \fBproc\fR(5).
+
+Note: unless overridden, UDP ports with numbers corresponding to forwarded TCP
+port numbers are forwarded too, without, however, any port translation. 
+
+IPv6 bound ports are also forwarded for IPv4.
+
+Default is \fBauto\fR.
+
+.TP
+.BR \-T ", " \-\-tcp-ns " " \fIspec
+Configure TCP port forwarding from target namespace to init namespace.
+\fIspec\fR is as described above.
+
+Default is \fBauto\fR.
+
+.TP
+.BR \-U ", " \-\-udp-ns " " \fIspec
+Configure UDP port forwarding from target namespace to init namespace.
+\fIspec\fR is as described above.
+
+Default is \fBauto\fR.
+
+.SH EXAMPLES
+
+.SS \fBpasta
+.BR "Create and use a new, connected, user and network namespace"
+.RS
+.nf
+$ iperf3 -s -D
+$ ./pasta
+Outbound interface: eth0, namespace interface: eth0
+ARP:
+    address: 28:16:ad:39:a9:ea
+DHCP:
+    assign: 192.168.1.118
+    mask: 255.255.255.0
+    router: 192.168.1.1
+NDP/DHCPv6:
+    assign: 2a02:6d40:3ca5:2001:b81d:fa4a:8cdd:cf17
+    router: fe80::62e3:27ff:fe33:2b01
+#
+# udhcpc -i eth0
+udhcpc: started, v1.30.1
+udhcpc: sending discover
+udhcpc: sending select for 192.168.1.118
+udhcpc: lease of 192.168.1.118 obtained, lease time 4294967295
+# dhclient -6
+# ip address show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 65520 qdisc pfifo_fast state UNKNOWN group default qlen 1000
+    link/ether 5e:90:02:eb:b0:2a brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.118/24 brd 192.168.1.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 2a02:6d40:3ca5:2001:b81d:fa4a:8cdd:cf17/128 scope global 
+       valid_lft forever preferred_lft forever
+    inet6 2a02:6d40:3ca5:2001:5c90:2ff:feeb:b02a/64 scope global dynamic mngtmpaddr 
+       valid_lft 3591sec preferred_lft 3591sec
+    inet6 fe80::5c90:2ff:feeb:b02a/64 scope link 
+       valid_lft forever preferred_lft forever
+# ip route show
+default via 192.168.1.1 dev eth0 
+192.168.1.0/24 dev eth0 proto kernel scope link src 192.168.1.118 
+# ip -6 route show
+2a02:6d40:3ca5:2001:b81d:fa4a:8cdd:cf17 dev eth0 proto kernel metric 256 pref medium
+2a02:6d40:3ca5:2001::/64 dev eth0 proto kernel metric 256 expires 3584sec pref medium
+fe80::/64 dev eth0 proto kernel metric 256 pref medium
+default via fe80::62e3:27ff:fe33:2b01 dev eth0 proto ra metric 1024 expires 3584sec pref medium
+# iperf3 -c 127.0.0.1 -t1
+Connecting to host 127.0.0.1, port 5201
+[  5] local 127.0.0.1 port 51938 connected to 127.0.0.1 port 5201
+[ ID] Interval           Transfer     Bitrate         Retr  Cwnd
+[  5]   0.00-1.00   sec  4.46 GBytes  38.3 Gbits/sec    0   3.93 MBytes       
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-1.00   sec  4.46 GBytes  38.3 Gbits/sec    0             sender
+[  5]   0.00-1.41   sec  4.45 GBytes  27.1 Gbits/sec                  receiver
+
+iperf Done.
+# iperf3 -c ::1 -t1
+Connecting to host ::1, port 5201
+[  5] local ::1 port 50108 connected to ::1 port 5201
+[ ID] Interval           Transfer     Bitrate         Retr  Cwnd
+[  5]   0.00-1.00   sec  4.35 GBytes  37.4 Gbits/sec    0   4.99 MBytes       
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-1.00   sec  4.35 GBytes  37.4 Gbits/sec    0             sender
+[  5]   0.00-1.41   sec  4.35 GBytes  26.4 Gbits/sec                  receiver
+
+iperf Done.
+# ping -c1 -4 spaghetti.pizza
+PING spaghetti.pizza (172.67.192.217) 56(84) bytes of data.
+64 bytes from 172.67.192.217: icmp_seq=1 ttl=255 time=37.3 ms
+
+--- spaghetti.pizza ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+# ping -c1 -6 spaghetti.pizza
+PING spaghetti.pizza(2606:4700:3034::6815:147a (2606:4700:3034::6815:147a)) 56 data bytes
+64 bytes from 2606:4700:3034::6815:147a: icmp_seq=1 ttl=255 time=35.6 ms
+
+--- spaghetti.pizza ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 35.605/35.605/35.605/0.000 ms
+# logout
+$
+
+.RE
+.fi
+
+.BR "Connect an existing user and network namespace"
+.RS
+.nf
+$ unshare -rUn
+# echo $$
+2446678
+
+.fi
+.BR "	[From another terminal]"
+.nf
+$ ./pasta 2446678
+Outbound interface: eth0, namespace interface: eth0
+ARP:
+    address: 28:16:ad:39:a9:ea
+DHCP:
+    assign: 192.168.1.118
+    mask: 255.255.255.0
+    router: 192.168.1.1
+NDP/DHCPv6:
+    assign: 2a02:6d40:3ca5:2001:b81d:fa4a:8cdd:cf17
+    router: fe80::62e3:27ff:fe33:2b01
+
+.fi
+.BR "	[Back to the original terminal]"
+.nf
+# udhcpc -i eth0
+udhcpc: started, v1.30.1
+udhcpc: sending discover
+udhcpc: sending select for 192.168.1.118
+udhcpc: lease of 192.168.1.118 obtained, lease time 4294967295
+# dhclient -6
+# ip address show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 65520 qdisc pfifo_fast state UNKNOWN group default qlen 1000
+    link/ether fa:c1:2a:27:92:a9 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.118/24 brd 192.168.1.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 2a02:6d40:3ca5:2001:b81d:fa4a:8cdd:cf17/128 scope global 
+       valid_lft forever preferred_lft forever
+    inet6 2a02:6d40:3ca5:2001:f8c1:2aff:fe27:92a9/64 scope global dynamic mngtmpaddr 
+       valid_lft 3594sec preferred_lft 3594sec
+    inet6 fe80::f8c1:2aff:fe27:92a9/64 scope link 
+       valid_lft forever preferred_lft forever
+.fi
+.RE
+
+.SS \fBpasst
+.BR "Start and connect a guest with basic port forwarding"
+.RS
+.nf
+$ ./passt -f -t 2222:22
+Outbound interface: eth0
+ARP:
+    address: 28:16:ad:39:a9:ea
+DHCP:
+    assign: 192.168.1.118
+    mask: 255.255.255.0
+    router: 192.168.1.1
+        search:
+            redhat.com
+NDP/DHCPv6:
+    assign: 2a02:6d40:3ca5:2001:b81d:fa4a:8cdd:cf17
+    router: fe80::62e3:27ff:fe33:2b01
+        search:
+            redhat.com
+UNIX domain socket bound at /tmp/passt_1.socket
+
+You can now start qrap:
+    ./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio
+or directly qemu, patched with:
+    qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch
+as follows:
+    kvm ... -net socket,connect=/tmp/passt_1.socket -net nic,model=virtio
+
+.fi
+.BR "	[From another terminal]"
+.nf
+$ ./qrap 5 kvm test.qcow2 -m 1024 -display none -nodefaults -nographic -net socket,fd=5 -net nic,model=virtio
+Connected to /tmp/passt_1.socket
+
+.fi
+.BR "	[Back to the original terminal]"
+.nf
+passt: DHCP: ack to request
+passt:     from 52:54:00:12:34:56
+passt: NDP: received NS, sending NA
+passt: NDP: received RS, sending RA
+passt: DHCPv6: received SOLICIT, sending ADVERTISE
+passt: NDP: received NS, sending NA
+passt: DHCPv6: received REQUEST/RENEW/CONFIRM, sending REPLY
+passt: NDP: received NS, sending NA
+
+.fi
+.BR "	[From yet another terminal]"
+.nf
+$ ssh -p 2222 root@localhost
+root@localhost's password: 
+.fi
+.BR "	[...]"
+.nf
+# ip address show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: ens2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 65520 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.118/24 brd 192.168.1.255 scope global noprefixroute ens2
+       valid_lft forever preferred_lft forever
+    inet6 2a02:6d40:3ca5:2001:b81d:fa4a:8cdd:cf17/128 scope global noprefixroute 
+       valid_lft forever preferred_lft forever
+    inet6 2a02:6d40:3ca5:2001:b019:9ae2:a2fe:e6b4/64 scope global dynamic noprefixroute 
+       valid_lft 3588sec preferred_lft 3588sec
+    inet6 fe80::1f98:d09f:9309:9e77/64 scope link noprefixroute 
+       valid_lft forever preferred_lft forever
+.fi
+.RE
+
+.SH NOTES
+
+.SS Handling of traffic with local destination and source addressses
+
+Both \fBpasst\fR and \fBpasta\fR can bind on ports with a local address,
+depending on the configuration. Local destination or source addresses need to be
+changed before packets are delivered to the guest or target namespace: most
+operating systems would drop packets received from non-loopback interfaces with
+local addresses, and it would also be impossible for guest or target namespace
+to route answers back.
+
+For convenience, and somewhat arbitrarily, the source address on these packets
+is translated to the address of the default IPv4 or IPv6 gateway -- this is
+known to be an existing, valid address on the same subnet.
+
+Loopback destination addresses are instead translated to the observed external
+address of the guest or target namespace. For IPv6 packets, if usage of a
+link-local address by guest or namespace has ever been observed, and the
+original destination address is also a link-local address, the observed
+link-local address is used. Otherwise, the observed global address is used. For
+both IPv4 and IPv6, if no addresses have been seen yet, the configured addresses
+will be used instead.
+
+For example, if \fBpasst\fR or \fBpasta\fR receive a connection from 127.0.0.1,
+with destination 127.0.0.10, and the default IPv4 gateway is 192.0.2.1, while
+the last observed source address from guest or namespace is 192.0.2.2, this will
+be translated to a connection from 192.0.2.1 to 192.0.2.2.
+
+Similarly, for traffic coming from guest or namespace, packets with destination
+address corresponding to the default gateway will have their destination address
+translated to a loopback address, if and only if a packet, in the opposite
+direction, with a loopback destination or source address, port-wise matching for
+UDP, or connection-wise for TCP, has been recently forwarded to guest or
+namespace.
+
+.SS Handling of local traffic in pasta
+
+Depending on the configuration, \fBpasta\fR can bind to local ports in the init
+namespace, in the target namespace, or both, and forward connections and packets
+to corresponding ports in the other namespace.
+
+To avoid unnecessary overhead, these connections and packets are not forwarded
+through the tap device connecting the namespaces: \fBpasta\fR creates a socket
+in the destination namespace, with matching Layer-4 protocol, and uses it to
+forward local data. For TCP, data is forwarded between the originating socket
+and the new socket using the \fBsplice\fR(2) system call, and for UDP, a pair
+of \fBrecvmmsg\fR(2) and \fBsendmmsg\fR(2) system calls deals with packet
+transfers.
+
+This bypass only applies to local connections and traffic, because it's not
+possible to bind sockets to foreign addresses.
+
+.SS Binding to low numbered ports (well-known or system ports, up to 1023)
+
+If the port forwarding configuration requires binding to port numbers lower than
+1024, \fBpasst\fR and \fBpasta\fR will try to bind to them, but will fail if not
+running as root, or without the \fICAP_NET_BIND_SERVICE\fR Linux capability, see
+\fBservices\fR(5) and \fBcapabilities\fR(7).
+
+.SS ICMP/ICMPv6 Echo sockets
+
+ICMP and ICMPv6 Echo requests coming from guest or target namespace are handled
+using so-called "ping" sockets, introduced in Linux 2.6.30. To preserve the
+original identifier (see RFC 792, page 14, for ICMP, and RFC 4443, section 4.1,
+for ICMPv6), \fBpasst\fR and \fBpasta\fR try to bind these sockets using the
+observed source identifier as "port" -- that corresponds to Echo identifiers
+for "ping" sockets.
+
+As \fBbind\fR(2) failures were seen with particularly restrictive SELinux
+policies, a fall-back mechanism maps different identifiers to different sockets,
+and identifiers in replies will be mapped back to the original identifier of the
+request. However, if \fBbind\fR(2) fails and the fall-back mechanism is used,
+echo requests will be forwarded with different, albeit unique, identifiers.
+
+For ICMP and ICMPv6 Echo requests to work, the \fIping_group_range\fR parameter
+needs to include the PID of \fBpasst\fR or \fBpasta\fR, see \fBicmp\fR(7).
+
+.SS pasta and loopback interface
+
+As \fBpasta\fR connects to an existing namespace, or once it creates a new
+namespace, it will also ensure that the loopback interface, \fIlo\fR, is brought
+up. This is needed to bind ports using the loopback address in the namespace.
+
+.SS TCP sending window and \fITCP_INFO\fB before Linux 5.3
+
+To synchronise the TCP sending window from host Layer-4 sockets to the TCP
+parameters announced in TCP segments sent over the Layer-2 interface,
+\fBpasst\fR and \fBpasta\fR routinely query the size of the sending window seen
+by the kernel on the corresponding socket using the \fITCP_INFO\fR socket
+option, see \fBtcp\fR(7). Before Linux 5.3, i.e. before Linux kernel commit 
+8f7baad7f035 ("tcp: Add snd_wnd to TCP_INFO"), the sending window
+(\fIsnd_wnd\fR field) is not available.
+
+If the sending window cannot be queried, it will always be announced as a fixed
+value to guest or target namespace (14 600 bytes, suggested by RFC 6928), and
+segments received by guest or target namespace will be acknowledged as soon as
+the corresponding payload is enqueued to the corresponding socket. The normal
+behaviour is to acknowledge segments only as the remote peer acknowledges the
+corresponding payload, in order to reflect the congestion control dynamic back
+to the sender. This might affect throughput of TCP connections.
+
+.SH LIMITATIONS
+
+Currently, IGMP/MLD proxying (RFC 4605) and support for SCTP (RFC 4960) are not
+implemented.
+
+TCP Selective Acknowledgment (RFC 2018), as well as Protection Against Wrapped
+Sequences (PAWS) and Round-Trip Time Measurement (RTTM), both described by RFC
+7232, are currently not implemented.
+
+.SH AUTHOR
+
+Stefano Brivio <sbrivio@redhat.com>
+
+.SH REPORTING BUGS
+
+No public bug tracker is available at this time. For the moment being, report
+issues to Stefano Brivio <sbrivio@redhat.com>.
+
+.SH COPYRIGHT
+
+Copyright (c) 2020-2021 Red Hat GmbH.
+
+\fBpasst\fR and \fBpasta\fR are free software: you can redistribute them and/or
+modify them under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version. 
+
+.SH SEE ALSO
+
+\fBnamespaces\fR(7), \fBqemu\fR(1), \fBqrap\fR(1), \fBslirp4netns\fR(1).
+
+High-level documentation is available at https://passt.top/passt/about/.
