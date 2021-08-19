@@ -30,7 +30,8 @@ qrap: qrap.c passt.h
 
 .PHONY: clean
 clean:
-	-${RM} passt *.o qrap pasta pasta.1 passt4netns
+	-${RM} passt *.o qrap pasta pasta.1 passt4netns \
+		passt.tar passt.tar.gz *.deb *.rpm
 
 install: passt pasta qrap
 	cp -d passt pasta qrap $(prefix)/bin
@@ -43,3 +44,16 @@ uninstall:
 	-${RM} $(prefix)/man/man1/passt.1
 	-${RM} $(prefix)/man/man1/pasta.1
 	-${RM} $(prefix)/man/man1/qrap.1
+
+pkgs:
+	tar cf passt.tar -P --xform 's//\/usr\/bin\//' passt pasta qrap
+	tar rf passt.tar -P --xform 's//\/usr\/share\/man\/man1\//' \
+		passt.1 pasta.1 qrap.1
+	gzip passt.tar
+	EMAIL="sbrivio@redhat.com" fakeroot alien --to-deb \
+		--description="User-mode networking for VMs and namespaces" \
+		-k --version=$(shell git rev-parse --short HEAD) \
+		passt.tar.gz
+	fakeroot alien --to-rpm --target=$(shell uname -m) \
+		--description="User-mode networking for VMs and namespaces" \
+		-k --version=g$(shell git rev-parse --short HEAD) passt.tar.gz
