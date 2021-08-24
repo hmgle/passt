@@ -1034,7 +1034,7 @@ static void tcp_table_tap_compact(struct ctx *c, struct tcp_tap_conn *hole)
 	else if (to->state == TAP_SYN_SENT)
 		ev.events = EPOLLOUT | EPOLLRDHUP;
 	else
-		ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+		ev.events = EPOLLIN | EPOLLRDHUP;
 
 	ref.tcp.v6 = !IN6_IS_ADDR_V4MAPPED(&to->a.a6);
 	ref.s = from->sock;
@@ -1335,7 +1335,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 		.sin6_port = th->dest,
 		.sin6_addr = *(struct in6_addr *)addr,
 	};
-	struct epoll_event ev = { .events = EPOLLIN | EPOLLET | EPOLLRDHUP };
+	struct epoll_event ev = { .events = EPOLLIN | EPOLLRDHUP };
 	union epoll_ref ref = { .proto = IPPROTO_TCP };
 	const struct sockaddr *sa;
 	struct tcp_tap_conn *conn;
@@ -2056,7 +2056,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		tcp_data_from_sock(c, conn, now);
 		tcp_send_to_tap(c, conn, 0, NULL, 0);
 
-		ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+		ev.events = EPOLLIN | EPOLLRDHUP;
 		ref.s = conn->sock;
 		ref.tcp.index = conn - tt;
 		ev.data.u64 = ref.u64;
@@ -2123,7 +2123,7 @@ static void tcp_connect_finish(struct ctx *c, struct tcp_tap_conn *conn,
 		return;
 
 	/* Drop EPOLLOUT, only used to wait for connect() to complete */
-	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+	ev.events = EPOLLIN | EPOLLRDHUP;
 	ev.data.u64 = ref.u64;
 	epoll_ctl(c->epollfd, EPOLL_CTL_MOD, conn->sock, &ev);
 
