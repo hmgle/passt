@@ -1137,7 +1137,9 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		conn->seq_to_tap += len;
 	}
 
-	if (conn->no_snd_wnd) {
+	if (flags & SYN) {
+		ack_pending = 0;
+	} else if (conn->no_snd_wnd) {
 		ack_pending = (conn->seq_from_tap - conn->seq_ack_to_tap) <
 			      MAX_WINDOW;
 	} else {
