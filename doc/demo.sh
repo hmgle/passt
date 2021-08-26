@@ -122,4 +122,4 @@ echo
 echo "Starting passt..."
 echo
 
-ip netns exec "${ns}" ./passt -f -e -t all
+ip netns exec "${ns}" ./passt -f -e -t all -u all
