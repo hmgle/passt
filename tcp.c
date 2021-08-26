@@ -601,7 +601,12 @@ static struct iovec	tcp6_l2_iov_tap		[TCP_TAP_FRAMES];
 static struct msghdr	tcp4_l2_mh_sock;
 static struct msghdr	tcp6_l2_mh_sock;
 
-static struct mmsghdr	tcp_l2_mh_tap		[TCP_TAP_FRAMES];
+__extension__
+static struct mmsghdr	tcp_l2_mh_tap		[TCP_TAP_FRAMES] = {
+	[ 0 ... TCP_TAP_FRAMES - 1 ] = {
+		.msg_hdr.msg_iovlen = 1,
+	},
+};
 
 /* sendmsg() to socket */
 static struct iovec	tcp_tap_iov		[TAP_MSGS];
@@ -1358,8 +1363,15 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	if (conn->mss_guest < 0)
 		conn->mss_guest = MSS_DEFAULT;
 
-	if (c->mode == MODE_PASST && c->v6 && conn->mss_guest > SHRT_MAX)
-		conn->mss_guest = SHRT_MAX;
+	if (c->mode == MODE_PASST) {
+		/* Don't upset qemu */
+		conn->mss_guest = MIN(USHRT_MAX -
+				      sizeof(uint32_t) -
+				      sizeof(struct ethhdr) -
+				      sizeof(struct ipv6hdr) -
+				      sizeof(struct tcphdr),
+				      conn->mss_guest);
+	}
 
 	sl = sizeof(conn->mss_guest);
 	setsockopt(s, SOL_TCP, TCP_MAXSEG, &conn->mss_guest, sl);
@@ -1534,15 +1546,16 @@ static void tcp_sock_consume(struct tcp_tap_conn *conn, uint32_t ack_seq)
 static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 			      struct timespec *now)
 {
-	int mss_tap, fill_bufs, send_bufs = 0, last_len, msg_len, iov_rem = 0;
 	int *buf_mss, *buf_mss_nr_set, *buf_mss_tap, *buf_mss_tap_nr_set;
+	int mss_tap, fill_bufs, send_bufs = 0, last_len, iov_rem = 0;
 	int send, len, plen, v4 = IN6_IS_ADDR_V4MAPPED(&conn->a.a6);
+	uint32_t seq_to_tap = conn->seq_to_tap;
 	socklen_t sl = sizeof(struct tcp_info);
-	struct mmsghdr *mh = tcp_l2_mh_tap;
 	int s = conn->sock, i, ret = 0;
 	struct iovec *iov, *iov_tap;
 	uint32_t already_sent;
 	struct tcp_info info;
+	struct mmsghdr *mh;
 
 	already_sent = conn->seq_to_tap - conn->seq_ack_from_tap;
 
@@ -1644,15 +1657,9 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 		info.tcpi_snd_wnd = conn->tcpi_snd_wnd;
 	}
 
-	if (v4)
-		mh->msg_hdr.msg_iov = tcp4_l2_iov_tap;
-	else
-		mh->msg_hdr.msg_iov = tcp6_l2_iov_tap;
-	mh->msg_hdr.msg_iovlen = 0;
 	plen = conn->mss_guest;
-	msg_len = 0;
-	for (i = 0; i < send_bufs; i++) {
-		int iov_len, ip_len;
+	for (i = 0, mh = tcp_l2_mh_tap; i < send_bufs; i++, mh++) {
+		int ip_len;
 
 		if (i == send_bufs - 1)
 			plen = last_len;
@@ -1673,7 +1680,7 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 
 			b->th.source = htons(conn->sock_port);
 			b->th.dest = htons(conn->tap_port);
-			b->th.seq = htonl(conn->seq_to_tap);
+			b->th.seq = htonl(seq_to_tap);
 			b->th.ack_seq = htonl(conn->seq_ack_to_tap);
 
 			if (conn->no_snd_wnd) {
@@ -1696,6 +1703,8 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 			}
 
 			b->vnet_len = htonl(sizeof(struct ethhdr) + ip_len);
+
+			mh->msg_hdr.msg_iov = &tcp4_l2_iov_tap[i];
 		} else {
 			struct tcp6_l2_buf_t *b = &tcp6_l2_buf[i];
 			uint32_t flow = conn->seq_init_to_tap;
@@ -1713,7 +1722,7 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 
 			b->th.source = htons(conn->sock_port);
 			b->th.dest = htons(conn->tap_port);
-			b->th.seq = htonl(conn->seq_to_tap);
+			b->th.seq = htonl(seq_to_tap);
 			b->th.ack_seq = htonl(conn->seq_ack_to_tap);
 
 			if (conn->no_snd_wnd) {
@@ -1741,32 +1750,45 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 			}
 
 			b->vnet_len = htonl(sizeof(struct ethhdr) + ip_len);
+
+			mh->msg_hdr.msg_iov = &tcp6_l2_iov_tap[i];
 		}
 
-		iov_len = sizeof(uint32_t) + sizeof(struct ethhdr) + ip_len;
-
-		/* Switch to a new message if this one is too long for qemu. */
-		if (msg_len && msg_len + iov_len > SHRT_MAX) {
-			mh++;
-			mh->msg_hdr.msg_iovlen = 0;
-			msg_len = 0;
-			if (v4)
-				mh->msg_hdr.msg_iov = &tcp4_l2_iov_tap[i];
-			else
-				mh->msg_hdr.msg_iov = &tcp6_l2_iov_tap[i];
-		}
-		mh->msg_hdr.msg_iovlen++;
-		msg_len += iov_len;
-
-		conn->seq_to_tap += plen;
+		seq_to_tap += plen;
 	}
 
 	if (c->mode == MODE_PASTA)
 		goto out;
 
-	sendmmsg(c->fd_tap, tcp_l2_mh_tap, mh - tcp_l2_mh_tap + 1,
-		 MSG_NOSIGNAL | MSG_DONTWAIT);
-	pcapmm(tcp_l2_mh_tap, mh - tcp_l2_mh_tap + 1);
+	ret = sendmmsg(c->fd_tap, tcp_l2_mh_tap, mh - tcp_l2_mh_tap,
+		       MSG_NOSIGNAL | MSG_DONTWAIT);
+	if (ret <= 0)
+		goto out;
+
+	conn->seq_to_tap += conn->mss_guest * (ret - 1) + last_len;
+
+	/* sendmmsg() indicates how many messages were sent at least partially.
+	 * Kernel commit 3023898b7d4a ("sock: fix sendmmsg for partial sendmsg")
+	 * gives us the guarantee that at most one message, namely the last sent
+	 * one, might have been sent partially. Check how many bytes of that
+	 * message were sent, and re-send any missing bytes with a blocking
+	 * sendmsg(), otherwise qemu will fail to parse any subsequent message.
+	 */
+	mh = &tcp_l2_mh_tap[ret - 1];
+	if (mh->msg_len < mh->msg_hdr.msg_iov->iov_len) {
+		uint8_t **iov_base = (uint8_t **)&mh->msg_hdr.msg_iov->iov_base;
+		int part_sent = mh->msg_len;
+
+		mh->msg_hdr.msg_iov->iov_len -= part_sent;
+		*iov_base += part_sent;
+
+		sendmsg(c->fd_tap, &mh->msg_hdr, MSG_NOSIGNAL);
+
+		mh->msg_hdr.msg_iov->iov_len += part_sent;
+		*iov_base -= part_sent;
+	}
+
+	pcapmm(tcp_l2_mh_tap, ret);
 
 	goto out;
 
@@ -2027,10 +2049,15 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		if (conn->mss_guest < 0)
 			conn->mss_guest = MSS_DEFAULT;
 
-		/* Don't upset qemu */
-		if (c->mode == MODE_PASST && c->v6 &&
-		    conn->mss_guest > SHRT_MAX)
-			conn->mss_guest = SHRT_MAX;
+		if (c->mode == MODE_PASST) {
+			/* Don't upset qemu */
+			conn->mss_guest = MIN(USHRT_MAX -
+					      sizeof(uint32_t) -
+					      sizeof(struct ethhdr) -
+					      sizeof(struct ipv6hdr) -
+					      sizeof(struct tcphdr),
+					      conn->mss_guest);
+		}
 
 		ws = tcp_opt_get(th, len, OPT_WS, NULL, NULL);
 		if (ws > MAX_WS) {
