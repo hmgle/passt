@@ -308,6 +308,17 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	*(unsigned long *)opts[3].s =  c->gw4;
 	*(unsigned long *)opts[54].s = c->gw4;
 
+	/* If the gateway is not on the assigned subnet, send an option 121
+	 * (Classless Static Routing) adding a dummy route to it.
+	 */
+	if ((c->addr4 & c->mask4) != (c->gw4 & c->mask4)) {
+		/* a.b.c.d/32:0.0.0.0, 0:a.b.c.d */
+		opts[121].slen = 14;
+		opts[121].s[0] = 32;
+		*(unsigned long *)&opts[121].s[1] = c->gw4;
+		*(unsigned long *)&opts[121].s[10] = c->gw4;
+	}
+
 	if (c->mtu) {
 		opts[26].slen = 2;
 		opts[26].s[0] = c->mtu / 256;
