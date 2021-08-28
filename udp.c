@@ -923,9 +923,9 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 
 		udp_tap_map[V4][src].ts = now->tv_sec;
 
-		if (s_in.sin_addr.s_addr == c->gw4 &&
-		    udp_tap_map[V4][dst].ts_local) {
-			if (udp_tap_map[V4][dst].loopback)
+		if (s_in.sin_addr.s_addr == c->gw4) {
+			if (!udp_tap_map[V4][dst].ts_local ||
+			    udp_tap_map[V4][dst].loopback)
 				s_in.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 			else
 				s_in.sin_addr.s_addr = c->addr4_seen;
@@ -941,9 +941,9 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 		sa = (struct sockaddr *)&s_in6;
 		sl = sizeof(s_in6);
 
-		if (!memcmp(addr, &c->gw6, sizeof(c->gw6)) &&
-		    udp_tap_map[V6][dst].ts_local) {
-			if (udp_tap_map[V6][dst].loopback)
+		if (!memcmp(addr, &c->gw6, sizeof(c->gw6))) {
+			if (!udp_tap_map[V6][dst].ts_local ||
+			    udp_tap_map[V6][dst].loopback)
 				s_in6.sin6_addr = in6addr_loopback;
 			else
 				s_in6.sin6_addr = c->addr6_seen;
