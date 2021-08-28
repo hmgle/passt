@@ -34,6 +34,7 @@ clean:
 		passt.tar passt.tar.gz *.deb *.rpm
 
 install: passt pasta qrap
+	mkdir -p $(prefix)/bin $(prefix)/man/man1
 	cp -d passt pasta qrap $(prefix)/bin
 	cp -d passt.1 pasta.1 qrap.1 $(prefix)/man/man1
 
