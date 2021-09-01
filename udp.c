@@ -645,7 +645,7 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		      struct timespec *now)
 {
 	int iov_in_msg, msg_i = 0, ret;
-	ssize_t n, msglen, missing;
+	ssize_t n, msglen, missing = 0;
 	struct mmsghdr *tap_mmh;
 	struct msghdr *cur_mh;
 	unsigned int i;
@@ -829,7 +829,7 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 	 *
 	 * In pictures, given this example:
 	 *
-	 *				 	iov #0  iov #2  iov #3  iov #4
+	 *				 	iov #0  iov #1  iov #2  iov #3
 	 * tap_mmh[ret - 1].msg_hdr:		....    ......  .....   ......
 	 * tap_mmh[ret - 1].msg_len:	7	....    ...
 	 *
@@ -845,7 +845,7 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			missing = msglen - tap_mmh[ret - 1].msg_len;
 		}
 
-		if (missing) {
+		if (missing > 0) {
 			uint8_t **iov_base;
 			int first_offset;
 
