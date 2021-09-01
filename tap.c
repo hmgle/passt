@@ -322,8 +322,7 @@ static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
 			struct timespec *now, int first)
 {
-	char buf_s[INET6_ADDRSTRLEN] __attribute((__unused__));
-	char buf_d[INET6_ADDRSTRLEN] __attribute((__unused__));
+	char buf_s[INET6_ADDRSTRLEN], buf_d[INET6_ADDRSTRLEN];
 	struct ethhdr *eh = (struct ethhdr *)msg[0].start;
 	struct udphdr *uh, *prev_uh = NULL;
 	uint8_t proto = 0, prev_proto = 0;
@@ -462,11 +461,11 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 	while (n > (ssize_t)sizeof(uint32_t)) {
 		ssize_t len = ntohl(*(uint32_t *)p);
 
+		if (len < (ssize_t)sizeof(*eh) || len > ETH_MAX_MTU)
+			return 0;
+
 		p += sizeof(uint32_t);
 		n -= sizeof(uint32_t);
-
-		if (len < (ssize_t)sizeof(*eh))
-			return 0;
 
 		/* At most one packet might not fit in a single read */
 		if (len > n) {
