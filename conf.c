@@ -1144,6 +1144,18 @@ void conf(struct ctx *c, int argc, char **argv)
 	if (!*c->pasta_ifn)
 		strncpy(c->pasta_ifn, c->ifn, IFNAMSIZ);
 
+#ifdef PASST_LEGACY_NO_OPTIONS
+	if (c->mode == MODE_PASST) {
+		c->foreground = 1;
+		c->stderr = 1;
+
+		if (!tcp_tap) {
+			memset(c->tcp.port_to_tap, 0xff,
+			       PORT_EPHEMERAL_MIN / 8);
+		}
+	}
+#endif
+
 	if (c->mode == MODE_PASTA) {
 		if (!tcp_tap || tcp_tap == PORT_AUTO) {
 			ns_ports_arg.proto = IPPROTO_TCP;
