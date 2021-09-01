@@ -295,15 +295,17 @@ static struct resp_not_on_link_t {
 static struct opt_hdr *dhcpv6_opt(struct opt_hdr *o, uint16_t type, size_t *len)
 {
 	while (*len >= sizeof(struct opt_hdr)) {
-		if (ntohs(o->l) > *len)
+		unsigned int opt_len = ntohs(o->l) + sizeof(struct opt_hdr);
+
+		if (opt_len > *len)
 			return NULL;
 
-		*len -= ntohs(o->l) + sizeof(struct opt_hdr);
+		*len -= opt_len;
 
 		if (o->t == type)
 			return o;
 
-		o = (struct opt_hdr *)((uint8_t *)(o + 1) + ntohs(o->l));
+		o = (struct opt_hdr *)((uint8_t *)o + opt_len);
 	}
 
 	return NULL;
@@ -335,14 +337,16 @@ ia_ta:
 		size_t ia_len = ntohs(ia->l);
 
 		if (ia_type == OPT_IA_NA) {
-			struct opt_ia_na *opts = (struct opt_ia_na *)ia + 1;
+			struct opt_ia_na *subopt = (struct opt_ia_na *)ia + 1;
 
-			ia_addr = (struct opt_hdr *)opts;
+			ia_addr = (struct opt_hdr *)subopt;
 		} else if (ia_type == OPT_IA_TA) {
-			struct opt_ia_ta *opts = (struct opt_ia_ta *)ia + 1;
+			struct opt_ia_ta *subopt = (struct opt_ia_ta *)ia + 1;
 
-			ia_addr = (struct opt_hdr *)opts;
+			ia_addr = (struct opt_hdr *)subopt;
 		}
+
+		ia_len -= sizeof(struct opt_ia_na) - sizeof(struct opt_hdr);
 
 		while ((ia_addr = dhcpv6_opt(ia_addr, OPT_IAAADR, &ia_len))) {
 			struct opt_ia_addr *next;
