@@ -113,7 +113,7 @@ void usage(const char *name)
  */
 int main(int argc, char **argv)
 {
-	struct timeval tv = { .tv_sec = 0, .tv_usec = 100 * 1000 };
+	struct timeval tv = { .tv_sec = 0, .tv_usec = 500 * 1000 };
 	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0;
 	char *qemu_argv[ARG_MAX], dev_str[ARG_MAX];
 	struct sockaddr_un addr = {
@@ -232,12 +232,11 @@ int main(int argc, char **argv)
 	qemu_argv[qemu_argc++] = "socket,fd=" STR(DEFAULT_FD) ",id=hostnet0";
 	qemu_argv[qemu_argc] = NULL;
 
-	system("ls /tmp > /tmp/ls_tmp.txt");
-
 valid_args:
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
 		s = socket(AF_UNIX, SOCK_STREAM, 0);
 		setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+		setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
 		if (s < 0) {
 			perror("socket");
@@ -255,8 +254,6 @@ valid_args:
 			break;
 
 		fprintf(stderr, "Probe of %s failed\n", addr.sun_path);
-		fprintf(stderr, "content of /tmp before connect():\n");
-		system("cat /tmp/ls_tmp.txt");
 
 		close(s);
 	}
@@ -268,6 +265,7 @@ valid_args:
 
 	tv.tv_usec = 0;
 	setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+	setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 	fprintf(stderr, "Connected to %s\n", addr.sun_path);
 
 	if (dup2(s, (int)fd) < 0) {
