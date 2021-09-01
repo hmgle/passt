@@ -165,12 +165,13 @@
  *
  * - ESTABLISHED		connection established, ready for data
  *   - FIN from tap		write shutdown > FIN_WAIT_1
- *   - zero-sized socket read	read shutdown, FIN to tap > ESTABLISHED_SOCK_FIN
+ *   - EPOLLRDHUP/EPOLLHUP	read shutdown > ESTABLISHED_SOCK_FIN
  *   - socket error		RST to tap, close socket > CLOSED
  *   - data timeout		FIN to tap > ESTABLISHED_SOCK_FIN
  *   - RST from tap		close socket > CLOSED
  *
- * - ESTABLISHED_SOCK_FIN	socket closing connection, FIN sent to tap
+ * - ESTABLISHED_SOCK_FIN	socket closing connection, reading half closed
+ *   - zero-sized socket read	FIN, ACK to tap > CLOSE_WAIT
  *   - ACK from tap		> CLOSE_WAIT
  *   - ACK timeout		RST to tap, close socket > CLOSED
  *   - RST from tap		close socket > CLOSED
@@ -1222,12 +1223,13 @@ static void tcp_rst(struct ctx *c, struct tcp_tap_conn *conn)
 /**
  * tcp_clamp_window() - Set window and scaling from option, clamp on socket
  * @conn:	Connection pointer
- * @th:		TCP header, from tap
- * @len:	Buffer length, at L4
+ * @th:		TCP header, from tap, can be NULL if window is passed
+ * @len:	Buffer length, at L4, can be 0 if no header is passed
+ * @window:	Window value, host order, unscaled, if no header is passed
  * @init:	Set if this is the very first segment from tap
  */
 static void tcp_clamp_window(struct tcp_tap_conn *conn, struct tcphdr *th,
-			     int len, int init)
+			     int len, unsigned int window, int init)
 {
 	if (init) {
 		conn->ws = tcp_opt_get(th, len, OPT_WS, NULL, NULL);
@@ -1241,7 +1243,10 @@ static void tcp_clamp_window(struct tcp_tap_conn *conn, struct tcphdr *th,
 		conn->tap_window = ntohs(th->window);
 		conn->window_clamped = 0;
 	} else {
-		unsigned int window = ntohs(th->window) << conn->ws;
+		if (th)
+			window = ntohs(th->window) << conn->ws;
+		else
+			window <<= conn->ws;
 
 		if (conn->window_clamped) {
 			if (conn->tap_window == window)
@@ -1376,7 +1381,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	sl = sizeof(conn->mss_guest);
 	setsockopt(s, SOL_TCP, TCP_MAXSEG, &conn->mss_guest, sl);
 
-	tcp_clamp_window(conn, th, len, 1);
+	tcp_clamp_window(conn, th, len, 0, 1);
 
 	if (af == AF_INET) {
 		sa = (struct sockaddr *)&addr4;
@@ -1802,10 +1807,9 @@ err:
 zero_len:
 	if (conn->state == FIN_WAIT_1) {
 		tcp_tap_state(conn, FIN_WAIT_1_SOCK_FIN);
-	} else if (conn->state < ESTABLISHED_SOCK_FIN) {
-		tcp_tap_state(conn, ESTABLISHED_SOCK_FIN);
-		shutdown(conn->sock, SHUT_RD);
+	} else if (conn->state == ESTABLISHED_SOCK_FIN) {
 		tcp_send_to_tap(c, conn, FIN | ACK, NULL, 0);
+		tcp_tap_state(conn, CLOSE_WAIT);
 	}
 
 	goto out_restore_iov;
@@ -1838,7 +1842,7 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 	struct msghdr mh = { .msg_iov = tcp_tap_iov };
 	uint32_t max_ack_seq = conn->seq_ack_from_tap;
 	uint32_t seq_from_tap = conn->seq_from_tap;
-	uint16_t max_ack_seq_wnd;
+	uint16_t max_ack_seq_wnd = WINDOW_DEFAULT;
 	ssize_t len;
 
 	for (i = 0, iov_i = 0; i < count; i++) {
@@ -1938,6 +1942,8 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		}
 	}
 
+	tcp_clamp_window(conn, NULL, 0, max_ack_seq_wnd, 0);
+
 	if (ack) {
 		conn->ts_ack_tap = *now;
 		tcp_sock_consume(conn, max_ack_seq);
@@ -1978,11 +1984,13 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		tcp_send_to_tap(c, conn, 0, NULL, 0);
 
 fin:
-	if (conn->state == ESTABLISHED_SOCK_FIN && ack &&
-	    !tcp_data_from_sock(c, conn, now))
-		tcp_tap_state(conn, CLOSE_WAIT);
-
-	if (fin) {
+	if (conn->state == CLOSE_WAIT && fin && ack) {
+		tcp_data_from_sock(c, conn, now);
+		tcp_sock_consume(conn, conn->seq_ack_from_tap);
+		shutdown(conn->sock, SHUT_WR);
+		tcp_tap_state(conn, LAST_ACK);
+		tcp_send_to_tap(c, conn, ACK, NULL, 0);
+	} else if (fin) {
 		shutdown(conn->sock, SHUT_WR);
 		if (conn->state == ESTABLISHED) {
 			tcp_tap_state(conn, FIN_WAIT_1);
@@ -2034,8 +2042,6 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		return 1;
 	}
 
-	tcp_clamp_window(conn, th, len, th->syn && th->ack);
-
 	conn->ts_tap = *now;
 
 	switch (conn->state) {
@@ -2044,6 +2050,8 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 			tcp_rst(c, conn);
 			return 1;
 		}
+
+		tcp_clamp_window(conn, th, len, 0, 1);
 
 		conn->mss_guest = tcp_opt_get(th, len, OPT_MSS, NULL, NULL);
 		if (conn->mss_guest < 0)
@@ -2102,6 +2110,8 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 			tcp_rst(c, conn);
 			return 1;
 		}
+
+		tcp_clamp_window(conn, th, len, 0, 0);
 
 		tcp_tap_state(conn, ESTABLISHED);
 		break;
@@ -2598,8 +2608,7 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 	}
 
 	if (conn->state == SOCK_SYN_SENT) {
-		/* This can only be a socket error or a shutdown from remote */
-		tcp_rst(c, conn);
+		/* This could also be a data packet already, don't reset yet. */
 		return;
 	}
 
@@ -2614,15 +2623,13 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		return;
 	}
 
-	if (conn->state == ESTABLISHED)
+	if (conn->state == ESTABLISHED || conn->state == ESTABLISHED_SOCK_FIN)
 		tcp_data_from_sock(c, conn, now);
 
 	if (events & (EPOLLRDHUP | EPOLLHUP)) {
 		if (conn->state == ESTABLISHED) {
 			tcp_tap_state(conn, ESTABLISHED_SOCK_FIN);
 			shutdown(conn->sock, SHUT_RD);
-			tcp_data_from_sock(c, conn, now);
-			tcp_send_to_tap(c, conn, FIN | ACK, NULL, 0);
 		} else if (conn->state == FIN_WAIT_1) {
 			tcp_tap_state(conn, FIN_WAIT_1_SOCK_FIN);
 			shutdown(conn->sock, SHUT_RD);
