@@ -617,7 +617,9 @@ static void usage(const char *name)
 		info("      /tmp/passt_ISO8601-TIMESTAMP_INSTANCE-NUMBER.pcap");
 
 	info(   "  -m, --mtu MTU	Assign MTU via DHCP/NDP");
-	info(   "    default: no MTU assigned via DHCP/NDP options");
+	info(   "    a zero value disables assignment");
+	info(   "    default: 65520: maximum 802.3 MTU minus 802.3 header");
+	info(   "                    length, rounded to 32 bits (IPv4 words)");
 	info(   "  -a, --address ADDR	Assign IPv4 or IPv6 address ADDR");
 	info(   "    can be specified zero to two times (for IPv4 and IPv6)");
 	info(   "    default: use addresses from interface with default route");
@@ -954,6 +956,12 @@ void conf(struct ctx *c, int argc, char **argv)
 
 			errno = 0;
 			c->mtu = strtol(optarg, NULL, 0);
+
+			if (!c->mtu) {
+				c->mtu = -1;
+				break;
+			}
+
 			if (c->mtu < ETH_MIN_MTU || c->mtu > (int)ETH_MAX_MTU ||
 			    errno) {
 				err("Invalid MTU: %s", optarg);
@@ -1130,6 +1138,11 @@ void conf(struct ctx *c, int argc, char **argv)
 			c->no_ndp = 1;
 			c->no_dhcpv6 = 1;
 		}
+	}
+
+	if (!c->mtu) {
+		c->mtu = (ETH_MAX_MTU - ETH_HLEN) /
+			 sizeof(uint32_t) * sizeof(uint32_t);
 	}
 
 	get_routes(c);

@@ -116,7 +116,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		memcpy(p, &c->addr6, 8);	/* prefix */
 		p += 16;
 
-		if (c->mtu) {
+		if (c->mtu != -1) {
 			*p++ = 5;			/* type */
 			*p++ = 1;			/* length */
 			p += 2;				/* reserved */

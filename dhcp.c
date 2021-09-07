@@ -49,7 +49,6 @@ struct opt {
 static struct opt opts[255] = {
 	[1]  = { 0, 4, {                      0 }, 0, { 0 }, },	/* Mask */
 	[3]  = { 0, 4, {                      0 }, 0, { 0 }, },	/* Router */
-	[26] = { 0, 2, {             0xff, 0xf0 }, 0, { 0 }, },	/* MTU */
 	[51] = { 0, 4, { 0xff, 0xff, 0xff, 0xff }, 0, { 0 }, },	/* Lease time */
 	[53] = { 0, 1, {                      0 }, 0, { 0 }, },	/* Type */
 #define DHCPDISCOVER	1
@@ -319,7 +318,7 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 		*(unsigned long *)&opts[121].s[10] = c->gw4;
 	}
 
-	if (c->mtu) {
+	if (c->mtu != -1) {
 		opts[26].slen = 2;
 		opts[26].s[0] = c->mtu / 256;
 		opts[26].s[1] = c->mtu % 256;
