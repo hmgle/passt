@@ -85,7 +85,9 @@ char *ip_proto_str[IPPROTO_SCTP + 1] = {
 static void sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			 struct timespec *now)
 {
-	debug("%s packet from socket %i", IP_PROTO_STR(ref.proto), ref.s);
+	debug("%s: %s packet from socket %i (events: 0x%08x)",
+	      c->mode == MODE_PASST ? "passt" : "pasta",
+	      IP_PROTO_STR(ref.proto), ref.s, events);
 
 	if (!c->no_tcp && ref.proto == IPPROTO_TCP)
 		tcp_sock_handler( c, ref, events, now);
