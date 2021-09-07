@@ -676,9 +676,6 @@ static void usage(const char *name)
 	info(   "  -u, --udp-ports SPEC	UDP port forwarding to guest");
 	info(   "    SPEC is as described for TCP above");
 	info(   "    default: none");
-	info(   "    unless overridden, UDP ports with numbers corresponding");
-	info(   "      to forwarded TCP port numbers are forwarded too, and");
-	info(   "      IPv6 bound ports are also forwarded for IPv4");
 
 	exit(EXIT_FAILURE);
 
@@ -701,9 +698,10 @@ pasta_ports:
 	info(   "  -u, --udp-ports SPEC	UDP port forwarding to namespace");
 	info(   "    SPEC is as described for TCP above");
 	info(   "    default: auto");
-	info(   "    unless overridden, UDP ports with numbers corresponding");
-	info(   "      to forwarded TCP port numbers are forwarded too, and");
-	info(   "      IPv6 bound ports are also forwarded for IPv4");
+	info(   "    IPv6 bound ports are also forwarded for IPv4");
+	info(   "    unless specified, with '-t auto', UDP ports with numbers");
+	info(   "    corresponding to forwarded TCP port numbers are");
+	info(   "    forwarded too");
 	info(   "  -T, --tcp-ns SPEC	TCP port forwarding to init namespace");
 	info(   "    SPEC is as described above");
 	info(   "    default: auto");
