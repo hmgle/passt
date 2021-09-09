@@ -216,6 +216,10 @@ static void pasta_start_ns(struct ctx *c)
 	write(fd, buf, strlen(buf));
 	close(fd);
 
+	fd = open("/proc/sys/net/ipv4/ping_group_range", O_WRONLY);
+	write(fd, "0 0", strlen("0 0"));
+	close(fd);
+
 	shell = getenv("SHELL") ? getenv("SHELL") : "/bin/sh";
 	if (strstr(shell, "/bash"))
 		execve(shell, ((char *[]) { shell, "-l", NULL }), environ);
