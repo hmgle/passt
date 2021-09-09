@@ -223,7 +223,7 @@ int main(int argc, char **argv)
 
 	if (has_dev) {
 		qemu_argv[qemu_argc++] = "-device";
-		snprintf(dev_str, ARG_MAX, "%s,%s%x%s,netdev=hostnet0",
+		snprintf(dev_str, ARG_MAX, "%s,%s%x%s,netdev=hostnet0,x-txburst=4096",
 			 dev->name, dev->template, i, dev->template_post);
 		qemu_argv[qemu_argc++] = dev_str;
 	}
