@@ -858,6 +858,8 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			cur_mh->msg_iov = &cur_mh->msg_iov[i];
 
 			sendmsg(c->fd_tap, cur_mh, MSG_NOSIGNAL);
+
+			*iov_base -= first_offset;
 			break;
 		}
 	}
