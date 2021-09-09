@@ -761,7 +761,8 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 
 			s_addr = ntohl(b->s_in.sin_addr.s_addr);
 			if (s_addr >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
-			    s_addr == INADDR_ANY || s_addr == c->addr4_seen) {
+			    s_addr == INADDR_ANY ||
+			    s_addr == ntohl(c->addr4_seen)) {
 				in_port_t src = htons(b->s_in.sin_port);
 
 				b->iph.saddr = c->gw4;
