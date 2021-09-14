@@ -1752,7 +1752,7 @@ recvmmsg:
 	iov_tap[send_bufs - 1].iov_len = mss_tap - conn->mss_guest + last_len;
 
 	/* Likely, some new data was acked too. */
-	if (conn->seq_from_tap != conn->seq_ack_to_tap) {
+	if (conn->seq_from_tap != conn->seq_ack_to_tap || !conn->tcpi_snd_wnd) {
 		if (conn->no_snd_wnd) {
 			conn->seq_ack_to_tap = conn->seq_from_tap;
 		} else {
