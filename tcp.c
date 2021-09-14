@@ -1885,7 +1885,7 @@ recvmmsg:
 sendmmsg:
 	ret = sendmmsg(c->fd_tap, tcp_l2_mh_tap, mh - tcp_l2_mh_tap,
 		       MSG_NOSIGNAL | MSG_DONTWAIT);
-	if (ret < 0 && ret == EINTR)
+	if (ret < 0 && errno == EINTR)
 		goto sendmmsg;
 
 	if (ret <= 0)
