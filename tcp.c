@@ -1200,8 +1200,9 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 
 	if (flags & SYN) {
 		ack_pending = 0;
-	} else if (conn->no_snd_wnd) {
-		ack_pending = (conn->seq_from_tap - conn->seq_ack_to_tap) <
+	} else if (conn->state == ESTABLISHED || conn->no_snd_wnd) {
+		ack_pending = conn->seq_from_tap != conn->seq_ack_to_tap &&
+			      (conn->seq_from_tap - conn->seq_ack_to_tap) <
 			      MAX_WINDOW;
 	} else {
 		ack_pending = info.tcpi_bytes_acked > conn->tcpi_acked_last;
@@ -1213,8 +1214,12 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		if (conn->no_snd_wnd) {
 			conn->seq_ack_to_tap = conn->seq_from_tap;
 		} else {
-			conn->seq_ack_to_tap = info.tcpi_bytes_acked +
-					       conn->seq_init_from_tap;
+			if (conn->state == ESTABLISHED)
+				conn->seq_ack_to_tap = conn->seq_from_tap;
+			else
+				conn->seq_ack_to_tap = info.tcpi_bytes_acked +
+						       conn->seq_init_from_tap;
+
 			conn->tcpi_acked_last = info.tcpi_bytes_acked;
 		}
 
@@ -1770,9 +1775,13 @@ recvmmsg:
 								     * 90);
 			}
 
+			if (conn->state == ESTABLISHED)
+				conn->seq_ack_to_tap = conn->seq_from_tap;
+			else
+				conn->seq_ack_to_tap = info.tcpi_bytes_acked +
+						       conn->seq_init_from_tap;
+
 			conn->tcpi_acked_last = info.tcpi_bytes_acked;
-			conn->seq_ack_to_tap = info.tcpi_bytes_acked +
-					       conn->seq_init_from_tap;
 		}
 	} else {
 		info.tcpi_snd_wscale = conn->ws;
