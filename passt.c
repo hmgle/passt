@@ -26,6 +26,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/uio.h>
@@ -138,6 +139,67 @@ void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 }
 
 static int pasta_child_pid;
+static char pasta_child_ns[PATH_MAX];
+
+/**
+ * pasta_ns_cleanup() - Look for processes in namespace, terminate them
+ */
+static void pasta_ns_cleanup(void)
+{
+	char proc_path[PATH_MAX], ns_link[PATH_MAX];
+	int recheck = 0, found = 0, waited = 0;
+	struct dirent *dp;
+	DIR *dirp;
+
+	if (!*pasta_child_ns)
+		return;
+
+loop:
+	if (!(dirp = opendir("/proc")))
+		return;
+
+	while ((dp = readdir(dirp))) {
+		pid_t pid;
+
+		errno = 0;
+		pid = strtol(dp->d_name, NULL, 0);
+		if (!pid || errno)
+			continue;
+
+		snprintf(proc_path, PATH_MAX, "/proc/%i/ns/net", pid);
+		if (readlink(proc_path, ns_link, PATH_MAX) < 0)
+			continue;
+
+		if (!strncmp(ns_link, pasta_child_ns, PATH_MAX)) {
+			found = 1;
+			if (waited)
+				kill(pid, SIGKILL);
+			else
+				kill(pid, SIGQUIT);
+		}
+	}
+
+	closedir(dirp);
+
+	if (!found)
+		return;
+
+	if (waited) {
+		if (recheck) {
+			info("Some processes in namespace didn't quit");
+		} else {
+			found = 0;
+			recheck = 1;
+			goto loop;
+		}
+		return;
+	}
+
+	info("Waiting for all processes in namespace to terminate");
+	sleep(1);
+	waited = 1;
+	goto loop;
+}
 
 /**
  * pasta_child_handler() - Exit once shell spawned by pasta_start_ns() exits
@@ -149,10 +211,15 @@ static void pasta_child_handler(int signal)
 
 	(void)signal;
 
-	if (!waitid(P_PID, pasta_child_pid, &infop, WEXITED | WNOHANG)) {
-		if (infop.si_pid == pasta_child_pid)
+	if (pasta_child_pid &&
+	    !waitid(P_PID, pasta_child_pid, &infop, WEXITED | WNOHANG)) {
+		if (infop.si_pid == pasta_child_pid) {
+			pasta_ns_cleanup();
 			exit(EXIT_SUCCESS);
+		}
 	}
+
+	waitid(P_ALL, 0, NULL, WEXITED | WNOHANG);
 }
 
 /**
@@ -175,17 +242,11 @@ static void pasta_start_ns(struct ctx *c)
 {
 	char buf[BUFSIZ], *shell;
 	int euid = geteuid();
-	struct sigaction sa;
 	int fd;
 
 	c->foreground = 1;
 	if (!c->debug)
 		c->quiet = 1;
-
-	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = 0;
-	sa.sa_handler = pasta_child_handler;
-	sigaction(SIGCHLD, &sa, NULL);
 
 	if ((c->pasta_pid = fork()) == -1) {
 		perror("fork");
@@ -247,6 +308,14 @@ int main(int argc, char **argv)
 	int nfds, i;
 
 	if (strstr(argv[0], "pasta") || strstr(argv[0], "passt4netns")) {
+		struct sigaction sa;
+
+		sigemptyset(&sa.sa_mask);
+		sa.sa_flags = 0;
+		sa.sa_handler = pasta_child_handler;
+		sigaction(SIGCHLD, &sa, NULL);
+		signal(SIGPIPE, SIG_IGN);
+
 		c.mode = MODE_PASTA;
 		log_name = "pasta";
 	} else {
@@ -262,8 +331,13 @@ int main(int argc, char **argv)
 	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
 		openlog(log_name, LOG_PERROR, LOG_DAEMON);
 
-	if (c.mode == MODE_PASTA && !c.pasta_pid)
+	if (c.mode == MODE_PASTA && !c.pasta_pid) {
+		char proc_path[PATH_MAX];
+
 		pasta_start_ns(&c);
+		snprintf(proc_path, PATH_MAX, "/proc/%i/ns/net", c.pasta_pid);
+		readlink(proc_path, pasta_child_ns, PATH_MAX);
+	}
 
 	c.epollfd = epoll_create1(0);
 	if (c.epollfd == -1) {
