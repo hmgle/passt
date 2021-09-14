@@ -2007,7 +2007,8 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 			    ack_seq - max_ack_seq < MAX_WINDOW) {
 
 				/* Fast re-transmit */
-				retr = !len && ack_seq == max_ack_seq &&
+				retr = !len && !th->fin &&
+				       ack_seq == max_ack_seq &&
 				       max_ack_seq_wnd == ntohs(th->window);
 
 				max_ack_seq_wnd = ntohs(th->window);
