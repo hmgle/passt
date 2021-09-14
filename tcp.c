@@ -3004,9 +3004,9 @@ static void tcp_timer_one(struct ctx *c, struct tcp_tap_conn *conn,
 				tcp_send_to_tap(c, conn, 0, NULL, 0);
 		}
 
-		if (ack_tap_ms > ACK_TIMEOUT) {
+		if (sock_ms - ack_tap_ms > ACK_TIMEOUT) {
 			if (conn->seq_ack_from_tap < conn->seq_to_tap) {
-				if (ack_tap_ms > 10 * ACK_TIMEOUT) {
+				if (sock_ms - ack_tap_ms > 10 * ACK_TIMEOUT) {
 					tcp_rst(c, conn);
 					break;
 				}
@@ -3026,7 +3026,7 @@ static void tcp_timer_one(struct ctx *c, struct tcp_tap_conn *conn,
 		break;
 	case CLOSE_WAIT:
 	case FIN_WAIT_1_SOCK_FIN:
-		if (ack_tap_ms > FIN_TIMEOUT)
+		if (sock_ms - ack_tap_ms > FIN_TIMEOUT)
 			tcp_rst(c, conn);
 		break;
 	case FIN_WAIT_1:
