@@ -2088,13 +2088,8 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		return;
 	}
 
-	if (keep != -1) {
-		tcp_send_to_tap(c, conn, ACK, NULL, 0);
-		tcp_send_to_tap(c, conn, ACK, NULL, 0);
-	}
-
 	if (!iov_i)
-		goto fin_check;
+		goto out;
 
 	mh.msg_iovlen = iov_i;
 eintr:
@@ -2114,14 +2109,16 @@ eintr:
 	if (len < (seq_from_tap - conn->seq_from_tap)) {
 		conn->seq_from_tap += len;
 		tcp_send_to_tap(c, conn, ZERO_WINDOW, NULL, 0);
-		return;
+	} else {
+		conn->seq_from_tap += len;
 	}
 
-	conn->seq_from_tap += len;
-
-fin_check:
-	if (keep != -1)
+out:
+	if (keep != -1) {
+		tcp_send_to_tap(c, conn, ACK, NULL, 0);
+		tcp_send_to_tap(c, conn, ACK, NULL, 0);
 		return;
+	}
 
 	if (ack) {
 		if (conn->state == ESTABLISHED_SOCK_FIN_SENT &&
