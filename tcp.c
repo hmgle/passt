@@ -1534,9 +1534,9 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 static void tcp_table_splice_compact(struct ctx *c,
 				     struct tcp_splice_conn *hole)
 {
-	union epoll_ref ref_from = { .proto = IPPROTO_TCP,
+	union epoll_ref ref_from = { .proto = IPPROTO_TCP, .tcp.splice = 1,
 				     .tcp.index = hole - ts };
-	union epoll_ref ref_to = { .proto = IPPROTO_TCP,
+	union epoll_ref ref_to = { .proto = IPPROTO_TCP, .tcp.splice = 1,
 				   .tcp.index = hole - ts };
 	struct tcp_splice_conn *move;
 	struct epoll_event ev_from;
