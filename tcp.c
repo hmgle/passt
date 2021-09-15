@@ -1602,6 +1602,7 @@ static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
 		close(conn->from);
 		tcp_splice_state(conn, CLOSED);
 		tcp_table_splice_compact(c, conn);
+		conn->from_fin_sent = conn->to_fin_sent = 0;
 		conn->from_read = conn->from_written = 0;
 		conn->to_read = conn->to_written = 0;
 		return;
