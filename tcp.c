@@ -2689,10 +2689,15 @@ eintr:
 				 SPLICE_F_MOVE);
 
 		if (written > 0) {
-			if (move_from == conn->from)
+			if (move_from == conn->from) {
 				conn->from_written += written;
-			else
+				if (conn->from_read == conn->from_written)
+					break;
+			} else {
 				conn->to_written += written;
+				if (conn->to_read == conn->to_written)
+					break;
+			}
 		}
 
 		if (written < 0) {
