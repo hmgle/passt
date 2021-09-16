@@ -2380,18 +2380,13 @@ static int tcp_splice_connect(struct ctx *c, struct tcp_splice_conn *conn,
 		.sin_addr = { .s_addr = htonl(INADDR_LOOPBACK) },
 	};
 	const struct sockaddr *sa;
-	int ret, one = 1;
 	socklen_t sl;
+	int ret;
 
 	if (sock_conn < 0)
 		return -errno;
 
 	conn->to = sock_conn;
-
-	setsockopt(conn->from, SOL_TCP, TCP_CORK,    &one, sizeof(one));
-	setsockopt(conn->from, SOL_TCP, TCP_NODELAY, &one, sizeof(one));
-	setsockopt(conn->to,   SOL_TCP, TCP_CORK,    &one, sizeof(one));
-	setsockopt(conn->to,   SOL_TCP, TCP_NODELAY, &one, sizeof(one));
 
 	if (v6) {
 		sa = (struct sockaddr *)&addr6;
