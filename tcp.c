@@ -2002,12 +2002,8 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 
 		seq = ntohl(th->seq);
 		ack_seq = ntohl(th->ack_seq);
-		if (!i) {
-			if (count == 1)
-				max_ack_seq_wnd = ntohs(th->window);
-			else
-				max_ack_seq_wnd = ntohs(th->window) - 1;
-		}
+		if (!i)
+			max_ack_seq_wnd = ntohs(th->window);
 
 		if (th->ack) {
 			ack = 1;
