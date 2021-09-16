@@ -2639,9 +2639,7 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 		}
 	}
 
-	if (events & EPOLLHUP) {
-		tcp_splice_state(conn, SPLICE_FIN_BOTH);
-	} else if (events & EPOLLRDHUP) {
+	if (events & EPOLLRDHUP) {
 		if (ref.s == conn->from) {
 			if (conn->state == SPLICE_ESTABLISHED)
 				tcp_splice_state(conn, SPLICE_FIN_FROM);
