@@ -2825,9 +2825,7 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 	case ESTABLISHED_SOCK_FIN_SENT:
 	case ESTABLISHED:
 		tcp_data_from_sock(c, conn, now);
-		if (events & EPOLLHUP) {
-			tcp_rst(c, conn);
-		} else if (events & EPOLLRDHUP) {
+		if (events & EPOLLRDHUP) {
 			if (conn->state == ESTABLISHED)
 				tcp_tap_state(conn, ESTABLISHED_SOCK_FIN);
 			tcp_data_from_sock(c, conn, now);
@@ -2870,9 +2868,6 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 	case CLOSED:
 		break;
 	}
-
-	if (events & EPOLLHUP)
-		tcp_rst(c, conn);
 }
 
 /**
