@@ -1150,16 +1150,13 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 			return err;
 		}
 
-		if (info.tcpi_snd_wnd > conn->sndbuf) {
-			sl = sizeof(conn->sndbuf);
-			if (getsockopt(conn->sock, SOL_SOCKET, SO_SNDBUF,
-				       &conn->sndbuf, &sl))
-				conn->sndbuf = USHRT_MAX;
+		sl = sizeof(conn->sndbuf);
+		if (getsockopt(conn->sock, SOL_SOCKET, SO_SNDBUF,
+			       &conn->sndbuf, &sl))
+			conn->sndbuf = USHRT_MAX;
 
-			info.tcpi_snd_wnd = MIN(info.tcpi_snd_wnd,
-						conn->sndbuf / 100 * 90);
-		}
-
+		info.tcpi_snd_wnd = MIN(info.tcpi_snd_wnd,
+					conn->sndbuf * 90 / 100);
 		conn->tcpi_snd_wnd = info.tcpi_snd_wnd;
 	}
 
@@ -1766,15 +1763,12 @@ recvmmsg:
 				       &sl))
 				goto err;
 
-			if (info.tcpi_snd_wnd > conn->sndbuf) {
-				if (getsockopt(conn->sock, SOL_SOCKET,
-					       SO_SNDBUF, &conn->sndbuf, &sl))
-					conn->sndbuf = USHRT_MAX;
+			if (getsockopt(conn->sock, SOL_SOCKET,
+				       SO_SNDBUF, &conn->sndbuf, &sl))
+				conn->sndbuf = USHRT_MAX;
 
-				info.tcpi_snd_wnd = MIN(info.tcpi_snd_wnd,
-							conn->sndbuf / 100
-								     * 90);
-			}
+			info.tcpi_snd_wnd = MIN(info.tcpi_snd_wnd,
+						conn->sndbuf * 90 / 100);
 
 			if (conn->state == ESTABLISHED)
 				conn->seq_ack_to_tap = conn->seq_from_tap;
