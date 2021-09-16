@@ -2735,8 +2735,14 @@ eintr:
 		if (move_from == conn->from &&
 		    conn->from_read == conn->from_written) {
 			if (!conn->from_fin_sent) {
-				shutdown(move_to, SHUT_WR);
+				shutdown(conn->to, SHUT_WR);
 				conn->from_fin_sent = 1;
+
+				ev.events = 0;
+				ref.s = move_from;
+				ev.data.u64 = ref.u64,
+				epoll_ctl(c->epollfd, EPOLL_CTL_MOD,
+					  move_from, &ev);
 			}
 
 			if (conn->to_fin_sent)
@@ -2744,8 +2750,14 @@ eintr:
 		} else if (move_from == conn->to &&
 			   conn->to_read == conn->to_written) {
 			if (!conn->to_fin_sent) {
-				shutdown(move_to, SHUT_WR);
+				shutdown(conn->from, SHUT_WR);
 				conn->to_fin_sent = 1;
+
+				ev.events = 0;
+				ref.s = move_from;
+				ev.data.u64 = ref.u64,
+				epoll_ctl(c->epollfd, EPOLL_CTL_MOD,
+					  move_from, &ev);
 			}
 
 			if (conn->from_fin_sent)
