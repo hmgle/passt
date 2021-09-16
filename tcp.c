@@ -2577,7 +2577,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 			     uint32_t events)
 {
-	int move_from, move_to, *pipes, eof;
+	int move_from, move_to, *pipes, eof, never_read;
 	struct tcp_splice_conn *conn;
 	struct epoll_event ev;
 
@@ -2657,9 +2657,10 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 
 swap:
 	eof = 0;
+	never_read = 1;
 
 	while (1) {
-		int never_read = 1, retry_write = 1;
+		int retry_write = 1;
 		ssize_t read, to_write = 0, written;
 
 retry:
