@@ -1558,8 +1558,8 @@ static void tcp_table_splice_compact(struct ctx *c,
 		ev_from.events = EPOLLET | EPOLLRDHUP;
 		ev_to.events = EPOLLET | EPOLLOUT | EPOLLRDHUP;
 	} else {
-		ev_from.events = EPOLLET | EPOLLIN | EPOLLOUT | EPOLLRDHUP;
-		ev_to.events = EPOLLET | EPOLLIN | EPOLLOUT | EPOLLRDHUP;
+		ev_from.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP;
+		ev_to.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP;
 	}
 
 	ev_from.data.u64 = ref_from.u64;
@@ -2336,7 +2336,7 @@ static void tcp_splice_connect_finish(struct ctx *c,
 	if (conn->state == SPLICE_CONNECT) {
 		tcp_splice_state(conn, SPLICE_ESTABLISHED);
 
-		ev_from.events = ev_to.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+		ev_from.events = ev_to.events = EPOLLIN | EPOLLRDHUP;
 		ev_from.data.u64 = ref_from.u64;
 		ev_to.data.u64 = ref_to.u64;
 
@@ -2615,7 +2615,7 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 
 	if (events & EPOLLOUT) {
 		struct epoll_event ev = {
-			.events = EPOLLIN | EPOLLET | EPOLLRDHUP,
+			.events = EPOLLIN | EPOLLRDHUP,
 			.data.u64 = ref.u64,
 		};
 
@@ -2714,7 +2714,7 @@ eintr:
 			if (retry_write--)
 				goto retry;
 
-			ev.events = EPOLLIN | EPOLLOUT | EPOLLET | EPOLLRDHUP;
+			ev.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP;
 			ref.s = move_to;
 			ev.data.u64 = ref.u64,
 			epoll_ctl(c->epollfd, EPOLL_CTL_MOD, move_to, &ev);
