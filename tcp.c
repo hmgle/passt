@@ -1583,11 +1583,15 @@ static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
 	case SPLICE_ESTABLISHED:
 		if (conn->pipe_from_to[0] != -1) {
 			close(conn->pipe_from_to[0]);
+			conn->pipe_from_to[0] = -1;
 			close(conn->pipe_from_to[1]);
+			conn->pipe_from_to[1] = -1;
 		}
 		if (conn->pipe_to_from[0] != -1) {
 			close(conn->pipe_to_from[0]);
+			conn->pipe_to_from[0] = -1;
 			close(conn->pipe_to_from[1]);
+			conn->pipe_to_from[1] = -1;
 		}
 		/* Falls through */
 	case SPLICE_CONNECT:
