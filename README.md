@@ -286,3 +286,11 @@ before _passt_ starts.
 ## Contribute
 
 Send patches and issue reports to [sbrivio@redhat.com](mailto:sbrivio@redhat.com).
+
+<p><video id="ci_video" style="width: 90%; height: auto; max-height: 90%" controls>
+ <source src="/builds/ci.mp4" type="video/mp4">
+</video></p>
+
+<script src="/builds/perf.js"></script>
+
+<script src="/builds/video_links.js"></script>
