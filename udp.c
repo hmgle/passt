@@ -727,7 +727,7 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			udp6_l2_iov_tap[i].iov_len = iov_len;
 
 			/* With bigger messages, qemu closes the connection. */
-			if (iov_in_msg && msglen + iov_len > USHRT_MAX) {
+			if (iov_in_msg && msglen + iov_len > SHRT_MAX) {
 				cur_mh->msg_iovlen = iov_in_msg;
 
 				cur_mh = &udp6_l2_mh_tap[++msg_i].msg_hdr;
@@ -797,7 +797,7 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			udp4_l2_iov_tap[i].iov_len = iov_len;
 
 			/* With bigger messages, qemu closes the connection. */
-			if (iov_in_msg && msglen + iov_len > USHRT_MAX) {
+			if (iov_in_msg && msglen + iov_len > SHRT_MAX) {
 				cur_mh->msg_iovlen = iov_in_msg;
 
 				cur_mh = &udp4_l2_mh_tap[++msg_i].msg_hdr;
