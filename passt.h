@@ -45,7 +45,7 @@ union epoll_ref {
 	uint64_t u64;
 };
 
-#define TAP_BUF_BYTES		((ETH_MAX_MTU + sizeof(uint32_t)) * 128)
+#define TAP_BUF_BYTES		((ETH_MAX_MTU + sizeof(uint32_t)) * 256)
 #define TAP_BUF_FILL		(TAP_BUF_BYTES - ETH_MAX_MTU - sizeof(uint32_t))
 #define TAP_MSGS							\
 	DIV_ROUND_UP(TAP_BUF_BYTES, ETH_ZLEN - 2 * ETH_ALEN + sizeof(uint32_t))
