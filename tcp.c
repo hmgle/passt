@@ -306,12 +306,15 @@
  * namespaces, the implementation is substantially simpler: packets are directly
  * translated between L4 sockets using a pair of splice() syscalls. These
  * connections are tracked in the @ts array of struct tcp_splice_conn, using
- * just four states:
+ * these states:
  *
  * - CLOSED:			no connection
  * - SPLICE_ACCEPTED:		accept() on the listening socket succeeded
  * - SPLICE_CONNECT:		connect() issued in the destination namespace
  * - SPLICE_ESTABLISHED:	connect() succeeded, packets are transferred
+ * - SPLICE_FIN_FROM:		FIN (EPOLLRDHUP) seen from originating socket
+ * - SPLICE_FIN_TO:		FIN (EPOLLRDHUP) seen from connected socket
+ * - SPLICE_FIN_BOTH:		FIN (EPOLLRDHUP) seen from both sides
  */
 
 #define _GNU_SOURCE
