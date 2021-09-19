@@ -120,7 +120,7 @@
 
 #define UDP_CONN_TIMEOUT	180 /* s, timeout for ephemeral or local bind */
 #define UDP_SPLICE_FRAMES	128
-#define UDP_TAP_FRAMES		64
+#define UDP_TAP_FRAMES		16
 
 /**
  * struct udp_tap_port - Port tracking based on tap-facing source port
