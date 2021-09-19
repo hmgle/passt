@@ -11,8 +11,8 @@ struct ctx;
 void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		      struct timespec *now);
 int tcp_tap_handler(struct ctx *c, int af, void *addr,
-		    struct tap_msg *msg, int count, struct timespec *now);
-int tcp_sock_init(struct ctx *c);
+		    struct tap_l4_msg *msg, int count, struct timespec *now);
+int tcp_sock_init(struct ctx *c, struct timespec *now);
 void tcp_timer(struct ctx *c, struct timespec *ts);
 void tcp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 		       uint32_t *ip_da);
@@ -45,6 +45,9 @@ union tcp_epoll_ref {
  * @port_to_tap:	Ports bound host-side, packets to tap or spliced
  * @port_to_init:	Ports bound namespace-side, spliced to init
  * @timer_run:		Timestamp of most recent timer run
+ * @kernel_snd_wnd:	Kernel reports sending window (with commit 8f7baad7f035)
+ * @pipe_size:		Size of pipes for spliced connections
+ * @refill_ts:		Time of last refill operation for pools of sockets/pipes
  */
 struct tcp_ctx {
 	uint64_t hash_secret[2];
@@ -53,6 +56,9 @@ struct tcp_ctx {
 	uint8_t port_to_tap	[USHRT_MAX / 8];
 	uint8_t port_to_init	[USHRT_MAX / 8];
 	struct timespec timer_run;
+	int kernel_snd_wnd;
+	size_t pipe_size;
+	struct timespec refill_ts;
 };
 
 #endif /* TCP_H */
