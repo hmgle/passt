@@ -127,6 +127,16 @@ static void timer_handler(struct ctx *c, struct timespec *now)
 }
 
 /**
+ * timer_init() - Set initial timestamp for timer runs to current time
+ * @c:		Execution context
+ * @now:	Current timestamp
+ */
+static void timer_init(struct ctx *c, struct timespec *now)
+{
+	c->tcp.timer_run = c->udp.timer_run = c->icmp.timer_run = *now;
+}
+
+/**
  * proto_update_l2_buf() - Update scatter-gather L2 buffers in protocol handlers
  * @eth_d:	Ethernet destination address, NULL if unchanged
  * @eth_s:	Ethernet source address, NULL if unchanged
@@ -363,8 +373,10 @@ int main(int argc, char **argv)
 
 	tap_sock_init(&c);
 
-	if ((!c.no_udp && udp_sock_init(&c)) ||
-	    (!c.no_tcp && tcp_sock_init(&c)))
+	clock_gettime(CLOCK_MONOTONIC, &now);
+
+	if ((!c.no_udp && udp_sock_init(&c, &now)) ||
+	    (!c.no_tcp && tcp_sock_init(&c, &now)))
 		exit(EXIT_FAILURE);
 
 	if (c.v6 && !c.no_dhcpv6)
@@ -379,6 +391,8 @@ int main(int argc, char **argv)
 
 	if (isatty(fileno(stdout)) && !c.foreground)
 		daemon(0, 0);
+
+	timer_init(&c, &now);
 loop:
 	nfds = epoll_wait(c.epollfd, events, EPOLL_EVENTS, TIMER_INTERVAL);
 	if (nfds == -1 && errno != EINTR) {
