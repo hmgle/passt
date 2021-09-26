@@ -58,7 +58,6 @@
  * - security:
  *   - no dynamic memory allocation is performed
  *   - TODO: synflood protection
- *   - TODO: sequence collision attacks
  *
  * Portability is limited by usage of Linux-specific socket options.
  *
