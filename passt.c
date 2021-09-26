@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
@@ -61,12 +62,12 @@
 #include "tap.h"
 #include "conf.h"
 
-#define EPOLL_EVENTS		10
+#define EPOLL_EVENTS		8
 
 #define __TIMER_INTERVAL	MIN(TCP_TIMER_INTERVAL, UDP_TIMER_INTERVAL)
 #define TIMER_INTERVAL		MIN(__TIMER_INTERVAL, ICMP_TIMER_INTERVAL)
 
-char pkt_buf			[PKT_BUF_BYTES];
+char pkt_buf[PKT_BUF_BYTES]	__attribute__ ((aligned(PAGE_SIZE)));
 
 char *ip_proto_str[IPPROTO_SCTP + 1] = {
 	[IPPROTO_ICMP]		= "ICMP",
@@ -322,6 +323,9 @@ int main(int argc, char **argv)
 		c.mode = MODE_PASST;
 		log_name = "passt";
 	}
+
+	if (madvise(pkt_buf, TAP_BUF_BYTES, MADV_HUGEPAGE))
+		perror("madvise");
 
 	openlog(log_name, 0, LOG_DAEMON);
 

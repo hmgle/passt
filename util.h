@@ -25,6 +25,7 @@ void debug(const char *format, ...);
 #endif
 
 #define DIV_ROUND_UP(n, d)	(((n) + (d) - 1) / (d))
+#define ROUND_DOWN(x, y)	((x) & ~((y) - 1))
 
 #define SWAP(a, b)							\
 	do {								\
