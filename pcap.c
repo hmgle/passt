@@ -186,7 +186,7 @@ void pcap_init(struct ctx *c, int index)
 	}
 
 	pcap_fd = open(c->pcap, O_WRONLY | O_CREAT | O_TRUNC | O_DSYNC,
-		       S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		       S_IRUSR | S_IWUSR);
 	if (pcap_fd == -1) {
 		perror("open");
 		return;
