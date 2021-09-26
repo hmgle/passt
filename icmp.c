@@ -141,22 +141,25 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  * Return: count of consumed packets (always 1, even if malformed)
  */
 int icmp_tap_handler(struct ctx *c, int af, void *addr,
-		     struct tap_msg *msg, int count, struct timespec *now)
+		     struct tap_l4_msg *msg, int count, struct timespec *now)
 {
 	(void)count;
 
 	if (af == AF_INET) {
-		struct icmphdr *ih = (struct icmphdr *)msg[0].l4h;
 		union icmp_epoll_ref iref = { .v6 = 0 };
 		struct sockaddr_in sa = {
 			.sin_family = AF_INET,
 			.sin_addr = { .s_addr = INADDR_ANY },
-			.sin_port = ih->un.echo.id,
 		};
+		struct icmphdr *ih;
 		int id, s;
+
+		ih = (struct icmphdr *)(pkt_buf + msg[0].pkt_buf_offset);
 
 		if (msg[0].l4_len < sizeof(*ih) || ih->type != ICMP_ECHO)
 			return 1;
+
+		sa.sin_port = ih->un.echo.id;
 
 		iref.id = id = ntohs(ih->un.echo.id);
 
@@ -171,21 +174,24 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		bitmap_set(icmp_act[V4], id);
 
 		sa.sin_addr = *(struct in_addr *)addr;
-		sendto(s, msg[0].l4h, msg[0].l4_len, MSG_NOSIGNAL,
+		sendto(s, ih, msg[0].l4_len, MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
 	} else if (af == AF_INET6) {
-		struct icmp6hdr *ih = (struct icmp6hdr *)msg[0].l4h;
 		union icmp_epoll_ref iref = { .v6 = 1 };
 		struct sockaddr_in6 sa = {
 			.sin6_family = AF_INET6,
 			.sin6_addr = IN6ADDR_ANY_INIT,
-			.sin6_port = ih->icmp6_identifier,
 		};
+		struct icmp6hdr *ih;
 		int id, s;
+
+		ih = (struct icmp6hdr *)(pkt_buf + msg[0].pkt_buf_offset);
 
 		if (msg[0].l4_len < sizeof(*ih) ||
 		    (ih->icmp6_type != 128 && ih->icmp6_type != 129))
 			return 1;
+
+		sa.sin6_port = ih->icmp6_identifier;
 
 		iref.id = id = ntohs(ih->icmp6_identifier);
 		if ((s = icmp_id_map[V6][id].sock) <= 0) {
@@ -200,7 +206,7 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		bitmap_set(icmp_act[V6], id);
 
 		sa.sin6_addr = *(struct in6_addr *)addr;
-		sendto(s, msg[0].l4h, msg[0].l4_len, MSG_NOSIGNAL,
+		sendto(s, ih, msg[0].l4_len, MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
 	}
 

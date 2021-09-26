@@ -50,7 +50,9 @@
 #include "dhcpv6.h"
 #include "pcap.h"
 
-static struct tap_msg tap_msgs[TAP_MSGS];
+/* IPv4 (plus ARP) and IPv6 message batches from tap/guest to IP handlers */
+static struct tap_msg seq4[TAP_MSGS];
+static struct tap_msg seq6[TAP_MSGS];
 
 /**
  * tap_send() - Send frame, with qemu socket header if needed
@@ -199,256 +201,409 @@ void tap_ip_send(struct ctx *c, struct in6_addr *src, uint8_t proto,
 }
 
 /**
+ * struct l4_seq4_t - Message sequence for one protocol handler call, IPv4
+ * @msgs:	Count of messages in sequence
+ * @protocol:	Protocol number
+ * @source:	Source port
+ * @dest:	Destination port
+ * @saddr:	Source address
+ * @daddr:	Destination address
+ * @msg:	Array of messages that can be handled in a single call
+ */
+static struct tap_l4_seq4 {
+	uint16_t msgs;
+	uint8_t protocol;
+
+	uint16_t source;
+	uint16_t dest;
+
+	uint32_t saddr;
+	uint32_t daddr;
+
+	struct tap_l4_msg msg[UIO_MAXIOV];
+} l4_seq4[UIO_MAXIOV /* Arbitrary: TAP_MSGS in theory, so limit in users */];
+
+/**
+ * struct l4_seq6_t - Message sequence for one protocol handler call, IPv6
+ * @msgs:	Count of messages in sequence
+ * @protocol:	Protocol number
+ * @source:	Source port
+ * @dest:	Destination port
+ * @saddr:	Source address
+ * @daddr:	Destination address
+ * @msg:	Array of messages that can be handled in a single call
+ */
+static struct tap_l4_seq6 {
+	uint16_t msgs;
+	uint8_t protocol;
+
+	uint16_t source;
+	uint16_t dest;
+
+	struct in6_addr saddr;
+	struct in6_addr daddr;
+
+	struct tap_l4_msg msg[UIO_MAXIOV];
+} l4_seq6[UIO_MAXIOV /* Arbitrary: TAP_MSGS in theory, so limit in users */];
+
+/**
+ * tap_packet_debug() - Print debug message for packet(s) from guest/tap
+ * @iph:	IPv4 header, can be NULL
+ * @ip6h:	IPv6 header, can be NULL
+ * @seq4:	Pointer to @struct tap_l4_seq4, can be NULL
+ * @proto6:	IPv6 protocol, for IPv6
+ * @seq6:	Pointer to @struct tap_l4_seq6, can be NULL
+ * @count:	Count of packets in this sequence
+ */
+static void tap_packet_debug(struct iphdr *iph, struct ipv6hdr *ip6h,
+			     struct tap_l4_seq4 *seq4, uint8_t proto6,
+			     struct tap_l4_seq6 *seq6, int count)
+{
+	char buf6s[INET6_ADDRSTRLEN], buf6d[INET6_ADDRSTRLEN];
+	char buf4s[INET_ADDRSTRLEN], buf4d[INET_ADDRSTRLEN];
+	uint8_t proto;
+
+	if (iph || seq4) {
+		inet_ntop(AF_INET,   iph ? &iph->saddr  : &seq4->saddr,
+			  buf4s, sizeof(buf4s)),
+		inet_ntop(AF_INET,   iph ? &iph->daddr  : &seq4->daddr,
+			  buf4d, sizeof(buf4d)),
+		proto = iph ? iph->protocol : seq4->protocol;
+	} else {
+		inet_ntop(AF_INET6, ip6h ? &ip6h->saddr : &seq6->saddr,
+			  buf6s, sizeof(buf6s)),
+		inet_ntop(AF_INET6, ip6h ? &ip6h->daddr : &seq6->daddr,
+			  buf6d, sizeof(buf6d)),
+		proto = proto6;
+	}
+
+	if (proto == IPPROTO_TCP || proto == IPPROTO_UDP) {
+		debug("protocol %i from tap: %s:%i -> %s:%i (%i packet%s)",
+		      proto, seq4 ? buf4s : buf6s,
+		      ntohs(seq4 ? seq4->source : seq6->source),
+		      seq4 ? buf4d : buf6d,
+		      ntohs(seq4 ? seq4->dest : seq6->dest),
+		      count, count == 1 ? "" : "s");
+	} else {
+		debug("protocol %i from tap: %s -> %s (%i packet%s)",
+		      proto, iph ? buf4s : buf6s, iph ? buf4d : buf6d,
+		      count, count == 1 ? "" : "s");
+	}
+}
+
+/**
  * tap4_handler() - IPv4 and ARP packet handler for tap file descriptor
  * @c:		Execution context
- * @msg:	Array of messages with the same L3 protocol
- * @count:	Count of messages with the same L3 protocol
+ * @msg:	Array of messages with IPv4 or ARP protocol
+ * @count:	Count of messages
  * @now:	Current timestamp
- * @first:	First call for an IPv4 packet in this batch
  *
  * Return: count of packets consumed by handlers
  */
 static int tap4_handler(struct ctx *c, struct tap_msg *msg, size_t count,
-			struct timespec *now, int first)
+			struct timespec *now)
 {
-	char buf_s[INET_ADDRSTRLEN] __attribute((__unused__));
-	char buf_d[INET_ADDRSTRLEN] __attribute((__unused__));
-	struct ethhdr *eh = (struct ethhdr *)msg[0].start;
-	struct iphdr *iph, *prev_iph = NULL;
-	struct udphdr *uh, *prev_uh = NULL;
-	size_t len = msg[0].len;
-	unsigned int i;
+	unsigned int i, j, seq_count;
+	struct tap_l4_msg *l4_msg;
+	struct tap_l4_seq4 *seq;
+	size_t len, l4_len;
+	struct ethhdr *eh;
+	struct iphdr *iph;
+	struct udphdr *uh;
 	char *l4h;
 
 	if (!c->v4)
 		return count;
 
-	if (len < sizeof(*eh) + sizeof(*iph))
-		return 1;
-
-	if (arp(c, eh, len) || dhcp(c, eh, len))
-		return 1;
-
-	for (i = 0; i < count; i++) {
+	i = 0;
+resume:
+	for (seq_count = 0, seq = NULL; i < count; i++) {
+		eh = (struct ethhdr *)(pkt_buf + msg[i].pkt_buf_offset);
 		len = msg[i].len;
+
+		if (len < sizeof(*eh))
+			continue;
+
+		if (ntohs(eh->h_proto) == ETH_P_ARP && arp(c, eh, len))
+			continue;
+
 		if (len < sizeof(*eh) + sizeof(*iph))
-			return 1;
+			continue;
 
-		eh = (struct ethhdr *)msg[i].start;
 		iph = (struct iphdr *)(eh + 1);
-		l4h = (char *)iph + iph->ihl * 4;
+		if ((iph->ihl * 4) + sizeof(*eh) > len)
+			continue;
+		if (iph->ihl * 4 < sizeof(*iph))
+			continue;
 
-		if (first && c->addr4_seen != iph->saddr) {
+		if (iph->saddr && c->addr4_seen != iph->saddr) {
 			c->addr4_seen = iph->saddr;
 			proto_update_l2_buf(NULL, NULL, &c->addr4_seen);
 		}
 
-		msg[i].l4h = l4h;
-		msg[i].l4_len = len - ((intptr_t)l4h - (intptr_t)eh);
+		l4h = (char *)iph + iph->ihl * 4;
+		l4_len = len - ((intptr_t)l4h - (intptr_t)eh);
 
-		if (iph->protocol != IPPROTO_TCP &&
-		    iph->protocol != IPPROTO_UDP)
-			break;
+		if (iph->protocol == IPPROTO_ICMP) {
+			struct tap_l4_msg icmp_msg = { l4h - pkt_buf,
+						       l4_len };
 
-		if (len < sizeof(*uh))
-			break;
+			if (l4_len < sizeof(struct icmphdr))
+				continue;
 
-		uh = (struct udphdr *)l4h;
-
-		if (!i) {
-			prev_iph = iph;
-			prev_uh = uh;
+			tap_packet_debug(iph, NULL, NULL, 0, NULL, 1);
+			if (!c->no_icmp) {
+				icmp_tap_handler(c, AF_INET, &iph->daddr,
+						 &icmp_msg, 1, now);
+			}
 			continue;
 		}
 
-		if (iph->tos		!= prev_iph->tos	||
-		    iph->frag_off	!= prev_iph->frag_off	||
-		    iph->protocol	!= prev_iph->protocol	||
-		    iph->saddr		!= prev_iph->saddr	||
-		    iph->daddr		!= prev_iph->daddr	||
-		    uh->source		!= prev_uh->source	||
-		    uh->dest		!= prev_uh->dest)
-			break;
+		if (l4_len < sizeof(*uh))
+			continue;
 
-		prev_iph = iph;
-		prev_uh = uh;
+		uh = (struct udphdr *)l4h;
+
+		if (iph->protocol == IPPROTO_UDP && dhcp(c, eh, len))
+			continue;
+
+		if (iph->protocol != IPPROTO_TCP &&
+		    iph->protocol != IPPROTO_UDP) {
+			tap_packet_debug(iph, NULL, NULL, 0, NULL, 1);
+			continue;
+		}
+
+#define L4_MATCH(iph, uh, seq)						\
+	(seq->protocol == iph->protocol &&				\
+	 seq->source   == uh->source    && seq->dest  == uh->dest &&	\
+	 seq->saddr    == iph->saddr    && seq->daddr == iph->daddr)
+
+#define L4_SET(iph, uh, seq)						\
+	do {								\
+		seq->protocol	= iph->protocol;			\
+		seq->source	= uh->source;				\
+		seq->dest	= uh->dest;				\
+		seq->saddr	= iph->saddr;				\
+		seq->daddr	= iph->daddr;				\
+	} while (0)
+
+		if (seq && L4_MATCH(iph, uh, seq) && seq->msgs < UIO_MAXIOV)
+			goto append;
+
+		for (seq = l4_seq4 + seq_count - 1; seq >= l4_seq4; seq--) {
+			if (L4_MATCH(iph, uh, seq)) {
+				if (seq->msgs >= UIO_MAXIOV)
+					seq = l4_seq4 - 1;
+				break;
+			}
+		}
+
+		if (seq < l4_seq4) {
+			seq = l4_seq4 + seq_count++;
+			L4_SET(iph, uh, seq);
+			seq->msgs = 0;
+		}
+
+#undef L4_MATCH
+#undef L4_SET
+
+append:
+		l4_msg = &seq->msg[seq->msgs++];
+
+		l4_msg->pkt_buf_offset = l4h - pkt_buf;
+		l4_msg->l4_len = l4_len;
+
+		if (seq_count == UIO_MAXIOV)
+			break;	/* Resume after flushing if i < count */
 	}
 
-	eh = (struct ethhdr *)msg[0].start;
-	iph = (struct iphdr *)(eh + 1);
+	for (j = 0, seq = l4_seq4; j < seq_count; j++, seq++) {
+		int n = seq->msgs;
 
-	if (iph->protocol == IPPROTO_TCP || iph->protocol == IPPROTO_UDP ||
-	    iph->protocol == IPPROTO_SCTP) {
-		uh = (struct udphdr *)msg[0].l4h;
+		l4_msg = seq->msg;
 
-		if (msg[0].len < sizeof(*uh))
-			return 1;
+		tap_packet_debug(NULL, NULL, seq, 0, NULL, n);
 
-		debug("%s (%i) from tap: %s:%i -> %s:%i (%i packet%s)",
-		      IP_PROTO_STR(iph->protocol), iph->protocol,
-		      inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
-		      ntohs(uh->source),
-		      inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)),
-		      ntohs(uh->dest),
-		      i, i > 1 ? "s" : "");
-	} else if (iph->protocol == IPPROTO_ICMP) {
-		debug("icmp from tap: %s -> %s",
-		      inet_ntop(AF_INET, &iph->saddr, buf_s, sizeof(buf_s)),
-		      inet_ntop(AF_INET, &iph->daddr, buf_d, sizeof(buf_d)));
+		if (seq->protocol == IPPROTO_TCP) {
+			if (c->no_tcp)
+				continue;
+			while ((n -= tcp_tap_handler(c, AF_INET, &seq->daddr,
+						     l4_msg, n, now)));
+		} else if (seq->protocol == IPPROTO_UDP) {
+			if (c->no_udp)
+				continue;
+			while ((n -= udp_tap_handler(c, AF_INET, &seq->daddr,
+						     l4_msg, n, now)));
+		}
 	}
 
-	if (iph->protocol == IPPROTO_TCP) {
-		if (c->no_tcp)
-			return i;
-		return tcp_tap_handler(c, AF_INET, &iph->daddr, msg, i, now);
-	}
+	if (i < count)
+		goto resume;
 
-	if (iph->protocol == IPPROTO_UDP) {
-		if (c->no_udp)
-			return i;
-		return udp_tap_handler(c, AF_INET, &iph->daddr, msg, i, now);
-	}
-
-	if (iph->protocol == IPPROTO_ICMP) {
-		if (c->no_icmp)
-			return 1;
-		icmp_tap_handler(c, AF_INET, &iph->daddr, msg, 1, now);
-	}
-
-	return 1;
+	return count;
 }
 
 /**
  * tap6_handler() - IPv6 packet handler for tap file descriptor
  * @c:		Execution context
- * @msg:	Array of messages with the same L3 protocol
- * @count:	Count of messages with the same L3 protocol
+ * @msg:	Array of messages with IPv6 protocol
+ * @count:	Count of messages
  * @now:	Current timestamp
- * @first:	First call for an IPv6 packet in this batch
  *
  * Return: count of packets consumed by handlers
  */
 static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
-			struct timespec *now, int first)
+			struct timespec *now)
 {
-	char buf_s[INET6_ADDRSTRLEN], buf_d[INET6_ADDRSTRLEN];
-	struct ethhdr *eh = (struct ethhdr *)msg[0].start;
-	struct udphdr *uh, *prev_uh = NULL;
-	uint8_t proto = 0, prev_proto = 0;
-	size_t len = msg[0].len;
+	unsigned int i, j, seq_count = 0;
+	struct tap_l4_msg *l4_msg;
+	struct tap_l4_seq6 *seq;
 	struct ipv6hdr *ip6h;
-	unsigned int i;
+	size_t len, l4_len;
+	struct ethhdr *eh;
+	struct udphdr *uh;
+	uint8_t proto;
 	char *l4h;
 
 	if (!c->v6)
 		return count;
 
-	if (len < sizeof(*eh) + sizeof(*ip6h))
-		return 1;
-
-	if (ndp(c, eh, len) || dhcpv6(c, eh, len))
-		return 1;
-
-	for (i = 0; i < count; i++) {
-		struct ipv6hdr *p_ip6h;
-
+	i = 0;
+resume:
+	for (seq_count = 0, seq = NULL; i < count; i++) {
+		eh = (struct ethhdr *)(pkt_buf + msg[i].pkt_buf_offset);
 		len = msg[i].len;
+
+		if (len < sizeof(*eh))
+			continue;
+
 		if (len < sizeof(*eh) + sizeof(*ip6h))
 			return 1;
 
-		eh = (struct ethhdr *)msg[i].start;
 		ip6h = (struct ipv6hdr *)(eh + 1);
-		l4h = ipv6_l4hdr(ip6h, &proto);
 
-		msg[i].l4h = l4h;
-		msg[i].l4_len = len - ((intptr_t)l4h - (intptr_t)eh);
+		if (IN6_IS_ADDR_LINKLOCAL(&ip6h->saddr)) {
+			c->addr6_ll_seen = ip6h->saddr;
 
-		if (first) {
-			if (IN6_IS_ADDR_LINKLOCAL(&ip6h->saddr)) {
-				c->addr6_ll_seen = ip6h->saddr;
-
-				if (IN6_IS_ADDR_UNSPECIFIED(&c->addr6_seen)) {
-					c->addr6_seen = ip6h->saddr;
-				}
-			} else {
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->addr6_seen)) {
 				c->addr6_seen = ip6h->saddr;
 			}
+		} else {
+			c->addr6_seen = ip6h->saddr;
 		}
 
-		ip6h->saddr = c->addr6;
+		if (ntohs(ip6h->payload_len) >
+		    len - sizeof(*eh) - sizeof(*ip6h))
+			continue;
 
-		if (proto != IPPROTO_TCP && proto != IPPROTO_UDP)
-			break;
+		if (!(l4h = ipv6_l4hdr(ip6h, &proto)))
+			continue;
 
-		if (len < sizeof(*uh))
-			break;
+		l4_len = len - ((intptr_t)l4h - (intptr_t)eh);
 
-		uh = (struct udphdr *)l4h;
+		if (proto == IPPROTO_ICMPV6) {
+			struct tap_l4_msg icmpv6_msg = { l4h - pkt_buf,
+						         l4_len };
 
-		if (!i) {
-			p_ip6h = ip6h;
-			prev_proto = proto;
-			prev_uh = uh;
+			if (l4_len < sizeof(struct icmp6hdr))
+				continue;
+
+			if (ndp(c, eh, len))
+				continue;
+
+			tap_packet_debug(NULL, ip6h, NULL, proto, NULL, 1);
+			if (!c->no_icmp) {
+				icmp_tap_handler(c, AF_INET6, &ip6h->daddr,
+						 &icmpv6_msg, 1, now);
+			}
 			continue;
 		}
 
-		if (proto		!= prev_proto		||
-		    memcmp(&ip6h->saddr, &p_ip6h->saddr, sizeof(ip6h->saddr)) ||
-		    memcmp(&ip6h->daddr, &p_ip6h->daddr, sizeof(ip6h->daddr)) ||
-		    uh->source		!= prev_uh->source	||
-		    uh->dest		!= prev_uh->dest)
-			break;
+		if (l4_len < sizeof(*uh))
+			continue;
 
-		p_ip6h = ip6h;
-		prev_proto = proto;
-		prev_uh = uh;
+		uh = (struct udphdr *)l4h;
+
+		if (proto == IPPROTO_UDP && dhcpv6(c, eh, len))
+			continue;
+
+		ip6h->saddr = c->addr6;
+
+		if (proto != IPPROTO_TCP && proto != IPPROTO_UDP) {
+			tap_packet_debug(NULL, ip6h, NULL, proto, NULL, 1);
+			continue;
+		}
+
+#define L4_MATCH(ip6h, proto, uh, seq)					\
+	(seq->protocol == proto         &&				\
+	 seq->source   == uh->source    && seq->dest  == uh->dest &&	\
+	 !memcmp(&seq->saddr, &ip6h->saddr, sizeof(seq->saddr))   &&	\
+	 !memcmp(&seq->daddr, &ip6h->daddr, sizeof(seq->daddr)))
+
+#define L4_SET(ip6h, proto, uh, seq)					\
+	do {								\
+		seq->protocol	= proto;				\
+		seq->source	= uh->source;				\
+		seq->dest	= uh->dest;				\
+		seq->saddr	= ip6h->saddr;				\
+		seq->daddr	= ip6h->daddr;				\
+	} while (0)
+
+		if (seq && L4_MATCH(ip6h, proto, uh, seq) &&
+		    seq->msgs < UIO_MAXIOV)
+			goto append;
+
+		for (seq = l4_seq6 + seq_count - 1; seq >= l4_seq6; seq--) {
+			if (L4_MATCH(ip6h, proto, uh, seq)) {
+				if (seq->msgs >= UIO_MAXIOV)
+					seq = l4_seq6 - 1;
+				break;
+			}
+		}
+
+		if (seq < l4_seq6) {
+			seq = l4_seq6 + seq_count++;
+			L4_SET(ip6h, proto, uh, seq);
+			seq->msgs = 0;
+		}
+
+#undef L4_MATCH
+#undef L4_SET
+
+append:
+		l4_msg = &seq->msg[seq->msgs++];
+
+		l4_msg->pkt_buf_offset = l4h - pkt_buf;
+		l4_msg->l4_len = l4_len;
+
+		if (seq_count == UIO_MAXIOV)
+			break;	/* Resume after flushing if i < count */
 	}
 
-	if (prev_proto)
-		proto = prev_proto;
+	for (j = 0, seq = l4_seq6; j < seq_count; j++, seq++) {
+		int n = seq->msgs;
 
-	eh = (struct ethhdr *)msg[0].start;
-	ip6h = (struct ipv6hdr *)(eh + 1);
+		l4_msg = seq->msg;
 
-	if (proto == IPPROTO_ICMPV6) {
-		debug("icmpv6 from tap: %s ->\n\t%s",
-		      inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
-		      inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)));
-	} else if (proto == IPPROTO_TCP || proto == IPPROTO_UDP ||
-		   proto == IPPROTO_SCTP) {
-		uh = (struct udphdr *)msg[0].l4h;
+		tap_packet_debug(NULL, NULL, NULL, seq->protocol, seq, n);
 
-		if (msg[0].len < sizeof(*uh))
-			return 1;
-
-		debug("%s (%i) from tap: [%s]:%i\n\t-> [%s]:%i (%i packet%s)",
-		      IP_PROTO_STR(proto), proto,
-		      inet_ntop(AF_INET6, &ip6h->saddr, buf_s, sizeof(buf_s)),
-		      ntohs(uh->source),
-		      inet_ntop(AF_INET6, &ip6h->daddr, buf_d, sizeof(buf_d)),
-		      ntohs(uh->dest),
-		      i, i > 1 ? "s" : "");
+		if (seq->protocol == IPPROTO_TCP) {
+			if (c->no_tcp)
+				continue;
+			while ((n -= tcp_tap_handler(c, AF_INET6, &seq->daddr,
+						     l4_msg, n, now)));
+		} else if (seq->protocol == IPPROTO_UDP) {
+			if (c->no_udp)
+				continue;
+			while ((n -= udp_tap_handler(c, AF_INET6, &seq->daddr,
+						     l4_msg, n, now)));
+		}
 	}
 
-	if (proto == IPPROTO_TCP) {
-		if (c->no_tcp)
-			return i;
-		return tcp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, i, now);
-	}
+	if (i < count)
+		goto resume;
 
-	if (proto == IPPROTO_UDP) {
-		if (c->no_udp)
-			return i;
-		return udp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, i, now);
-	}
-
-	if (proto == IPPROTO_ICMPV6) {
-		if (c->no_icmp)
-			return 1;
-		icmp_tap_handler(c, AF_INET6, &ip6h->daddr, msg, 1, now);
-	}
-
-	return 1;
+	return count;
 }
 
 /**
@@ -460,10 +615,14 @@ static int tap6_handler(struct ctx *c, struct tap_msg *msg, size_t count,
  */
 static int tap_handler_passt(struct ctx *c, struct timespec *now)
 {
-	int msg_count = 0, same, i = 0, first_v4 = 1, first_v6 = 1;
+	int seq4_i, seq6_i;
 	struct ethhdr *eh;
-	char *p = pkt_buf;
 	ssize_t n, rem;
+	char *p;
+
+redo:
+	p = pkt_buf;
+	seq4_i = seq6_i = rem = 0;
 
 	n = recv(c->fd_tap, p, TAP_BUF_FILL, MSG_DONTWAIT);
 	if (n < 0) {
@@ -479,30 +638,27 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 	while (n > (ssize_t)sizeof(uint32_t)) {
 		ssize_t len = ntohl(*(uint32_t *)p);
 
-		if (len < (ssize_t)sizeof(*eh) || len > ETH_MAX_MTU)
-			return 0;
-
 		p += sizeof(uint32_t);
 		n -= sizeof(uint32_t);
 
-		/* At most one packet might not fit in a single read */
+		/* At most one packet might not fit in a single read, and this
+		 * needs to be blocking.
+		 */
 		if (len > n) {
-			rem = recv(c->fd_tap, p + n, len - n, MSG_DONTWAIT);
+			rem = recv(c->fd_tap, p + n, len - n, 0);
 			if ((n += rem) != len)
 				return 0;
 		}
 
+		/* Complete the partial read above before discarding a malformed
+		 * frame, otherwise the stream will be inconsistent.
+		 */
+		if (len < (ssize_t)sizeof(*eh) || len > ETH_MAX_MTU)
+			goto next;
+
 		pcap(p, len);
 
-		tap_msgs[msg_count].start = p;
-		tap_msgs[msg_count++].len = len;
-
-		n -= len;
-		p += len;
-	}
-
-	while (i < msg_count) {
-		eh = (struct ethhdr *)tap_msgs[i].start;
+		eh = (struct ethhdr *)p;
 
 		if (memcmp(c->mac_guest, eh->h_source, ETH_ALEN)) {
 			memcpy(c->mac_guest, eh->h_source, ETH_ALEN);
@@ -511,51 +667,32 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
 
 		switch (ntohs(eh->h_proto)) {
 		case ETH_P_ARP:
-			if (c->v4)
-				tap4_handler(c, tap_msgs + i, 1, now, 1);
-			i++;
-			break;
 		case ETH_P_IP:
-			for (same = 1; i + same < msg_count &&
-				       same < UIO_MAXIOV; same++) {
-				struct tap_msg *next = &tap_msgs[i + same];
-
-				eh = (struct ethhdr *)next->start;
-				if (ntohs(eh->h_proto) != ETH_P_IP)
-					break;
-			}
-
-			if (!c->v4) {
-				i += same;
-				break;
-			}
-
-			i += tap4_handler(c, tap_msgs + i, same, now, first_v4);
-			first_v4 = 0;
+			seq4[seq4_i].pkt_buf_offset = p - pkt_buf;
+			seq4[seq4_i++].len = len;
 			break;
 		case ETH_P_IPV6:
-			for (same = 1; i + same < msg_count &&
-				       same < UIO_MAXIOV; same++) {
-				struct tap_msg *next = &tap_msgs[i + same];
-
-				eh = (struct ethhdr *)next->start;
-				if (ntohs(eh->h_proto) != ETH_P_IPV6)
-					break;
-			}
-
-			if (!c->v6) {
-				i += same;
-				break;
-			}
-
-			i += tap6_handler(c, tap_msgs + i, same, now, first_v6);
-			first_v6 = 0;
+			seq6[seq6_i].pkt_buf_offset = p - pkt_buf;
+			seq6[seq6_i++].len = len;
 			break;
 		default:
-			i++;
 			break;
 		}
+
+next:
+		p += len;
+		n -= len;
 	}
+
+	if (seq4_i)
+		tap4_handler(c, seq4, seq4_i, now);
+
+	if (seq6_i)
+		tap6_handler(c, seq6, seq6_i, now);
+
+	/* We can't use EPOLLET otherwise. */
+	if (rem)
+		goto redo;
 
 	return 0;
 }
@@ -569,14 +706,19 @@ static int tap_handler_passt(struct ctx *c, struct timespec *now)
  */
 static int tap_handler_pasta(struct ctx *c, struct timespec *now)
 {
-	struct tap_msg msg = { .start = pkt_buf };
-	ssize_t n;
+	ssize_t n = 0, len;
+	int err, seq4_i = 0, seq6_i = 0;
 
-	while ((n = read(c->fd_tap, pkt_buf, TAP_BUF_BYTES)) > 0) {
-		struct ethhdr *eh = (struct ethhdr *)pkt_buf;
-		msg.len = n;
+restart:
+	while ((len = read(c->fd_tap, pkt_buf + n, TAP_BUF_BYTES - n)) > 0) {
+		struct ethhdr *eh = (struct ethhdr *)(pkt_buf + n);
 
-		pcap(msg.start, msg.len);
+		if (len < (ssize_t)sizeof(*eh) || len > ETH_MAX_MTU) {
+			n += len;
+			continue;
+		}
+
+		pcap(pkt_buf + n, len);
 
 		if (memcmp(c->mac_guest, eh->h_source, ETH_ALEN)) {
 			memcpy(c->mac_guest, eh->h_source, ETH_ALEN);
@@ -585,21 +727,33 @@ static int tap_handler_pasta(struct ctx *c, struct timespec *now)
 
 		switch (ntohs(eh->h_proto)) {
 		case ETH_P_ARP:
-			if (c->v4)
-				tap4_handler(c, &msg, 1, now, 1);
-			break;
 		case ETH_P_IP:
-			if (c->v4)
-				tap4_handler(c, &msg, 1, now, 1);
+			seq4[seq4_i].pkt_buf_offset = n;
+			seq4[seq4_i++].len = len;
 			break;
 		case ETH_P_IPV6:
-			if (c->v6)
-				tap6_handler(c, &msg, 1, now, 1);
+			seq6[seq6_i].pkt_buf_offset = n;
+			seq6[seq6_i++].len = len;
+			break;
+		default:
 			break;
 		}
+
+		n += len;
 	}
 
-	if (!n || errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+	if (len < 0 && errno == EINTR)
+		goto restart;
+
+	err = errno;
+
+	if (seq4_i)
+		tap4_handler(c, seq4, seq4_i, now);
+
+	if (seq6_i)
+		tap6_handler(c, seq6, seq6_i, now);
+
+	if (len > 0 || err == EAGAIN)
 		return 0;
 
 	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_tap, NULL);
@@ -753,12 +907,14 @@ void tap_sock_init(struct ctx *c)
 		close(c->fd_tap);
 	}
 
-	if (c->mode == MODE_PASST)
+	if (c->mode == MODE_PASST) {
 		tap_sock_init_unix(c);
-	else
+		ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+	} else {
 		tap_sock_init_tun(c);
+		ev.events = EPOLLIN | EPOLLRDHUP;
+	}
 
-	ev.events = EPOLLIN | EPOLLRDHUP;
 	ev.data.fd = c->fd_tap;
 	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, c->fd_tap, &ev);
 }

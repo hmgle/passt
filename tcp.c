@@ -333,6 +333,7 @@
 #include <sys/random.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <unistd.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
@@ -645,7 +646,7 @@ static struct mmsghdr	tcp_l2_mh_tap		[TCP_TAP_FRAMES] = {
 };
 
 /* sendmsg() to socket */
-static struct iovec	tcp_tap_iov		[TAP_MSGS];
+static struct iovec	tcp_tap_iov		[UIO_MAXIOV];
 
 /* Bitmap, activity monitoring needed for connection via tap */
 static uint8_t tcp_act[MAX_TAP_CONNS / 8] = { 0 };
@@ -1968,7 +1969,7 @@ out_restore_iov:
  * @now:	Current timestamp
  */
 static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
-			      struct tap_msg *msg, int count,
+			      struct tap_l4_msg *msg, int count,
 			      struct timespec *now)
 {
 	int i, iov_i, ack = 0, fin = 0, retr = 0, keep = -1;
@@ -1979,10 +1980,13 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 	ssize_t len;
 
 	for (i = 0, iov_i = 0; i < count; i++) {
-		struct tcphdr *th = (struct tcphdr *)msg[i].l4h;
 		uint32_t seq, seq_offset, ack_seq;
-		size_t len = msg[i].l4_len, off;
+		struct tcphdr *th;
 		char *data;
+		size_t off;
+
+		th = (struct tcphdr *)(pkt_buf + msg[i].pkt_buf_offset);
+		len = msg[i].l4_len;
 
 		if (len < sizeof(*th)) {
 			tcp_rst(c, conn);
@@ -2152,19 +2156,11 @@ out:
  * Return: count of consumed packets
  */
 int tcp_tap_handler(struct ctx *c, int af, void *addr,
-		    struct tap_msg *msg, int count, struct timespec *now)
+		    struct tap_l4_msg *msg, int count, struct timespec *now)
 {
-	struct tcphdr *th = (struct tcphdr *)msg[0].l4h;
-	size_t len = msg[0].l4_len, off;
+	struct tcphdr *th = (struct tcphdr *)(pkt_buf + msg[0].pkt_buf_offset);
+	uint16_t len = msg[0].l4_len;
 	struct tcp_tap_conn *conn;
-	int ws;
-
-	if (len < sizeof(*th))
-		return 1;
-
-	off = th->doff * 4;
-	if (off < sizeof(*th) || off > len)
-		return 1;
 
 	conn = tcp_hash_lookup(c, af, addr, htons(th->source), htons(th->dest));
 	if (!conn) {

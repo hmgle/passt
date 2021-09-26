@@ -879,12 +879,12 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  * Return: count of consumed packets
  */
 int udp_tap_handler(struct ctx *c, int af, void *addr,
-		    struct tap_msg *msg, int count, struct timespec *now)
+		    struct tap_l4_msg *msg, int count, struct timespec *now)
 {
 	/* The caller already checks that all the messages have the same source
 	 * and destination, so we can just take those from the first message.
 	 */
-	struct udphdr *uh = (struct udphdr *)msg[0].l4h;
+	struct udphdr *uh = (struct udphdr *)(pkt_buf + msg[0].pkt_buf_offset);
 	struct mmsghdr mm[UIO_MAXIOV] = { 0 };
 	struct iovec m[UIO_MAXIOV];
 	struct sockaddr_in6 s_in6;
@@ -972,7 +972,10 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 	}
 
 	for (i = 0; i < count; i++) {
-		m[i].iov_base = (char *)((struct udphdr *)msg[i].l4h + 1);
+		struct udphdr *uh;
+
+		uh = (struct udphdr *)(msg[i].pkt_buf_offset + pkt_buf);
+		m[i].iov_base = (char *)(uh + 1);
 		m[i].iov_len = msg[i].l4_len - sizeof(*uh);
 
 		mm[i].msg_hdr.msg_name = sa;
@@ -1084,11 +1087,13 @@ static void udp_splice_iov_init(void)
  *
  * Return: 0 on success, -1 on failure
  */
-int udp_sock_init(struct ctx *c)
+int udp_sock_init(struct ctx *c, struct timespec *now)
 {
 	union udp_epoll_ref uref = { .bound = 1 };
 	in_port_t dst;
 	int s;
+
+	(void)now;
 
 	for (dst = 0; dst < USHRT_MAX; dst++) {
 		if (!bitmap_isset(c->udp.port_to_tap, dst))

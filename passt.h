@@ -3,15 +3,21 @@
 
 /**
  * struct tap_msg - Generic message descriptor for arrays of messages
- * @start:	Pointer to message start
- * @l4_start:	Pointer to L4 header
- * @len:	Message length, with L2 headers
- * @l4_len:	Message length, with L4 headers
+ * @pkt_buf_offset:	Offset from @pkt_buf
+ * @len:		Message length, with L2 headers
  */
 struct tap_msg {
-	char *start;
-	char *l4h;
+	uint32_t pkt_buf_offset;
 	uint16_t len;
+};
+
+/**
+ * struct tap_l4_msg - Layer-4 message descriptor for protocol handlers
+ * @pkt_buf_offset:	Offset of message from @pkt_buf
+ * @l4_len:		Length of Layer-4 payload, host order
+ */
+struct tap_l4_msg {
+	uint32_t pkt_buf_offset;
 	uint16_t l4_len;
 };
 
