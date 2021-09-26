@@ -20,6 +20,7 @@
 #include <string.h>
 #include <net/ethernet.h>
 #include <net/if.h>
+#include <net/if_arp.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdint.h>
@@ -869,14 +870,79 @@ fail:
 }
 
 /**
+ * struct tap_sock_if_up_ns_arg - Arguments for tap_sock_if_up_ns()
+ * @c:			Execution context
+ * @target_pid:		Target namespace PID
+ * @ifname:		Interface name of tap device
+ */
+struct tap_sock_if_up_ns_arg {
+	struct ctx *c;
+	int target_pid;
+	char ifname[IFNAMSIZ];
+};
+
+/**
+ * tap_sock_if_up_ns() - Bring up tap, get or set MAC address (if we have one)
+ * @ifname:		Interface name
+ *
+ * Return: 0 -- not fundamental, the interface can be brought up later
+ */
+static int tap_sock_if_up_ns(void *arg)
+{
+	struct ifreq ifr = { .ifr_flags = IFF_UP };
+	struct tap_sock_if_up_ns_arg *a;
+	int fd;
+
+	a = (struct tap_sock_if_up_ns_arg *)arg;
+
+	if (ns_enter(a->target_pid))
+		return 0;
+
+	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("socket for ioctl");
+		return 0;
+	}
+
+	strncpy(ifr.ifr_name, a->ifname, IFNAMSIZ);
+	if (ioctl(fd, SIOCSIFFLAGS, &ifr)) {
+		perror("SIOCSIFFLAGS ioctl for tap");
+		goto out;
+	}
+
+	if (memcmp(a->c->mac_guest,
+		   ((uint8_t [ETH_ALEN]){ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }),
+		   ETH_ALEN)) {
+		ifr.ifr_hwaddr.sa_family = ARPHRD_ETHER;
+		memcpy(ifr.ifr_hwaddr.sa_data, a->c->mac_guest, ETH_ALEN);
+
+		if (ioctl(fd, SIOCSIFHWADDR, &ifr) < 0) {
+			perror("SIOCSIFHWADDR ioctl for tap");
+			goto out;
+		}
+	} else {
+		if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
+			perror("SIOCGIFHWADDR ioctl for tap");
+			goto out;
+		}
+
+		memcpy(a->c->mac_guest, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
+		proto_update_l2_buf(a->c->mac_guest, NULL, NULL);
+	}
+
+out:
+	close(fd);
+
+	return 0;
+}
+
+/**
  * tap_sock_init_tun() - Set up tuntap file descriptor
  * @c:		Execution context
  */
 static void tap_sock_init_tun(struct ctx *c)
 {
 	struct ifreq ifr = { .ifr_flags = IFF_TAP | IFF_NO_PI };
-
-	strncpy(ifr.ifr_name, c->pasta_ifn, IFNAMSIZ);
+	struct tap_sock_if_up_ns_arg ifup_arg;
 
 	NS_CALL(tap_sock_init_tun_ns, &c->pasta_pid);
 	if (tun_ns_fd == -1) {
@@ -884,10 +950,16 @@ static void tap_sock_init_tun(struct ctx *c)
 		exit(EXIT_FAILURE);
 	}
 
+	strncpy(ifr.ifr_name, c->pasta_ifn, IFNAMSIZ);
 	if (ioctl(tun_ns_fd, TUNSETIFF, &ifr)) {
 		perror("TUNSETIFF ioctl");
 		exit(EXIT_FAILURE);
 	}
+
+	strncpy(ifup_arg.ifname, c->pasta_ifn, IFNAMSIZ);
+	ifup_arg.target_pid = c->pasta_pid;
+	ifup_arg.c = c;
+	NS_CALL(tap_sock_if_up_ns, (void *)&ifup_arg);
 
 	pcap_init(c, c->pasta_pid);
 
