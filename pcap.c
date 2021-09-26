@@ -162,7 +162,7 @@ void pcap_init(struct ctx *c, int index)
 	struct tm *tm;
 
 	if (pcap_fd != -1)
-		close(pcap_fd);
+		return;
 
 	if (!*c->pcap)
 		return;
