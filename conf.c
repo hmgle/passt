@@ -546,13 +546,17 @@ static void get_dns(struct ctx *c)
 			if (end)
 				*end = 0;
 
-			if (dns4 - &c->dns4[0] < ARRAY_SIZE(c->dns4) &&
-			    inet_pton(AF_INET, p + 1, dns4))
+			if (dns4 - &c->dns4[0] < ARRAY_SIZE(c->dns4) - 1 &&
+			    inet_pton(AF_INET, p + 1, dns4)) {
 				dns4++;
+				*dns4 = 0;
+			}
 
-			if (dns6 - &c->dns6[0] < ARRAY_SIZE(c->dns6) &&
-			    inet_pton(AF_INET6, p + 1, dns6))
+			if (dns6 - &c->dns6[0] < ARRAY_SIZE(c->dns6) - 1 &&
+			    inet_pton(AF_INET6, p + 1, dns6)) {
 				dns6++;
+				memset(dns6, 0, sizeof(*dns6));
+			}
 		} else if (!dnss_set && strstr(buf, "search ") == buf &&
 			   s == c->dns_search) {
 			end = strpbrk(buf, "\n");
@@ -560,10 +564,11 @@ static void get_dns(struct ctx *c)
 				*end = 0;
 
 			p = strtok(buf, " \t");
-			while ((p = strtok(NULL, " \t")) &&
-			       s - c->dns_search < ARRAY_SIZE(c->dns_search)) {
+			while (s - c->dns_search < ARRAY_SIZE(c->dns_search) - 1
+			       && (p = strtok(NULL, " \t"))) {
 				strncpy(s->n, p, sizeof(c->dns_search[0]));
 				s++;
+				*s->n = 0;
 			}
 		}
 	}
