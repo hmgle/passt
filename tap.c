@@ -848,19 +848,24 @@ static int tap_sock_init_tun_ns(void *target_pid)
 	if (ns_enter(*(int *)target_pid))
 		goto fail;
 
-	if ((fd = open("/dev/net/tun", O_RDWR)) < 0)
+	if ((fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK)) < 0)
 		goto fail;
-
-	fcntl(fd, F_SETFL, O_NONBLOCK);
 
 	tun_ns_fd = fd;
 
-	if (ioctl(socket(AF_INET, SOCK_DGRAM, 0), SIOCSIFFLAGS,
-	    &((struct ifreq) { .ifr_name = "lo",
-			       .ifr_flags = IFF_UP }))) {
-		perror("SIOCSIFFLAGS ioctl for \"lo\"");
+	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("socket for ioctl");
 		goto fail;
 	}
+
+	if (ioctl(fd, SIOCSIFFLAGS, &((struct ifreq){ .ifr_name = "lo",
+						      .ifr_flags = IFF_UP }))) {
+		perror("SIOCSIFFLAGS ioctl for \"lo\"");
+		close(fd);
+		goto fail;
+	}
+
+	close(fd);
 
 	return 0;
 
