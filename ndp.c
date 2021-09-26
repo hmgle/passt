@@ -100,7 +100,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		info("NDP: received RS, sending RA");
 		ihr->icmp6_type = RA;
 		ihr->icmp6_code = 0;
-		ihr->icmp6_rt_lifetime = htons(3600);
+		ihr->icmp6_rt_lifetime = htons(9000);
 		ihr->icmp6_addrconf_managed = 1;
 
 		p = (unsigned char *)(ihr + 1);
