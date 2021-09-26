@@ -839,7 +839,7 @@ static int tun_ns_fd = -1;
 
 /**
  * tap_sock_init_tun_ns() - Create tuntap fd in namespace, bring up loopback
- * @c:		Execution context
+ * @target_pid:		Pointer to target PID
  */
 static int tap_sock_init_tun_ns(void *target_pid)
 {
