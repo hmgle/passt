@@ -185,7 +185,7 @@ void pcap_init(struct ctx *c, int index)
 		strncpy(c->pcap, name, PATH_MAX);
 	}
 
-	pcap_fd = open(c->pcap, O_WRONLY | O_CREAT | O_TRUNC | O_DSYNC,
+	pcap_fd = open(c->pcap, O_WRONLY | O_CREAT | O_TRUNC,
 		       S_IRUSR | S_IWUSR);
 	if (pcap_fd == -1) {
 		perror("open");
