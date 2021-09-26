@@ -92,6 +92,7 @@ char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto)
 			nh = ip6h->nexthdr;
 			hdrlen = sizeof(struct ipv6hdr);
 		} else {
+			o = (struct ipv6_opt_hdr *)(((char *)ip6h) + offset);
 			nh = o->nexthdr;
 			hdrlen = (o->hdrlen + 1) * 8;
 		}
@@ -103,8 +104,6 @@ char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto)
 		    nh == 51  || nh == 60  || nh == 135 || nh == 139 ||
 		    nh == 140 || nh == 253 || nh == 254) {
 			offset += hdrlen;
-			o = (struct ipv6_opt_hdr *)(unsigned char *)ip6h +
-								    offset;
 		} else {
 			*proto = nh;
 			return (char *)(ip6h + 1) + offset;
