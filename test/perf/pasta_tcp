@@ -1,0 +1,256 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/perf/pasta_tcp - Check TCP performance in pasta mode
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+onlyfor	passt_in_ns
+htools	cpupower ip seq bc sleep iperf3 tcp_rr tcp_crr jq sed
+nstools	sysctl nproc ip seq bc sleep iperf3 tcp_rr tcp_crr jq sed
+
+test	pasta: throughput and latency (local connections)
+
+ns	sysctl -w net.ipv4.tcp_rmem="131072 524288 134217728"
+ns	sysctl -w net.ipv4.tcp_wmem="131072 524288 134217728"
+ns	sysctl -w net.ipv4.tcp_timestamps=0
+
+
+set	THREADS 2
+set	STREAMS 2
+set	OPTS -Z -w 4M -l 1M -P __STREAMS__ -i1 -t30 -O5 --pacing-timer 10000
+hout	FREQ cpupower frequency-info -lm | sed -n 's/.*- \(.*\) GHz$/\1/p'
+
+
+info	Throughput in Gbps, latency in µs, __THREADS__ threads at __FREQ__ GHz, __STREAMS__ streams each
+report	pasta lo_tcp __THREADS__ __FREQ__
+
+th	MTU 1500B 4000B 16384B 65535B
+
+
+tr	TCP throughput over IPv6: ns to host
+ns	ip link set dev lo mtu 1500
+iperf3c	ns ::1 100${i}3 __THREADS__ __OPTS__
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 15.0 20.0
+ns	ip link set dev lo mtu 4000
+iperf3c	ns ::1 100${i}3 __THREADS__ __OPTS__
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 15.0 20.0
+ns	ip link set dev lo mtu 16384
+iperf3c	ns ::1 100${i}3 __THREADS__ __OPTS__
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 15.0 20.0
+ns	ip link set dev lo mtu 65535
+iperf3c	ns ::1 100${i}3 __THREADS__ __OPTS__
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 15.0 20.0
+
+tl	TCP RR latency over IPv6: ns to host
+lat	-
+lat	-
+lat	-
+hostb	tcp_rr --nolog -P 10003 -C 10013 -6
+nsout	LAT tcp_rr --nolog -P 10003 -C 10013 -6 -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 150 100
+
+tl	TCP CRR latency over IPv6: ns to host
+lat	-
+lat	-
+lat	-
+hostb	tcp_crr --nolog -P 10003 -C 10013 -6
+nsout	LAT tcp_crr --nolog -P 10003 -C 10013 -6 -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 500 350
+
+
+tr	TCP throughput over IPv4: ns to host
+ns	ip link set dev lo mtu 1500
+iperf3c	ns 127.0.0.1 100${i}3 __THREADS__ __OPTS__
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 15.0 20.0
+ns	ip link set dev lo mtu 4000
+iperf3c	ns 127.0.0.1 100${i}3 __THREADS__ __OPTS__
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 15.0 20.0
+ns	ip link set dev lo mtu 16384
+iperf3c	ns 127.0.0.1 100${i}3 __THREADS__ __OPTS__
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 15.0 20.0
+ns	ip link set dev lo mtu 65535
+iperf3c	ns 127.0.0.1 100${i}3 __THREADS__ __OPTS__
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 15.0 20.0
+
+tl	TCP RR latency over IPv4: ns to host
+lat	-
+lat	-
+lat	-
+hostb	tcp_rr --nolog -P 10003 -C 10013 -4
+nsout	LAT tcp_rr --nolog -P 10003 -C 10013 -4 -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 150 100
+
+tl	TCP CRR latency over IPv4: ns to host
+lat	-
+lat	-
+lat	-
+hostb	tcp_crr --nolog -P 10003 -C 10013 -4
+nsout	LAT tcp_crr --nolog -P 10003 -C 10013 -4 -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 500 350
+
+
+tr	TCP throughput over IPv6: host to ns
+bw	-
+bw	-
+bw	-
+iperf3c	host ::1 100${i}2 __THREADS__ __OPTS__
+iperf3s	BW ns 100${i}2 __THREADS__
+bw	__BW__ 15.0 20.0
+
+tl	TCP RR latency over IPv6: host to ns
+lat	-
+lat	-
+lat	-
+nsb	tcp_rr --nolog -P 10002 -C 10012 -6
+hout	LAT tcp_rr --nolog -P 10002 -C 10012 -6 -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 150 100
+
+tl	TCP CRR latency over IPv6: host to ns
+lat	-
+lat	-
+lat	-
+nsb	tcp_crr --nolog -P 10002 -C 10012 -6
+hout	LAT tcp_crr --nolog -P 10002 -C 10012 -6 -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 1000 700
+
+
+tr	TCP throughput over IPv4: host to ns
+bw	-
+bw	-
+bw	-
+iperf3c	host 127.0.0.1 100${i}2 __THREADS__ __OPTS__
+iperf3s	BW ns 100${i}2 __THREADS__
+bw	__BW__ 15.0 20.0
+
+tl	TCP RR latency over IPv4: host to ns
+lat	-
+lat	-
+lat	-
+nsb	tcp_rr --nolog -P 10002 -C 10012 -4
+hout	LAT tcp_rr --nolog -P 10002 -C 10012 -4 -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 150 100
+
+tl	TCP CRR latency over IPv4: host to ns
+lat	-
+lat	-
+lat	-
+sleep	1
+nsb	tcp_crr --nolog -P 10002 -C 10012 -4
+hout	LAT tcp_crr --nolog -P 10002 -C 10012 -4 -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 1000 700
+
+te
+
+
+test	pasta: throughput and latency (connections via tap)
+
+nsout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+set	THREADS 1
+set	STREAMS 2
+set	OPTS -Z -P __STREAMS__ -i1 -t30 -O5 --pacing-timer 100000
+
+info	Throughput in Gbps, latency in µs, one thread at __FREQ__ GHz, __STREAMS__ streams
+report	pasta tap_tcp __THREADS__ __FREQ__
+
+th	MTU 1500B 4000B 16384B 65520B
+
+
+tr	TCP throughput over IPv6: ns to host
+ns	ip link set dev __IFNAME__ mtu 1500
+iperf3c	ns __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -w 512k
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 0.2 0.4
+ns	ip link set dev __IFNAME__ mtu 4000
+iperf3c	ns __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -w 1M
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 0.3 0.5
+ns	ip link set dev __IFNAME__ mtu 16384
+iperf3c	ns __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -w 8M
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 1.5 2.0
+ns	ip link set dev __IFNAME__ mtu 65520
+iperf3c	ns __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -w 8M
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 2.0 2.5
+
+tl	TCP RR latency over IPv6: ns to host
+lat	-
+lat	-
+lat	-
+hostb	tcp_rr --nolog -P 10003 -C 10013 -6
+nsout	LAT tcp_rr --nolog -P 10003 -C 10013 -6 -c -H __GW6__%__IFNAME__ | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 150 100
+
+tl	TCP CRR latency over IPv6: ns to host
+lat	-
+lat	-
+lat	-
+hostb	tcp_crr --nolog -P 10003 -C 10013 -6
+nsout	LAT tcp_crr --nolog -P 10003 -C 10013 -6 -c -H __GW6__%__IFNAME__ | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 1500 500
+
+
+tr	TCP throughput over IPv4: ns to host
+ns	ip link set dev __IFNAME__ mtu 1500
+iperf3c	ns __GW__ 100${i}3 __THREADS__ __OPTS__ -w 512k
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 0.2 0.4
+ns	ip link set dev __IFNAME__ mtu 4000
+iperf3c	ns __GW__ 100${i}3 __THREADS__ __OPTS__ -w 1M
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 0.3 0.5
+ns	ip link set dev __IFNAME__ mtu 16384
+iperf3c	ns __GW__ 100${i}3 __THREADS__ __OPTS__ -w 8M
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 1.5 2.0
+ns	ip link set dev __IFNAME__ mtu 65520
+iperf3c	ns __GW__ 100${i}3 __THREADS__ __OPTS__ -w 8M
+iperf3s	BW host 100${i}3 __THREADS__
+bw	__BW__ 2.0 2.5
+
+tl	TCP RR latency over IPv4: ns to host
+lat	-
+lat	-
+lat	-
+hostb	tcp_rr --nolog -P 10003 -C 10013 -4
+nsout	LAT tcp_rr --nolog -P 10003 -C 10013 -4 -c -H __GW__ | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 150 100
+
+tl	TCP CRR latency over IPv4: ns to host
+lat	-
+lat	-
+lat	-
+hostb	tcp_crr --nolog -P 10003 -C 10013 -4
+nsout	LAT tcp_crr --nolog -P 10003 -C 10013 -4 -c -H __GW__ | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 1500 500
+
+te

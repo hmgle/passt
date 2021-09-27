@@ -1,0 +1,142 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/util - Convenience functions
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+# list_has() - Check whether a tab-separated list contains a given token
+# $1:	List
+# $2:	Token
+# Return: 0 if token was found or is empty, 1 otherwise
+list_has() {
+	[ -z "${2}" ] && return 0
+
+	__ifs="${IFS}"
+	IFS='	'
+	for __t in ${1}; do
+		[ "${__t}" = "${2}" ] && IFS="${__ifs}" && return 0
+	done
+
+	IFS="${__ifs}"
+	return 1
+}
+
+# list_add() - Add token to tab-separated list, unless it's already present
+# $1:	List
+# $2:	Token
+list_add() {
+	list_has "${1}" "${2}" && return
+	[ -n "${1}" ] && printf '%s\t%s\n' "${1}" "${2}" || printf '%s\n' "${2}"
+}
+
+# list_remove_pair() - Drop pair with given key if present
+# $1:	List
+# $2:	Key
+list_remove_pair()
+{
+	__ifs="${IFS}"
+	IFS='	'
+	__skip_next=0
+	for __t in ${1}; do
+		[ ${__skip_next} -eq 1 ] && __skip_next=0 && continue
+		[ "${__t}" = "${2}" ] && __skip_next=1 && continue
+		printf '%s\t' "${__t}"
+	done
+	printf "\n"
+	IFS="${__ifs}"
+}
+
+# list_add_pair() - Add token pair to list, replace if the first one is present
+# $1:	List
+# $2:	First token
+# $3:	Second token
+list_add_pair() {
+	[ -z "${3}" ] && return
+
+
+	if [ -n "${1}" ]; then
+		__new_list="$(list_remove_pair "${1}" "${2}")"
+		printf '%s\t%s\t%s' "${__new_list}" "${2}" "${3}"
+	else
+		printf '%s\t%s' "${2}" "${3}"
+	fi
+	printf "\n"
+}
+
+# list_has_all() - Check whether a list contains all given IFS-separated tokens
+# $1:	List
+# $2:	List of tokens
+# Return: 0 if list of tokens was found or is empty, 1 otherwise
+list_has_all() {
+	[ -z "${2}" ] && return 0
+
+	for __i in ${2}; do
+		list_has "${1}" "${__i}" || return 1
+	done
+	return 0
+}
+
+# file_def() - List of tokens tab-separated line from file, starting with key
+# $1:	Filename
+# $2:	Token
+file_def() {
+	sed -n 's/^'"${2}"'\t\(.*\)/\1/p' "${1}" | tr ' ' '\t'
+}
+
+# subs_apply() - Apply substitutions using a list of token pairs
+# $1:	List of substitutions
+# $2:	String where substitutions have to be applied
+subs_apply() {
+	echo "in subs_apply" >> /tmp/subs_apply
+
+	__ifs="${IFS}"
+	IFS='	'
+	__newarg="${2}"
+	__s=
+	for __t in ${1}; do
+		[ -z "${__s}" ] && __s="${__t}" && continue
+
+		echo "t: --${__t}--, --${__s}--" >> /tmp/subs_apply
+
+		__et="$(printf '%s\n' "$__t" | sed -e 's/[\/&]/\\&/g')"
+		__es="$(printf '%s\n' "$__s" | sed -e 's/[]\/$*.^[]/\\&/g')"
+
+		__newarg="$(printf '%s' "${__newarg}" | sed "s/${__es}/${__et}/g")"
+		__s=
+	done
+
+	printf '%s' "${__newarg}"
+	IFS="${__ifs}"
+}
+
+# set_mode() - Set 'passt' or 'pasta' mode for terminal control, renaming panes
+# $1:	Mode to be set
+set_mode() {
+	MODE="${1}"
+	if [ "${1}" = "pasta" ]; then
+		tmux select-pane -t ${PANE_GUEST} -T "namespace"
+		tmux select-pane -t ${PANE_PASST} -T "pasta"
+	else
+		tmux select-pane -t ${PANE_GUEST} -T "guest"
+		tmux select-pane -t ${PANE_PASST} -T "passt"
+	fi
+}
+
+# get_info_cols() - Get number of columns for info pane
+get_info_cols() {
+	__log_pane_cols=
+	__j=0
+	for __i in $(tmux list-panes -t passt_test:1.0 -F "#{pane_width}"); do
+		[ ${__j} -eq ${PANE_INFO} ] && STATUS_COLS=${__i} && break
+		__j=$((__j + 1))
+	done
+}

@@ -1,0 +1,154 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/run - Entry point to run test cases and demo
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+# Start an X terminal and capture a video of the test run (also set for ./ci)
+CI=${CI:-0}
+
+# Start an X terminal and show the demo (also set for ./demo)
+DEMO=${DEMO:-0}
+
+# Base path for output files
+BASEPATH=${BASEPATH:-"$(pwd)"}
+
+# Location of log files for test run
+LOGDIR=${LOGDIR:-"${BASEPATH}/test_logs"}
+LOGFILE=${LOGFILE:-"${LOGDIR}/test.log"}
+
+# If set, skip typing delays while issuing commands in panes
+FAST=${FAST:-1}
+
+# If set, run passt and pasta with debug options
+DEBUG=${DEBUG:-0}
+
+# If set, tell passt and pasta to take packet captures
+PCAP=${PCAP:-0}
+
+COMMIT="$(git log --oneline --no-decorate -1)"
+
+. lib/util
+. lib/setup
+. lib/term
+. lib/perf_report
+. lib/layout
+. lib/test
+. lib/video
+
+# cleanup() - Remove temporary files
+cleanup() {
+	rm -f /tmp/.passt_test_log_pipe
+}
+
+# run() - Call setup functions, run tests, handle exit from test session
+run() {
+	rm -f /tmp/.passt_test_log_pipe
+	mkfifo /tmp/.passt_test_log_pipe
+
+	term
+	perf_init
+	[ ${CI} -eq 1 ]   && video_grab ci
+
+	setup build
+	test build
+
+	setup pasta
+	test ndp
+	test dhcp
+	test tcp
+	test udp
+	teardown pasta
+
+	setup passt
+	test ndp
+	test dhcp
+	test tcp
+	test udp
+	teardown passt
+
+	setup passt_in_ns
+	test ndp
+	test dhcp
+	test icmp
+	test tcp
+	test udp
+	test perf
+	teardown passt_in_ns
+
+	setup two_guests
+	test two_guests
+	teardown two_guests
+
+	perf_finish
+	[ ${CI} -eq 1 ] && video_stop ${STATUS_FAIL}
+
+	log "PASS: ${STATUS_PASS}, FAIL: ${STATUS_FAIL}"
+
+	pause_continue \
+		"Press any key to keep test session open"	\
+		"Closing in "					\
+		"Interrupted, press any key to quit"		\
+		9
+
+	return ${STATUS_FAIL}
+}
+
+# demo() - Simpler path for demo purposes
+demo() {
+	rm -f /tmp/.passt_test_log_pipe
+	mkfifo /tmp/.passt_test_log_pipe
+
+	FAST=0
+
+	term_demo
+
+	layout_demo_passt
+	video_grab demo_passt
+	MODE=passt
+	test demo
+	video_stop 0
+	tmux send-keys -t ${PANE_GUEST} "C-c"
+
+	layout_demo_pasta
+	video_grab demo_pasta
+	MODE=pasta
+	test demo
+	video_stop 0
+
+	return 0
+}
+
+[ "$(basename "${0}")" = "ci" ]       && CI=1
+[ "$(basename "${0}")" = "run_demo" ] && DEMO=1
+
+if [ "${1}" = "from_term" ]; then
+	cd ..
+	if [ ${DEMO} -eq 1 ]; then
+		demo
+	else
+		run
+	fi
+	tmux kill-session -t passt_test
+	exit
+else
+	rm -rf "${LOGDIR}"
+	mkdir -p "${LOGDIR}"
+	:> "${LOGFILE}"
+	trap "cleanup" EXIT
+	run_term
+	trap "" EXIT
+fi
+
+tail -n1 ${LOGFILE}
+echo "Log at ${LOGFILE}"
+exit $(tail -n1 ${LOGFILE} | sed -n 's/.*FAIL: \(.*\)$/\1/p')

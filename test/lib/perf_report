@@ -1,0 +1,262 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/perf_report - Prepare JavaScript report for performance tests
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+PERF_LINK_COUNT=0
+PERF_JS="${BASEPATH}/perf.js"
+
+PERF_TEMPLATE_HTML="document.write('"'
+Throughput in Gbps, latency in µs. Threads are <span style="font-family: monospace;">iperf3</span> processes, <i>passt</i> and <i>pasta</i> are currently single-threaded.<br/>
+Click on numbers to show test execution. Measured at head, commit <span style="font-family: monospace;">__commit__</span>.
+
+<style type="text/CSS">
+table td { border: 0px solid; padding: 10px; }
+table td { text-align: right; }
+table th { text-align: center; font-weight: bold; }
+table tr:not(:first-of-type) td:not(:first-of-type) { font-family: monospace; font-weight: bolder; }
+table.passt tr:nth-child(3n+0) { background-color: #112315; }
+table.passt tr:not(:nth-child(3n+0)) td { background-color: #101010; }
+table.passt td:nth-child(6n+7) { background-color: #603302; }
+table.passt tr:nth-child(1) { background-color: #363e61; }
+td:empty { visibility: hidden; }
+</style>
+
+<ul>
+<li><p>passt</p>
+<table class="passt" width="70%">
+	<tr>
+		<th/>
+		<th id="perf_passt_tcp" colspan="__passt_tcp_cols__">TCP, __passt_tcp_threads__ at __passt_tcp_freq__ GHz</th>
+		<th id="perf_passt_udp" colspan="__passt_udp_cols__">UDP, __passt_udp_threads__ at __passt_udp_freq__ GHz</th>
+	</tr>
+	<tr>
+		<td align="right">MTU:</td>
+		__passt_tcp_header__
+		__passt_udp_header__
+	</tr>
+	__passt_tcp_LINE__ __passt_udp_LINE__
+</table>
+
+<style type="text/CSS">
+table td { border: 0px solid; padding: 10px; }
+table td { text-align: right; }
+table th { text-align: center; font-weight: bold; }
+table.pasta tr:nth-child(3n+0) { background-color: #112315; }
+table.pasta tr:not(:nth-child(3n+0)) td { background-color: #101010; }
+table.pasta td:nth-child(4n+5) { background-color: #603302; }
+table.pasta tr:nth-child(1) { background-color: #363e61; }
+td:empty { visibility: hidden; }
+</style>
+
+</li><li><p>pasta: local connections/traffic</p>
+<table class="pasta" width="70%">
+	<tr>
+		<th/>
+		<th id="perf_pasta_lo_tcp" colspan="__pasta_lo_tcp_cols__">TCP, __pasta_lo_tcp_threads__ at __pasta_lo_tcp_freq__ GHz</th>
+		<th id="perf_pasta_lo_udp" colspan="__pasta_lo_udp_cols__">UDP, __pasta_lo_udp_threads__ at __pasta_lo_udp_freq__ GHz</th>
+	</th>
+	<tr>
+		<td align="right">MTU:</td>
+		__pasta_lo_tcp_header__
+		__pasta_lo_udp_header__
+	</tr>
+	__pasta_lo_tcp_LINE__ __pasta_lo_udp_LINE__
+</table>
+
+</li><li><p>pasta: connections/traffic via tap</p>
+<table class="pasta" width="70%">
+	<tr>
+		<th/>
+		<th id="perf_pasta_tap_tcp" colspan="__pasta_tap_tcp_cols__">TCP, __pasta_tap_tcp_threads__ at __pasta_tap_tcp_freq__ GHz</th>
+		<th id="perf_pasta_tap_udp" colspan="__pasta_tap_udp_cols__">UDP, __pasta_tap_udp_threads__ at __pasta_tap_udp_freq__ GHz</th>
+	</tr>
+	<tr>
+		<td align="right">MTU:</td>
+		__pasta_tap_tcp_header__
+		__pasta_tap_udp_header__
+	</tr>
+	__pasta_tap_tcp_LINE__ __pasta_tap_udp_LINE__
+</table>
+
+</li></ul>'
+
+PERF_TEMPLATE_JS="');
+
+var perf_links = [
+"
+
+PERF_TEMPLATE_POST='];
+
+for (var i = 0; i < perf_links.length; i++) {
+	var obj = document.getElementById(perf_links[i][0]);
+
+	obj.addEventListener("click", function(event) {
+		var ci_video = document.getElementById("ci_video");
+		var top = ci_video.offsetTop - 5;
+
+		event.preventDefault();
+		ci_video.play();
+		ci_video.pause();
+		for (var i = 0; i < perf_links.length; i++) {
+			if (this.id == perf_links[i][0]) {
+				ci_video.currentTime = perf_links[i][1] - 10;
+			}
+		}
+		window.scrollTo({ top: top, behavior: "smooth" })
+		ci_video.play();
+	}, false);
+}
+'
+
+# perf_init() - Process first part of template
+perf_init() {
+	echo "${PERF_TEMPLATE_HTML}" > "${PERF_JS}"
+	perf_report_sub commit "$(echo ${COMMIT} | sed "s/'/\\\'/g")"
+}
+
+# perf_fill_lines() - Fill multiple "LINE" directives in template, matching rows
+perf_fill_lines() {
+	while true; do
+		__file_line="$(sed -n '/__.*_LINE__/{=;q}' "${PERF_JS}")"
+		[ -z "${__file_line}" ] && break
+
+		__line_no=0
+		__done=0
+		__line_buf="<tr>"
+		while true; do
+			__match_first_td=0
+			for __t in $(sed -n '/__.*_LINE__/{p;q}' "${PERF_JS}"); do
+				if [ ${__match_first_td} -eq 1 ]; then
+					__matching_line_no=0
+					while true; do
+						__line_part=
+						__var_name="$(echo $__t | sed -n 's/__\(.*\)__/\1_'"${__matching_line_no}"'/p')"
+						[ -z "$(eval echo \$${__var_name})" ] && break
+						__line_part="$(eval echo \$${__var_name})"
+						__td_check="$(echo "${__line_part}" | sed -n 's/^<td>\([^>]*\)<\/td>.*$/\1/p')"
+						if [ "${__td_check}" = "${__td_match}" ]; then
+							__line_part="$(echo "${__line_part}" | sed -n 's/^<td>[^>]*<\/td>\(.*\)$/\1/p')"
+							break
+						fi
+						__matching_line_no=$((__matching_line_no + 1))
+					done
+				else
+					__var_name="$(echo $__t | sed -n 's/__\(.*\)__/\1_'"${__line_no}"'/p')"
+					[ -z "$(eval echo \$${__var_name})" ] && __done=1 && break
+					__line_part="$(eval echo \$${__var_name})"
+					__td_match="$(echo "${__line_part}" | sed -n 's/^<td>\([^>]*\)<\/td>.*$/\1/p')"
+				fi
+				__line_buf="${__line_buf}${__line_part}"
+				__match_first_td=1
+			done
+			[ ${__done} -eq 1 ] && break
+			__line_no=$((__line_no + 1))
+			__line_buf="${__line_buf}</tr><tr>"
+		done
+		__line_buf="${__line_buf}</tr>"
+		__line_buf="$(printf '%s\n' "${__line_buf}" | sed -e 's/[]\/$*.^[]/\\&/g')"
+		sed -i "${__file_line}s/.*/${__line_buf}/" "${PERF_JS}"
+	done
+}
+
+# perf_finish() - Add trailing backslashes and process ending templates
+perf_finish() {
+	perf_fill_lines
+	sed -i 's/^.*$/&\\/g' "${PERF_JS}"
+	echo "${PERF_TEMPLATE_JS}" >> "${PERF_JS}"
+	echo "${PERF_TEMPLATE_POST}" >> "${PERF_JS}"
+}
+
+# perf_report_sub() - Apply simple substitutions in template
+perf_report_sub() {
+	__et="$(printf '%s\n' "${1}" | sed -e 's/[\/&]/\\&/g')"
+	__es="$(printf '%s\n' "${2}" | sed -e 's/[]\/$*.^[]/\\&/g')"
+
+	sed -i 's/__'"${__et}"'__/'"${__es}"'/g' "${PERF_JS}"
+}
+
+# perf_report_append() - Append generic string to current JavaScript report
+perf_report_append() {
+	echo "${@}" >> "${PERF_JS}"
+}
+
+# perf_report_append() - Append generic string to current template buffer
+perf_report_append_js() {
+	PERF_TEMPLATE_JS="${PERF_TEMPLATE_JS}${@}"
+}
+
+# perf_report() - Start of single test report
+perf_report() {
+	__mode="${1}"
+	__proto="${2}"
+	__threads="${3}"
+	__freq="${4}"
+
+	REPORT_IN="${__mode}_${__proto}"
+
+	[ ${__threads} -eq 1 ] && __threads="one thread" || __threads="${__threads} threads"
+	perf_report_sub "${__mode}_${__proto}_threads" "${__threads}"
+	perf_report_sub "${__mode}_${__proto}_freq" "${__freq}"
+
+	perf_report_append_js "[ 'perf_${__mode}_${__proto}', $(video_time_now) ],"
+}
+
+# perf_th() - Table header for a set of tests
+perf_th() {
+	shift
+
+	__th_buf=
+	__cols_count=0
+	for __arg; do
+		__th_buf="${__th_buf}<td>${__arg}</td>"
+		__cols_count=$((__cols_count + 1))
+	done
+	perf_report_sub "${REPORT_IN}_header" "${__th_buf}"
+	perf_report_sub "${REPORT_IN}_cols" ${__cols_count}
+}
+
+# perf_tr() - Main table row
+perf_tr() {
+	__line_no=0
+	shift
+	while true; do
+		[ -z "$(eval echo \$${REPORT_IN}_LINE_${__line_no})" ] && break
+		__line_no=$((__line_no + 1))
+	done
+	eval ${REPORT_IN}_LINE_${__line_no}="\"<td>${@}</td>\""
+}
+
+# perf_td() - Single cell with test result
+perf_td() {
+	__rewind="${1}"
+	shift
+
+	__line_no=0
+	while true; do
+		[ -z "$(eval echo \$${REPORT_IN}_LINE_${__line_no})" ] && break
+		__line_no=$((__line_no + 1))
+	done
+	__line_no=$((__line_no - 1))
+	[ -z "${1}" ] && __id=0 || __id="perf_${PERF_LINK_COUNT}"
+	eval ${REPORT_IN}_LINE_${__line_no}=\""\${${REPORT_IN}_LINE_${__line_no}}<td id=\"${__id}\">${1}</td>"\"
+	[ -z "${1}" ] && return
+
+	perf_report_append_js "[ '${__id}', $(($(video_time_now) - ${__rewind})) ],"
+	PERF_LINK_COUNT=$((PERF_LINK_COUNT + 1))
+}
+
+# perf_te() - End of a table, currently unused
+pert_te() {
+	:
+}

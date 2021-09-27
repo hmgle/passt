@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/build/install - Check that binaries and man pages can be installed
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+req	build/all
+htools	make mkdir cp rm man
+tempdir	TEMP
+
+test	Install
+host	prefix=__TEMP__ make install
+check	[ -f __TEMP__/bin/passt ]
+check	[ -h __TEMP__/bin/pasta ]
+check	[ -f __TEMP__/bin/qrap ]
+check	man -M __TEMP__/man -W passt
+check	man -M __TEMP__/man -W pasta
+check	man -M __TEMP__/man -W qrap
+
+test	Uninstall
+host	prefix=__TEMP__ make uninstall
+check	! [ -f __TEMP__/bin/passt ]
+check	! [ -h __TEMP__/bin/pasta ]
+check	! [ -f __TEMP__/bin/qrap ]
+check	! man -M __TEMP__/man -W passt 2>/dev/null
+check	! man -M __TEMP__/man -W pasta 2>/dev/null
+check	! man -M __TEMP__/man -W qrap 2>/dev/null

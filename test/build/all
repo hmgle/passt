@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/build/all - Build targets, one by one, then all together, check output
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+htools	make cc rm uname getconf
+
+test	Build passt
+host	make clean
+check	! [ -e passt ]
+host	CFLAGS="-Werror" make passt
+check	[ -f passt ]
+
+test	Build pasta
+host	make clean
+check	! [ -e pasta ]
+host	CFLAGS="-Werror" make pasta
+check	[ -h pasta ]
+
+test	Build qrap
+host	make clean
+check	! [ -e qrap ]
+host	CFLAGS="-Werror" make qrap
+check	[ -f qrap ]
+
+test	Build all
+host	make clean
+check	! [ -e passt ]
+check	! [ -e pasta ]
+check	! [ -e qrap ]
+host	CFLAGS="-Werror" make
+check	[ -f passt ]
+check	[ -h pasta ]
+check	[ -f qrap ]
+
+test	Build AVX2
+host	make clean
+check	! [ -e passt ]
+check	! [ -e pasta ]
+check	! [ -e qrap ]
+host	CFLAGS="-Werror" make avx2
+check	[ -f passt ]
+check	[ -h pasta ]
+check	[ -f qrap ]

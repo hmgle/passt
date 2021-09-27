@@ -1,0 +1,322 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/setup - Set up and tear down passt and pasta environments
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+VCPUS="$( [ $(nproc) -ge 8 ] && echo 4 || echo $(( $(nproc) / 2 + 1 )) )"
+__mem_kib="$(sed -n 's/MemTotal:[ ]*\([0-9]*\) kB/\1/p' /proc/meminfo)"
+VMEM="$((${__mem_kib} / 1024 / 8))"
+
+# setup_build() - Set up pane layout for build tests
+setup_build() {
+	MODE=build
+
+	layout_host
+}
+
+# setup_passt() - Build guest initrd with mbuto, start qemu and passt
+setup_passt() {
+	MODE=passt
+
+	layout_passt
+
+	__mbuto_dir="$(mktemp -d)"
+	pane_run GUEST "git -C ${__mbuto_dir} clone https://mbuto.lameexcu.se/mbuto/"
+	pane_wait GUEST
+
+	pane_run GUEST "${__mbuto_dir}/mbuto/mbuto -p passt -c lz4 -f mbuto.img"
+	pane_wait GUEST
+
+	rm -rf "${__mbuto_dir}"
+
+	# Ports:
+	#
+	#              guest    |        host
+	#         --------------|---------------------
+	#  10001     as server  |  forwarded to guest
+	#  10003                |      as server
+
+	__opts=
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt.pcap"
+	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	pane_run PASST "./passt ${__opts} -f -t 10001 -u 10001"
+	sleep 1
+
+	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS}	\
+		'-kernel' "/boot/vmlinuz-$(uname -r)"			\
+		'-initrd mbuto.img -nographic -serial stdio'		\
+		'-nodefaults '						\
+		'-append "console=ttyS0 mitigations=off apparmor=0 '	\
+		'virtio-net.napi_tx=1"'					\
+		"-device virtio-net-pci,netdev=hostnet0,x-txburst=16384"\
+		"-netdev socket,fd=5,id=hostnet0"
+	pane_wait GUEST
+}
+
+# setup_pasta() - Create a network and user namespace, connect pasta to it
+setup_pasta() {
+	MODE=pasta
+
+	layout_pasta
+
+	pane_run NS "unshare -rUn /bin/sh "
+	pane_wait NS
+
+	pane_run NS 'echo $$'
+	pane_wait NS
+	__pasta_pid="$(pane_parse NS)"
+
+	# Ports:
+	#
+	#                 ns        |         host
+	#         ------------------|---------------------
+	#  10002      as server     |    spliced to ns
+	#  10003   spliced to init  |      as server
+
+	__opts=
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta.pcap"
+	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+
+	pane_run PASST "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 ${__pasta_pid}"
+	sleep 1
+}
+
+# setup_passt_in_ns() - Set up namespace (with pasta), run qemu and passt into it
+setup_passt_in_ns() {
+	MODE=passt_in_ns
+
+	layout_passt_in_pasta
+
+	# Ports:
+	#
+	#             guest    |         ns         |       host
+	#         -------------|--------------------|-----------------
+	#  10001    as server  | forwarded to guest |  spliced to ns
+	#  10002               |     as server      |  spliced to ns
+	#  10003               |   spliced to init  |    as server
+	#  10011    as server  | forwarded to guest |  spliced to ns
+	#  10012               |     as server      |  spliced to ns
+	#  10013               |   spliced to init  |    as server
+
+	__opts=
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_with_passt.pcap"
+	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+
+	pane_run PASST "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013"
+	sleep 1
+	pane_run PASST ''
+	pane_wait PASST
+	pane_run PASST 'echo $$'
+	pane_wait PASST
+	__ns_pid="$(pane_parse PASST)"
+
+	pane_run GUEST "nsenter -t ${__ns_pid} -U -n --preserve-credentials"
+	pane_run NS "nsenter -t ${__ns_pid} -U -n --preserve-credentials"
+	pane_wait GUEST
+	pane_wait NS
+
+	pane_run NS "ip -j li sh | jq -rM '.[] | select(.link_type == \"ether\").ifname'"
+	pane_wait NS
+	__ifname="$(pane_parse NS)"
+	pane_run NS "/sbin/udhcpc -i ${__ifname}"
+	pane_wait NS
+	sleep 2
+	pane_run NS "/sbin/dhclient -6 ${__ifname}"
+	pane_wait NS
+
+	__opts=
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_in_pasta.pcap"
+	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+
+	#pane_run PASST "valgrind --max-stackframe=2097208 ./passt -f ${__opts} -t 10001,10011 -u 10001,10011"
+	pane_run PASST "./passt -f ${__opts} -t 10001,10011 -u 10001,10011"
+	sleep 1
+
+	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS}	\
+		'-kernel' "/boot/vmlinuz-$(uname -r)"			\
+		'-initrd mbuto.img -nographic -serial stdio'		\
+		'-nodefaults '						\
+		'-append "console=ttyS0 mitigations=off apparmor=0 '	\
+		'virtio-net.napi_tx=1"'					\
+		"-device virtio-net-pci,netdev=hostnet0,x-txburst=131072"\
+		"-netdev socket,fd=5,id=hostnet0"
+	pane_wait GUEST
+}
+
+# setup_two_guests() - Set up two namespace, run qemu and passt in both of them
+setup_two_guests() {
+	MODE=passt_in_ns
+
+	layout_two_guests
+
+	# Ports:
+	#
+	#         guest #1  |  guest #2 |   ns #1   |    ns #2   |    host
+	#         --------- |-----------|-----------|------------|------------
+	#  10001  as server |           | to guest  |  to init   |  to ns #1
+	#  10002            |           | as server |            |  to ns #1
+	#  10003            |           |  to init  |  to init   |  as server
+	#  10004            | as server |  to init  |  to guest  |  to ns #2
+	#  10005            |           |           |  as server |  to ns #2
+
+	__opts=
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_1.pcap"
+	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	pane_run PASST_1 "./pasta ${__opts} -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004"
+
+	__opts=
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_2.pcap"
+	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	pane_run PASST_2 "./pasta ${__opts} -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001"
+
+	sleep 1
+	pane_run PASST_1 ''
+	pane_run PASST_2 ''
+
+	pane_wait PASST_1
+	pane_wait PASST_2
+	pane_run PASST_1 'echo $$'
+	pane_run PASST_2 'echo $$'
+	pane_wait PASST_1
+	pane_wait PASST_2
+	__ns1_pid="$(pane_parse PASST_1)"
+	__ns2_pid="$(pane_parse PASST_2)"
+
+	pane_run GUEST_1 "nsenter -t ${__ns1_pid} -U -n --preserve-credentials"
+	pane_run GUEST_2 "nsenter -t ${__ns2_pid} -U -n --preserve-credentials"
+
+	pane_run PASST_1 "ip -j li sh | jq -rM '.[] | select(.link_type == \"ether\").ifname'"
+	pane_wait PASST_1
+	__ifname="$(pane_parse PASST_1)"
+
+	pane_run GUEST_1 "/sbin/udhcpc -i ${__ifname}"
+	pane_run GUEST_2 "/sbin/udhcpc -i ${__ifname}"
+	pane_wait GUEST_1
+	pane_wait GUEST_2
+	sleep 2
+	pane_run GUEST_1 "/sbin/dhclient -6 ${__ifname}"
+	pane_run GUEST_2 "/sbin/dhclient -6 ${__ifname}"
+	pane_wait GUEST_1
+	pane_wait GUEST_2
+
+	__opts=
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_1.pcap"
+	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	pane_run PASST_1 "./passt -f ${__opts} -t 10001 -u 10001"
+	sleep 1
+
+	__opts=
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_2.pcap"
+	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	pane_run PASST_2 "./passt -f ${__opts} -t 10004 -u 10004"
+
+	pane_run GUEST_2 'cp mbuto.img mbuto_2.img'
+	pane_wait GUEST_2
+
+	pane_run GUEST_1 './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS}	\
+		'-kernel' "/boot/vmlinuz-$(uname -r)"			\
+		'-initrd mbuto.img -nographic -serial stdio'		\
+		'-nodefaults '						\
+		'-append "console=ttyS0 mitigations=off apparmor=0 '	\
+		'virtio-net.napi_tx=1"'					\
+		"-device virtio-net-pci,netdev=hostnet0,x-txburst=16384"\
+		"-netdev socket,fd=5,id=hostnet0"
+	pane_run GUEST_2 './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS}	\
+		'-kernel' "/boot/vmlinuz-$(uname -r)"			\
+		'-initrd mbuto_2.img -nographic -serial stdio'		\
+		'-nodefaults '						\
+		'-append "console=ttyS0 mitigations=off apparmor=0 '	\
+		'virtio-net.napi_tx=1"'					\
+		"-device virtio-net-pci,netdev=hostnet0,x-txburst=16384"\
+		"-netdev socket,fd=5,id=hostnet0"
+	pane_wait GUEST_1
+	pane_wait GUEST_2
+}
+
+# teardown_passt() - Kill qemu and passt
+teardown_passt() {
+	tmux send-keys -t ${PANE_PASST} "C-c"
+	pane_wait PASST
+	tmux send-keys -t ${PANE_GUEST} "C-c"
+	pane_wait GUEST
+}
+
+# teardown_passt() - Exit namespace, kill pasta process
+teardown_pasta() {
+	tmux send-keys -t ${PANE_PASST} "C-c"
+	pane_wait PASST
+	tmux send-keys -t ${PANE_NS} "C-d"
+	pane_wait NS
+}
+
+# teardown_passt_in_ns() - Exit namespace, kill qemu, passt and pasta
+teardown_passt_in_ns() {
+	tmux send-keys -t ${PANE_GUEST} "C-c"
+	pane_wait GUEST
+	tmux send-keys -t ${PANE_GUEST} "C-d"
+
+	tmux send-keys -t ${PANE_PASST} "C-c"
+	pane_wait PASST
+	tmux send-keys -t ${PANE_PASST} "C-d"
+
+	tmux send-keys -t ${PANE_NS} "C-d"
+
+	pane_wait GUEST
+	pane_wait NS
+	pane_wait PASST
+}
+
+# teardown_two_guests() - Exit namespaces, kill qemu processes, passt and pasta
+teardown_two_guests() {
+	tmux send-keys -t ${PANE_GUEST_1} "C-c"
+	pane_wait GUEST_1
+	tmux send-keys -t ${PANE_GUEST_1} "C-d"
+
+	tmux send-keys -t ${PANE_GUEST_2} "C-c"
+	pane_wait GUEST_2
+	tmux send-keys -t ${PANE_GUEST_2} "C-d"
+
+	tmux send-keys -t ${PANE_PASST_1} "C-c"
+	pane_wait PASST_1
+	tmux send-keys -t ${PANE_PASST_1} "C-d"
+
+	tmux send-keys -t ${PANE_PASST_2} "C-c"
+	pane_wait PASST_2
+	tmux send-keys -t ${PANE_PASST_2} "C-d"
+
+	tmux send-keys -t ${PANE_NS_1} "C-d"
+	tmux send-keys -t ${PANE_NS_2} "C-d"
+
+	pane_wait GUEST_1
+	pane_wait GUEST_2
+	ns_1_wait
+	ns_2_wait
+	pane_wait PASST_1
+	pane_wait PASST_2
+}
+
+# setup() - Run setup_*() functions
+# $*:	Suffix list of setup_*() functions to be called
+setup() {
+	for arg do
+		eval setup_${arg}
+	done
+}
+
+# teardown() - Run teardown_*() functions
+# $*:	Suffix list of teardown_*() functions to be called
+teardown() {
+	for arg do
+		eval teardown_${arg}
+	done
+}

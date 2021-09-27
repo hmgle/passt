@@ -1,0 +1,274 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/demo/pasta - Quick introduction to pasta
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+onlyfor	pasta
+say	This is a short introduction to 
+em	pasta
+say	.
+nl
+nl
+sleep	3
+
+say	Let's fetch the source
+sleep	1
+tempdir	TEMPDIR
+host	cd __TEMPDIR__
+host	git clone https://passt.top/passt
+sleep	1
+
+say	 and build it.
+sleep	1
+host	cd passt
+host	make
+sleep	1
+
+nl
+nl
+say	A quick look at the man page...
+sleep	1
+hostb	man ./pasta.1
+sleep	5
+hostb	/pasta
+sleep	2
+hostb	n
+sleep	2
+hostb	n
+sleep	10
+
+nl
+say	  without TARGET_PID, it will create a namespace.
+sleep	3
+passt	cd __TEMPDIR__/passt
+passt	./pasta
+sleep	3
+
+nl
+nl
+say	For convenience, let's enter this namespace
+nl
+say	  from another terminal.
+sleep	3
+pout	TARGET_PID echo $$
+sleep	1
+
+ns	nsenter -t __TARGET_PID__ -U -n --preserve-credentials
+sleep	5
+
+nl
+nl
+say	Now, we're ready to configure networking.
+sleep	2
+host	q
+
+nl
+nl
+ns	ip li sh
+sleep	3
+say	Let's configure IPv4 first...
+sleep	2
+ns	dhclient
+sleep	2
+ns	ip ad sh
+sleep	5
+
+nl
+say	  SLAAC is already done, but we can also
+nl
+say	  get another address via DHCPv6.
+sleep	3
+ns	dhclient -6
+sleep	3
+
+nl
+nl
+say	Let's try to communicate between host and namespace
+sleep	2
+nl
+say	  ...there's no need to configure port forwarding,
+nl
+say	  pasta detects bound ports and forwards them.
+sleep	3
+
+nsb	nc -6 -l -p 31337
+sleep	2
+host	echo "Hello from the host" | nc -N ::1 31337
+sleep	5
+
+nl
+nl
+say	Now the other way around...
+nl
+say	  we can use a loopback address
+sleep
+hostb	nc -l -p 31337
+sleep	2
+ns	echo "Hello from the namespace" | nc -N 127.0.0.1 31337
+sleep	5
+
+nl
+say	  or the address of the default gateway.
+sleep	2
+nsout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+sleep	5
+hostb	nc -l -p 31337
+sleep	2
+ns	echo "Hello from the namespace" | nc -N __GW__ 31337
+sleep	3
+
+nl
+nl
+say	UDP...
+sleep	2
+ns	host -t A passt.top
+sleep	3
+say	 seems to work too.
+sleep	3
+
+nl
+nl
+em	pasta
+say	 can also take packet captures.
+sleep	3
+passt	exit
+sleep	2
+temp	TEMP
+passtb	./pasta -p __TEMP__.pcap
+sleep	2
+passt	
+passt	/sbin/dhclient
+sleep	2
+hostb	tshark -r __TEMP__.pcap
+sleep	5
+
+nl
+nl
+say	And there are tons of totally useless
+sleep	1
+bsp	14
+say	absolutely useful features
+nl
+say	  you can find described in the man page.
+sleep	5
+
+nl
+nl
+say	Let's have a (quick!) look at performance
+nl
+say	  more in the "Performance" section below.
+sleep	3
+passt	exit
+passt	CFLAGS="-g" make avx2
+sleep	2
+passt	perf record -g ./pasta
+sleep	2
+
+pout	TARGET_PID echo $$
+sleep	1
+ns	nsenter -t __TARGET_PID__ -U -n --preserve-credentials
+sleep	5
+
+nl
+nl
+info	Throughput in Gbps, latency in µs
+th	flow init>ns ns>init
+
+set	OPTS -P4 -l 1M -w 32M -i1 --pacing-timer 100000
+
+tr	TCP/IPv6 throughput
+nsb	sleep 10; iperf3 -c ::1 __OPTS__
+hout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
+bw	__BW__ 10.0 20.0
+sleep	5
+hostb	sleep 10; iperf3 -c ::1 __OPTS__
+nsout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
+bw	__BW__ 10.0 20.0
+
+tl	TCP/IPv6 RR latency
+hostb	tcp_rr -6 --nolog
+sleep	2
+nsout	LAT tcp_rr --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 500
+sleep	2
+nsb	tcp_rr -6 --nolog
+sleep	2
+hout	LAT tcp_rr --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 500
+sleep	2
+
+tl	TCP/IPv6 CRR latency
+hostb	tcp_crr -6 --nolog
+sleep	2
+nsout	LAT tcp_crr --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 500
+sleep	2
+nsb	tcp_crr -6 --nolog
+sleep	2
+hout	LAT tcp_crr --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 500
+sleep	2
+
+tr	TCP/IPv4 throughput
+nsb	sleep 10; iperf3 -c 127.0.0.1 __OPTS__
+hout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
+bw	__BW__ 10.0 20.0
+sleep	5
+hostb	sleep 10; iperf3 -c 127.0.0.1 __OPTS__
+nsout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
+bw	__BW__ 10.0 20.0
+
+tl	TCP/IPv4 RR latency
+hostb	tcp_rr -4 --nolog
+sleep	2
+nsout	LAT tcp_rr --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 500
+sleep	2
+nsb	tcp_rr -4 --nolog
+sleep	2
+hout	LAT tcp_rr --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 500
+sleep	2
+
+tl	TCP/IPv4 CRR latency
+hostb	tcp_crr -4 --nolog
+sleep	2
+nsout	LAT tcp_crr --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 500
+sleep	2
+nsb	tcp_crr -4 --nolog
+sleep	2
+hout	LAT tcp_crr --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 500
+sleep	2
+
+sleep	5
+passt	exit
+sleep	2
+killp	PASST
+killp	HOST
+sleep	2
+nsb	perf report -g --max-stack 3
+sleep	10
+
+nl
+nl
+say	I 
+em	knew
+say	 it. 
+em	syscalls
+say	.
+sleep	5
+
+nl
+nl
+say	Thanks for watching!
+sleep	5

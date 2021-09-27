@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/icmp/passt_in_ns - Check ICMP/ICMPv6 functionality for passt in ns
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+#
+# These tests can work reliably only within an isolated namespace: the host
+# might have a net.ipv4.ping_group_range sysctl value not allowing pasta's gid
+# to create "ping" sockets. Inside the namespace, there's a single group, which
+# is allowed by default to create them.
+
+onlyfor	passt_in_ns
+nstools	ip jq sleep
+gtools	ping ip jq
+
+test	ICMP echo: guest to ns
+nsout	IFNAME_NS ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+ns	ip addr add 192.0.2.1/32 dev __IFNAME_NS__
+guest	ping -c1 -w1 192.0.2.1
+gout	RET echo $?
+ns	ip addr del 192.0.2.1/32 dev __IFNAME_NS__
+check	[ __RET__ -eq 0 ]
+
+test	ICMPv6 echo: guest to ns
+ns	ip addr add 2001:db8::1 dev __IFNAME_NS__ && sleep 2 # DAD
+gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+guest	ping -c1 -w1 2001:db8::1
+gout	RET echo $?
+ns	ip addr del 2001:db8::1 dev __IFNAME_NS__
+check	[ __RET__ -eq 0 ]

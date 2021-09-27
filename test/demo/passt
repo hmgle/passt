@@ -1,0 +1,248 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/demo/passt - Quick introduction to passt
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+onlyfor	passt
+say	This is a short introduction to 
+em	passt
+say	.
+nl
+nl
+sleep	3
+
+say	Let's fetch the source
+sleep	1
+tempdir	TEMPDIR
+host	cd __TEMPDIR__
+host	git clone https://passt.top/passt
+sleep	1
+
+say	 and build it.
+sleep	1
+host	cd passt
+host	make avx2
+sleep	1
+
+nl
+nl
+say	A quick look at the man page...
+sleep	1
+hostb	man ./passt.1
+sleep	5
+hostb	/ports
+sleep	2
+hostb	n
+sleep	2
+hostb	n
+sleep	10
+
+nl
+say	  '-t' to forward TCP ports.
+sleep	3
+host	q
+
+nl
+nl
+say	Let's create a small initramfs image for the guest.
+guest	cd __TEMPDIR__
+guest	git clone https://mbuto.lameexcu.se/mbuto
+guest	cd mbuto
+guest	./mbuto -f passt.img -p passt -c lz4
+sleep	2
+
+nl
+nl
+say	We want to isolate passt and guest in a
+nl
+say	  network namespace. For convenience, we'll
+nl
+say	  create it with 'pasta', see also the
+nl
+say	  'pasta' demo above.
+sleep	3
+
+passt	cd __TEMPDIR__/passt
+passt	./pasta
+sleep	3
+passt	/sbin/dhclient
+sleep	2
+passt	/sbin/dhclient -6
+sleep	2
+
+nl
+nl
+say	Now let's run 'passt' in the new namespace, and
+nl
+say	  enter this namespace from the guest terminal too.
+sleep	3
+pout	TARGET_PID echo $$
+sleep	1
+
+passtb	./passt -f -t 5201,5203
+sleep	2
+
+guest	nsenter -t __TARGET_PID__ -U -n --preserve-credentials
+sleep	5
+
+nl
+nl
+say	We're ready to start qemu with the qrap wrapper,
+nl
+say	  that we currently need to connect the netdev
+nl
+say	  back-end to passt's UNIX domain socket.
+sleep	2
+hout	VMLINUZ echo "/boot/vmlinuz-$(uname -r)"
+guest	../passt/qrap 5 kvm -m 4096 -cpu host -smp 4 -kernel __VMLINUZ__ -initrd passt.img -nographic -serial stdio -nodefaults -append "console=ttyS0 virtio-net.napi_tx=1" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384 -netdev socket,fd=5,id=hostnet0
+sleep	10
+
+nl
+nl
+guest	ip li sh
+sleep	3
+say	Guest is up. Let's configure IPv4 first...
+sleep	2
+guest	dhclient
+sleep	2
+guest	ip ad sh
+sleep	5
+
+nl
+say	  SLAAC is already done, but we can also
+nl
+say	  get another address via DHCPv6.
+sleep	3
+guest	dhclient -6
+sleep	3
+
+nl
+nl
+say	Let's try to communicate between host and guest.
+sleep	2
+guestb	nc -6 -l -p 5201
+sleep	2
+host	echo "Hello from the host" | nc -N ::1 5201
+sleep	5
+
+nl
+nl
+say	Now the other way around... using
+nl
+say	   the address of the default gateway.
+sleep	2
+gout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+sleep	5
+hostb	nc -l -p 31337
+sleep	2
+guest	echo "Hello from the guest" | nc -N __GW__ 31337
+sleep	3
+
+nl
+nl
+say	Let's have a (quick!) look at performance
+nl
+say	  more in the "Performance" section below.
+sleep	3
+
+host	nsenter -t __TARGET_PID__ -U -n --preserve-credentials
+
+guest	/sbin/sysctl -w net.core.rmem_max=536870912
+guest	/sbin/sysctl -w net.core.wmem_max=536870912
+guest	/sbin/sysctl -w net.core.rmem_default=33554432
+guest	/sbin/sysctl -w net.core.wmem_default=33554432
+guest	/sbin/sysctl -w net.ipv4.tcp_rmem="4096 131072 268435456"
+guest	/sbin/sysctl -w net.ipv4.tcp_wmem="4096 131072 268435456"
+guest	/sbin/sysctl -w net.ipv4.tcp_timestamps=0
+
+host	sysctl -w net.ipv4.tcp_rmem="4096 524288 134217728"
+host	sysctl -w net.ipv4.tcp_wmem="4096 524288 134217728"
+host	sysctl -w net.ipv4.tcp_timestamps=0
+
+gout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+nl
+nl
+info	Throughput in Gbps, latency in µs
+th	flow host>guest guest>host
+
+set	OPTS -P4 -w 64M -l 1M -i1 --pacing-timer 100000
+
+tr	TCP/IPv6 throughput
+hostb	sleep 10; iperf3 -c ::1 __OPTS__
+gout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
+bw	__BW__ 2.0 3.0
+sleep	5
+guestb	sleep 10; iperf3 -c __GW6__%__IFNAME__ -p 5202 __OPTS__ -O3
+hout	BW iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second"
+bw	__BW__ 2.0 3.0
+
+tl	TCP/IPv6 RR latency
+guestb	tcp_rr -C 5201 -P 5203 -6 --nolog
+sleep	2
+hout	LAT tcp_rr -C 5201 -P 5203 --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 800
+sleep	2
+hostb	tcp_rr -6 --nolog
+sleep	2
+gout	LAT tcp_rr --nolog -c -H __GW6__%__IFNAME__ | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 800
+sleep	2
+
+tl	TCP/IPv6 CRR latency
+guestb	tcp_crr -C 5201 -P 5203 -6 --nolog
+sleep	2
+hout	LAT tcp_crr -C 5201 -P 5203 --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 800
+sleep	2
+hostb	tcp_crr -6 --nolog
+sleep	2
+gout	LAT tcp_crr --nolog -c -H __GW6__%__IFNAME__ | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 800
+sleep	2
+
+tr	TCP/IPv4 throughput
+hostb	sleep 10; iperf3 -c 127.0.0.1 __OPTS__
+gout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
+bw	__BW__ 2.0 3.0
+sleep	5
+guestb	sleep 10; iperf3 -c __GW__ -p 5202 __OPTS__ -O3
+hout	BW iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second"
+bw	__BW__ 2.0 3.0
+
+tl	TCP/IPv4 RR latency
+guestb	tcp_rr -C 5201 -P 5203 -4 --nolog
+sleep	2
+hout	LAT tcp_rr -C 5201 -P 5203 --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 800
+sleep	2
+hostb	tcp_rr -4 --nolog
+sleep	2
+gout	LAT tcp_rr --nolog -c -H __GW__ | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 800
+sleep	2
+
+tl	TCP/IPv4 CRR latency
+guestb	tcp_crr -C 5201 -P 5203 -4 --nolog
+sleep	2
+hout	LAT tcp_crr -C 5201 -P 5203 --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 800
+sleep	2
+hostb	tcp_crr -4 --nolog
+sleep	2
+gout	LAT tcp_crr --nolog -c -H __GW__ | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 800
+sleep	2
+
+nl
+nl
+say	Thanks for watching!
+sleep	5

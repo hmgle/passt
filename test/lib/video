@@ -1,0 +1,119 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/video - Video grabbing, JavaScript fragments with links
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+FFMPEG_PID_FILE="$(mktemp)"
+VIDEO_START_SECONDS=
+VIDEO_NAME=
+
+VIDEO_LINKS_TEMPLATE="document.write('"'
+	Skip to:
+'
+
+VIDEO_LINKS_TEMPLATE_JS="
+');
+
+var video___VIDEO_NAME__links = [
+"
+
+VIDEO_LINKS_TEMPLATE_POST='];
+
+for (var i = 0; i < video___VIDEO_NAME__links.length; i++) {
+	var obj = document.getElementById(video___VIDEO_NAME__links[i][0]);
+
+	obj.addEventListener("click", function(event) {
+		var __VIDEO_NAME___video = document.getElementById("__VIDEO_NAME___video");
+		var top = __VIDEO_NAME___video.offsetTop - 5;
+
+		event.preventDefault();
+		__VIDEO_NAME___video.play();
+		__VIDEO_NAME___video.pause();
+		for (var i = 0; i < video___VIDEO_NAME__links.length; i++) {
+			if (this.id == video___VIDEO_NAME__links[i][0]) {
+				__VIDEO_NAME___video.currentTime = video___VIDEO_NAME__links[i][1];
+			}
+		}
+		window.scrollTo({ top: top, behavior: "smooth" })
+		__VIDEO_NAME___video.play();
+	}, false);
+}
+'
+
+VIDEO_LINKS_BUF=
+VIDEO_LINKS_COUNT=0
+
+# video_append_links() - Append generic string to JavaScript links file
+video_append_links()
+{
+	printf "${@}" >> "${BASEPATH}/${VIDEO_NAME}.js"
+}
+
+# video_append_links() - Append generic string to buffer for links
+video_append_links_js()
+{
+	VIDEO_LINKS_BUF="${VIDEO_LINKS_BUF}${@}"
+}
+
+# video_grab() - Fetch window geometry, start grabbing video
+video_grab() {
+	VIDEO_NAME="${1}"
+
+	rm -f "${BASEPATH}/${VIDEO_NAME}.mp4" "${BASEPATH}/${VIDEO_NAME}.webm" "${BASEPATH}/${VIDEO_NAME}.js"
+
+	echo "${VIDEO_LINKS_TEMPLATE}" > "${BASEPATH}/${VIDEO_NAME}.js"
+
+	__x=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Absolute upper-left X:[ ]*\([0-9]*\)$/\1/p')
+	__y=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Absolute upper-left Y:[ ]*\([0-9]*\)$/\1/p')
+	__width=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Width:[ ]*\([0-9]*\)$/\1/p')
+	__height=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Height:[ ]*\([0-9]*\)$/\1/p')
+
+	[ $((__width % 2)) ]  && __width=$((__width - 1))
+	[ $((__height % 2)) ] && __height=$((__height - 1))
+
+	sleep 3
+	VIDEO_START_SECONDS=$(sed -n 's/\([0-9]*\).[0-9]* [0-9]*.[0-9]*/\1/p' /proc/uptime)
+	ffmpeg -f x11grab -framerate 15 -video_size "${__width}x${__height}" -i "+${__x},${__y}" -vcodec libx264 -preset ultrafast -qp 0 -pix_fmt yuv444p -draw_mouse 0 "${BASEPATH}/${VIDEO_NAME}.mp4" & echo $! > "${FFMPEG_PID_FILE}"
+}
+
+# video_time_now() - Print current video timestamp, in seconds
+video_time_now() {
+	__now=$(sed -n 's/\([0-9]*\).[0-9]* [0-9]*.[0-9]*/\1/p' /proc/uptime)
+	echo $((__now - VIDEO_START_SECONDS))
+}
+
+# video_stop() - Stop grabbing, finalise JavaScript templates, convert to webm
+video_stop() {
+	sed -i 's/^.*$/&\\/g' "${BASEPATH}/${VIDEO_NAME}.js"
+	echo "${VIDEO_LINKS_TEMPLATE_JS}" | sed "s/__VIDEO_NAME__/${VIDEO_NAME}/g" >> "${BASEPATH}/${VIDEO_NAME}.js"
+	echo "${VIDEO_LINKS_BUF}" >> "${BASEPATH}/${VIDEO_NAME}.js"
+	echo "${VIDEO_LINKS_TEMPLATE_POST}"  | sed "s/__VIDEO_NAME__/${VIDEO_NAME}/g" >> "${BASEPATH}/${VIDEO_NAME}.js"
+
+	kill -INT $(cat "${FFMPEG_PID_FILE}")
+	while ps -p $(cat "${FFMPEG_PID_FILE}") >/dev/null; do sleep 1; done
+	rm "${FFMPEG_PID_FILE}"
+
+	[ ${1} -ne 0 ] && return
+
+	ffmpeg -an -fflags +genpts -i "${BASEPATH}/${VIDEO_NAME}.mp4" -c:v libvpx-vp9 -row-mt 1 -minrate 10k -maxrate 200k -b:v 200k "${BASEPATH}/${VIDEO_NAME}.webm"
+}
+
+# video_link() - Append single link to given video chapter
+video_link() {
+	[ ${VIDEO_LINKS_COUNT} -eq 0 ] && __sep="" || __sep=" |"
+	__id="video_link_${VIDEO_LINKS_COUNT}"
+	video_append_links "${__sep} <a id=\"${__id}\">${1}</a>"
+	video_append_links_js "[ '${__id}', $(($(video_time_now) - 1)) ],"
+
+	VIDEO_LINKS_COUNT=$((VIDEO_LINKS_COUNT + 1))
+}

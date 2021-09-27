@@ -1,0 +1,610 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/term - Set up tmux sessions and panes, handle terminals and logs
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+# Commands of X terminals for "CI" and "demo" runs
+DEMO_XTERM="cool-retro-term --verbose --workdir"
+CI_XTERM="mate-terminal --hide-menubar --profile=passt_ci --working-directory"
+
+STATUS_FILE=
+STATUS_FILE_NTESTS=
+STATUS_FILE_INDEX=0
+STATUS_COLS=
+STATUS_PASS=0
+STATUS_FAIL=0
+
+PR_RED='\033[1;31m'
+PR_GREEN='\033[1;32m'
+PR_YELLOW='\033[1;33m'
+PR_BLUE='\033[1;34m'
+PR_NC='\033[0m'
+PR_DELAY_INIT=100 # ms
+
+# info() - Highlight test log pane, print message to it and to log file
+# $@:	Message to print
+info() {
+	tmux select-pane -t ${PANE_INFO}
+	echo "${@}" >> /tmp/.passt_test_log_pipe
+	echo "${@}" >> "${LOGFILE}"
+}
+
+# info_n() - Highlight, print message to pane and to log file without newline
+# $@:	Message to print
+info_n() {
+	tmux select-pane -t ${PANE_INFO}
+	printf "${@}" >> /tmp/.passt_test_log_pipe
+	printf "${@}" >> "${LOGFILE}"
+}
+
+# info_nolog() - Highlight test log pane, print message to it
+# $@:	Message to print
+info_nolog() {
+	tmux select-pane -t ${PANE_INFO}
+	echo "${@}" >> /tmp/.passt_test_log_pipe
+}
+
+# info_nolog() - Print message to log file
+# $@:	Message to print
+log() {
+	echo "${@}" >> "${LOGFILE}"
+}
+
+# info_nolog_n() - Send message to pane without highlighting it, without newline
+# $@:	Message to print
+info_nolog_n() {
+	tmux send-keys -l -t ${PANE_INFO} "${@}"
+}
+
+# info_sep() - Print given separator, horizontally filling test log pane
+# $1:	Separator character
+info_sep() {
+	tmux send-keys -l -N ${STATUS_COLS} -t ${PANE_INFO} "${1}"
+	tmux send-keys -t ${PANE_INFO} C-m
+}
+
+# sleep_char() - Sleep for typed characted resembling interactive input
+# $1:	Character typed to pane
+sleep_char() {
+	[ ${FAST} -eq 1 ] && return
+
+	if [ "${1}" = " " ]; then
+		PR_DELAY=$((PR_DELAY + 40))
+	elif [ -n "$(printf '%s' "${1}" | tr -d [:alnum:])" ]; then
+		PR_DELAY=$((PR_DELAY + 30))
+	elif [ ${PR_DELAY} -ge 30 ]; then
+		PR_DELAY=$((PR_DELAY / 3 * 2))
+	fi
+
+	sleep "$(printf 0.%03i ${PR_DELAY})" || sleep 1
+}
+
+# display_delay() - Simple delay, omitted if $FAST is set
+display_delay() {
+	[ ${FAST} -eq 1 ] && return
+
+	sleep "${1}" || sleep 1
+}
+
+# switch_pane() - Highlight given pane and reset character delay
+# $1:	Pane number
+switch_pane() {
+	tmux select-pane -t ${1}
+	PR_DELAY=${PR_DELAY_INIT}
+	display_delay "0.2"
+}
+
+# cmd_write() - Write a command to a pane, letter by letter, and execute it
+# $1:	Pane number
+# $@:	Command to issue
+cmd_write() {
+	__pane_no=${1}
+	shift
+
+	switch_pane ${__pane_no}
+
+	__str="${@}"
+	while [ -n "${__str}" ]; do
+		__rem="${__str#?}"
+		__first="${__str%"$__rem"}"
+		if [ "${__first}" = ";" ]; then
+			tmux send-keys -t ${__pane_no} -l '\;'
+		else
+			tmux send-keys -t ${__pane_no} -l "${__first}"
+		fi
+		sleep_char "${__first}"
+		__str="${__rem}"
+	done
+	tmux send-keys -t ${__pane_no} "C-m"
+}
+
+# text_write() - Write text to info pane, letter by letter
+# $1:	Pane number
+# $@:	Command to issue
+text_write() {
+	__str="${@}"
+	while [ -n "${__str}" ]; do
+		__rem="${__str#?}"
+		__first="${__str%"$__rem"}"
+		if [ "${__first}" = ";" ]; then
+			tmux send-keys -t ${PANE_INFO} -l '\;'
+		else
+			tmux send-keys -t ${PANE_INFO} -l "${__first}"
+		fi
+		sleep_char "${__first}"
+		__str="${__rem}"
+	done
+}
+
+# text_backspace() - Slow backspace motion for demo
+# $1:	Number of backspace characters
+text_backspace() {
+	for __count in $(seq 0 ${1}); do
+		tmux send-keys -t ${PANE_INFO} Bspace
+		sleep 0.1
+	done
+}
+
+# em_write() - Write to log pane in red, for demo
+# $@:	Text
+em_write() {
+	info_n "${PR_RED}${@}${PR_NC}"
+}
+
+# pane_kill() - Kill a single pane given its name
+# $1:	Pane name
+pane_kill() {
+	__pane_number=$(eval echo \$PANE_${1})
+	tmux kill-pane -t ${__pane_number}
+}
+
+# pane_highlight() - Highlight a single pane given its name
+# $1:	Pane name
+pane_highlight() {
+	__pane_number=$(eval echo \$PANE_${1})
+	switch_pane ${__pane_number}
+	sleep 3
+}
+
+# pane_run() - Issue a command in given pane name
+# $1:	Pane name
+# $@:	Command to issue
+pane_run() {
+	__pane_name="${1}"
+	shift
+
+	__pane_number=$(eval echo \$PANE_${__pane_name})
+
+	eval ${__pane_name}_LAST_CMD=\"\${@}\"
+
+	cmd_write ${__pane_number} "${@}"
+}
+
+# pane_wait() - Wait for command to be done in given pane name
+# $1:	Pane name
+pane_wait() {
+	__pane_lc="$(echo "${1}" | tr [A-Z] [a-z])"
+
+	while [ "$(tail -n1 ${LOGDIR}/pane_${__pane_lc}.log)" != '$ ' ] && \
+	      [ "$(tail -n1 ${LOGDIR}/pane_${__pane_lc}.log)" != '# ' ] && \
+	      [ "$(tail -n1 ${LOGDIR}/pane_${__pane_lc}.log)" != '# # ' ]; do
+		sleep 0.1 || sleep 1
+	done
+}
+
+# pane_parse() - Print last line, @EMPTY@ if command had no output
+# $1:	Pane name
+pane_parse() {
+	__pane_lc="$(echo "${1}" | tr [A-Z] [a-z])"
+
+	__buf="$(tail -n2 ${LOGDIR}/pane_${__pane_lc}.log | head -n1 | tr -d -c [:print:])"
+
+	[ "# $(eval printf '%s' \"\$${1}_LAST_CMD\")" != "${__buf}" ] && \
+	[ "$ $(eval printf '%s' \"\$${1}_LAST_CMD\")" != "${__buf}" ] &&
+		printf '%s' "${__buf}" || printf '@EMPTY@'
+}
+
+# status_file_end() - Display and log messages when tests from one file are done
+status_file_end() {
+	[ -z "${STATUS_FILE}" ] && return
+
+	info_sep "="
+	log
+	tmux select-pane -t ${PANE_INFO} -T ""
+	STATUS_FILE=
+}
+
+# status_file_start() - Display and log messages when tests from one file start
+status_file_start() {
+	switch_pane ${PANE_INFO}
+
+	status_file_end
+
+	info_nolog "Starting tests in file: ${1}\n"
+	log "=== ${1}"
+	tmux select-pane -t ${PANE_INFO} -T "${1}"
+
+	STATUS_FILE="${1}"
+	STATUS_FILE_NTESTS="${2}"
+	STATUS_FILE_INDEX=0
+}
+
+# status_file_start() - Display and log messages when a single test starts
+status_test_start() {
+	switch_pane ${PANE_INFO}
+
+	info_nolog "Starting test: ${1}"
+	log "> ${1}"
+
+	STATUS_FILE_INDEX=$((STATUS_FILE_INDEX + 1))
+	tmux select-pane -t ${PANE_INFO} -T "${STATUS_FILE} [${STATUS_FILE_INDEX}/${STATUS_FILE_NTESTS}] - ${1}"
+}
+
+# info_check() - Display and log messages for a single test condition check
+info_check() {
+	switch_pane ${PANE_INFO}
+
+	printf "${PR_YELLOW}?${PR_NC} ${@}" >> /tmp/.passt_test_log_pipe
+	printf "? ${@}" >> "${LOGFILE}"
+}
+
+# info_check_passed() - Display and log a new line when a check passes
+info_check_passed() {
+	switch_pane ${PANE_INFO}
+
+	printf "\n" >> /tmp/.passt_test_log_pipe
+	printf "\n" >> ${LOGFILE}
+}
+
+# info_check_failed() - Display and log messages when a check fails
+info_check_failed() {
+	switch_pane ${PANE_INFO}
+
+	printf " ${PR_RED}!${PR_NC}\n" >> /tmp/.passt_test_log_pipe
+	printf " < failed.\n" >> "${LOGFILE}"
+}
+
+# info_passed() - Display, log, and make status bar blink when a test passes
+info_passed() {
+	switch_pane ${PANE_INFO}
+
+	info_nolog "...${PR_GREEN}passed${PR_NC}.\n"
+	log "...passed."
+	log
+
+	for i in `seq 1 3`; do
+		tmux set status-right-style 'bg=colour1 fg=colour2 bold'
+		sleep "0.1"
+		tmux set status-right-style 'bg=colour1 fg=colour233 bold'
+		sleep "0.1"
+	done
+}
+
+# info_failed() - Display, log, and make status bar blink when a test passes
+info_failed() {
+	switch_pane ${PANE_INFO}
+
+	info_nolog "...${PR_RED}failed${PR_NC}.\n"
+	log "...failed."
+	log
+
+	for i in `seq 1 3`; do
+		tmux set status-right-style 'bg=colour1 fg=colour196 bold'
+		sleep "0.1"
+		tmux set status-right-style 'bg=colour1 fg=colour233 bold'
+		sleep "0.1"
+	done
+
+	pause_continue \
+		"Press any key to pause test session"		\
+		"Resuming in "					\
+		"Paused, press any key to continue"		\
+		5
+}
+
+# info_skipped() - Display and log skipped test
+info_skipped() {
+	switch_pane ${PANE_INFO}
+
+	info_nolog "...${PR_YELLOW}skipped${PR_NC}.\n"
+	log "...skipped."
+	log
+}
+
+# info_layout() - Display string for new test layout
+info_layout() {
+	switch_pane ${PANE_INFO}
+
+	info_nolog "Test layout: ${PR_BLUE}${@}${PR_NC}.\n"
+}
+
+# status_test_ok() - Update counter of passed tests, log and display message
+status_test_ok() {
+	STATUS_PASS=$((STATUS_PASS + 1))
+	tmux set status-right "PASS: ${STATUS_PASS} | FAIL: ${STATUS_FAIL} | #(TZ="UTC" date -Iseconds)"
+	info_passed
+}
+
+# status_test_fail() - Update counter of failed tests, log and display message
+status_test_fail() {
+	STATUS_FAIL=$((STATUS_FAIL + 1))
+	tmux set status-right "PASS: ${STATUS_PASS} | FAIL: ${STATUS_FAIL} | #(TZ="UTC" date -Iseconds)"
+	info_failed
+}
+
+# status_test_fail() - Update counter of failed tests, log and display message
+status_test_skip() {
+	info_skipped
+}
+
+# table_header() - Print table header to log pane
+# $1:	Header description
+# $@:	Column headers
+table_header() {
+	perf_th ${@}
+
+	__ifs="${IFS}"
+	IFS=" "
+
+	__desc="${1}"
+	shift
+
+	__max_len=4
+	__count=0
+	for __h in ${@}; do
+		[ ${#__h} -gt ${__max_len} ] && __max_len=${#__h}
+		__count=$((__count + 1))
+	done
+
+	# > xxxx |<
+	__outer_len=$((__max_len + 3))
+	__width_fields=$((__outer_len * __count + 1))
+
+	TABLE_HEADER_LEFT=$((STATUS_COLS - __width_fields))
+	TABLE_CELL_SIZE=$((__max_len + 2))
+	TABLE_COLS=${__count}
+
+	__pad_left=$((TABLE_HEADER_LEFT - ${#__desc} - 2))
+	__buf="$(printf %-${__pad_left}s%s "" "${__desc}: ")"
+	for __h in ${@}; do
+		__pad_left=$(( (TABLE_CELL_SIZE - ${#__h} + 1) / 2))
+		__pad_right=$(( (TABLE_CELL_SIZE - ${#__h}) / 2))
+		__buf="${__buf}$(printf "|%-${__pad_left}s%s%-${__pad_right}s" "" ${__h} "")"
+	done
+
+	info_n "${__buf}|"
+
+	IFS="${__ifs}"
+}
+
+# table_row() - Print main table row to log pane
+# $@:	Column headers
+table_row() {
+	perf_tr ${@}
+
+	__line="${@}"
+	__buf="$(printf %-${TABLE_HEADER_LEFT}s "")"
+	for __i in $(seq 1 ${TABLE_COLS}); do
+		__buf="${__buf}|"
+		for __j in $(seq 1 ${TABLE_CELL_SIZE}); do
+			__buf="${__buf}-"
+		done
+	done
+	info_n "\n${__buf}|\n"
+
+	__pad_left=$(( (TABLE_HEADER_LEFT - ${#__line} + 1) / 2))
+	__pad_right=$(( (TABLE_HEADER_LEFT - ${#__line}) / 2))
+	info_n "$(printf "%-${__pad_left}s%s%-${__pad_right}s|" "" "${__line}" "")"
+}
+
+# table_line() - Print simple line to log pane
+# $@:	Column headers
+table_line() {
+	perf_tr ${@}
+
+	__line="${@}"
+	info_n "\n"
+
+	__pad_left=$(( (TABLE_HEADER_LEFT - ${#__line} + 1) / 2))
+	__pad_right=$(( (TABLE_HEADER_LEFT - ${#__line}) / 2))
+	info_n "$(printf "%-${__pad_left}s%s%-${__pad_right}s|" "" "${__line}" "")"
+}
+
+table_cell() {
+	__len="${1}"
+	shift
+
+	__content="${@}"
+
+	__pad_left=$((TABLE_CELL_SIZE - __len - 1))
+	info_n "$(printf "%-${__pad_left}s%s |" "" "${__content}")"
+}
+
+table_end() {
+	__buf="$(printf %-${TABLE_HEADER_LEFT}s "")"
+	for __i in $(seq 1 ${TABLE_COLS}); do
+		__buf="${__buf}'"
+		for __j in $(seq 1 ${TABLE_CELL_SIZE}); do
+			__buf="${__buf}-"
+		done
+	done
+	info_n "\n${__buf}'\n"
+}
+
+table_value_throughput() {
+	[ "${1}" = "-" ] && table_cell 1 "-" && perf_td 0 "" && return 0
+	__v="$(echo "scale=1; x=( ${1} + 10^8 / 2 ) / 10^9; if ( x < 1 && x > 0 ) print 0; x" | bc -l)"
+	perf_td 31 "${__v}"
+
+	__red="${2}"
+	__yellow="${3}"
+	if [ "$(echo "${__v} < ${__red}" | bc -l)" = "1" ]; then
+		table_cell ${#__v} "${PR_RED}${__v}${PR_NC}"
+		return 1
+	elif [ "$(echo "${__v} < ${__yellow}" | bc -l)" = "1" ]; then
+		table_cell ${#__v} "${PR_YELLOW}${__v}${PR_NC}"
+		return 1
+	else
+		table_cell ${#__v} "${PR_GREEN}${__v}${PR_NC}"
+		return 0
+	fi
+}
+
+table_value_latency() {
+	[ "${1}" = "-" ] && table_cell 1 "-" && perf_td 0 "" && return 0
+
+	__v="$(echo "scale=6; 1 / ${1} * 10^6" | bc -l)"
+	__v="${__v%.*}"
+
+	perf_td 11 "${__v}"
+
+	__red="${2}"
+	__yellow="${3}"
+	if [ "$(echo "${__v} > ${__red}" | bc -l)" = "1" ]; then
+		table_cell ${#__v} "${PR_RED}${__v}${PR_NC}"
+		return 1
+	elif [ "$(echo "${__v} > ${__yellow}" | bc -l)" = "1" ]; then
+		table_cell ${#__v} "${PR_YELLOW}${__v}${PR_NC}"
+		return 1
+	else
+		table_cell ${#__v} "${PR_GREEN}${__v}${PR_NC}"
+		return 0
+	fi
+}
+
+# pause_continue() - Pause for a while, wait for keystroke, resume on second one
+pause_continue() {
+	tmux select-pane -t ${PANE_INFO}
+	info_nolog "${1}"
+	info_nolog_n "${2}"
+
+	__pause_tmp="$(mktemp)"
+	echo >> "${__pause_tmp}"
+	tmux pipe-pane -O -t ${PANE_INFO} "cat >> ${__pause_tmp}"
+	__pane_buf=
+	__wait=0
+	sleep 1
+	for __i in $(seq ${4} -1 0); do
+		if [ "$(tail -n1 ${__pause_tmp} | tr -d -c [:print:])" != "${__pane_buf}" ]; then
+			__wait=1
+			break
+		fi
+
+		if [ ${__i} -ne ${4} ]; then
+			tmux send-keys -t ${PANE_INFO} Bspace
+			tmux send-keys -t ${PANE_INFO} Bspace
+			__pane_buf="${__pane_buf}  "
+		fi
+		info_nolog_n "${__i} "
+		__pane_buf="${__pane_buf}${__i} "
+		sleep 1
+	done
+
+	if [ ${__wait} -eq 1 ]; then
+		tmux send-keys -t ${PANE_INFO} Bspace
+		tmux send-keys -t ${PANE_INFO} Bspace
+		info_nolog ""
+		info_nolog "${3}"
+		__pane_buf="$(tail -n1 ${__pause_tmp})"
+		while true; do
+			[ "$(tail -n1 ${__pause_tmp})" != "${__pane_buf}" ] && break
+			sleep 1
+		done
+	fi
+	tmux pipe-pane -O -t ${PANE_INFO} ""
+	rm "${__pause_tmp}"
+	info_nolog ""
+}
+
+# run_term() - Start tmux session, X terminal if requested, running entry point
+run_term() {
+	export SHELL="/bin/sh"
+
+	if [ ${CI} -eq 1 ]; then
+		__xterm_done="$(mktemp)"
+		${CI_XTERM} "$(pwd)" -e "sh -c \"printf '\e[8;50;240t'; tmux new-session -s passt_test ./ci from_term; echo >${__xterm_done}\""
+		while ! [ -s "${__xterm_done}" ]; do sleep 1; done
+		rm "${__xterm_done}"
+	elif [ ${DEMO} -eq 1 ]; then
+		while true; do
+			${DEMO_XTERM} "$(pwd)" -e sh -c 'tmux new-session -s passt_test ./run_demo from_term'
+			[ $? -ne 0 ] && { tmux kill-session -t passt_test; continue; }
+			break
+		done
+	else
+		tmux new-session -s passt_test ./run from_term
+	fi
+}
+
+# term() - Set up terminal window and panes for regular tests or CI
+term() {
+	tmux set status-interval 1
+	tmux rename-window ''
+
+	tmux set window-status-format '#W'
+	tmux set window-status-current-format '#W'
+	tmux set status-left ''
+	tmux set window-status-separator ''
+
+	tmux set window-status-style 'bg=colour1 fg=colour233 bold'
+	tmux set status-style 'bg=colour1 fg=colour233 bold'
+	tmux set status-right-style 'bg=colour1 fg=colour233 bold'
+
+	tmux new-window -n "Testing commit: ${COMMIT}"
+
+	tmux set window-status-format '#W'
+	tmux set window-status-current-format '#W'
+	tmux set status-left ''
+	tmux set window-status-separator ''
+
+	tmux set window-status-current-style 'bg=colour1 fg=colour233 bold'
+	tmux set status-right '#(TZ="UTC" date -Iseconds)'
+	tmux set status-right-length 50
+	tmux set status-right-style 'bg=colour1 fg=colour233 bold'
+
+	tmux set history-limit 500000
+	tmux select-pane -t 0 -T ''
+	tmux set pane-border-format '#T'
+	tmux set pane-border-style 'fg=colour2 bg=colour233'
+	tmux set pane-active-border-style 'fg=colour233 bg=colour4 bold'
+	tmux set pane-border-status bottom
+}
+
+# term_demo() - Set up terminal window and panes for demo
+term_demo() {
+	tmux set status-interval 1
+	tmux rename-window ''
+
+	tmux set window-status-format '#W'
+	tmux set window-status-current-format '#W'
+	tmux set status-left ''
+	tmux set window-status-separator ''
+
+	tmux set window-status-style 'bg=colour1 fg=colour15 bold'
+	tmux set status-right ''
+	tmux set status-style 'bg=colour1 fg=colour15 bold'
+	tmux set status-right-style 'bg=colour1 fg=colour15 bold'
+
+	tmux new-window -n "Demo at commit: ${COMMIT}"
+
+	tmux set window-status-format '#W'
+	tmux set window-status-current-format '#W'
+	tmux set status-left ''
+	tmux set window-status-separator ''
+
+	tmux select-pane -t 0 -T ''
+	tmux set pane-border-format '#T'
+	tmux set pane-border-style 'fg=colour2 bg=colour233'
+	tmux set pane-active-border-style 'fg=colour15 bg=colour4 bold'
+	tmux set pane-border-status bottom
+}

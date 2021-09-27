@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/tcp/passt - Check TCP functionality in passt mode
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+onlyfor	passt
+gtools	nc ip jq cat md5sum cut
+htools	dd nc ip jq cat md5sum cut
+
+test	TCP/IPv4: host to guest: big transfer
+temp	TEMP_BIG
+guestb	nc -4 -l 10001 > test_big.bin
+host	dd if=/dev/urandom bs=1M count=10 > __TEMP_BIG__
+host	cat __TEMP_BIG__ | nc -N 127.0.0.1 10001
+guestw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
+
+test	TCP/IPv4: guest to host: big transfer
+hostb	nc -4 -l 10003 > __TEMP_BIG__
+gout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+guest	cat test_big.bin | nc -N __GW__ 10003
+hostw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
+
+test	TCP/IPv4: host to guest: small transfer
+temp	TEMP_SMALL
+guestb	nc -4 -l 10001 > test_small.bin
+host	dd if=/dev/urandom bs=2k count=1 > __TEMP_SMALL__
+host	cat __TEMP_SMALL__ | nc -N 127.0.0.1 10001
+guestw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_SMALL__" = "__HOST_MD5_SMALL__" ]
+
+test	TCP/IPv4: guest to host: small transfer
+hostb	nc -4 -l 10003 > __TEMP_SMALL__
+sleep	1
+guest	cat test_small.bin | nc -N __GW__ 10003
+hostw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+check	[ "__GUEST_MD5_SMALL__" = "__HOST_MD5_SMALL__" ]
+
+
+test	TCP/IPv6: host to guest: big transfer
+guestb	nc -6 -l 10001 > test_big.bin
+sleep	1
+host	cat __TEMP_BIG__ | nc -N ::1 10001
+guestw
+gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
+
+test	TCP/IPv6: guest to host: big transfer
+hostb	nc -6 -l 10003 > __TEMP_BIG__
+gout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+guest	cat test_big.bin | nc -N __GW6__%__IFNAME__ 10003
+hostw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
+
+test	TCP/IPv6: host to guest: small transfer
+guestb	nc -6 -l 10001 > test_small.bin
+sleep	1
+host	cat __TEMP_SMALL__ | nc -N ::1 10001
+guestw
+gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_SMALL__" = "__HOST_MD5_SMALL__" ]
+
+test	TCP/IPv6: guest to host: small transfer
+hostb	nc -6 -l 10003 > __TEMP_SMALL__
+sleep	1
+guest	cat test_small.bin | nc -N __GW6__%__IFNAME__ 10003
+hostw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+check	[ "__GUEST_MD5_SMALL__" = "__HOST_MD5_SMALL__" ]

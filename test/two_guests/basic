@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/two_guests/basic - Check basic functionality with two guests
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+g1tools	ip jq dhclient nc cat
+g2tools	ip jq dhclient nc cat
+htools	ip jq cat md5sum cut
+
+test	Interface names
+g1out	IFNAME1 ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+g2out	IFNAME2 ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+hout	HOST_IFNAME ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").dev'
+check	[ -n "__IFNAME1__" ]
+check	[ -n "__IFNAME2__" ]
+
+test	DHCP: addresses
+guest1	/sbin/dhclient __IFNAME1__
+guest2	/sbin/dhclient __IFNAME1__
+g1out	ADDR1 ip -j -4 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME1__").addr_info[0].local'
+g2out	ADDR2 ip -j -4 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME2__").addr_info[0].local'
+hout	HOST_ADDR ip -j -4 ad sh|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[0].local'
+check	[ "__ADDR1__" = "__HOST_ADDR__" ]
+check	[ "__ADDR2__" = "__HOST_ADDR__" ]
+
+test	DHCPv6: addresses
+guest1	/sbin/dhclient -6 __IFNAME1__
+guest2	/sbin/dhclient -6 __IFNAME1__
+g1out	ADDR1_6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME1__").addr_info[] | select(.prefixlen == 128).local'
+g2out	ADDR2_6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME2__").addr_info[] | select(.prefixlen == 128).local'
+hout	HOST_ADDR6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[] | select(.scope == "global").local'
+check	[ "__ADDR1_6__" = "__HOST_ADDR6__" ]
+check	[ "__ADDR2_6__" = "__HOST_ADDR6__" ]
+
+test	TCP/IPv4: guest 1 > guest 2
+g1out	GW1 ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+guest2b	nc -4 -l 10004 > msg
+guest1	echo "Hello_from_guest_1" | nc -N __GW1__ 10004
+guest2w
+sleep 	1
+g2out	MSG2 cat msg
+check	[ "__MSG2__" = "Hello_from_guest_1" ]
+
+test	TCP/IPv6: guest 2 > guest 1
+g2out	GW2_6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+guest1b	nc -6 -l 10001 > msg
+guest2	echo "Hello_from_guest_2" | nc -N __GW2_6__%__IFNAME2__ 10001
+guest1w
+sleep 	1
+g1out	MSG1 cat msg
+check	[ "__MSG1__" = "Hello_from_guest_2" ]
+
+test	UDP/IPv4: guest 1 > guest 2
+guest2b	nc -u -W1 -4 -l 10004 > msg
+guest1	echo "Hello_from_guest_1" | nc -u -q1 __GW1__ 10004
+guest2w
+sleep 	1
+g2out	MSG2 cat msg
+check	[ "__MSG2__" = "Hello_from_guest_1" ]
+
+test	UDP/IPv6: guest 2 > guest 1
+guest1b	nc -u -W1 -6 -l 10001 > msg
+guest2	echo "Hello_from_guest_2" | nc -u -q1 -N __GW2_6__%__IFNAME2__ 10001
+guest1w
+sleep 	1
+g1out	MSG1 cat msg
+check	[ "__MSG1__" = "Hello_from_guest_2" ]

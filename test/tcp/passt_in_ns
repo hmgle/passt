@@ -1,0 +1,262 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/tcp/passt_in_ns - Check TCP functionality for passt in ns with pasta
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+onlyfor	passt_in_ns
+gtools	nc ip jq cat md5sum cut
+htools	dd nc ip jq cat md5sum cut
+nstools	nc ip jq cat md5sum cut
+
+test	TCP/IPv4: host to guest: big transfer
+temp	TEMP_BIG
+guestb	nc -4 -l 10001 > test_big.bin
+host	dd if=/dev/urandom bs=1M count=10 > __TEMP_BIG__
+host	cat __TEMP_BIG__ | nc -N 127.0.0.1 10001
+guestw
+hout	MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv4: host to ns: big transfer
+temp	TEMP_NS_BIG
+nsb	nc -4 -l 10002 > __TEMP_NS_BIG__
+host	cat __TEMP_BIG__ | nc -N 127.0.0.1 10002
+nsw
+nsout	NS_MD5_BIG md5sum __TEMP_NS_BIG__ | cut -d' ' -f1
+check	[ "__NS_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv4: guest to host: big transfer
+hostb	nc -4 -l 10003 > __TEMP_BIG__
+gout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+guest	cat test_big.bin | nc -N __GW__ 10003
+hostw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv4: guest to ns: big transfer
+nsb	nc -4 -l 10002 > __TEMP_BIG__
+guest	cat test_big.bin | nc -N __GW__ 10002
+hostw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv4: ns to host (spliced): big transfer
+sleep	1
+hostb	nc -4 -l 10003 > __TEMP_BIG__
+ns	cat __TEMP_NS_BIG__ | nc -N 127.0.0.1 10003
+hostw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv4: ns to host (via tap): big transfer
+hostb	nc -4 -l 10003 > __TEMP_BIG__
+ns	cat __TEMP_NS_BIG__ | nc -N __GW__ 10003
+hostw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv4: ns to guest (using loopback address): big transfer
+guestb	nc -4 -l 10001 > test_big.bin
+ns	cat __TEMP_NS_BIG__ | nc -N 127.0.0.1 10001
+guestw
+gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv4: ns to guest (using namespace address): big transfer
+guestb	nc -4 -l 10001 > test_big.bin
+nsout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	ADDR ip -j -4 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+ns	cat __TEMP_NS_BIG__ | nc -N __ADDR__ 10001
+guestw
+gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv4: host to guest: small transfer
+temp	TEMP_SMALL
+guestb	nc -4 -l 10001 > test_small.bin
+host	dd if=/dev/urandom bs=2k count=100 > __TEMP_SMALL__
+host	cat __TEMP_SMALL__ | nc -N 127.0.0.1 10001
+guestw
+hout	MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv4: host to ns: small transfer
+temp	TEMP_NS_SMALL
+nsb	nc -4 -l 10002 > __TEMP_NS_SMALL__
+host	cat __TEMP_SMALL__ | nc -N 127.0.0.1 10002
+nsw
+nsout	NS_MD5_SMALL md5sum __TEMP_NS_SMALL__ | cut -d' ' -f1
+check	[ "__NS_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv4: guest to host: small transfer
+hostb	nc -4 -l 10003 > __TEMP_SMALL__
+gout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+guest	cat test_small.bin | nc -N __GW__ 10003
+hostw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv4: guest to ns: small transfer
+nsb	nc -4 -l 10002 > __TEMP_SMALL__
+guest	cat test_small.bin | nc -N __GW__ 10002
+hostw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv4: ns to host (spliced): small transfer
+sleep	1
+hostb	nc -4 -l 10003 > __TEMP_SMALL__
+ns	cat __TEMP_NS_SMALL__ | nc -N 127.0.0.1 10003
+hostw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv4: ns to host (via tap): small transfer
+hostb	nc -4 -l 10003 > __TEMP_SMALL__
+ns	cat __TEMP_NS_SMALL__ | nc -N __GW__ 10003
+hostw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv4: ns to guest (using loopback address): small transfer
+guestb	nc -4 -l 10001 > test_small.bin
+ns	cat __TEMP_NS_SMALL__ | nc -N 127.0.0.1 10001
+guestw
+gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv4: ns to guest (using namespace address): small transfer
+guestb	nc -4 -l 10001 > test_small.bin
+ns	cat __TEMP_NS_SMALL__ | nc -N __ADDR__ 10001
+guestw
+gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv6: host to guest: big transfer
+guestb	nc -6 -l 10001 > test_big.bin
+host	cat __TEMP_BIG__ | nc -N ::1 10001
+guestw
+gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv6: host to ns: big transfer
+nsb	nc -6 -l 10002 > __TEMP_NS_BIG__
+host	cat __TEMP_BIG__ | nc -N ::1 10002
+nsw
+nsout	NS_MD5_BIG md5sum __TEMP_NS_BIG__ | cut -d' ' -f1
+check	[ "__NS_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv6: guest to host: big transfer
+hostb	nc -6 -l 10003 > __TEMP_BIG__
+gout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+guest	cat test_big.bin | nc -N __GW6__%__IFNAME__ 10003
+hostw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv6: guest to ns: big transfer
+nsb	nc -6 -l 10002 > __TEMP_BIG__
+guest	cat test_big.bin | nc -N __GW6__%__IFNAME__ 10002
+hostw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv6: ns to host (spliced): big transfer
+hostb	nc -6 -l 10003 > __TEMP_BIG__
+ns	cat __TEMP_NS_BIG__ | nc -N ::1 10003
+hostw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv6: ns to host (via tap): big transfer
+hostb	nc -6 -l 10003 > __TEMP_BIG__
+nsout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+ns	cat __TEMP_NS_BIG__ | nc -N __GW6__%__IFNAME__ 10003
+hostw
+hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
+check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv6: ns to guest (using loopback address): big transfer
+guestb	nc -6 -l 10001 > test_big.bin
+ns	cat __TEMP_NS_BIG__ | nc -N ::1 10001
+guestw
+gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv6: ns to guest (using namespace address): big transfer
+guestb	nc -6 -l 10001 > test_big.bin
+nsout	ADDR6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+ns	cat __TEMP_NS_BIG__ | nc -N __ADDR6__ 10001
+guestw
+gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_BIG__" = "__MD5_BIG__" ]
+
+test	TCP/IPv6: host to guest: small transfer
+guestb	nc -6 -l 10001 > test_small.bin
+host	cat __TEMP_SMALL__ | nc -N ::1 10001
+guestw
+gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv6: host to ns: small transfer
+nsb	nc -6 -l 10002 > __TEMP_NS_SMALL__
+host	cat __TEMP_SMALL__ | nc -N ::1 10002
+nsw
+nsout	NS_MD5_SMALL md5sum __TEMP_NS_SMALL__ | cut -d' ' -f1
+check	[ "__NS_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv6: guest to host: small transfer
+hostb	nc -6 -l 10003 > __TEMP_SMALL__
+gout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+guest	cat test_small.bin | nc -N __GW6__%__IFNAME__ 10003
+hostw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv6: guest to ns: small transfer
+nsb	nc -6 -l 10002 > __TEMP_SMALL__
+guest	cat test_small.bin | nc -N __GW6__%__IFNAME__ 10002
+hostw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv6: ns to host (spliced): small transfer
+hostb	nc -6 -l 10003 > __TEMP_SMALL__
+ns	cat __TEMP_NS_SMALL__ | nc -N ::1 10003
+hostw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv6: ns to host (via tap): small transfer
+hostb	nc -6 -l 10003 > __TEMP_SMALL__
+nsout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+ns	cat __TEMP_NS_SMALL__ | nc -N __GW6__%__IFNAME__ 10003
+hostw
+hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
+check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv6: ns to guest (using loopback address): small transfer
+guestb	nc -6 -l 10001 > test_small.bin
+ns	cat __TEMP_NS_SMALL__ | nc -N ::1 10001
+guestw
+gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_SMALL__" = "__MD5_SMALL__" ]
+
+test	TCP/IPv6: ns to guest (using namespace address): small transfer
+guestb	nc -6 -l 10001 > test_small.bin
+ns	cat __TEMP_NS_SMALL__ | nc -N __ADDR6__ 10001
+guestw
+gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
+check	[ "__GUEST_MD5_SMALL__" = "__MD5_SMALL__" ]
