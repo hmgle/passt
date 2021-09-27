@@ -297,9 +297,9 @@ Don't forward any ports
 
 .TP
 .BR auto
-Forward all ports currently bound in the namespace. The list of ports is derived
-from listening sockets reported by \fI/proc/net/tcp\fR and \fI/proc/net/tcp6\fR,
-see \fBproc\fR(5).
+Dynamically forward ports bound in the namespace. The list of ports is
+periodically derived (every second) from listening sockets reported by
+\fI/proc/net/tcp\fR and \fI/proc/net/tcp6\fR, see \fBproc\fR(5).
 
 .TP
 .BR ports
@@ -331,9 +331,10 @@ Default is \fBauto\fR.
 
 .TP
 .BR \-u ", " \-\-udp-ports " " \fIspec
-Configure UDP port forwarding to guest. \fIspec\fR is as described for TCP
+Configure UDP port forwarding to namespace. \fIspec\fR is as described for TCP
 above, and the list of ports is derived from listening sockets reported by
-\fI/proc/net/udp\fR and \fI/proc/net/udp6\fR, see \fBproc\fR(5).
+\fI/proc/net/udp\fR and \fI/proc/net/udp6\fR, see \fBproc\fR(5),
+when \fBpasta\fR starts (not periodically).
 
 Note: unless overridden, UDP ports with numbers corresponding to forwarded TCP
 port numbers are forwarded too, without, however, any port translation. 
@@ -345,14 +346,14 @@ Default is \fBauto\fR.
 .TP
 .BR \-T ", " \-\-tcp-ns " " \fIspec
 Configure TCP port forwarding from target namespace to init namespace.
-\fIspec\fR is as described above.
+\fIspec\fR is as described above for TCP.
 
 Default is \fBauto\fR.
 
 .TP
 .BR \-U ", " \-\-udp-ns " " \fIspec
 Configure UDP port forwarding from target namespace to init namespace.
-\fIspec\fR is as described above.
+\fIspec\fR is as described above for UDP.
 
 Default is \fBauto\fR.
 

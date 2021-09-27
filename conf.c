@@ -40,6 +40,42 @@
 #include "tcp.h"
 
 /**
+ * get_bound_ports() - Get maps of ports with bound sockets
+ * @c:		Execution context
+ * @ns:		If set, set bitmaps for ports to tap/ns -- to init otherwise
+ * @proto:	Protocol number (IPPROTO_TCP or IPPROTO_UDP)
+ */
+void get_bound_ports(struct ctx *c, int ns, uint8_t proto)
+{
+	uint8_t *udp_map, *udp_exclude, *tcp_map, *tcp_exclude;
+
+	if (ns) {
+		udp_map = c->udp.port_to_tap;
+		udp_exclude = c->udp.port_to_init;
+		tcp_map = c->tcp.port_to_tap;
+		tcp_exclude = c->tcp.port_to_init;
+	} else {
+		udp_map = c->udp.port_to_init;
+		udp_exclude = c->udp.port_to_tap;
+		tcp_map = c->tcp.port_to_init;
+		tcp_exclude = c->tcp.port_to_tap;
+	}
+
+	if (proto == IPPROTO_UDP) {
+		memset(udp_map, 0, USHRT_MAX / 8);
+		procfs_scan_listen("udp",  udp_map, udp_exclude);
+		procfs_scan_listen("udp6", udp_map, udp_exclude);
+
+		procfs_scan_listen("tcp",  udp_map, udp_exclude);
+		procfs_scan_listen("tcp6", udp_map, udp_exclude);
+	} else if (proto == IPPROTO_TCP) {
+		memset(tcp_map, 0, USHRT_MAX / 8);
+		procfs_scan_listen("tcp",  tcp_map, tcp_exclude);
+		procfs_scan_listen("tcp6", tcp_map, tcp_exclude);
+	}
+}
+
+/**
  * struct get_bound_ports_ns_arg - Arguments for get_bound_ports_ns()
  * @c:		Execution context
  * @proto:	Protocol number (IPPROTO_TCP or IPPROTO_UDP)
@@ -50,7 +86,7 @@ struct get_bound_ports_ns_arg {
 };
 
 /**
- * get_bound_ports_ns() - Get maps of ports  namespace with bound sockets
+ * get_bound_ports_ns() - Get maps of ports in namespace with bound sockets
  * @arg:	See struct get_bound_ports_ns_arg
  *
  * Return: 0
@@ -63,37 +99,9 @@ static int get_bound_ports_ns(void *arg)
 	if (!c->pasta_pid || ns_enter(c->pasta_pid))
 		return 0;
 
-	if (a->proto == IPPROTO_UDP) {
-		procfs_scan_listen("udp",  c->udp.port_to_tap);
-		procfs_scan_listen("udp6", c->udp.port_to_tap);
-
-		procfs_scan_listen("tcp",  c->udp.port_to_tap);
-		procfs_scan_listen("tcp6", c->udp.port_to_tap);
-	} else if (a->proto == IPPROTO_TCP) {
-		procfs_scan_listen("tcp",  c->tcp.port_to_tap);
-		procfs_scan_listen("tcp6", c->tcp.port_to_tap);
-	}
+	get_bound_ports(c, 1, a->proto);
 
 	return 0;
-}
-
-/**
- * get_bound_ports() - Get maps of ports in init namespace with bound sockets
- * @c:		Execution context
- * @proto:	Protocol number (IPPROTO_TCP or IPPROTO_UDP)
- */
-static void get_bound_ports(struct ctx *c, uint8_t proto)
-{
-	if (proto == IPPROTO_UDP) {
-		procfs_scan_listen("udp",  c->udp.port_to_init);
-		procfs_scan_listen("udp6", c->udp.port_to_init);
-
-		procfs_scan_listen("tcp",  c->udp.port_to_init);
-		procfs_scan_listen("tcp6", c->udp.port_to_init);
-	} else if (proto == IPPROTO_TCP) {
-		procfs_scan_listen("tcp",  c->tcp.port_to_init);
-		procfs_scan_listen("tcp6", c->tcp.port_to_init);
-	}
 }
 
 enum conf_port_type {
@@ -1172,19 +1180,28 @@ void conf(struct ctx *c, int argc, char **argv)
 	}
 #endif
 
+	c->tcp.ns_detect_ports   = c->udp.ns_detect_ports   = 0;
+	c->tcp.init_detect_ports = c->udp.init_detect_ports = 0;
+
 	if (c->mode == MODE_PASTA) {
 		if (!tcp_tap || tcp_tap == PORT_AUTO) {
+			c->tcp.ns_detect_ports = 1;
 			ns_ports_arg.proto = IPPROTO_TCP;
 			NS_CALL(get_bound_ports_ns, &ns_ports_arg);
 		}
 		if (!udp_tap || udp_tap == PORT_AUTO) {
+			c->udp.ns_detect_ports = 1;
 			ns_ports_arg.proto = IPPROTO_UDP;
 			NS_CALL(get_bound_ports_ns, &ns_ports_arg);
 		}
-		if (!tcp_init || tcp_init == PORT_AUTO)
-			get_bound_ports(c, IPPROTO_TCP);
-		if (!udp_init || udp_init == PORT_AUTO)
-			get_bound_ports(c, IPPROTO_UDP);
+		if (!tcp_init || tcp_init == PORT_AUTO) {
+			c->tcp.init_detect_ports = 1;
+			get_bound_ports(c, 0, IPPROTO_TCP);
+		}
+		if (!udp_init || udp_init == PORT_AUTO) {
+			c->udp.init_detect_ports = 1;
+			get_bound_ports(c, 0, IPPROTO_UDP);
+		}
 	}
 
 	conf_print(c);

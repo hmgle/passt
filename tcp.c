@@ -334,6 +334,7 @@
 #include "tap.h"
 #include "siphash.h"
 #include "pcap.h"
+#include "conf.h"
 
 #define MAX_TAP_CONNS			(128 * 1024)
 #define MAX_SPLICE_CONNS		(128 * 1024)
@@ -362,6 +363,8 @@
 #define TCP_SOCK_POOL_TSH		128 /* Refill in ns if > x used */
 #define TCP_SPLICE_PIPE_POOL_SIZE	256
 #define REFILL_INTERVAL			1000
+
+#define PORT_DETECT_INTERVAL		1000
 
 /* We need to include <linux/tcp.h> for tcpi_bytes_acked, instead of
  * <netinet/tcp.h>, but that doesn't include a definition for SOL_TCP
@@ -524,6 +527,11 @@ struct tcp_splice_conn {
 /* Port re-mappings as delta, indexed by original destination port */
 static in_port_t		tcp_port_delta_to_tap	[USHRT_MAX];
 static in_port_t		tcp_port_delta_to_init	[USHRT_MAX];
+
+/* Listening sockets, used for automatic port forwarding in pasta mode only */
+static int tcp_sock_init_lo	[USHRT_MAX][IP_VERSIONS];
+static int tcp_sock_init_ext	[USHRT_MAX][IP_VERSIONS];
+static int tcp_sock_ns		[USHRT_MAX][IP_VERSIONS];
 
 /**
  * tcp_remap_to_tap() - Set delta for port translation toward guest/tap
@@ -3002,6 +3010,93 @@ smaller:
 }
 
 /**
+ * tcp_sock_init_one() - Initialise listening sockets for a given port
+ * @c:		Execution context
+ * @ns:		In pasta mode, if set, bind with loopback address in namespace
+ * @port:	Port, host order
+ */
+static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
+{
+	union tcp_epoll_ref tref = { .listen = 1 };
+	int s;
+
+	if (ns)
+		tref.index = (in_port_t)(port + tcp_port_delta_to_init[port]);
+	else
+		tref.index = (in_port_t)(port + tcp_port_delta_to_tap[port]);
+
+	if (c->v4) {
+		tref.v6 = 0;
+
+		tref.splice = 0;
+		if (!ns) {
+			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
+				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
+				    tref.u32);
+			if (s > 0)
+				tcp_sock_set_bufsize(s);
+			else
+				s = -1;
+
+			if (c->tcp.init_detect_ports)
+				tcp_sock_init_ext[port][V4] = s;
+		}
+
+		if (c->mode == MODE_PASTA) {
+			tref.splice = 1;
+			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
+				    BIND_LOOPBACK, tref.u32);
+			if (s > 0)
+				tcp_sock_set_bufsize(s);
+			else
+				s = -1;
+
+			if (c->tcp.ns_detect_ports) {
+				if (ns)
+					tcp_sock_ns[port][V4] = s;
+				else
+					tcp_sock_init_lo[port][V4] = s;
+			}
+		}
+	}
+
+	if (c->v6) {
+		tref.v6 = 1;
+
+		tref.splice = 0;
+		if (!ns) {
+			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
+				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
+				    tref.u32);
+			if (s > 0)
+				tcp_sock_set_bufsize(s);
+			else
+				s = -1;
+
+			if (c->tcp.init_detect_ports)
+				tcp_sock_init_ext[port][V6] = s;
+		}
+
+		if (c->mode == MODE_PASTA) {
+			tref.splice = 1;
+			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
+				    BIND_LOOPBACK, tref.u32);
+			if (s > 0)
+				tcp_sock_set_bufsize(s);
+			else
+				s = -1;
+
+			if (c->tcp.ns_detect_ports) {
+				if (ns)
+					tcp_sock_ns[port][V6] = s;
+				else
+					tcp_sock_init_lo[port][V6] = s;
+			}
+		}
+	}
+}
+
+/**
  * tcp_sock_init_ns() - Bind sockets in namespace for inbound connections
  * @arg:	Execution context
  *
@@ -3009,10 +3104,8 @@ smaller:
  */
 static int tcp_sock_init_ns(void *arg)
 {
-	union tcp_epoll_ref tref = { .listen = 1, .splice = 1 };
 	struct ctx *c = (struct ctx *)arg;
 	in_port_t port;
-	int s;
 
 	ns_enter(c->pasta_pid);
 
@@ -3020,21 +3113,7 @@ static int tcp_sock_init_ns(void *arg)
 		if (!bitmap_isset(c->tcp.port_to_init, port))
 			continue;
 
-		tref.index = (in_port_t)(port + tcp_port_delta_to_init[port]);
-
-		if (c->v4) {
-			tref.v6 = 0;
-			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
-				    BIND_LOOPBACK, tref.u32);
-			tcp_sock_set_bufsize(s);
-		}
-
-		if (c->v6) {
-			tref.v6 = 1;
-			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
-				    BIND_LOOPBACK, tref.u32);
-			tcp_sock_set_bufsize(s);
-		}
+		tcp_sock_init_one(c, 1, port);
 	}
 
 	return 0;
@@ -3128,9 +3207,7 @@ static int tcp_sock_refill(void *arg)
 int tcp_sock_init(struct ctx *c, struct timespec *now)
 {
 	struct tcp_sock_refill_arg refill_arg = { c, 0 };
-	union tcp_epoll_ref tref = { .listen = 1 };
 	in_port_t port;
-	int s;
 
 	getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret), GRND_RANDOM);
 
@@ -3138,40 +3215,7 @@ int tcp_sock_init(struct ctx *c, struct timespec *now)
 		if (!bitmap_isset(c->tcp.port_to_tap, port))
 			continue;
 
-		tref.index = (in_port_t)(port + tcp_port_delta_to_tap[port]);
-		if (c->v4) {
-			tref.v6 = 0;
-
-			tref.splice = 0;
-			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
-				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
-				    tref.u32);
-			tcp_sock_set_bufsize(s);
-
-			if (c->mode == MODE_PASTA) {
-				tref.splice = 1;
-				s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
-					    BIND_LOOPBACK, tref.u32);
-				tcp_sock_set_bufsize(s);
-			}
-		}
-
-		if (c->v6) {
-			tref.v6 = 1;
-
-			tref.splice = 0;
-			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
-				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
-				    tref.u32);
-			tcp_sock_set_bufsize(s);
-
-			if (c->mode == MODE_PASTA) {
-				tref.splice = 1;
-				s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
-					    BIND_LOOPBACK, tref.u32);
-				tcp_sock_set_bufsize(s);
-			}
-		}
+		tcp_sock_init_one(c, 0, port);
 	}
 
 	if (c->v4)
@@ -3190,6 +3234,8 @@ int tcp_sock_init(struct ctx *c, struct timespec *now)
 		refill_arg.ns = 1;
 		NS_CALL(tcp_sock_refill, &refill_arg);
 		tcp_splice_pipe_refill(c);
+
+		c->tcp.port_detect_ts = *now;
 	}
 
 	return 0;
@@ -3284,6 +3330,122 @@ static void tcp_timer_one(struct ctx *c, struct tcp_tap_conn *conn,
 }
 
 /**
+ * struct tcp_port_detect_arg - Arguments for tcp_port_detect()
+ * @c:			Execution context
+ * @detect_in_ns:	Detect ports bound in namespace, not in init
+ */
+struct tcp_port_detect_arg {
+	struct ctx *c;
+	int detect_in_ns;
+};
+
+/**
+ * tcp_port_detect() - Detect ports bound in namespace or init
+ * @arg:		See struct tcp_port_detect_arg
+ *
+ * Return: 0
+ */
+static int tcp_port_detect(void *arg)
+{
+	struct tcp_port_detect_arg *a = (struct tcp_port_detect_arg *)arg;
+
+	if (a->detect_in_ns) {
+		ns_enter(a->c->pasta_pid);
+
+		get_bound_ports(a->c, 1, IPPROTO_TCP);
+	} else {
+		get_bound_ports(a->c, 0, IPPROTO_TCP);
+	}
+
+	return 0;
+}
+
+/**
+ * struct tcp_port_rebind_arg - Arguments for tcp_port_rebind()
+ * @c:			Execution context
+ * @bind_in_ns:		Rebind ports in namespace, not in init
+ */
+struct tcp_port_rebind_arg {
+	struct ctx *c;
+	int bind_in_ns;
+};
+
+/**
+ * tcp_port_rebind() - Rebind ports in namespace or init
+ * @arg:		See struct tcp_port_rebind_arg
+ *
+ * Return: 0
+ */
+static int tcp_port_rebind(void *arg)
+{
+	struct tcp_port_rebind_arg *a = (struct tcp_port_rebind_arg *)arg;
+	in_port_t port;
+
+	if (a->bind_in_ns) {
+		ns_enter(a->c->pasta_pid);
+
+		for (port = 0; port < USHRT_MAX; port++) {
+			if (!bitmap_isset(a->c->tcp.port_to_init, port)) {
+				if (tcp_sock_ns[port][V4] > 0) {
+					close(tcp_sock_ns[port][V4]);
+					tcp_sock_ns[port][V4] = 0;
+				}
+
+				if (tcp_sock_ns[port][V6] > 0) {
+					close(tcp_sock_ns[port][V6]);
+					tcp_sock_ns[port][V6] = 0;
+				}
+
+				continue;
+			}
+
+			/* Don't loop back our own ports */
+			if (bitmap_isset(a->c->tcp.port_to_tap, port))
+				continue;
+
+			if ((a->c->v4 && !tcp_sock_ns[port][V4]) ||
+			    (a->c->v6 && !tcp_sock_ns[port][V6]))
+				tcp_sock_init_one(a->c, 1, port);
+		}
+	} else {
+		for (port = 0; port < USHRT_MAX; port++) {
+			if (!bitmap_isset(a->c->tcp.port_to_tap, port)) {
+				if (tcp_sock_init_ext[port][V4] > 0) {
+					close(tcp_sock_init_ext[port][V4]);
+					tcp_sock_init_ext[port][V4] = 0;
+				}
+
+				if (tcp_sock_init_ext[port][V6] > 0) {
+					close(tcp_sock_init_ext[port][V6]);
+					tcp_sock_init_ext[port][V6] = 0;
+				}
+
+				if (tcp_sock_init_lo[port][V4] > 0) {
+					close(tcp_sock_init_lo[port][V4]);
+					tcp_sock_init_lo[port][V4] = 0;
+				}
+
+				if (tcp_sock_init_lo[port][V6] > 0) {
+					close(tcp_sock_init_lo[port][V6]);
+					tcp_sock_init_lo[port][V6] = 0;
+				}
+				continue;
+			}
+
+			/* Don't loop back our own ports */
+			if (bitmap_isset(a->c->tcp.port_to_init, port))
+				continue;
+
+			if ((a->c->v4 && !tcp_sock_init_ext[port][V4]) ||
+			    (a->c->v6 && !tcp_sock_init_ext[port][V6]))
+				tcp_sock_init_one(a->c, 0, port);
+		}
+	}
+
+	return 0;
+}
+
+/**
  * tcp_timer() - Scan activity bitmap for sockets waiting for timed events
  * @c:		Execution context
  * @ts:		Timestamp from caller
@@ -3292,6 +3454,30 @@ void tcp_timer(struct ctx *c, struct timespec *now)
 {
 	struct tcp_sock_refill_arg refill_arg = { c, 0 };
 	int i;
+
+	if (c->mode == MODE_PASTA) {
+		if (timespec_diff_ms(now, &c->tcp.port_detect_ts) >
+		    PORT_DETECT_INTERVAL) {
+			struct tcp_port_detect_arg detect_arg = { c, 0 };
+			struct tcp_port_rebind_arg rebind_arg = { c, 0 };
+
+			if (c->tcp.init_detect_ports) {
+				detect_arg.detect_in_ns = 0;
+				tcp_port_detect(&detect_arg);
+				rebind_arg.bind_in_ns = 1;
+				NS_CALL(tcp_port_rebind, &rebind_arg);
+			}
+
+			if (c->tcp.ns_detect_ports) {
+				detect_arg.detect_in_ns = 1;
+				NS_CALL(tcp_port_detect, &detect_arg);
+				rebind_arg.bind_in_ns = 0;
+				tcp_port_rebind(&rebind_arg);
+			}
+
+			c->tcp.port_detect_ts = *now;
+		}
+	}
 
 	if (timespec_diff_ms(now, &c->tcp.refill_ts) > REFILL_INTERVAL) {
 		tcp_sock_refill(&refill_arg);

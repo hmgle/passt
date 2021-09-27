@@ -43,22 +43,28 @@ union tcp_epoll_ref {
  * @tap_conn_count:	Count of tap connections in connection table
  * @splice_conn_count:	Count of spliced connections in connection table
  * @port_to_tap:	Ports bound host-side, packets to tap or spliced
+ * @init_detect_ports:	If set, periodically detect ports bound in init
  * @port_to_init:	Ports bound namespace-side, spliced to init
+ * @ns_detect_ports:	If set, periodically detect ports bound in namespace
  * @timer_run:		Timestamp of most recent timer run
  * @kernel_snd_wnd:	Kernel reports sending window (with commit 8f7baad7f035)
  * @pipe_size:		Size of pipes for spliced connections
  * @refill_ts:		Time of last refill operation for pools of sockets/pipes
+ * @port_detect_ts:	Time of last TCP port detection/rebind, if enabled
  */
 struct tcp_ctx {
 	uint64_t hash_secret[2];
 	int tap_conn_count;
 	int splice_conn_count;
 	uint8_t port_to_tap	[USHRT_MAX / 8];
+	int init_detect_ports;
 	uint8_t port_to_init	[USHRT_MAX / 8];
+	int ns_detect_ports;
 	struct timespec timer_run;
 	int kernel_snd_wnd;
 	size_t pipe_size;
 	struct timespec refill_ts;
+	struct timespec port_detect_ts;
 };
 
 #endif /* TCP_H */

@@ -137,5 +137,5 @@ int timespec_diff_ms(struct timespec *a, struct timespec *b);
 void bitmap_set(uint8_t *map, int bit);
 void bitmap_clear(uint8_t *map, int bit);
 int bitmap_isset(uint8_t *map, int bit);
-void procfs_scan_listen(char *name, uint8_t *map);
+void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude);
 int ns_enter(int target_pid);

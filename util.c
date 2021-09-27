@@ -266,8 +266,9 @@ int bitmap_isset(uint8_t *map, int bit)
  * procfs_scan_listen() - Set bits for listening TCP or UDP sockets from procfs
  * @name:	Corresponding name of file under /proc/net/
  * @map:	Bitmap where numbers of ports in listening state will be set
+ * @exclude:	Bitmap of ports to exclude from setting (and clear)
  */
-void procfs_scan_listen(char *name, uint8_t *map)
+void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
 {
 	char line[200], path[PATH_MAX];
 	unsigned long port;
@@ -288,7 +289,10 @@ void procfs_scan_listen(char *name, uint8_t *map)
 		    (strstr(name, "udp") && state != 0x07))
 			continue;
 
-		bitmap_set(map, port);
+		if (bitmap_isset(exclude, port))
+			bitmap_clear(map, port);
+		else
+			bitmap_set(map, port);
 	}
 
 	fclose(fp);

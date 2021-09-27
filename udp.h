@@ -40,12 +40,16 @@ union udp_epoll_ref {
 /**
  * struct udp_ctx - Execution context for UDP
  * @port_to_tap:	Ports bound host-side, data to tap or ns L4 socket
+ * @init_detect_ports:	If set, periodically detect ports bound in init (TODO)
  * @port_to_init:	Ports bound namespace-side, data to init L4 socket
+ * @ns_detect_ports:	If set, periodically detect ports bound in namespace
  * @timer_run:		Timestamp of most recent timer run
  */
 struct udp_ctx {
 	uint8_t port_to_tap		[USHRT_MAX / 8];
+	int init_detect_ports;
 	uint8_t port_to_init		[USHRT_MAX / 8];
+	int ns_detect_ports;
 	struct timespec timer_run;
 };
 
