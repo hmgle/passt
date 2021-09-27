@@ -115,6 +115,7 @@ for TCP and UDP, respectively.
 - [Addresses](#addresses)
 - [Protocols](#protocols)
 - [Ports](#ports)
+- [Demo](#demo)
 - [Continuous Integration](#continuous-integration)
 - [Performance](#performance)
 - [Try it](#try-it)
@@ -285,6 +286,20 @@ container need to be started before _passt_ starts.
 With default options, _pasta_ scans for bound ports on init and non-init
 namespaces, and automatically forwards them from the other side. Port forwarding
 is fully configurable with command line options.
+
+## Demo
+
+### pasta
+
+<p><video id="demo_pasta_video" style="width: 70%; height: auto; max-height: 90%" controls>
+ <source src="/builds/latest/web/demo_pasta.webm" type="video/webm">
+</video></p>
+
+### passt
+
+<p><video id="demo_passt_video" style="width: 70%; height: auto; max-height: 90%" controls>
+ <source src="/builds/latest/web/demo_passt.webm" type="video/webm">
+</video></p>
 
 ## Continuous Integration
 
