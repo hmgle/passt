@@ -380,7 +380,7 @@ Test logs [here](https://passt.top/builds/latest/test/).
 
         ssh 192.0.2.2
 
-### passt
+### pasta
 
 * build from source:
 
