@@ -1187,10 +1187,23 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 	th->doff = sizeof(*th) / 4;
 
 	if (flags & SYN) {
+		uint16_t mss;
+
 		/* Options: MSS, NOP and window scale if allowed (4-8 bytes) */
 		*data++ = OPT_MSS;
 		*data++ = OPT_MSS_LEN;
-		*(uint16_t *)data = htons(info.tcpi_snd_mss);
+
+		if (c->mtu == -1) {
+			mss = info.tcpi_snd_mss;
+		} else {
+			mss = c->mtu - sizeof(sizeof *th);
+			if (IN6_IS_ADDR_V4MAPPED(&conn->a.a6))
+				mss -= sizeof(struct iphdr);
+			else
+				mss -= sizeof(struct ipv6hdr);
+		}
+		*(uint16_t *)data = htons(mss);
+
 		data += OPT_MSS_LEN - 2;
 		th->doff += OPT_MSS_LEN / 4;
 
