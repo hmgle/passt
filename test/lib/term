@@ -529,15 +529,24 @@ pause_continue() {
 # run_term() - Start tmux session, X terminal if requested, running entry point
 run_term() {
 	export SHELL="/bin/sh"
+	tmux set-option -g default-shell "/bin/sh"
 
 	if [ ${CI} -eq 1 ]; then
 		__xterm_done="$(mktemp)"
-		${CI_XTERM} "$(pwd)" -e "sh -c \"printf '\e[8;50;240t'; tmux new-session -s passt_test ./ci from_term; echo >${__xterm_done}\""
+		if [ ${XVFB} -eq 1 ]; then
+			xvfb-run -s "-screen 0 4000x4000x24 -ac" ${CI_XTERM} "$(pwd)" -e "sh -c \"printf '\e[8;50;240t'; tmux new-session -s passt_test ./ci from_term; echo >${__xterm_done}\""
+		else
+			${CI_XTERM} "$(pwd)" -e "sh -c \"printf '\e[8;50;240t'; tmux new-session -s passt_test ./ci from_term; echo >${__xterm_done}\""
+		fi
 		while ! [ -s "${__xterm_done}" ]; do sleep 1; done
 		rm "${__xterm_done}"
 	elif [ ${DEMO} -eq 1 ]; then
 		while true; do
-			${DEMO_XTERM} "$(pwd)" -e sh -c 'tmux new-session -s passt_test ./run_demo from_term'
+			if [ ${XVFB} -eq 1 ]; then
+				xvfb-run -s "-screen 0 4000x4000x24 -ac" ${DEMO_XTERM} "$(pwd)" -e sh -c 'tmux new-session -s passt_test ./run_demo from_term'
+			else
+				${DEMO_XTERM} "$(pwd)" -e sh -c 'tmux new-session -s passt_test ./run_demo from_term'
+			fi
 			[ $? -ne 0 ] && { tmux kill-session -t passt_test; continue; }
 			break
 		done

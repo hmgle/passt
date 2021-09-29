@@ -73,17 +73,23 @@ video_grab() {
 
 	echo "${VIDEO_LINKS_TEMPLATE}" > "${BASEPATH}/${VIDEO_NAME}.js"
 
-	__x=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Absolute upper-left X:[ ]*\([0-9]*\)$/\1/p')
-	__y=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Absolute upper-left Y:[ ]*\([0-9]*\)$/\1/p')
-	__width=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Width:[ ]*\([0-9]*\)$/\1/p')
-	__height=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Height:[ ]*\([0-9]*\)$/\1/p')
+	if [ ${XVFB} -eq 1 ]; then
+		# Grab the geometry of the first window that's at least 100px wide
+		eval $(xwininfo -d :99.0 -root -tree | sed -n 's/^[ ]*0x[0-f]*[^0-9]*\([0-9]\{3,\}\)x\([0-9]*\)+\([0-9]*\)+\([0-9]*\).*/__width=\1; __height=\2; __x=\3; __y=\4;/p')
+	else
+		__x=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Absolute upper-left X:[ ]*\([0-9]*\)$/\1/p')
+		__y=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Absolute upper-left Y:[ ]*\([0-9]*\)$/\1/p')
+		__width=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Width:[ ]*\([0-9]*\)$/\1/p')
+		__height=$(xwininfo -id $(xdotool getactivewindow) | sed -n 's/[ ]*Height:[ ]*\([0-9]*\)$/\1/p')
+	fi
 
 	[ $((__width % 2)) ]  && __width=$((__width - 1))
 	[ $((__height % 2)) ] && __height=$((__height - 1))
 
 	sleep 3
 	VIDEO_START_SECONDS=$(sed -n 's/\([0-9]*\).[0-9]* [0-9]*.[0-9]*/\1/p' /proc/uptime)
-	ffmpeg -f x11grab -framerate 15 -video_size "${__width}x${__height}" -i "+${__x},${__y}" -vcodec libx264 -preset ultrafast -qp 0 -pix_fmt yuv444p -draw_mouse 0 "${BASEPATH}/${VIDEO_NAME}.mp4" & echo $! > "${FFMPEG_PID_FILE}"
+	[ ${XVFB} -eq 1 ] && __disp=":99.0" || __disp=
+	ffmpeg -f x11grab -framerate 15 -video_size "${__width}x${__height}" -i "${__disp}+${__x},${__y}" -vcodec libx264 -preset ultrafast -qp 0 -pix_fmt yuv444p -draw_mouse 0 "${BASEPATH}/${VIDEO_NAME}.mp4" & echo $! > "${FFMPEG_PID_FILE}"
 }
 
 # video_time_now() - Print current video timestamp, in seconds

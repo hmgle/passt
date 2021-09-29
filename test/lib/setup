@@ -305,6 +305,29 @@ teardown_two_guests() {
 	pane_wait PASST_2
 }
 
+# teardown_demo_passt() - Exit namespace, kill qemu, passt and pasta
+teardown_demo_passt() {
+	tmux send-keys -t ${PANE_GUEST} "C-c"
+	pane_wait GUEST
+	tmux send-keys -t ${PANE_GUEST} "C-d"
+
+	tmux send-keys -t ${PANE_HOST} "C-d"
+
+	tmux send-keys -t ${PANE_PASST} "C-c"
+	pane_wait PASST
+	tmux send-keys -t ${PANE_PASST} "C-d"
+
+	pane_wait GUEST
+	pane_wait HOST
+	pane_wait PASST
+}
+
+# teardown_demo_pasta() - Exit namespace from remaining pane
+teardown_demo_pasta() {
+	tmux send-keys -t ${PANE_NS} "C-d"
+	pane_wait NS
+}
+
 # setup() - Run setup_*() functions
 # $*:	Suffix list of setup_*() functions to be called
 setup() {
