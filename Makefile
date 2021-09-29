@@ -1,6 +1,7 @@
 CFLAGS += -Wall -Wextra -pedantic
 CFLAGS += -DRLIMIT_STACK_VAL=$(shell ulimit -s)
 CFLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)
+CFLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
 
 prefix ?= /usr/local
 

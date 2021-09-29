@@ -845,13 +845,13 @@ static int tun_ns_fd = -1;
 
 /**
  * tap_sock_init_tun_ns() - Create tuntap fd in namespace, bring up loopback
- * @target_pid:		Pointer to target PID
+ * @c:		Execution context
  */
-static int tap_sock_init_tun_ns(void *target_pid)
+static int tap_sock_init_tun_ns(void *c)
 {
 	int fd;
 
-	if (ns_enter(*(int *)target_pid))
+	if (ns_enter((struct ctx *)c))
 		goto fail;
 
 	if ((fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK)) < 0)
@@ -883,12 +883,10 @@ fail:
 /**
  * struct tap_sock_if_up_ns_arg - Arguments for tap_sock_if_up_ns()
  * @c:			Execution context
- * @target_pid:		Target namespace PID
  * @ifname:		Interface name of tap device
  */
 struct tap_sock_if_up_ns_arg {
 	struct ctx *c;
-	int target_pid;
 	char ifname[IFNAMSIZ];
 };
 
@@ -906,7 +904,7 @@ static int tap_sock_if_up_ns(void *arg)
 
 	a = (struct tap_sock_if_up_ns_arg *)arg;
 
-	if (ns_enter(a->target_pid))
+	if (ns_enter(a->c))
 		return 0;
 
 	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -955,7 +953,7 @@ static void tap_sock_init_tun(struct ctx *c)
 	struct ifreq ifr = { .ifr_flags = IFF_TAP | IFF_NO_PI };
 	struct tap_sock_if_up_ns_arg ifup_arg;
 
-	NS_CALL(tap_sock_init_tun_ns, &c->pasta_pid);
+	NS_CALL(tap_sock_init_tun_ns, c);
 	if (tun_ns_fd == -1) {
 		err("Failed to open tun socket in namespace");
 		exit(EXIT_FAILURE);
@@ -968,11 +966,10 @@ static void tap_sock_init_tun(struct ctx *c)
 	}
 
 	strncpy(ifup_arg.ifname, c->pasta_ifn, IFNAMSIZ);
-	ifup_arg.target_pid = c->pasta_pid;
 	ifup_arg.c = c;
 	NS_CALL(tap_sock_if_up_ns, (void *)&ifup_arg);
 
-	pcap_init(c, c->pasta_pid);
+	pcap_init(c, c->pasta_netns_fd);
 
 	c->fd_tap = tun_ns_fd;
 }

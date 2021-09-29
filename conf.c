@@ -96,7 +96,7 @@ static int get_bound_ports_ns(void *arg)
 	struct get_bound_ports_ns_arg *a = (struct get_bound_ports_ns_arg *)arg;
 	struct ctx *c = a->c;
 
-	if (!c->pasta_pid || ns_enter(c->pasta_pid))
+	if (!c->pasta_netns_fd || ns_enter(c))
 		return 0;
 
 	get_bound_ports(c, 1, a->proto);
@@ -589,16 +589,114 @@ out:
 }
 
 /**
+ * conf_ns_check() - Check if we can enter configured namespaces
+ * @arg:	Execution context
+ *
+ * Return: 0
+ */
+static int conf_ns_check(void *arg)
+{
+	struct ctx *c = (struct ctx *)arg;
+
+	if ((!c->netns_only && setns(c->pasta_userns_fd, 0)) ||
+	    setns(c->pasta_netns_fd, 0))
+		c->pasta_userns_fd = c->pasta_netns_fd = -1;
+
+	return 0;
+
+}
+
+/**
+ * conf_ns_opt() - Open network, user namespaces descriptors from configuration
+ * @c:			Execution context
+ * @nsdir:		--nsrun-dir argument, can be an empty string
+ * @conf_userns:	--userns argument, can be an empty string
+ * @optarg:		PID, path or name of namespace
+ *
+ * Return: 0 on success, negative error code otherwise
+ */
+static int conf_ns_opt(struct ctx *c,
+		       char *nsdir, char *conf_userns, const char *optarg)
+{
+	char userns[PATH_MAX], netns[PATH_MAX];
+	int ufd = 0, nfd = 0, try, ret;
+	char *endptr;
+	pid_t pid;
+
+	if (c->netns_only && *conf_userns) {
+		err("Both --userns and --netns-only given");
+		return -EINVAL;
+	}
+
+	/* It might be a PID, a netns path, or a netns name */
+	for (try = 0; try < 3; try++) {
+		if (try == 0) {
+			pid = strtol(optarg, &endptr, 10);
+			if (*endptr || pid > INT_MAX)
+				continue;
+
+			if (!*conf_userns && !c->netns_only) {
+				ret = snprintf(userns, PATH_MAX,
+					       "/proc/%i/ns/user", pid);
+				if (ret <= 0 || ret > (int)sizeof(userns))
+					continue;
+			}
+			ret = snprintf(netns, PATH_MAX, "/proc/%i/ns/net", pid);
+			if (ret <= 0 || ret > (int)sizeof(netns))
+				continue;
+		} else if (try == 1) {
+			if (!*conf_userns)
+				c->netns_only = 1;
+
+			ret = snprintf(netns, PATH_MAX, "%s", optarg);
+			if (ret <= 0 || ret > (int)sizeof(userns))
+				continue;
+		} else if (try == 2) {
+			ret = snprintf(netns, PATH_MAX, "%s/%s",
+				 *nsdir ? nsdir : NETNS_RUN_DIR, optarg);
+			if (ret <= 0 || ret > (int)sizeof(netns))
+				continue;
+		}
+
+		if (!c->netns_only) {
+			if (*conf_userns)
+				ufd = open(conf_userns, O_RDONLY);
+			else if (*userns)
+				ufd = open(userns, O_RDONLY);
+		}
+
+		nfd = open(netns, O_RDONLY);
+
+		if (nfd >= 0 && ufd >= 0) {
+			c->pasta_netns_fd = nfd;
+			c->pasta_userns_fd = ufd;
+
+			NS_CALL(conf_ns_check, c);
+			if (c->pasta_netns_fd >= 0)
+				return 0;
+		}
+
+		if (nfd > 0)
+			close(nfd);
+
+		if (ufd > 0)
+			close(ufd);
+	}
+
+	return -ENOENT;
+}
+
+/**
  * usage() - Print usage and exit
  * @name:	Executable name
  */
 static void usage(const char *name)
 {
 	if (strstr(name, "pasta") || strstr(name, "passt4netns")) {
-		info("Usage: %s [OPTION]... [TARGET_PID]", name);
+		info("Usage: %s [OPTION]... [PID|PATH|NAME]", name);
 		info("");
-		info("Without TARGET_PID, enter a user and network namespace,");
-		info("run the default shell and connect it via pasta.");
+		info("Without PID|PATH|NAME, run the default shell in a new");
+		info("network and user namespace, and connect it via pasta.");
 	} else {
 		info("Usage: %s [OPTION]...", name);
 	}
@@ -670,7 +768,7 @@ static void usage(const char *name)
 	info(   "  -6, --ipv6-only	Enable IPv6 operation only");
 
 	if (strstr(name, "pasta") || strstr(name, "passt4netns"))
-		goto pasta_ports;
+		goto pasta_opts;
 
 	info(   "  -t, --tcp-ports SPEC	TCP port forwarding to guest");
 	info(   "    can be specified multiple times");
@@ -692,7 +790,7 @@ static void usage(const char *name)
 
 	exit(EXIT_FAILURE);
 
-pasta_ports:
+pasta_opts:
 	info(   "  -t, --tcp-ports SPEC	TCP port forwarding to namespace");
 	info(   "    can be specified multiple times"); 
 	info(   "    SPEC can be:");
@@ -721,6 +819,11 @@ pasta_ports:
 	info(   "  -U, --udp-ns SPEC	UDP port forwarding to init namespace");
 	info(   "    SPEC is as described above");
 	info(   "    default: auto");
+	info(   "  --userns NSPATH 	Target user namespace to join");
+	info(   "  --netns-only		Don't join or create user namespace");
+	info(   "    implied if PATH or NAME are given without --userns");
+	info(   "  --nsrun-dir		Directory for nsfs mountpoints");
+	info(   "    default: " NETNS_RUN_DIR);
 
 	exit(EXIT_FAILURE);
 }
@@ -839,9 +942,13 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"udp-ports",	required_argument,	NULL,		'u' },
 		{"tcp-ns",	required_argument,	NULL,		'T' },
 		{"udp-ns",	required_argument,	NULL,		'U' },
+		{"userns",	required_argument,	NULL,		2 },
+		{"netns-only",	no_argument,		&c->netns_only,	1 },
+		{"nsrun-dir",	required_argument,	NULL,		3 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
+	char nsdir[PATH_MAX] = { 0 }, userns[PATH_MAX] = { 0 };
 	enum conf_port_type tcp_tap = 0, tcp_init = 0;
 	enum conf_port_type udp_tap = 0, udp_init = 0;
 	struct fqdn *dnss = c->dns_search;
@@ -863,10 +970,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		if ((name == 'p' || name == 'D' || name == 'S') && !optarg &&
 		    optind < argc && *argv[optind] && *argv[optind] != '-') {
 			if (c->mode == MODE_PASTA) {
-				char *endptr;
-
-				strtol(argv[optind], &endptr, 10);
-				if (*endptr)
+				if (conf_ns_opt(c, nsdir, userns, argv[optind]))
 					optarg = argv[optind++];
 			} else {
 				optarg = argv[optind++];
@@ -876,6 +980,30 @@ void conf(struct ctx *c, int argc, char **argv)
 		switch (name) {
 		case -1:
 		case 0:
+			break;
+		case 2:
+			if (c->mode != MODE_PASTA) {
+				err("--userns is for pasta mode only");
+				usage(argv[0]);
+			}
+
+			ret = snprintf(userns, sizeof(userns), "%s", optarg);
+			if (ret <= 0 || ret >= (int)sizeof(userns)) {
+				err("Invalid userns: %s", optarg);
+				usage(argv[0]);
+			}
+			break;
+		case 3:
+			if (c->mode != MODE_PASTA) {
+				err("--nsrun-dir is for pasta mode only");
+				usage(argv[0]);
+			}
+
+			ret = snprintf(nsdir, sizeof(nsdir), "%s", optarg);
+			if (ret <= 0 || ret >= (int)sizeof(nsdir)) {
+				err("Invalid nsrun-dir: %s", optarg);
+				usage(argv[0]);
+			}
 			break;
 		case 'd':
 			if (c->debug) {
@@ -1129,9 +1257,14 @@ void conf(struct ctx *c, int argc, char **argv)
 	} while (name != -1);
 
 	if (c->mode == MODE_PASTA && optind + 1 == argc) {
-		c->pasta_pid = strtol(argv[optind], NULL, 0);
-		if (c->pasta_pid < 0 || errno)
+		ret = conf_ns_opt(c, nsdir, userns, argv[optind]);
+		if (ret == -ENOENT)
+			err("Namespace %s not found", argv[optind]);
+		if (ret < 0)
 			usage(argv[0]);
+	} else if (c->mode == MODE_PASTA && *userns && optind == argc) {
+		err("--userns requires PID, PATH or NAME");
+		usage(argv[0]);
 	} else if (optind != argc) {
 		usage(argv[0]);
 	}

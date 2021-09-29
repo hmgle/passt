@@ -12,7 +12,7 @@
 [\fIOPTION\fR]...
 .br
 .B pasta
-[\fIOPTION\fR]... [\fITARGET_PID\fR]
+[\fIOPTION\fR]... [\fIPID\fR|\fIPATH\fR|\fINAME\fR]
 
 .SH DESCRIPTION
 
@@ -56,11 +56,10 @@ or with the \fBqrap\fR(1) wrapper.
 equivalent functionality to network namespaces, as the one offered by
 \fBpasst\fR for virtual machines.
 
-If TARGET_PID is given, \fBpasta\fR associates to the user and network namespace
-of the corresponding process. Otherwise, \fBpasta\fR creates a new user and
-network namespace, and spawns an interactive shell within this context. A
-\fItap\fR device within the network namespace is created to provide network
-connectivity.
+If PID, PATH or NAME are given, \fBpasta\fR associates to an existing user and
+network namespace. Otherwise, \fBpasta\fR creates a new user and network
+namespace, and spawns an interactive shell within this context. A \fItap\fR
+device within the network namespace is created to provide network connectivity.
 
 For local TCP and UDP traffic only, \fBpasta\fR also implements a bypass path
 directly mapping Layer-4 sockets between \fIinit\fR and target namespaces,
@@ -356,6 +355,25 @@ Configure UDP port forwarding from target namespace to init namespace.
 \fIspec\fR is as described above for UDP.
 
 Default is \fBauto\fR.
+
+.TP
+.BR \-\-userns " " \fIspec
+Target user namespace to join, as path or name (i.e. suffix for --nsrun-dir). If
+PID is given, without this option, the user namespace will be the one of the
+corresponding process.
+
+This option requires PID, PATH or NAME to be specified.
+
+.TP
+.BR \-\-netns-only
+Join or create only the network namespace, not a user namespace. This is implied
+if PATH or NAME are given without \-\-userns.
+
+.TP
+.BR \-\-nsrun-dir " " \fIpath
+Directory for nsfs mountpoints, used as path prefix for names of namespaces.
+
+The default path is shown with --help.
 
 .SH EXAMPLES
 

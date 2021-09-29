@@ -153,7 +153,7 @@ void pcapmm(struct mmsghdr *mmh, unsigned int vlen)
 /**
  * pcap_init() - Initialise pcap file
  * @c:		Execution context
- * @index:	pcap name index: passt instance number or pasta target pid
+ * @index:	pcap name index: passt instance number or pasta netns socket
  */
 void pcap_init(struct ctx *c, int index)
 {

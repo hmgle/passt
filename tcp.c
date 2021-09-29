@@ -2828,7 +2828,7 @@ static int tcp_splice_connect_ns(void *arg)
 	struct tcp_splice_connect_ns_arg *a;
 
 	a = (struct tcp_splice_connect_ns_arg *)arg;
-	ns_enter(a->c->pasta_pid);
+	ns_enter(a->c);
 	a->ret = tcp_splice_connect(a->c, a->conn, -1, a->v6, a->port);
 	return 0;
 }
@@ -3431,7 +3431,7 @@ static int tcp_sock_init_ns(void *arg)
 	struct ctx *c = (struct ctx *)arg;
 	in_port_t port;
 
-	ns_enter(c->pasta_pid);
+	ns_enter(c);
 
 	for (port = 0; port < USHRT_MAX; port++) {
 		if (!bitmap_isset(c->tcp.port_to_init, port))
@@ -3491,7 +3491,7 @@ static int tcp_sock_refill(void *arg)
 	int i, *p4, *p6;
 
 	if (a->ns) {
-		if (ns_enter(a->c->pasta_pid))
+		if (ns_enter(a->c))
 			return 0;
 		p4 = ns_sock_pool4;
 		p6 = ns_sock_pool6;
@@ -3676,7 +3676,7 @@ static int tcp_port_detect(void *arg)
 	struct tcp_port_detect_arg *a = (struct tcp_port_detect_arg *)arg;
 
 	if (a->detect_in_ns) {
-		ns_enter(a->c->pasta_pid);
+		ns_enter(a->c);
 
 		get_bound_ports(a->c, 1, IPPROTO_TCP);
 	} else {
@@ -3708,7 +3708,7 @@ static int tcp_port_rebind(void *arg)
 	in_port_t port;
 
 	if (a->bind_in_ns) {
-		ns_enter(a->c->pasta_pid);
+		ns_enter(a->c);
 
 		for (port = 0; port < USHRT_MAX; port++) {
 			if (!bitmap_isset(a->c->tcp.port_to_init, port)) {

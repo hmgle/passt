@@ -242,18 +242,34 @@ static void pasta_child_handler(int signal)
 
 /**
  * pasta_wait_for_ns() - Busy loop until we can enter the target namespace
- * @target_pid:	PID of process associated with target namespace
+ * @arg:	Execution context
  *
  * Return: 0
  */
-static int pasta_wait_for_ns(void *target_pid)
+static int pasta_wait_for_ns(void *arg)
 {
-	while (ns_enter(*(int *)target_pid));
+	struct ctx *c = (struct ctx *)arg;
+	char ns[PATH_MAX];
+
+	if (c->netns_only)
+		goto netns;
+
+	snprintf(ns, PATH_MAX, "/proc/%i/ns/user", pasta_child_pid);
+	do
+		while ((c->pasta_userns_fd = open(ns, O_RDONLY)) < 0);
+	while (setns(c->pasta_userns_fd, 0) && !close(c->pasta_userns_fd));
+
+netns:
+	snprintf(ns, PATH_MAX, "/proc/%i/ns/net", pasta_child_pid);
+	do
+		while ((c->pasta_netns_fd = open(ns, O_RDONLY)) < 0);
+	while (setns(c->pasta_netns_fd, 0) && !close(c->pasta_netns_fd));
+
 	return 0;
 }
 
 /**
- * pasta_start_ns() - Fork shell in new namespace if target PID is not given
+ * pasta_start_ns() - Fork shell in new namespace if target ns is not given
  * @c:		Execution context
  */
 static void pasta_start_ns(struct ctx *c)
@@ -266,34 +282,36 @@ static void pasta_start_ns(struct ctx *c)
 	if (!c->debug)
 		c->quiet = 1;
 
-	if ((c->pasta_pid = fork()) == -1) {
+	if ((pasta_child_pid = fork()) == -1) {
 		perror("fork");
 		exit(EXIT_FAILURE);
 	}
 
-	if ((pasta_child_pid = c->pasta_pid)) {
-		NS_CALL(pasta_wait_for_ns, &pasta_child_pid);
+	if (pasta_child_pid) {
+		NS_CALL(pasta_wait_for_ns, c);
 		return;
 	}
 
-	if (unshare(CLONE_NEWNET | CLONE_NEWUSER)) {
+	if (unshare(CLONE_NEWNET | (c->netns_only ? 0 : CLONE_NEWUSER))) {
 		perror("unshare");
 		exit(EXIT_FAILURE);
 	}
 
-	snprintf(buf, BUFSIZ, "%u %u %u", 0, euid, 1);
+	if (!c->netns_only) {
+		snprintf(buf, BUFSIZ, "%u %u %u", 0, euid, 1);
 
-	fd = open("/proc/self/uid_map", O_WRONLY);
-	write(fd, buf, strlen(buf));
-	close(fd);
+		fd = open("/proc/self/uid_map", O_WRONLY);
+		write(fd, buf, strlen(buf));
+		close(fd);
 
-	fd = open("/proc/self/setgroups", O_WRONLY);
-	write(fd, "deny", sizeof("deny"));
-	close(fd);
+		fd = open("/proc/self/setgroups", O_WRONLY);
+		write(fd, "deny", sizeof("deny"));
+		close(fd);
 
-	fd = open("/proc/self/gid_map", O_WRONLY);
-	write(fd, buf, strlen(buf));
-	close(fd);
+		fd = open("/proc/self/gid_map", O_WRONLY);
+		write(fd, buf, strlen(buf));
+		close(fd);
+	}
 
 	fd = open("/proc/sys/net/ipv4/ping_group_range", O_WRONLY);
 	write(fd, "0 0", strlen("0 0"));
@@ -352,11 +370,12 @@ int main(int argc, char **argv)
 	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
 		openlog(log_name, LOG_PERROR, LOG_DAEMON);
 
-	if (c.mode == MODE_PASTA && !c.pasta_pid) {
+	if (c.mode == MODE_PASTA && !c.pasta_netns_fd) {
 		char proc_path[PATH_MAX];
 
 		pasta_start_ns(&c);
-		snprintf(proc_path, PATH_MAX, "/proc/%i/ns/net", c.pasta_pid);
+		snprintf(proc_path, PATH_MAX, "/proc/%i/ns/net",
+			 pasta_child_pid);
 		readlink(proc_path, pasta_child_ns, PATH_MAX);
 	}
 

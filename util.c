@@ -32,6 +32,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
 
 #include "util.h"
 #include "passt.h"
@@ -327,31 +328,18 @@ void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
 }
 
 /**
- * ns_enter() - Enter user and network namespaces of process with given PID
- * @target_pid:		Process PID
+ * ns_enter() - Enter configured network and user namespaces
+ * @c:		Execution context
  *
  * Return: 0 on success, -1 on failure
  */
-int ns_enter(int target_pid)
+int ns_enter(struct ctx *c)
 {
-	char ns[PATH_MAX];
-	int fd;
+	if (!c->netns_only && setns(c->pasta_userns_fd, 0))
+		return -errno;
 
-	snprintf(ns, PATH_MAX, "/proc/%i/ns/user", target_pid);
-	if ((fd = open(ns, O_RDONLY)) < 0 || setns(fd, 0))
-		goto fail;
-	close(fd);
-
-	snprintf(ns, PATH_MAX, "/proc/%i/ns/net", target_pid);
-	if ((fd = open(ns, O_RDONLY)) < 0 || setns(fd, 0))
-		goto fail;
-	close(fd);
+	if (setns(c->pasta_netns_fd, 0))
+		return -errno;
 
 	return 0;
-
-fail:
-	if (fd != -1)
-		close(fd);
-
-	return -1;
 }

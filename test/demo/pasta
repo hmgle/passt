@@ -46,7 +46,7 @@ hostb	n
 sleep	10
 
 nl
-say	  without TARGET_PID, it will create a namespace.
+say	  without PID, it will create a namespace.
 sleep	3
 passt	cd __TEMPDIR__/passt
 passt	./pasta
