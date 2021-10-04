@@ -341,6 +341,9 @@
 
 #define TCP_TAP_FRAMES			8
 
+#define RCVBUF_BIG			(2 * 1024 * 1024)
+#define SNDBUF_BIG			(2 * 1024 * 1024)
+#define SNDBUF_SMALL			(128 * 1024)
 #define MAX_PIPE_SIZE			(2 * 1024 * 1024)
 
 #define TCP_HASH_TABLE_LOAD		70		/* % */
@@ -699,6 +702,56 @@ static void tcp_splice_state(struct tcp_splice_conn *conn, enum tcp_state state)
 	debug("TCP: index %i: %s -> %s",
 	      conn - ts, tcp_state_str[conn->state], tcp_state_str[state]);
 	conn->state = state;
+}
+
+/**
+ * tcp_probe_mem() - Check if setting high SO_SNDBUF and SO_RCVBUF is allowed
+ * @c:		Execution context
+ */
+static void tcp_probe_mem(struct ctx *c)
+{
+	int v = INT_MAX / 2, s;
+	socklen_t sl;
+
+	if ((s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+		c->tcp.low_wmem = c->tcp.low_rmem = 1;
+		return;
+	}
+
+	sl = sizeof(v);
+	if (setsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v))	||
+	    getsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, &sl) || v < SNDBUF_BIG)
+		c->tcp.low_wmem = 1;
+
+	v = INT_MAX / 2;
+	if (setsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v))	||
+	    getsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, &sl) || v < RCVBUF_BIG)
+		c->tcp.low_rmem = 1;
+
+	close(s);
+}
+
+/**
+ * tcp_get_sndbuf() - Get, scale SO_SNDBUF between thresholds (1 to 0.5 usage)
+ * @conn:	Connection pointer
+ */
+static void tcp_get_sndbuf(struct tcp_tap_conn *conn)
+{
+	int s = conn->sock, v;
+	socklen_t sl;
+
+	sl = sizeof(v);
+	if (getsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, &sl)) {
+		conn->snd_buf = WINDOW_DEFAULT;
+		return;
+	}
+
+	if (v >= SNDBUF_BIG)
+		v /= 2;
+	else if (v > SNDBUF_SMALL)
+		v -= v * (v - SNDBUF_SMALL) / (SNDBUF_BIG - SNDBUF_SMALL) / 2;
+
+	conn->snd_buf = v;
 }
 
 /**
@@ -1170,6 +1223,7 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 	uint32_t prev_ack_to_tap = conn->seq_ack_to_tap;
 	struct tcp_info info = { 0 };
 	socklen_t sl = sizeof(info);
+	int s = conn->sock;
 	struct tcphdr *th;
 	char *data;
 
@@ -1177,7 +1231,10 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 	    !flags && conn->wnd_to_tap)
 		return 0;
 
-	if (getsockopt(conn->sock, SOL_TCP, TCP_INFO, &info, &sl)) {
+	if (conn->snd_buf < SNDBUF_SMALL)
+		tcp_get_sndbuf(c, conn);
+
+	if (getsockopt(s, SOL_TCP, TCP_INFO, &info, &sl)) {
 		tcp_rst(c, conn);
 		return -ECONNRESET;
 	}
@@ -1540,20 +1597,18 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 		}
 
 		ev.events = EPOLLOUT | EPOLLRDHUP;
+
+		tcp_get_sndbuf(conn);
 	} else {
 		tcp_tap_state(conn, TAP_SYN_RCVD);
+
+		tcp_get_sndbuf(conn);
 
 		if (tcp_send_to_tap(c, conn, SYN | ACK, now))
 			return;
 
 		ev.events = EPOLLIN | EPOLLRDHUP;
 	}
-
-	sl = sizeof(conn->snd_buf);
-	if (getsockopt(s, SOL_SOCKET, SO_SNDBUF, &conn->snd_buf, &sl))
-		conn->snd_buf = WINDOW_DEFAULT;
-	else
-		conn->snd_buf /= 2;
 
 	conn->events = ev.events;
 	ref.tcp.index = conn - tt;
@@ -2642,11 +2697,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 
 	tcp_tap_state(conn, SOCK_SYN_SENT);
 
-	sl = sizeof(conn->snd_buf);
-	if (getsockopt(s, SOL_SOCKET, SO_SNDBUF, &conn->snd_buf, &sl))
-		conn->snd_buf = WINDOW_DEFAULT;
-	else
-		conn->snd_buf /= 2;
+	tcp_get_sndbuf(conn);
 }
 
 /**
