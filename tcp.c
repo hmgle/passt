@@ -1273,6 +1273,7 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 {
 	char buf[sizeof(struct tcphdr) + OPT_MSS_LEN + OPT_WS_LEN + 1] = { 0 };
 	uint32_t prev_ack_to_tap = conn->seq_ack_to_tap;
+	uint32_t prev_wnd_to_tap = conn->wnd_to_tap;
 	struct tcp_info info = { 0 };
 	socklen_t sl = sizeof(info);
 	int s = conn->sock;
@@ -1284,16 +1285,29 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 		return 0;
 
 	if (conn->snd_buf < SNDBUF_SMALL)
-		tcp_get_sndbuf(c, conn);
+		tcp_get_sndbuf(conn);
 
 	if (getsockopt(s, SOL_TCP, TCP_INFO, &info, &sl)) {
 		tcp_rst(c, conn);
 		return -ECONNRESET;
 	}
 
+	if (!conn->local)
+		tcp_rtt_dst_check(conn, &info);
+
 	th = (struct tcphdr *)buf;
 	data = (char *)(th + 1);
 	th->doff = sizeof(*th) / 4;
+
+	if (conn->state > ESTABLISHED || (flags & (DUP_ACK | FORCE_ACK))) {
+		conn->seq_ack_to_tap = conn->seq_from_tap;
+	} else {
+		conn->seq_ack_to_tap = info.tcpi_bytes_acked +
+				       conn->seq_init_from_tap;
+
+		if (SEQ_LT(conn->seq_ack_to_tap, prev_ack_to_tap))
+			conn->seq_ack_to_tap = prev_ack_to_tap;
+	}
 
 	if (flags & SYN) {
 		uint16_t mss;
@@ -1338,23 +1352,13 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 
 		th->ack = !!(flags & ACK);
 	} else {
-		th->ack = 1;
+		th->ack = !!(flags & (ACK | FORCE_ACK | DUP_ACK)) ||
+			  conn->seq_ack_to_tap != prev_ack_to_tap;
 		th->seq = htonl(conn->seq_to_tap);
 	}
 
-	if (conn->state > ESTABLISHED || (flags & (DUP_ACK | FORCE_ACK))) {
-		conn->seq_ack_to_tap = conn->seq_from_tap;
-	} else {
-		conn->seq_ack_to_tap = info.tcpi_bytes_acked +
-				       conn->seq_init_from_tap;
-
-		if (SEQ_LT(conn->seq_ack_to_tap, prev_ack_to_tap))
-			conn->seq_ack_to_tap = prev_ack_to_tap;
-	}
-
-	if (!flags &&
-	    conn->seq_ack_to_tap == prev_ack_to_tap &&
-	    c->tcp.kernel_snd_wnd && conn->wnd_to_tap == info.tcpi_snd_wnd)
+	if (!flags && conn->seq_ack_to_tap == prev_ack_to_tap &&
+	    conn->wnd_to_tap == prev_wnd_to_tap)
 		return 0;
 
 	th->ack_seq = htonl(conn->seq_ack_to_tap);
