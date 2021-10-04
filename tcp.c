@@ -339,7 +339,7 @@
 #define MAX_TAP_CONNS			(128 * 1024)
 #define MAX_SPLICE_CONNS		(128 * 1024)
 
-#define TCP_TAP_FRAMES			8
+#define TCP_TAP_FRAMES			32
 
 #define RCVBUF_BIG			(2 * 1024 * 1024)
 #define SNDBUF_BIG			(2 * 1024 * 1024)
