@@ -369,6 +369,9 @@
 
 #define PORT_DETECT_INTERVAL		1000
 
+#define LOW_RTT_TABLE_SIZE		8
+#define LOW_RTT_THRESHOLD		5 /* us */
+
 /* We need to include <linux/tcp.h> for tcpi_bytes_acked, instead of
  * <netinet/tcp.h>, but that doesn't include a definition for SOL_TCP
  */
@@ -440,6 +443,7 @@ struct tcp_tap_conn;
  * @a.a4.a:		IPv4 address
  * @tap_port:		Guest-facing tap port
  * @sock_port:		Remote, socket-facing port
+ * @local:		Destination is local
  * @state:		TCP connection state
  * @seq_to_tap:		Next sequence for packets to tap
  * @seq_ack_from_tap:	Last ACK number received from tap
@@ -476,6 +480,7 @@ struct tcp_tap_conn {
 	} a;
 	in_port_t tap_port;
 	in_port_t sock_port;
+	int local;
 	enum tcp_state state;
 
 	uint32_t seq_to_tap;
@@ -535,6 +540,9 @@ static in_port_t		tcp_port_delta_to_init	[USHRT_MAX];
 static int tcp_sock_init_lo	[USHRT_MAX][IP_VERSIONS];
 static int tcp_sock_init_ext	[USHRT_MAX][IP_VERSIONS];
 static int tcp_sock_ns		[USHRT_MAX][IP_VERSIONS];
+
+/* Table of destinations with very low RTT (assumed to be local), LRU */
+static struct in6_addr low_rtt_dst[LOW_RTT_TABLE_SIZE];
 
 /**
  * tcp_remap_to_tap() - Set delta for port translation toward guest/tap
@@ -679,6 +687,47 @@ static int init_sock_pool4	[TCP_SOCK_POOL_SIZE];
 static int init_sock_pool6	[TCP_SOCK_POOL_SIZE];
 static int ns_sock_pool4	[TCP_SOCK_POOL_SIZE];
 static int ns_sock_pool6	[TCP_SOCK_POOL_SIZE];
+
+/**
+ * tcp_rtt_dst_low() - Check if low RTT was seen for connection endpoint
+ * @conn:	Connection pointer
+ * Return: 1 if destination is in low RTT table, 0 otherwise
+ */
+static int tcp_rtt_dst_low(struct tcp_tap_conn *conn)
+{
+	int i;
+
+	for (i = 0; i < LOW_RTT_TABLE_SIZE; i++)
+		if (!memcmp(&conn->a.a6, low_rtt_dst + i, sizeof(conn->a.a6)))
+			return 1;
+
+	return 0;
+}
+
+/**
+ * tcp_rtt_dst_check() - Check tcpi_min_rtt, insert endpoint in table if low
+ * @conn:	Connection pointer
+ * @info:	Pointer to struct tcp_info for socket
+ */
+static void tcp_rtt_dst_check(struct tcp_tap_conn *conn, struct tcp_info *info)
+{
+	int i, hole = -1;
+
+	if (!info->tcpi_min_rtt || (int)info->tcpi_min_rtt > LOW_RTT_THRESHOLD)
+		return;
+
+	for (i = 0; i < LOW_RTT_TABLE_SIZE; i++) {
+		if (!memcmp(&conn->a.a6, low_rtt_dst + i, sizeof(conn->a.a6)))
+			return;
+		if (hole == -1 && IN6_IS_ADDR_UNSPECIFIED(low_rtt_dst + i))
+			hole = i;
+	}
+
+	memcpy(low_rtt_dst + hole++, &conn->a.a6, sizeof(conn->a.a6));
+	if (hole == LOW_RTT_TABLE_SIZE)
+		hole = 0;
+	memcpy(low_rtt_dst + hole, &in6addr_any, sizeof(conn->a.a6));
+}
 
 /**
  * tcp_tap_state() - Set given TCP state for tap connection, report to stderr
@@ -1258,6 +1307,11 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 				mss -= sizeof(struct iphdr);
 			else
 				mss -= sizeof(struct ipv6hdr);
+
+			if (!conn->local && !tcp_rtt_dst_low(conn))
+				mss = MIN(mss, PAGE_SIZE);
+			else
+				mss = ROUND_DOWN(mss, PAGE_SIZE);
 		}
 		*(uint16_t *)data = htons(mss);
 
@@ -1587,6 +1641,11 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	conn->seq_ack_from_tap = conn->seq_to_tap + 1;
 
 	tcp_hash_insert(c, conn, af, addr);
+
+	if (!bind(s, sa, sl))
+		tcp_rst(c, conn);	/* Nobody is listening then */
+	if (errno != EADDRNOTAVAIL)
+		conn->local = 1;
 
 	if (connect(s, sa, sl)) {
 		tcp_tap_state(conn, TAP_SYN_SENT);
