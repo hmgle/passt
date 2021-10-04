@@ -3389,8 +3389,8 @@ static void tcp_timer_one(struct ctx *c, struct tcp_tap_conn *conn,
 	int tap_act = timespec_diff_ms(ts, &conn->ts_tap_act);
 	int tap_data_noack;
 
-	if (memcmp(&conn->tap_data_noack, &((struct timespec){ 0, 0 }),
-		   sizeof(struct timespec)))
+	if (!memcmp(&conn->tap_data_noack, &((struct timespec){ 0, 0 }),
+		    sizeof(struct timespec)))
 		tap_data_noack = 0;
 	else
 		tap_data_noack = timespec_diff_ms(ts, &conn->tap_data_noack);
