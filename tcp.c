@@ -2314,7 +2314,7 @@ out:
 		int ack_offset = conn->seq_from_tap - conn->seq_ack_to_tap;
 
 		if (c->mode == MODE_PASTA ||
-		    psh || SEQ_GE(ack_offset, conn->wnd_to_tap / 2) ||
+		    psh || SEQ_GE(ack_offset, conn->wnd_to_tap * 2 / 3) ||
 		    ack_to_tap > ACK_INTERVAL) {
 			tcp_send_to_tap(c, conn, psh ? FORCE_ACK : 0, now);
 		}
