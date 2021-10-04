@@ -807,15 +807,18 @@ static void tcp_get_sndbuf(struct tcp_tap_conn *conn)
  * tcp_sock_set_bufsize() - Set SO_RCVBUF and SO_SNDBUF to maximum values
  * @s:		Socket, can be -1 to avoid check in the caller
  */
-static void tcp_sock_set_bufsize(int s)
+static void tcp_sock_set_bufsize(struct ctx *c, int s)
 {
 	int v = INT_MAX / 2; /* Kernel clamps and rounds, no need to check */
 
 	if (s == -1)
 		return;
 
-	setsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v));
-	setsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v));
+	if (!c->tcp.low_rmem)
+		setsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v));
+
+	if (!c->tcp.low_wmem)
+		setsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v));
 }
 
 /**
@@ -1308,7 +1311,8 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 			else
 				mss -= sizeof(struct ipv6hdr);
 
-			if (!conn->local && !tcp_rtt_dst_low(conn))
+			if (c->tcp.low_wmem &&
+			    !conn->local && !tcp_rtt_dst_low(conn))
 				mss = MIN(mss, PAGE_SIZE);
 			else
 				mss = ROUND_DOWN(mss, PAGE_SIZE);
@@ -1571,7 +1575,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	if (s < 0)
 		return;
 
-	tcp_sock_set_bufsize(s);
+	tcp_sock_set_bufsize(c, s);
 
 	if (af == AF_INET && addr4.sin_addr.s_addr == c->gw4)
 		addr4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -2560,13 +2564,15 @@ static int tcp_splice_connect(struct ctx *c, struct tcp_splice_conn *conn,
 		.sin_addr = { .s_addr = htonl(INADDR_LOOPBACK) },
 	};
 	const struct sockaddr *sa;
+	int ret, one = 1;
 	socklen_t sl;
-	int ret;
 
 	conn->to = sock_conn;
 
 	if (s <= 0)
-		tcp_sock_set_bufsize(sock_conn);
+		tcp_sock_set_bufsize(c, sock_conn);
+
+	setsockopt(s, SOL_TCP, TCP_QUICKACK, &one, sizeof(one));
 
 	if (v6) {
 		sa = (struct sockaddr *)&addr6;
@@ -3157,7 +3163,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
 				    tref.u32);
 			if (s > 0)
-				tcp_sock_set_bufsize(s);
+				tcp_sock_set_bufsize(c, s);
 			else
 				s = -1;
 
@@ -3170,7 +3176,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
 				    BIND_LOOPBACK, tref.u32);
 			if (s > 0)
-				tcp_sock_set_bufsize(s);
+				tcp_sock_set_bufsize(c, s);
 			else
 				s = -1;
 
@@ -3192,7 +3198,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
 				    tref.u32);
 			if (s > 0)
-				tcp_sock_set_bufsize(s);
+				tcp_sock_set_bufsize(c, s);
 			else
 				s = -1;
 
@@ -3205,7 +3211,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
 				    BIND_LOOPBACK, tref.u32);
 			if (s > 0)
-				tcp_sock_set_bufsize(s);
+				tcp_sock_set_bufsize(c, s);
 			else
 				s = -1;
 
@@ -3287,7 +3293,7 @@ struct tcp_sock_refill_arg {
 static int tcp_sock_refill(void *arg)
 {
 	struct tcp_sock_refill_arg *a = (struct tcp_sock_refill_arg *)arg;
-	int i, *p4, *p6, one = 1;
+	int i, *p4, *p6;
 
 	if (a->ns) {
 		if (ns_enter(a->c->pasta_pid))
@@ -3304,8 +3310,7 @@ static int tcp_sock_refill(void *arg)
 			break;
 		}
 		*p4 = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
-		setsockopt(*p4, SOL_TCP, TCP_QUICKACK, &one, sizeof(one));
-		tcp_sock_set_bufsize(*p4);
+		tcp_sock_set_bufsize(a->c, *p4);
 	}
 
 	for (i = 0; a->c->v6 && i < TCP_SOCK_POOL_SIZE; i++, p6++) {
@@ -3314,8 +3319,7 @@ static int tcp_sock_refill(void *arg)
 		}
 		*p6 = socket(AF_INET6, SOCK_STREAM | SOCK_NONBLOCK,
 			     IPPROTO_TCP);
-		setsockopt(*p6, SOL_TCP, TCP_QUICKACK, &one, sizeof(one));
-		tcp_sock_set_bufsize(*p6);
+		tcp_sock_set_bufsize(a->c, *p6);
 	}
 
 	return 0;
@@ -3333,6 +3337,8 @@ int tcp_sock_init(struct ctx *c, struct timespec *now)
 	in_port_t port;
 
 	getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret), GRND_RANDOM);
+
+	tcp_probe_mem(c);
 
 	for (port = 0; port < USHRT_MAX; port++) {
 		if (!bitmap_isset(c->tcp.port_to_tap, port))

@@ -51,6 +51,8 @@ union tcp_epoll_ref {
  * @pipe_size:		Size of pipes for spliced connections
  * @refill_ts:		Time of last refill operation for pools of sockets/pipes
  * @port_detect_ts:	Time of last TCP port detection/rebind, if enabled
+ * @low_wmem:		Low probed net.core.wmem_max
+ * @low_rmem:		Low probed net.core.rmem_max
  */
 struct tcp_ctx {
 	uint64_t hash_secret[2];
@@ -65,6 +67,8 @@ struct tcp_ctx {
 	size_t pipe_size;
 	struct timespec refill_ts;
 	struct timespec port_detect_ts;
+	int low_wmem;
+	int low_rmem;
 };
 
 #endif /* TCP_H */
