@@ -256,7 +256,7 @@ sleep	2
 killp	PASST
 killp	HOST
 sleep	2
-ns	cd __TEMPDIR__
+ns	cd __TEMPDIR__/passt
 nsb	perf report -g --max-stack 3
 sleep	10
 
