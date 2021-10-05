@@ -379,6 +379,9 @@
 #define SEQ_GE(a, b)			((a) - (b) < MAX_WINDOW)
 #define SEQ_GT(a, b)			((a) - (b) - 1 < MAX_WINDOW)
 
+#define CONN_V4(conn)			(IN6_IS_ADDR_V4MAPPED(&conn->a.a6))
+#define CONN_V6(conn)			(!CONN_V4(conn))
+
 enum tcp_state {
 	CLOSED = 0,
 	TAP_SYN_SENT,
@@ -413,9 +416,8 @@ static char *tcp_state_str[TCP_STATE_STR_SIZE] __attribute((__unused__)) = {
 #define RST		(1 << 2)
 #define ACK		(1 << 4)
 /* Flags for internal usage */
-#define UPDATE_WINDOW	(1 << 5)
-#define DUP_ACK		(1 << 6)
-#define FORCE_ACK	(1 << 7)
+#define DUP_ACK		(1 << 5)
+#define FORCE_ACK	(1 << 6)
 
 #define OPT_EOL		0
 #define OPT_NOP		1
@@ -653,6 +655,8 @@ static char 		tcp_buf_discard		[MAX_WINDOW];
 
 static struct iovec	tcp4_l2_iov_tap		[TCP_TAP_FRAMES];
 static struct iovec	tcp6_l2_iov_tap		[TCP_TAP_FRAMES];
+static struct iovec	tcp4_l2_flags_iov_tap	[TCP_TAP_FRAMES];
+static struct iovec	tcp6_l2_flags_iov_tap	[TCP_TAP_FRAMES];
 
 static struct msghdr	tcp4_l2_mh_sock;
 static struct msghdr	tcp6_l2_mh_sock;
@@ -666,6 +670,82 @@ static struct mmsghdr	tcp_l2_mh_tap		[TCP_TAP_FRAMES] = {
 
 /* sendmsg() to socket */
 static struct iovec	tcp_tap_iov		[UIO_MAXIOV];
+
+/**
+ * tcp4_l2_flags_buf_t - IPv4 packet buffers for segments without data (flags)
+ * @psum:	Partial IP header checksum (excluding tot_len and saddr)
+ * @tsum:	Partial TCP header checksum (excluding length and saddr)
+ * @pad:	Align TCP header to 32 bytes, for AVX2 checksum calculation only
+ * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
+ * @eh:		Pre-filled Ethernet header
+ * @iph:	Pre-filled IP header (except for tot_len and saddr)
+ * @th:		Headroom for TCP header
+ * @opts:	Headroom for TCP options
+ */
+__extension__  static struct tcp4_l2_flags_buf_t {
+	uint32_t psum;		/* 0 */
+	uint32_t tsum;		/* 4 */
+#ifdef __AVX2__
+	uint8_t pad[18];	/* 8, align th to 32 bytes */
+#endif
+
+	uint32_t vnet_len;	/* 26 */
+	struct ethhdr eh;	/* 30 */
+	struct iphdr iph;	/* 44 */
+	struct tcphdr th	/* 64 */ __attribute__ ((aligned(4)));
+	char opts[OPT_MSS_LEN + OPT_WS_LEN + 1];
+#ifdef __AVX2__
+} __attribute__ ((packed, aligned(32)))
+#else
+} __attribute__ ((packed, aligned(__alignof__(unsigned int))))
+#endif
+tcp4_l2_flags_buf[TCP_TAP_FRAMES] = {
+	[ 0 ... TCP_TAP_FRAMES - 1 ] = {
+		0, 0,
+#ifdef __AVX2__
+		{ 0 },
+#endif
+		0, L2_BUF_ETH_IP4_INIT, L2_BUF_IP4_INIT(IPPROTO_TCP),
+		{ 0 }, { 0 },
+	},
+};
+
+static int tcp4_l2_flags_buf_used;
+
+/**
+ * tcp6_l2_flags_buf_t - IPv6 packet buffers for segments without data (flags)
+ * @pad:	Align IPv6 header for checksum calculation to 32B (AVX2) or 4B
+ * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
+ * @eh:		Pre-filled Ethernet header
+ * @ip6h:	Pre-filled IP header (except for payload_len and addresses)
+ * @th:		Headroom for TCP header
+ * @opts:	Headroom for TCP options
+ */
+__extension__ struct tcp6_l2_flags_buf_t {
+#ifdef __AVX2__
+	uint8_t pad[14];	/* 0	align ip6h to 32 bytes */
+#else
+	uint8_t pad[2];		/*	align ip6h to 4 bytes		   0 */
+#endif
+	uint32_t vnet_len;	/* 14					   2 */
+	struct ethhdr eh;	/* 18					   6 */
+	struct ipv6hdr ip6h;	/* 32					  20 */
+	struct tcphdr th	/* 72 */ __attribute__ ((aligned(4))); /* 60 */ 
+	char opts[OPT_MSS_LEN + OPT_WS_LEN + 1];
+#ifdef __AVX2__
+} __attribute__ ((packed, aligned(32)))
+#else
+} __attribute__ ((packed, aligned(__alignof__(unsigned int))))
+#endif
+tcp6_l2_flags_buf[TCP_TAP_FRAMES] = {
+	[ 0 ... TCP_TAP_FRAMES - 1 ] = {
+		{ 0 },
+		0, L2_BUF_ETH_IP6_INIT, L2_BUF_IP6_INIT(IPPROTO_TCP),
+		{ 0 }, { 0 },
+	},
+};
+
+static int tcp6_l2_flags_buf_used;
 
 /* SO_RCVLOWAT set on source ([0]) or destination ([1]) socket, and activity */
 static uint8_t splice_rcvlowat_set[MAX_SPLICE_CONNS / 8][2];
@@ -855,33 +935,42 @@ void tcp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 	int i;
 
 	for (i = 0; i < TCP_TAP_FRAMES; i++) {
+		struct tcp4_l2_flags_buf_t *b4f = &tcp4_l2_flags_buf[i];
+		struct tcp6_l2_flags_buf_t *b6f = &tcp6_l2_flags_buf[i];
 		struct tcp4_l2_buf_t *b4 = &tcp4_l2_buf[i];
 		struct tcp6_l2_buf_t *b6 = &tcp6_l2_buf[i];
 
 		if (eth_d) {
 			memcpy(b4->eh.h_dest, eth_d, ETH_ALEN);
 			memcpy(b6->eh.h_dest, eth_d, ETH_ALEN);
+
+			memcpy(b4f->eh.h_dest, eth_d, ETH_ALEN);
+			memcpy(b6f->eh.h_dest, eth_d, ETH_ALEN);
 		}
 
 		if (eth_s) {
 			memcpy(b4->eh.h_source, eth_s, ETH_ALEN);
 			memcpy(b6->eh.h_source, eth_s, ETH_ALEN);
+
+			memcpy(b4f->eh.h_source, eth_s, ETH_ALEN);
+			memcpy(b6f->eh.h_source, eth_s, ETH_ALEN);
 		}
 
 		if (ip_da) {
-			b4->iph.daddr = *ip_da;
+			b4f->iph.daddr = b4->iph.daddr = *ip_da;
 			if (!i) {
-				b4->iph.saddr = 0;
-				b4->iph.tot_len = 0;
-				b4->iph.check = 0;
-				b4->psum = sum_16b(&b4->iph, 20);
+				b4f->iph.saddr = b4->iph.saddr = 0;
+				b4f->iph.tot_len = b4->iph.tot_len = 0;
+				b4f->iph.check = b4->iph.check = 0;
+				b4f->psum = b4->psum = sum_16b(&b4->iph, 20);
 
 				b4->tsum = ((*ip_da >> 16) & 0xffff) +
 					   (*ip_da & 0xffff) +
 					   htons(IPPROTO_TCP);
+				b4f->tsum = b4->tsum;
 			} else {
-				b4->psum = tcp4_l2_buf[0].psum;
-				b4->tsum = tcp4_l2_buf[0].tsum;
+				b4f->psum = b4->psum = tcp4_l2_buf[0].psum;
+				b4f->tsum = b4->tsum = tcp4_l2_buf[0].tsum;
 			}
 		}
 	}
@@ -908,6 +997,9 @@ static void tcp_sock4_iov_init(void)
 		iov->iov_base = &tcp4_l2_buf[i].vnet_len;
 		iov->iov_len = MSS_DEFAULT;
 	}
+
+	for (i = 0, iov = tcp4_l2_flags_iov_tap; i < TCP_TAP_FRAMES; i++, iov++)
+		iov->iov_base = &tcp4_l2_flags_buf[i].vnet_len;
 }
 
 /**
@@ -931,6 +1023,9 @@ static void tcp_sock6_iov_init(void)
 		iov->iov_base = &tcp6_l2_buf[i].vnet_len;
 		iov->iov_len = MSS_DEFAULT;
 	}
+
+	for (i = 0, iov = tcp6_l2_flags_iov_tap; i < TCP_TAP_FRAMES; i++, iov++)
+		iov->iov_base = &tcp6_l2_flags_buf[i].vnet_len;
 }
 
 /**
@@ -1004,7 +1099,7 @@ static int tcp_opt_get(struct tcphdr *th, size_t len, uint8_t __type,
 static int tcp_hash_match(struct tcp_tap_conn *conn, int af, void *addr,
 			  in_port_t tap_port, in_port_t sock_port)
 {
-	if (af == AF_INET && IN6_IS_ADDR_V4MAPPED(&conn->a.a6)	&&
+	if (af == AF_INET && CONN_V4(conn)			&&
 	    !memcmp(&conn->a.a4.a, addr, sizeof(conn->a.a4.a))	&&
 	    conn->tap_port == tap_port && conn->sock_port == sock_port)
 		return 1;
@@ -1166,7 +1261,7 @@ static void tcp_tap_epoll_mask(struct ctx *c, struct tcp_tap_conn *conn,
 {
 	union epoll_ref ref = { .proto = IPPROTO_TCP, .s = conn->sock,
 				.tcp.index = conn - tt,
-				.tcp.v6 = !IN6_IS_ADDR_V4MAPPED(&conn->a.a6) };
+				.tcp.v6 = CONN_V6(conn) };
 	struct epoll_event ev = { .data.u64 = ref.u64, .events = events };
 
 	if (conn->events == events)
@@ -1230,6 +1325,209 @@ static void tcp_tap_destroy(struct ctx *c, struct tcp_tap_conn *conn)
 static void tcp_rst(struct ctx *c, struct tcp_tap_conn *conn);
 
 /**
+ * tcp_l2_flags_buf_flush() - Send out buffers for segments with no data (flags)
+ * @c:		Execution context
+ */
+static void tcp_l2_flags_buf_flush(struct ctx *c)
+{
+	struct msghdr mh = { 0 };
+	size_t i;
+
+	mh.msg_iov = tcp6_l2_flags_iov_tap;
+	if ((mh.msg_iovlen = tcp6_l2_flags_buf_used)) {
+		if (c->mode == MODE_PASST) {
+			sendmsg(c->fd_tap, &mh, MSG_NOSIGNAL | MSG_DONTWAIT);
+		} else {
+			for (i = 0; i < mh.msg_iovlen; i++) {
+				struct iovec *iov = &mh.msg_iov[i];
+
+				write(c->fd_tap, (char *)iov->iov_base + 4,
+				      iov->iov_len - 4);
+			}
+		}
+		tcp6_l2_flags_buf_used = 0;
+		pcapm(&mh);
+	}
+
+	mh.msg_iov = tcp4_l2_flags_iov_tap;
+	if ((mh.msg_iovlen = tcp4_l2_flags_buf_used)) {
+		if (c->mode == MODE_PASST) {
+			sendmsg(c->fd_tap, &mh, MSG_NOSIGNAL | MSG_DONTWAIT);
+		} else {
+			for (i = 0; i < mh.msg_iovlen; i++) {
+				struct iovec *iov = &mh.msg_iov[i];
+				
+				write(c->fd_tap, (char *)iov->iov_base + 4,
+				      iov->iov_len - 4);
+			}
+		}
+		tcp4_l2_flags_buf_used = 0;
+		pcapm(&mh);
+	}
+}
+
+/**
+ * tcp_defer_handler() - Handler for TCP deferred tasks
+ * @c:		Execution context
+ */
+void tcp_defer_handler(struct ctx *c)
+{
+	tcp_l2_flags_buf_flush(c);
+}
+
+/**
+ * tcp_l2_buf_fill_headers() - Fill 802.3, IP, TCP headers in pre-cooked buffers
+ * @c:		Execution context
+ * @conn:	Connection pointer
+ * @p:		Pointer to any type of TCP pre-cooked buffer
+ * @plen:	Payload length (including TCP header options)
+ * @check:	Checksum, if already known
+ * @seq:	Sequence number for this segment
+ *
+ * Return: 802.3 length, host order.
+ */
+static size_t tcp_l2_buf_fill_headers(struct ctx *c, struct tcp_tap_conn *conn,
+				      void *p, size_t plen,
+				      uint16_t *check, uint32_t seq)
+{
+	size_t ip_len, eth_len;
+
+#define SET_TCP_HEADER_COMMON_V4_V6(b, conn, seq)			\
+	do {								\
+		b->th.source = htons(conn->sock_port);			\
+		b->th.dest = htons(conn->tap_port);			\
+		b->th.seq = htonl(seq);					\
+		b->th.ack_seq = htonl(conn->seq_ack_to_tap);		\
+									\
+		/* First value sent by receiver is not scaled */	\
+		if (b->th.syn) {					\
+			b->th.window = htons(MIN(conn->wnd_to_tap,	\
+					     USHRT_MAX));		\
+		} else {						\
+			b->th.window = htons(MIN(conn->wnd_to_tap >>	\
+						 conn->ws,		\
+						 USHRT_MAX));		\
+		}							\
+	} while (0)
+
+	if (CONN_V6(conn)) {
+		struct tcp6_l2_buf_t *b = (struct tcp6_l2_buf_t *)p;
+		uint32_t flow = conn->seq_init_to_tap;
+
+		ip_len = plen + sizeof(struct ipv6hdr) + sizeof(struct tcphdr);
+
+		b->ip6h.payload_len = htons(plen + sizeof(struct tcphdr));
+		b->ip6h.saddr = conn->a.a6;
+		if (IN6_IS_ADDR_LINKLOCAL(&b->ip6h.saddr))
+			b->ip6h.daddr = c->addr6_ll_seen;
+		else
+			b->ip6h.daddr = c->addr6_seen;
+
+		memset(b->ip6h.flow_lbl, 0, 3);
+
+		SET_TCP_HEADER_COMMON_V4_V6(b, conn, seq);
+
+		tcp_update_check_tcp6(b);
+
+		b->ip6h.flow_lbl[0] = (flow >> 16) & 0xf;
+		b->ip6h.flow_lbl[1] = (flow >> 8) & 0xff;
+		b->ip6h.flow_lbl[2] = (flow >> 0) & 0xff;
+
+		eth_len = ip_len + sizeof(struct ethhdr);
+		if (c->mode == MODE_PASST)
+			b->vnet_len = htonl(eth_len);
+	} else {
+		struct tcp4_l2_buf_t *b = (struct tcp4_l2_buf_t *)p;
+
+		ip_len = plen + sizeof(struct iphdr) + sizeof(struct tcphdr);
+		b->iph.tot_len = htons(ip_len);
+		b->iph.saddr = conn->a.a4.a.s_addr;
+		b->iph.daddr = c->addr4_seen;
+
+		if (check)
+			b->iph.check = *check;
+		else
+			tcp_update_check_ip4(b);
+
+		SET_TCP_HEADER_COMMON_V4_V6(b, conn, seq);
+
+		tcp_update_check_tcp4(b);
+
+		eth_len = ip_len + sizeof(struct ethhdr);
+		if (c->mode == MODE_PASST)
+			b->vnet_len = htonl(eth_len);
+	}
+
+#undef SET_TCP_HEADER_COMMON_V4_V6
+
+	return eth_len;
+}
+
+/**
+ * tcp_update_seqack_wnd() - Update ACK sequence and window to guest/tap
+ * @c:		Execution context
+ * @conn:	Connection pointer
+ * @flags:	TCP header flags we are about to send, if any
+ * @info:	tcp_info from kernel, can be NULL if not pre-fetched
+ *
+ * Return: 1 if sequence or window were updated, 0 otherwise
+ */
+static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
+				 int flags, struct tcp_info *info)
+{
+	uint32_t prev_ack_to_tap = conn->seq_ack_to_tap;
+	uint32_t prev_wnd_to_tap = conn->wnd_to_tap;
+	socklen_t sl = sizeof(*info);
+	struct tcp_info __info;
+	int s = conn->sock;
+
+	if (conn->state > ESTABLISHED || (flags & (DUP_ACK | FORCE_ACK)) ||
+	    conn->local || tcp_rtt_dst_low(conn) ||
+	    conn->snd_buf < SNDBUF_SMALL) {
+		conn->seq_ack_to_tap = conn->seq_from_tap;
+	} else if (conn->seq_ack_to_tap != conn->seq_from_tap) {
+		if (!info) {
+			info = &__info;
+			if (getsockopt(s, SOL_TCP, TCP_INFO, info, &sl))
+				return 0;
+		}
+
+		conn->seq_ack_to_tap = info->tcpi_bytes_acked +
+				       conn->seq_init_from_tap;
+
+		if (SEQ_LT(conn->seq_ack_to_tap, prev_ack_to_tap))
+			conn->seq_ack_to_tap = prev_ack_to_tap;
+	}
+
+	if (!c->tcp.kernel_snd_wnd) {
+		tcp_get_sndbuf(conn);
+		conn->wnd_to_tap = MIN(conn->snd_buf, MAX_WINDOW);
+		return 0;
+	}
+
+	if (!info) {
+		if (conn->wnd_to_tap > WINDOW_DEFAULT)
+			return 0;
+
+		info = &__info;
+		if (getsockopt(s, SOL_TCP, TCP_INFO, info, &sl))
+			return 0;
+	}
+
+	if (conn->local || tcp_rtt_dst_low(conn)) {
+		conn->wnd_to_tap = info->tcpi_snd_wnd;
+	} else {
+		tcp_get_sndbuf(conn);
+		conn->wnd_to_tap = MIN(info->tcpi_snd_wnd, conn->snd_buf);
+	}
+
+	conn->wnd_to_tap = MIN(conn->wnd_to_tap, MAX_WINDOW);
+
+	return conn->wnd_to_tap     != prev_wnd_to_tap ||
+	       conn->seq_ack_to_tap != prev_ack_to_tap;
+}
+
+/**
  * tcp_send_to_tap() - Send segment to tap, with options and values from socket
  * @c:		Execution context
  * @conn:	Connection pointer
@@ -1241,14 +1539,18 @@ static void tcp_rst(struct ctx *c, struct tcp_tap_conn *conn);
 static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 			   struct timespec *now)
 {
-	char buf[sizeof(struct tcphdr) + OPT_MSS_LEN + OPT_WS_LEN + 1] = { 0 };
 	uint32_t prev_ack_to_tap = conn->seq_ack_to_tap;
 	uint32_t prev_wnd_to_tap = conn->wnd_to_tap;
+	struct tcp4_l2_flags_buf_t *b4 = NULL;
+	struct tcp6_l2_flags_buf_t *b6 = NULL;
 	struct tcp_info info = { 0 };
 	socklen_t sl = sizeof(info);
+	size_t optlen = 0, eth_len;
 	int s = conn->sock;
+	struct iovec *iov;
 	struct tcphdr *th;
 	char *data;
+	void *p;
 
 	if (SEQ_GE(conn->seq_ack_to_tap, conn->seq_from_tap) &&
 	    !flags && conn->wnd_to_tap)
@@ -1265,24 +1567,27 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 	if (!conn->local)
 		tcp_rtt_dst_check(conn, &info);
 
-	th = (struct tcphdr *)buf;
-	data = (char *)(th + 1);
-	th->doff = sizeof(*th) / 4;
+	if (!tcp_update_seqack_wnd(c, conn, flags, &info) && !flags)
+		return 0;
 
-	if (conn->state > ESTABLISHED || (flags & (DUP_ACK | FORCE_ACK))) {
-		conn->seq_ack_to_tap = conn->seq_from_tap;
+	if (CONN_V4(conn)) {
+		iov = tcp4_l2_flags_iov_tap + tcp4_l2_flags_buf_used;
+		p = b4 = tcp4_l2_flags_buf  + tcp4_l2_flags_buf_used++;
+		th = &b4->th;
 	} else {
-		conn->seq_ack_to_tap = info.tcpi_bytes_acked +
-				       conn->seq_init_from_tap;
-
-		if (SEQ_LT(conn->seq_ack_to_tap, prev_ack_to_tap))
-			conn->seq_ack_to_tap = prev_ack_to_tap;
+		iov = tcp6_l2_flags_iov_tap + tcp6_l2_flags_buf_used;
+		p = b6 = tcp6_l2_flags_buf  + tcp6_l2_flags_buf_used++;
+		th = &b6->th;
 	}
+
+	data = (char *)(th + 1);
 
 	if (flags & SYN) {
 		uint16_t mss;
 
-		/* Options: MSS, NOP and window scale if allowed (4-8 bytes) */
+		/* Options: MSS, NOP and window scale (8 bytes) */
+		optlen = OPT_MSS_LEN + 1 + OPT_WS_LEN;
+
 		*data++ = OPT_MSS;
 		*data++ = OPT_MSS_LEN;
 
@@ -1290,7 +1595,7 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 			mss = info.tcpi_snd_mss;
 		} else {
 			mss = c->mtu - sizeof(sizeof *th);
-			if (IN6_IS_ADDR_V4MAPPED(&conn->a.a6))
+			if (CONN_V4(conn))
 				mss -= sizeof(struct iphdr);
 			else
 				mss -= sizeof(struct ipv6hdr);
@@ -1315,64 +1620,53 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 		*data++ = OPT_WS;
 		*data++ = OPT_WS_LEN;
 		*data++ = conn->ws;
-		th->doff += (1 + OPT_WS_LEN) / 4;
-
-		/* RFC 793, 3.1: "[...] and the first data octet is ISN+1." */
-		th->seq = htonl(conn->seq_to_tap++);
 
 		th->ack = !!(flags & ACK);
+
+		conn->wnd_to_tap = WINDOW_DEFAULT;
 	} else {
 		th->ack = !!(flags & (ACK | FORCE_ACK | DUP_ACK)) ||
-			  conn->seq_ack_to_tap != prev_ack_to_tap;
-		th->seq = htonl(conn->seq_to_tap);
+			  conn->seq_ack_to_tap != prev_ack_to_tap ||
+			  !prev_wnd_to_tap;
 	}
 
-	if (!flags && conn->seq_ack_to_tap == prev_ack_to_tap &&
-	    conn->wnd_to_tap == prev_wnd_to_tap)
-		return 0;
-
-	th->ack_seq = htonl(conn->seq_ack_to_tap);
+	th->doff = (sizeof(*th) + optlen) / 4;
 
 	th->rst = !!(flags & RST);
 	th->syn = !!(flags & SYN);
 	th->fin = !!(flags & FIN);
 
-	th->source = htons(conn->sock_port);
-	th->dest = htons(conn->tap_port);
-
-	if (th->syn) {
-		/* First value sent by receiver is not scaled */
-		th->window = htons(conn->wnd_to_tap = WINDOW_DEFAULT);
-	} else {
-		if (c->tcp.kernel_snd_wnd) {
-			conn->wnd_to_tap = MIN(info.tcpi_snd_wnd,
-					       conn->snd_buf);
-		} else {
-			conn->wnd_to_tap = conn->snd_buf;
-		}
-		conn->wnd_to_tap = MIN(conn->wnd_to_tap, MAX_WINDOW);
-
-		th->window = htons(MIN(conn->wnd_to_tap >> conn->ws,
-				       USHRT_MAX));
-	}
-
-	th->urg_ptr = 0;
-	th->check = 0;
+	eth_len = tcp_l2_buf_fill_headers(c, conn, p, optlen,
+					  NULL, conn->seq_to_tap);
+	iov->iov_len = eth_len + sizeof(uint32_t);
 
 	if (th->ack && now)
 		conn->ts_ack_to_tap = *now;
 
-	tap_ip_send(c, &conn->a.a6, IPPROTO_TCP, buf, th->doff * 4,
-		    conn->seq_init_to_tap);
-
-	if (flags & DUP_ACK) {
-		tap_ip_send(c, &conn->a.a6, IPPROTO_TCP, buf, th->doff * 4,
-			    conn->seq_init_to_tap);
-	}
-
-	if (th->fin) {
+	if (th->fin)
 		conn->tap_data_noack = *now;
+
+	/* RFC 793, 3.1: "[...] and the first data octet is ISN+1." */
+	if (th->fin || th->syn)
 		conn->seq_to_tap++;
+
+	if (CONN_V4(conn)) {
+		if (flags & DUP_ACK) {
+			memcpy(b4 + 1, b4, sizeof(*b4));
+			(iov + 1)->iov_len = iov->iov_len;
+			tcp4_l2_flags_buf_used++;
+		}
+
+		if (tcp4_l2_flags_buf_used > ARRAY_SIZE(tcp4_l2_flags_buf) - 2)
+			tcp_l2_flags_buf_flush(c);
+	} else {
+		if (flags & DUP_ACK) {
+			memcpy(b6 + 1, b6, sizeof(*b6));
+			(iov + 1)->iov_len = iov->iov_len;
+			tcp6_l2_flags_buf_used++;
+		}
+		if (tcp6_l2_flags_buf_used > ARRAY_SIZE(tcp6_l2_flags_buf) - 2)
+			tcp_l2_flags_buf_flush(c);
 	}
 
 	return 0;
@@ -1792,13 +2086,11 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 {
 	int *buf_mss, *buf_mss_nr_set, *buf_mss_tap, *buf_mss_tap_nr_set;
 	int mss_tap, fill_bufs, send_bufs = 0, last_len, iov_rem = 0;
-	int send, len, plen, v4 = IN6_IS_ADDR_V4MAPPED(&conn->a.a6);
+	int send, len, plen, v4 = CONN_V4(conn);
 	uint32_t seq_to_tap = conn->seq_to_tap;
-	socklen_t sl = sizeof(struct tcp_info);
 	int s = conn->sock, i, ret = 0;
 	struct iovec *iov, *iov_tap;
 	uint32_t already_sent;
-	struct tcp_info info;
 	struct mmsghdr *mh;
 
 	already_sent = conn->seq_to_tap - conn->seq_ack_from_tap;
@@ -1900,108 +2192,50 @@ recvmsg:
 	iov_tap[send_bufs - 1].iov_len = mss_tap - conn->mss_guest + last_len;
 
 	/* Likely, some new data was acked too. */
-	if (conn->seq_from_tap != conn->seq_ack_to_tap || !conn->wnd_to_tap) {
-		if (conn->state != ESTABLISHED ||
-		    getsockopt(s, SOL_TCP, TCP_INFO, &info, &sl)) {
-			conn->seq_ack_to_tap = conn->seq_from_tap;
-		} else {
-			conn->seq_ack_to_tap = info.tcpi_bytes_acked +
-					       conn->seq_init_from_tap;
-
-			if (c->tcp.kernel_snd_wnd) {
-				conn->wnd_to_tap = MIN(info.tcpi_snd_wnd,
-						       conn->snd_buf);
-			} else {
-				conn->wnd_to_tap = conn->snd_buf;
-			}
-			conn->wnd_to_tap = MIN(conn->wnd_to_tap, MAX_WINDOW);
-		}
-	}
+	tcp_update_seqack_wnd(c, conn, 0, NULL);
 
 	plen = conn->mss_guest;
 	for (i = 0, mh = tcp_l2_mh_tap; i < send_bufs; i++, mh++) {
-		int ip_len;
+		ssize_t eth_len;
 
 		if (i == send_bufs - 1)
 			plen = last_len;
 
 		if (v4) {
 			struct tcp4_l2_buf_t *b = &tcp4_l2_buf[i];
+			uint16_t *check = NULL;
 
-			ip_len = plen + sizeof(struct iphdr) +
-				 sizeof(struct tcphdr);
+			if (i && i != send_bufs - 1)
+				check = &tcp4_l2_buf[0].iph.check;
 
-			b->iph.tot_len = htons(ip_len);
-			b->iph.saddr = conn->a.a4.a.s_addr;
-			b->iph.daddr = c->addr4_seen;
-			if (!i || i == send_bufs - 1)
-				tcp_update_check_ip4(b);
-			else
-				b->iph.check = tcp4_l2_buf[0].iph.check;
-
-			b->th.source = htons(conn->sock_port);
-			b->th.dest = htons(conn->tap_port);
-			b->th.seq = htonl(seq_to_tap);
-			b->th.ack_seq = htonl(conn->seq_ack_to_tap);
-			b->th.window = htons(MIN(conn->wnd_to_tap >> conn->ws,
-						 USHRT_MAX));
-
-			tcp_update_check_tcp4(b);
+			eth_len = tcp_l2_buf_fill_headers(c, conn, b, plen,
+							  check, seq_to_tap);
 
 			if (c->mode == MODE_PASST) {
-				b->vnet_len = htonl(sizeof(struct ethhdr) +
-						    ip_len);
 				mh->msg_hdr.msg_iov = &tcp4_l2_iov_tap[i];
 				seq_to_tap += plen;
 				continue;
 			}
 
-			ip_len += sizeof(struct ethhdr);
-			pcap((char *)&b->eh, ip_len);
-			ret = write(c->fd_tap, &b->eh, ip_len);
+			pcap((char *)&b->eh, eth_len);
+			ret = write(c->fd_tap, &b->eh, eth_len);
 		} else {
 			struct tcp6_l2_buf_t *b = &tcp6_l2_buf[i];
-			uint32_t flow = conn->seq_init_to_tap;
 
-			ip_len = plen + sizeof(struct ipv6hdr) +
-				 sizeof(struct tcphdr);
-
-			b->ip6h.payload_len = htons(plen +
-						    sizeof(struct tcphdr));
-			b->ip6h.saddr = conn->a.a6;
-			if (IN6_IS_ADDR_LINKLOCAL(&b->ip6h.saddr))
-				b->ip6h.daddr = c->addr6_ll_seen;
-			else
-				b->ip6h.daddr = c->addr6_seen;
-
-			b->th.source = htons(conn->sock_port);
-			b->th.dest = htons(conn->tap_port);
-			b->th.seq = htonl(seq_to_tap);
-			b->th.ack_seq = htonl(conn->seq_ack_to_tap);
-			b->th.window = htons(MIN(conn->wnd_to_tap >> conn->ws,
-						 USHRT_MAX));
-
-			memset(b->ip6h.flow_lbl, 0, 3);
-			tcp_update_check_tcp6(b);
-
-			b->ip6h.flow_lbl[0] = (flow >> 16) & 0xf;
-			b->ip6h.flow_lbl[1] = (flow >> 8) & 0xff;
-			b->ip6h.flow_lbl[2] = (flow >> 0) & 0xff;
+			eth_len = tcp_l2_buf_fill_headers(c, conn, b, plen,
+							  NULL, seq_to_tap);
 
 			if (c->mode == MODE_PASST) {
-				b->vnet_len = htonl(sizeof(struct ethhdr) +
-						    ip_len);
 				mh->msg_hdr.msg_iov = &tcp6_l2_iov_tap[i];
 				seq_to_tap += plen;
 				continue;
 			}
 
-			ip_len += sizeof(struct ethhdr);
-			pcap((char *)&b->eh, ip_len);
-			ret = write(c->fd_tap, &b->eh, ip_len);
+			pcap((char *)&b->eh, eth_len);
+			ret = write(c->fd_tap, &b->eh, eth_len);
 		}
 
-		if (ret < ip_len) {
+		if (ret < eth_len) {
 			if (ret < 0) {
 				if (errno == EAGAIN || errno == EWOULDBLOCK)
 					return 0;
@@ -3388,7 +3622,7 @@ static void tcp_timer_one(struct ctx *c, struct tcp_tap_conn *conn,
 		}
 
 		if (!conn->wnd_to_tap)
-			tcp_send_to_tap(c, conn, UPDATE_WINDOW, ts);
+			tcp_send_to_tap(c, conn, 0, ts);
 		else if (ack_to_tap > ACK_INTERVAL)
 			tcp_send_to_tap(c, conn, 0, ts);
 
