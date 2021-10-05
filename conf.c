@@ -850,7 +850,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	uint32_t *dns4 = c->dns4;
 
 	do {
-		enum conf_port_type *set;
+		enum conf_port_type *set = NULL;
 		const char *optstring;
 
 		if (c->mode == MODE_PASST)
