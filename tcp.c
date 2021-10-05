@@ -359,8 +359,8 @@
 #define FIN_TIMEOUT			240000
 #define LAST_ACK_TIMEOUT		240000
 
-#define TCP_SOCK_POOL_SIZE		256
-#define TCP_SOCK_POOL_TSH		128 /* Refill in ns if > x used */
+#define TCP_SOCK_POOL_SIZE		32
+#define TCP_SOCK_POOL_TSH		16 /* Refill in ns if > x used */
 #define TCP_SPLICE_PIPE_POOL_SIZE	256
 #define REFILL_INTERVAL			1000
 
