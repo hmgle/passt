@@ -530,6 +530,7 @@ pause_continue() {
 run_term() {
 	export SHELL="/bin/sh"
 	tmux set-option -g default-shell "/bin/sh"
+	tmux set-option -g update-environment "PCAP DEBUG"
 
 	if [ ${CI} -eq 1 ]; then
 		__xterm_done="$(mktemp)"
