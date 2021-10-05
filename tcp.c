@@ -367,7 +367,7 @@
 #define PORT_DETECT_INTERVAL		1000
 
 #define LOW_RTT_TABLE_SIZE		8
-#define LOW_RTT_THRESHOLD		5 /* us */
+#define LOW_RTT_THRESHOLD		10 /* us */
 
 /* We need to include <linux/tcp.h> for tcpi_bytes_acked, instead of
  * <netinet/tcp.h>, but that doesn't include a definition for SOL_TCP
