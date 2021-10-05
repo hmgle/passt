@@ -54,6 +54,7 @@
 
 #include "util.h"
 #include "passt.h"
+#include "dhcp.h"
 #include "dhcpv6.h"
 #include "icmp.h"
 #include "tcp.h"
@@ -376,8 +377,6 @@ int main(int argc, char **argv)
 	}
 	sock_probe_mem(&c);
 
-	proto_update_l2_buf(c.mac_guest, c.mac, &c.addr4);
-
 	tap_sock_init(&c);
 
 	clock_gettime(CLOCK_MONOTONIC, &now);
@@ -385,6 +384,11 @@ int main(int argc, char **argv)
 	if ((!c.no_udp && udp_sock_init(&c, &now)) ||
 	    (!c.no_tcp && tcp_sock_init(&c, &now)))
 		exit(EXIT_FAILURE);
+
+	proto_update_l2_buf(c.mac_guest, c.mac, &c.addr4);
+
+	if (c.v4 && !c.no_dhcp)
+		dhcp_init();
 
 	if (c.v6 && !c.no_dhcpv6)
 		dhcpv6_init(&c);

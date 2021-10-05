@@ -46,11 +46,8 @@ struct opt {
 	unsigned char c[255];
 };
 
-static struct opt opts[255] = {
-	[1]  = { 0, 4, {                      0 }, 0, { 0 }, },	/* Mask */
-	[3]  = { 0, 4, {                      0 }, 0, { 0 }, },	/* Router */
-	[51] = { 0, 4, { 0xff, 0xff, 0xff, 0xff }, 0, { 0 }, },	/* Lease time */
-	[53] = { 0, 1, {                      0 }, 0, { 0 }, },	/* Type */
+static struct opt opts[255];
+
 #define DHCPDISCOVER	1
 #define DHCPOFFER	2
 #define DHCPREQUEST	3
@@ -60,8 +57,21 @@ static struct opt opts[255] = {
 #define DHCPRELEASE	7
 #define DHCPINFORM	8
 #define DHCPFORCERENEW	9
-	[54] = { 0, 4, {  0 }, 0, { 0 }, },	/* Server ID */
-};
+
+/**
+ * dhcp_init() - Initialise DHCP options
+ */
+void dhcp_init(void)
+{
+	opts[1]  = (struct opt) { 0, 4, {     0 }, 0, { 0 }, };	/* Mask */
+	opts[3]  = (struct opt) { 0, 4, {     0 }, 0, { 0 }, };	/* Router */
+	opts[51] = (struct opt) { 0, 4, {  0xff,
+					   0xff,
+					   0xff,
+					   0xff }, 0, { 0 }, };	/* Lease time */
+	opts[53] = (struct opt) { 0, 1, {     0 }, 0, { 0 }, };	/* Type */
+	opts[54] = (struct opt) { 0, 4, {     0 }, 0, { 0 }, };	/* Server ID */
+}
 
 /**
  * struct msg - BOOTP/DHCP message
