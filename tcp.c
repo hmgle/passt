@@ -2656,6 +2656,9 @@ static void tcp_connect_finish(struct ctx *c, struct tcp_tap_conn *conn,
 	socklen_t sl;
 	int so;
 
+	/* Drop EPOLLOUT, only used to wait for connect() to complete */
+	tcp_tap_epoll_mask(c, conn, EPOLLIN | EPOLLRDHUP);
+
 	sl = sizeof(so);
 	if (getsockopt(conn->sock, SOL_SOCKET, SO_ERROR, &so, &sl) || so) {
 		tcp_rst(c, conn);
@@ -2664,9 +2667,6 @@ static void tcp_connect_finish(struct ctx *c, struct tcp_tap_conn *conn,
 
 	if (tcp_send_to_tap(c, conn, SYN | ACK, now))
 		return;
-
-	/* Drop EPOLLOUT, only used to wait for connect() to complete */
-	tcp_tap_epoll_mask(c, conn, EPOLLIN | EPOLLRDHUP);
 
 	tcp_tap_state(conn, TAP_SYN_RCVD);
 }
