@@ -2324,7 +2324,7 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 			      struct tap_l4_msg *msg, int count,
 			      struct timespec *now)
 {
-	int i, iov_i, ack = 0, fin = 0, psh = 0, retr = 0, keep = -1;
+	int i, iov_i, ack = 0, fin = 0, retr = 0, keep = -1;
 	struct msghdr mh = { .msg_iov = tcp_tap_iov };
 	uint32_t max_ack_seq = conn->seq_ack_from_tap;
 	uint16_t max_ack_seq_wnd = conn->wnd_from_tap;
@@ -2382,9 +2382,6 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		if (th->fin)
 			fin = 1;
 
-		if (th->psh)
-			psh = 1;
-
 		if (!len)
 			continue;
 
@@ -2411,11 +2408,8 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		 *          ^ seq
 		 *    (offset < 0)
 		 */
-		if (SEQ_GE(seq_offset, 0) && SEQ_LE(seq + len, seq_from_tap)) {
-			/* Force sending ACK, sender might have lost one */
-			psh = 1;
+		if (SEQ_GE(seq_offset, 0) && SEQ_LE(seq + len, seq_from_tap))
 			continue;
-		}
 
 		if (SEQ_LT(seq_offset, 0)) {
 			if (keep == -1)
@@ -2469,19 +2463,21 @@ eintr:
 			goto eintr;
 
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			tcp_send_to_tap(c, conn, UPDATE_WINDOW, now);
+			tcp_send_to_tap(c, conn, 0, now);
 			return;
 		}
 		tcp_rst(c, conn);
 		return;
 	}
 
+
 	if (n < (seq_from_tap - conn->seq_from_tap)) {
 		partial_send = 1;
-		tcp_send_to_tap(c, conn, UPDATE_WINDOW, now);
+		conn->seq_from_tap += n;
+		tcp_send_to_tap(c, conn, 0, now);
+	} else {
+		conn->seq_from_tap += n;
 	}
-
-	conn->seq_from_tap += n;
 
 out:
 	if (keep != -1) {
@@ -2511,14 +2507,7 @@ out:
 			tcp_send_to_tap(c, conn, ACK, now);
 		}
 	} else {
-		int ack_to_tap = timespec_diff_ms(now, &conn->ts_ack_to_tap);
-		int ack_offset = conn->seq_from_tap - conn->seq_ack_to_tap;
-
-		if (c->mode == MODE_PASTA ||
-		    psh || SEQ_GE(ack_offset, conn->wnd_to_tap * 2 / 3) ||
-		    ack_to_tap > ACK_INTERVAL) {
-			tcp_send_to_tap(c, conn, psh ? FORCE_ACK : 0, now);
-		}
+		tcp_send_to_tap(c, conn, 0, now);
 	}
 }
 
