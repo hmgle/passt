@@ -126,6 +126,8 @@ enum passt_modes {
  * @no_dhcpv6:		Disable DHCPv6 server
  * @no_ndp:		Disable NDP handler altogether
  * @no_ra:		Disable router advertisements
+ * @low_wmem:		Low probed net.core.wmem_max
+ * @low_rmem:		Low probed net.core.rmem_max
  */
 struct ctx {
 	enum passt_modes mode;
@@ -177,6 +179,9 @@ struct ctx {
 	int no_dhcpv6;
 	int no_ndp;
 	int no_ra;
+
+	int low_wmem;
+	int low_rmem;
 };
 
 void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,

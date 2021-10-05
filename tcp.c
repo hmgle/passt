@@ -341,9 +341,6 @@
 
 #define TCP_TAP_FRAMES			32
 
-#define RCVBUF_BIG			(2 * 1024 * 1024)
-#define SNDBUF_BIG			(2 * 1024 * 1024)
-#define SNDBUF_SMALL			(128 * 1024)
 #define MAX_PIPE_SIZE			(2 * 1024 * 1024)
 
 #define TCP_HASH_TABLE_LOAD		70		/* % */
@@ -754,33 +751,6 @@ static void tcp_splice_state(struct tcp_splice_conn *conn, enum tcp_state state)
 }
 
 /**
- * tcp_probe_mem() - Check if setting high SO_SNDBUF and SO_RCVBUF is allowed
- * @c:		Execution context
- */
-static void tcp_probe_mem(struct ctx *c)
-{
-	int v = INT_MAX / 2, s;
-	socklen_t sl;
-
-	if ((s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-		c->tcp.low_wmem = c->tcp.low_rmem = 1;
-		return;
-	}
-
-	sl = sizeof(v);
-	if (setsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v))	||
-	    getsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, &sl) || v < SNDBUF_BIG)
-		c->tcp.low_wmem = 1;
-
-	v = INT_MAX / 2;
-	if (setsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v))	||
-	    getsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, &sl) || v < RCVBUF_BIG)
-		c->tcp.low_rmem = 1;
-
-	close(s);
-}
-
-/**
  * tcp_get_sndbuf() - Get, scale SO_SNDBUF between thresholds (1 to 0.5 usage)
  * @conn:	Connection pointer
  */
@@ -814,10 +784,10 @@ static void tcp_sock_set_bufsize(struct ctx *c, int s)
 	if (s == -1)
 		return;
 
-	if (!c->tcp.low_rmem)
+	if (!c->low_rmem)
 		setsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v));
 
-	if (!c->tcp.low_wmem)
+	if (!c->low_wmem)
 		setsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v));
 }
 
@@ -1325,7 +1295,7 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 			else
 				mss -= sizeof(struct ipv6hdr);
 
-			if (c->tcp.low_wmem &&
+			if (c->low_wmem &&
 			    !conn->local && !tcp_rtt_dst_low(conn))
 				mss = MIN(mss, PAGE_SIZE);
 			else
@@ -3341,8 +3311,6 @@ int tcp_sock_init(struct ctx *c, struct timespec *now)
 	in_port_t port;
 
 	getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret), GRND_RANDOM);
-
-	tcp_probe_mem(c);
 
 	for (port = 0; port < USHRT_MAX; port++) {
 		if (!bitmap_isset(c->tcp.port_to_tap, port))

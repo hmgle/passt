@@ -116,6 +116,10 @@ void debug(const char *format, ...);
 		.daddr		= IN6ADDR_ANY_INIT,			\
 	}
 
+#define RCVBUF_BIG		(2 * 1024 * 1024)
+#define SNDBUF_BIG		(4 * 1024 * 1024)
+#define SNDBUF_SMALL		(128 * 1024)
+
 #include <linux/ipv6.h>
 #include <net/if.h>
 #include <linux/ip.h>
@@ -133,6 +137,7 @@ struct ctx;
 char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto);
 int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
 	    enum bind_type bind_addr, uint32_t data);
+void sock_probe_mem(struct ctx *c);
 int timespec_diff_ms(struct timespec *a, struct timespec *b);
 void bitmap_set(uint8_t *map, int bit);
 void bitmap_clear(uint8_t *map, int bit);

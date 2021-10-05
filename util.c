@@ -213,6 +213,34 @@ int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
 }
 
 /**
+ * sock_probe_mem() - Check if setting high SO_SNDBUF and SO_RCVBUF is allowed
+ * @c:		Execution context
+ */
+void sock_probe_mem(struct ctx *c)
+{
+	int v = INT_MAX / 2, s;
+	socklen_t sl;
+
+	if ((s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+		c->low_wmem = c->low_rmem = 1;
+		return;
+	}
+
+	sl = sizeof(v);
+	if (setsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v))	||
+	    getsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, &sl) || v < SNDBUF_BIG)
+		c->low_wmem = 1;
+
+	v = INT_MAX / 2;
+	if (setsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v))	||
+	    getsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, &sl) || v < RCVBUF_BIG)
+		c->low_rmem = 1;
+
+	close(s);
+}
+
+
+/**
  * timespec_diff_ms() - Report difference in milliseconds between two timestamps
  * @a:		Minuend timestamp
  * @b:		Subtrahend timestamp

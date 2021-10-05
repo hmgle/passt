@@ -374,6 +374,7 @@ int main(int argc, char **argv)
 		perror("setrlimit");
 		exit(EXIT_FAILURE);
 	}
+	sock_probe_mem(&c);
 
 	proto_update_l2_buf(c.mac_guest, c.mac, &c.addr4);
 

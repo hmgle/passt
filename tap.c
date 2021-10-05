@@ -773,7 +773,7 @@ static void tap_sock_init_unix(struct ctx *c)
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
 	};
-	int i, ret;
+	int i, ret, v = INT_MAX / 2;
 
 	if (c->fd_tap_listen)
 		close(c->fd_tap_listen);
@@ -833,6 +833,12 @@ static void tap_sock_init_unix(struct ctx *c)
 	     addr.sun_path);
 
 	c->fd_tap = accept(fd, NULL, NULL);
+
+	if (!c->low_rmem)
+		setsockopt(c->fd_tap, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v));
+
+	if (!c->low_wmem)
+		setsockopt(c->fd_tap, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v));
 }
 
 static int tun_ns_fd = -1;
