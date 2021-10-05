@@ -1641,7 +1641,7 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 	if (th->ack && now)
 		conn->ts_ack_to_tap = *now;
 
-	if (th->fin)
+	if (th->fin && now)
 		conn->tap_data_noack = *now;
 
 	/* RFC 793, 3.1: "[...] and the first data octet is ISN+1." */
