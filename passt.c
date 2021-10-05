@@ -101,29 +101,35 @@ static void sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 }
 
 /**
- * timer_handler() - Run periodic tasks for L4 protocol handlers
+ * post_handler() - Run periodic and deferred tasks for L4 protocol handlers
  * @c:		Execution context
  * @now:	Current timestamp
  */
-static void timer_handler(struct ctx *c, struct timespec *now)
+static void post_handler(struct ctx *c, struct timespec *now)
 {
-	if (!c->no_tcp &&
-	    timespec_diff_ms(now, &c->tcp.timer_run) >= TCP_TIMER_INTERVAL) {
-		tcp_timer(c, now);
-		c->tcp.timer_run = *now;
-	}
+#define CALL_PROTO_HANDLER(c, now, lc, uc)				\
+	do {								\
+		extern void						\
+		lc ## _defer_handler (struct ctx *c)			\
+		__attribute__ ((weak));					\
+									\
+		if (!c->no_ ## lc) {					\
+			if (lc ## _defer_handler)			\
+				lc ## _defer_handler(c);		\
+									\
+			if (timespec_diff_ms((now), &c->lc.timer_run)	\
+			    >= uc ## _TIMER_INTERVAL) {			\
+				lc ## _timer(c, now);			\
+				c->lc.timer_run = *now;			\
+			}						\
+		} 							\
+	} while (0)
 
-	if (!c->no_udp &&
-	    timespec_diff_ms(now, &c->udp.timer_run) >= UDP_TIMER_INTERVAL) {
-		udp_timer(c, now);
-		c->udp.timer_run = *now;
-	}
+	CALL_PROTO_HANDLER(c, now, tcp, TCP);
+	CALL_PROTO_HANDLER(c, now, udp, UDP);
+	CALL_PROTO_HANDLER(c, now, icmp, ICMP);
 
-	if (!c->no_icmp &&
-	    timespec_diff_ms(now, &c->icmp.timer_run) >= ICMP_TIMER_INTERVAL) {
-		icmp_timer(c, now);
-		c->icmp.timer_run = *now;
-	}
+#undef CALL_PROTO_HANDLER
 }
 
 /**
@@ -411,7 +417,7 @@ loop:
 			sock_handler(&c, ref, events[i].events, &now);
 	}
 
-	timer_handler(&c, &now);
+	post_handler(&c, &now);
 
 	goto loop;
 
