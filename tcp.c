@@ -1556,9 +1556,6 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 	    !flags && conn->wnd_to_tap)
 		return 0;
 
-	if (conn->snd_buf < SNDBUF_SMALL)
-		tcp_get_sndbuf(conn);
-
 	if (getsockopt(s, SOL_TCP, TCP_INFO, &info, &sl)) {
 		tcp_rst(c, conn);
 		return -ECONNRESET;
