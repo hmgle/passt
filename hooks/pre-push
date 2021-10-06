@@ -1,0 +1,64 @@
+#!/bin/sh -e
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# hooks/pre-push - Run CI. On success, run demos, build, and copy all contents
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+#
+# cp hooks/pre-push .git/hooks/pre-push
+
+USER_HOST="passt.top"
+BASE="/var/www/passt"
+
+BUILDS="${BASE}/builds"
+LATEST="${BUILDS}/latest"
+TEMP="${BUILDS}/temp"
+
+WEB="${LATEST}/web"
+TEST="${LATEST}/test"
+
+ARCH="$(uname -m)"
+BIN="${LATEST}/${ARCH}"
+
+ssh "${USER_HOST}" 				"mkdir -p ${WEB} ${TEST} ${BIN}"
+ssh "${USER_HOST}"				"cp -a ${LATEST} ${TEMP}"
+
+cd test
+
+./ci
+scp ci.webm perf.js ci.js ../doc/*.png		"${USER_HOST}:${WEB}/"
+scp test_logs/* 				"${USER_HOST}:${TEST}/"
+
+./run_demo
+scp demo_passt.webm demo_pasta.webm		"${USER_HOST}:${WEB}/"
+
+cd ..
+
+make static
+scp passt pasta qrap passt.1 pasta.1 qrap.1	"${USER_HOST}:${BIN}"
+
+make pkgs
+ssh "${USER_HOST}" 				"rm -f ${BIN}/*.deb"
+ssh "${USER_HOST}"				"rm -f ${BIN}/*.rpm"
+scp *.deb *.rpm					"${USER_HOST}:${BIN}/"
+
+CFLAGS="-static" make avx2
+ssh "${USER_HOST}"				"mkdir -p ${BIN}/avx2"
+scp passt pasta qrap passt.1 pasta.1 qrap.1	"${USER_HOST}:${BIN}/avx2/"
+
+make pkgs
+ssh "${USER_HOST}"				"rm -f ${BIN}/avx2/*.deb"
+ssh "${USER_HOST}"				"rm -f ${BIN}/avx2/*.rpm"
+scp *.deb *.rpm					"${USER_HOST}:${BIN}/avx2/"
+
+# Legacy, for KubeVirt tests
+CFLAGS="-DPASST_LEGACY_NO_OPTIONS -static" make avx2
+scp passt qrap					"${USER_HOST}:${BUILDS}/static/"
