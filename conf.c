@@ -914,7 +914,7 @@ void conf(struct ctx *c, int argc, char **argv)
 {
 	struct option options[] = {
 		{"debug",	no_argument,		NULL,		'd' },
-		{"quiet",	no_argument,		NULL,		1 },
+		{"quiet",	no_argument,		NULL,		'q' },
 		{"foreground",	no_argument,		NULL,		'f' },
 		{"stderr",	no_argument,		&c->stderr,	1 },
 		{"help",	no_argument,		NULL,		'h' },
