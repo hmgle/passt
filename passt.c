@@ -238,6 +238,7 @@ static void pasta_child_handler(int signal)
 	}
 
 	waitid(P_ALL, 0, NULL, WEXITED | WNOHANG);
+	waitid(P_ALL, 0, NULL, WEXITED | WNOHANG);
 }
 
 /**
