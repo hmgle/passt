@@ -17,15 +17,15 @@ replacement for Slirp.
     <area class="map_area" target="_blank" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/net/ipv4/ping.c" coords="397,164,517,197" shape="rect">
     <area class="map_area" target="_blank" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/net/ipv4/tcp.c" coords="398,203,516,237" shape="rect">
     <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/unix.7.html" coords="569,306,674,359" shape="rect">
-    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/udp.c" coords="719,152,740,176,792,134,768,108" shape="poly">
-    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/icmp.c" coords="727,206,827,120,854,150,754,238" shape="poly">
-    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/tcp.c" coords="730,273,774,326,947,176,902,119" shape="poly">
-    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/igmp.c" coords="865,273,912,295" shape="rect">
-    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/arp.c" coords="854,300,897,320" shape="rect">
-    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/ndp.c" coords="869,325,909,344" shape="rect">
-    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/mld.c" coords="924,267,964,289" shape="rect">
-    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/dhcpv6.c" coords="918,297,986,317" shape="rect">
-    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/dhcp.c" coords="931,328,981,352" shape="rect">
+    <area class="map_area" target="_blank" href="/passt/tree/udp.c" coords="719,152,740,176,792,134,768,108" shape="poly">
+    <area class="map_area" target="_blank" href="/passt/tree/icmp.c" coords="727,206,827,120,854,150,754,238" shape="poly">
+    <area class="map_area" target="_blank" href="/passt/tree/tcp.c" coords="730,273,774,326,947,176,902,119" shape="poly">
+    <area class="map_area" target="_blank" href="/passt/tree/igmp.c" coords="865,273,912,295" shape="rect">
+    <area class="map_area" target="_blank" href="/passt/tree/arp.c" coords="854,300,897,320" shape="rect">
+    <area class="map_area" target="_blank" href="/passt/tree/ndp.c" coords="869,325,909,344" shape="rect">
+    <area class="map_area" target="_blank" href="/passt/tree/mld.c" coords="924,267,964,289" shape="rect">
+    <area class="map_area" target="_blank" href="/passt/tree/dhcpv6.c" coords="918,297,986,317" shape="rect">
+    <area class="map_area" target="_blank" href="/passt/tree/dhcp.c" coords="931,328,981,352" shape="rect">
     <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/udp.7.html" coords="1073,115,1059,154,1120,176,1133,137" shape="poly">
     <area class="map_area" target="_blank" href="https://lwn.net/Articles/420799/" coords="966,113,942,152,1000,175,1017,136" shape="poly">
     <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/tcp.7.html" coords="1059,175,1039,213,1098,237,1116,197" shape="poly">
@@ -37,7 +37,7 @@ replacement for Slirp.
     <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man4/veth.4.html" coords="1044,471,1090,461,1126,462,1150,464,1176,479,1160,491,1121,500,1081,501,1044,491,1037,483" shape="poly">
     <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/network_namespaces.7.html" coords="240,379,524,452" shape="rect">
     <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/netlink.7.html" coords="1119,278,1117,293,1165,304,1169,288" shape="poly">
-    <area class="map_area" target="_blank" href="https://passt.top/passt/tree/conf.c" coords="989,294,1040,264,1089,280,986,344" shape="poly">
+    <area class="map_area" target="_blank" href="/passt/tree/conf.c" coords="989,294,1040,264,1089,280,986,344" shape="poly">
 </map>
 <canvas id="map_highlight" style="border: 0px; z-index: 10; position: fixed; pointer-events: none"></canvas>
 <script>
@@ -199,8 +199,8 @@ _passt_ exchanges packets with _qemu_ via UNIX domain socket, using the `socket`
 back-end in qemu. Currently, qemu can only connect to a listening process via
 TCP. Two temporary solutions are available:
 
-* a [patch](https://passt.top/passt/tree/qemu) for qemu
-* a wrapper, [qrap](https://passt.top/passt/tree/qrap.c), that connects to a
+* a [patch](/passt/tree/qemu) for qemu
+* a wrapper, [qrap](/passt/tree/qrap.c), that connects to a
   UNIX domain socket and starts qemu, which can now use the file descriptor
   that's already opened
 
@@ -214,15 +214,15 @@ _pasta_ runs out of the box with any recent (post-3.8) Linux kernel.
 _passt_ and _pasta_ provide some minimalistic implementations of networking
 services:
 
-* [ARP proxy](https://passt.top/passt/tree/arp.c), that resolves the address of
+* [ARP proxy](/passt/tree/arp.c), that resolves the address of
   the host (which is used as gateway) to the original MAC address of the host
-* [DHCP server](https://passt.top/passt/tree/dhcp.c), a simple implementation
+* [DHCP server](/passt/tree/dhcp.c), a simple implementation
   handing out one single IPv4 address to the guest or namespace, namely, the
   same address as the first one configured for the upstream host interface, and
   passing the nameservers configured on the host
-* [NDP proxy](https://passt.top/passt/tree/ndp.c), which can also assign prefix
+* [NDP proxy](/passt/tree/ndp.c), which can also assign prefix
   and nameserver using SLAAC
-* [DHCPv6 server](https://passt.top/passt/tree/dhcpv6.c): a simple
+* [DHCPv6 server](/passt/tree/dhcpv6.c): a simple
   implementation handing out one single IPv6 address to the guest or namespace,
   namely, the the same address as the first one configured for the upstream host
   interface, and passing the nameservers configured on the host
@@ -261,8 +261,8 @@ destination address translated to the loopback address.
 
 _passt_ and _pasta_ support TCP, UDP and ICMP/ICMPv6 echo (requests and
 replies). More details about the TCP implementation are available
-[here](https://passt.top/passt/tree/tcp.c), and for the UDP
-implementation [here](https://passt.top/passt/tree/udp.c).
+[here](/passt/tree/tcp.c), and for the UDP
+implementation [here](/passt/tree/udp.c).
 
 An IGMP/MLD proxy is currently work in progress.
 
@@ -309,7 +309,7 @@ is fully configurable with command line options.
 
 <script src="/builds/latest/web/ci.js"></script>
 
-Test logs [here](https://passt.top/builds/latest/test/).
+Test logs [here](/builds/latest/test/).
 
 ## Performance
 
@@ -327,8 +327,8 @@ Test logs [here](https://passt.top/builds/latest/test/).
 
   * alternatively, static builds for x86_64, with or without AVX2 instructions,
     as of the latest commit are also available for convenience
-    [here](https://passt.top/builds/latest/x86_64/avx2/) and
-    [here](https://passt.top/builds/latest/x86_64/). Convenience, non-official
+    [here](/builds/latest/x86_64/avx2/) and
+    [here](/builds/latest/x86_64/). Convenience, non-official
     packages for Debian (and derivatives) and RPM-based distributions are also
     available there. These binaries and packages are simply built with:
 
@@ -355,12 +355,12 @@ Test logs [here](https://passt.top/builds/latest/test/).
 
             ip netns exec passt ./qrap 5 qemu-system-x86_64 ... -net socket,fd=5 -net nic,model=virtio ...
 
-  * or patch qemu with [this patch](https://passt.top/passt/tree/qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch)
+  * or patch qemu with [this patch](/passt/tree/qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch)
     and start it like this:
 
             qemu-system-x86_64 ... -net socket,connect=/tmp/passt.socket -net nic,model=virtio
 
-* alternatively, you can use libvirt, with [this patch](https://passt.top/passt/tree/libvirt/0001-conf-Introduce-support-for-UNIX-domain-socket-as-qem.patch),
+* alternatively, you can use libvirt, with [this patch](/passt/tree/libvirt/0001-conf-Introduce-support-for-UNIX-domain-socket-as-qem.patch),
   to start qemu (with the patch mentioned above), with this kind of network
   interface configuration:
 
@@ -390,8 +390,8 @@ Test logs [here](https://passt.top/builds/latest/test/).
 
   * alternatively, static builds for x86_64, with or without AVX2 instructions,
     as of the latest commit are also available for convenience
-    [here](https://passt.top/builds/latest/x86_64/avx2/) and
-    [here](https://passt.top/builds/latest/x86_64/). Convenience, non-official
+    [here](/builds/latest/x86_64/avx2/) and
+    [here](/builds/latest/x86_64/). Convenience, non-official
     packages for Debian (and derivatives) and RPM-based distributions are also
     available there. These binaries and packages are simply built with:
 
