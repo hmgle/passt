@@ -574,8 +574,8 @@ static void get_dns(struct ctx *c)
 	char buf[BUFSIZ], *p, *end;
 	FILE *r;
 
-	dns4_set = !!*dns4;
-	dns6_set = !IN6_IS_ADDR_UNSPECIFIED(dns6);
+	dns4_set = !c->v4  || !!*dns4;
+	dns6_set = !c->v6  || !IN6_IS_ADDR_UNSPECIFIED(dns6);
 	dnss_set = !!*s->n || c->no_dns_search;
 	dns_set = dns4_set || dns6_set || c->no_dns;
 
@@ -596,13 +596,15 @@ static void get_dns(struct ctx *c)
 			if (end)
 				*end = 0;
 
-			if (dns4 - &c->dns4[0] < ARRAY_SIZE(c->dns4) - 1 &&
+			if (!dns4_set &&
+			    dns4 - &c->dns4[0] < ARRAY_SIZE(c->dns4) - 1 &&
 			    inet_pton(AF_INET, p + 1, dns4)) {
 				dns4++;
 				*dns4 = 0;
 			}
 
-			if (dns6 - &c->dns6[0] < ARRAY_SIZE(c->dns6) - 1 &&
+			if (!dns6_set &&
+			    dns6 - &c->dns6[0] < ARRAY_SIZE(c->dns6) - 1 &&
 			    inet_pton(AF_INET6, p + 1, dns6)) {
 				dns6++;
 				memset(dns6, 0, sizeof(*dns6));
