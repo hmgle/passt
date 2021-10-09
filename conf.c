@@ -267,14 +267,27 @@ overlap:
 }
 
 /**
- * struct nl_request - Netlink request filled and sent by get_routes()
- * @nlh:	Netlink message header
- * @rtm:	Routing Netlink message
+ * nl_req() - Send netlink request and read response, doesn't return on failure
+ * @buf:	Buffer for response (BUFSIZ long)
+ * @req:	Request with netlink header
+ * @len:	Request length
  */
-struct nl_request {
-	struct nlmsghdr nlh;
-	struct rtmsg rtm;
-};
+static void nl_req(char *buf, void *req, ssize_t len)
+{
+	int s = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE), v = 1;
+	struct sockaddr_nl addr = { .nl_family = AF_NETLINK, };
+
+	if (s < 0							      ||
+	    setsockopt(s, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &v, sizeof(v)) ||
+	    bind(s, (struct sockaddr *)&addr, sizeof(addr)) 		      ||
+	    (send(s, req, len, 0) < len)				      ||
+	    (recv(s, buf, BUFSIZ, 0) < 0)) {
+		perror("netlink recv");
+		exit(EXIT_FAILURE);
+	}
+
+	close(s);
+}
 
 /**
  * get_routes() - Get default route and fill in routable interface name
@@ -282,57 +295,33 @@ struct nl_request {
  */
 static void get_routes(struct ctx *c)
 {
-	struct nl_request req = {
-		.nlh.nlmsg_type = RTM_GETROUTE,
+	struct { struct nlmsghdr nlh; struct rtmsg rtm; } req = {
+		.nlh.nlmsg_type	 = RTM_GETROUTE,
 		.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP | NLM_F_EXCL,
-		.nlh.nlmsg_len = sizeof(struct nl_request),
-		.nlh.nlmsg_seq = 1,
-		.rtm.rtm_family = AF_INET,
-		.rtm.rtm_table = RT_TABLE_MAIN,
-		.rtm.rtm_scope = RT_SCOPE_UNIVERSE,
-		.rtm.rtm_type = RTN_UNICAST,
+		.nlh.nlmsg_len	 = NLMSG_LENGTH(sizeof(struct rtmsg)),
+		.nlh.nlmsg_seq	 = 1,
+		.rtm.rtm_family	 = AF_INET,
+		.rtm.rtm_table	 = RT_TABLE_MAIN,
+		.rtm.rtm_scope	 = RT_SCOPE_UNIVERSE,
+		.rtm.rtm_type	 = RTN_UNICAST,
 	};
-	struct sockaddr_nl addr = {
-		.nl_family = AF_NETLINK,
-	};
-	struct nlmsghdr *nlh;
-	int s, n, na, v4, v6;
-	char ifn[IFNAMSIZ];
+	char ifn[IFNAMSIZ], buf[BUFSIZ];
+	struct nlmsghdr *nh;
 	struct rtattr *rta;
 	struct rtmsg *rtm;
-	char buf[BUFSIZ];
+	int n, na, v4, v6;
 
 	if (!c->v4 && !c->v6)
 		v4 = v6 = -1;
 	else
 		v6 = -!(v4 = -c->v4);
 
-	s = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
-	if (s < 0) {
-		perror("netlink socket");
-		goto out;
-	}
-
-	if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		perror("netlink bind");
-		goto out;
-	}
-
 v6:
-	if (send(s, &req, sizeof(req), 0) < 0) {
-		perror("netlink send");
-		goto out;
-	}
+	nl_req(buf, &req, sizeof(req));
+	nh = (struct nlmsghdr *)buf;
 
-	n = recv(s, &buf, sizeof(buf), 0);
-	if (n < 0) {
-		perror("netlink recv");
-		goto out;
-	}
-
-	nlh = (struct nlmsghdr *)buf;
-	for ( ; NLMSG_OK(nlh, n); nlh = NLMSG_NEXT(nlh, n)) {
-		rtm = (struct rtmsg *)NLMSG_DATA(nlh);
+	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
+		rtm = (struct rtmsg *)NLMSG_DATA(nh);
 
 		if (rtm->rtm_dst_len ||
 		    (rtm->rtm_family != AF_INET && rtm->rtm_family != AF_INET6))
@@ -342,7 +331,7 @@ v6:
 		if (*c->ifn) {
 			*ifn = 0;
 			for (rta = (struct rtattr *)RTM_RTA(rtm),
-			     na = RTM_PAYLOAD(nlh);
+			     na = RTM_PAYLOAD(nh);
 			     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
 				if (rta->rta_type != RTA_OIF)
 					continue;
@@ -355,7 +344,7 @@ v6:
 				goto next;
 		}
 
-		for (rta = (struct rtattr *)RTM_RTA(rtm), na = RTM_PAYLOAD(nlh);
+		for (rta = (struct rtattr *)RTM_RTA(rtm), na = RTM_PAYLOAD(nh);
 		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
 			if (!*c->ifn && rta->rta_type == RTA_OIF)
 				if_indextoname(*(unsigned *)RTA_DATA(rta), ifn);
@@ -380,22 +369,17 @@ v6:
 		}
 
 next:
-		if (nlh->nlmsg_type == NLMSG_DONE)
+		if (nh->nlmsg_type == NLMSG_DONE)
 			break;
 	}
 
-	if (v6 == -1) {
+	if (v6 < 0 && req.rtm.rtm_family == AF_INET) {
 		req.rtm.rtm_family = AF_INET6;
 		req.nlh.nlmsg_seq++;
-		recv(s, &buf, sizeof(buf), 0);
-		v6--;
 		goto v6;
 	} else if (v6 < 0) {
 		v6 = 0;
 	}
-
-out:
-	close(s);
 
 	if ((v4 <= 0 && v6 <= 0) || (!*c->ifn && !*ifn)) {
 		err("No routing information");
@@ -409,80 +393,98 @@ out:
 }
 
 /**
- * get_addrs() - Fetch MAC, IP addresses, masks of external routable interface
+ * get_l3_addrs() - Fetch IP addresses of external routable interface
  * @c:		Execution context
  */
-static void get_addrs(struct ctx *c)
+static void get_l3_addrs(struct ctx *c)
 {
-	struct ifreq ifr = {
-		.ifr_addr.sa_family = AF_INET,
+	struct { struct nlmsghdr nlh; struct ifaddrmsg ifa; } req = {
+		.nlh.nlmsg_type	 = RTM_GETADDR,
+		.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP,
+		.nlh.nlmsg_len	 = NLMSG_LENGTH(sizeof(struct ifaddrmsg)),
+		.nlh.nlmsg_seq	 = 1,
+		.ifa.ifa_family	 = AF_INET,
+		.ifa.ifa_index	 = if_nametoindex(c->ifn),
 	};
-	struct ifaddrs *ifaddr, *ifa;
-	int s, v4 = 0, v6 = 0;
+	struct ifaddrmsg *ifa;
+	struct nlmsghdr *nh;
+	struct rtattr *rta;
+	int n, na, v4, v6;
+	char buf[BUFSIZ];
 
-	if (getifaddrs(&ifaddr) == -1) {
-		perror("getifaddrs");
-		goto out;
-	}
-
-	if (c->addr4) {
-		c->addr4_seen = c->addr4;
-		v4 = 1;
-	}
-
-	if (!IN6_IS_ADDR_UNSPECIFIED(&c->addr6)) {
-		memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr6));
-		memcpy(&c->addr6_ll_seen, &c->addr6, sizeof(c->addr6));
-		v6 = 1;
-	}
-
-	/* Fill in any missing information */
-	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-		struct sockaddr_in *in_addr;
-		struct sockaddr_in *in_mask;
-		struct sockaddr_in6 *in6_addr;
-
-		if (strcmp(ifa->ifa_name, c->ifn))
-			continue;
-
-		if (!ifa->ifa_addr)
-			continue;
-
-		in_addr = (struct sockaddr_in *)ifa->ifa_addr;
-		if (ifa->ifa_addr->sa_family == AF_INET && !c->addr4) {
-			c->addr4_seen = c->addr4 = in_addr->sin_addr.s_addr;
+	if (c->v4) {
+		v4 = -1;
+		if ((c->addr4_seen = c->addr4))
 			v4 = 1;
-		}
+	}
 
-		if (ifa->ifa_addr->sa_family == AF_INET && !c->mask4 &&
-		    in_addr->sin_addr.s_addr == c->addr4) {
-			in_mask = (struct sockaddr_in *)ifa->ifa_netmask;
-			c->mask4 = in_mask->sin_addr.s_addr;
+	if (c->v6) {
+		v6 = -2;
+		if (!IN6_IS_ADDR_UNSPECIFIED(&c->addr6)) {
+			memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr6));
+			memcpy(&c->addr6_ll_seen, &c->addr6, sizeof(c->addr6));
+			v6 = -1;
 		}
+	}
 
-		if (ifa->ifa_addr->sa_family == AF_INET6) {
-			in6_addr = (struct sockaddr_in6 *)ifa->ifa_addr;
-			if (IN6_IS_ADDR_LINKLOCAL(&in6_addr->sin6_addr) &&
-			    IN6_IS_ADDR_UNSPECIFIED(&c->addr6_ll)) {
-				memcpy(&c->addr6_ll, &in6_addr->sin6_addr,
-				       sizeof(c->addr6_ll));
-			} else if (IN6_IS_ADDR_UNSPECIFIED(&c->addr6)) {
-				memcpy(&c->addr6, &in6_addr->sin6_addr,
-				       sizeof(c->addr6));
-				memcpy(&c->addr6_seen, &in6_addr->sin6_addr,
-				       sizeof(c->addr6_seen));
-				memcpy(&c->addr6_ll_seen, &in6_addr->sin6_addr,
-				       sizeof(c->addr6_seen));
-				v6 = 1;
+next_v:
+	if (v4 < 0)
+		req.ifa.ifa_family = AF_INET;
+	else if (v6 < 0)
+		req.ifa.ifa_family = AF_INET6;
+	else
+		goto mask_only;
+
+	nl_req(buf, &req, sizeof(req));
+	nh = (struct nlmsghdr *)buf;
+
+	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
+		if (nh->nlmsg_type != RTM_NEWADDR)
+			goto next;
+
+		ifa = (struct ifaddrmsg *)NLMSG_DATA(nh);
+
+		for (rta = (struct rtattr *)IFA_RTA(ifa), na = RTM_PAYLOAD(nh);
+		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
+			if (rta->rta_type != IFA_ADDRESS)
+				continue;
+
+			if (v4 < 0) {
+				memcpy(&c->addr4, RTA_DATA(rta),
+				       sizeof(c->addr4));
+				memcpy(&c->addr4_seen, RTA_DATA(rta),
+				       sizeof(c->addr4_seen));
+				v4 = 1;
+			} else if (v6 < 0) {
+				if (v6 == -2 &&
+				    ifa->ifa_scope == RT_SCOPE_UNIVERSE) {
+					memcpy(&c->addr6, RTA_DATA(rta),
+					       sizeof(c->addr6));
+					memcpy(&c->addr6_seen, RTA_DATA(rta),
+					       sizeof(c->addr6_seen));
+					memcpy(&c->addr6_ll_seen, RTA_DATA(rta),
+					       sizeof(c->addr6_ll_seen));
+				} else if (ifa->ifa_scope == RT_SCOPE_LINK) {
+					memcpy(&c->addr6_ll, RTA_DATA(rta),
+					       sizeof(c->addr6_ll));
+				}
+				if (!IN6_IS_ADDR_UNSPECIFIED(&c->addr6) &&
+				    !IN6_IS_ADDR_UNSPECIFIED(&c->addr6_ll))
+					v6 = 1;
 			}
 		}
+next:
+		if (nh->nlmsg_type == NLMSG_DONE)
+			break;
 	}
 
-	freeifaddrs(ifaddr);
+	if (v4 >= 0 && v6 < 0)
+		goto next_v;
 
 	if (v4 < c->v4 || v6 < c->v6)
 		goto out;
 
+mask_only:
 	if (v4 && !c->mask4) {
 		if (IN_CLASSA(ntohl(c->addr4)))
 			c->mask4 = htonl(IN_CLASSA_NET);
@@ -494,28 +496,68 @@ static void get_addrs(struct ctx *c)
 			c->mask4 = 0xffffffff;
 	}
 
-	if (!memcmp(c->mac, ((uint8_t [ETH_ALEN]){ 0 }), ETH_ALEN)) {
-		s = socket(AF_INET, SOCK_DGRAM, 0);
-		if (s < 0) {
-			perror("socket SIOCGIFHWADDR");
-			goto out;
-		}
-
-		strncpy(ifr.ifr_name, c->ifn, IF_NAMESIZE);
-		if (ioctl(s, SIOCGIFHWADDR, &ifr) < 0) {
-			perror("SIOCGIFHWADDR");
-			goto out;
-		}
-
-		close(s);
-		memcpy(c->mac, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
-	}
-
-	memset(&c->mac_guest, 0xff, sizeof(c->mac_guest));
-
 	return;
 out:
 	err("Couldn't get addresses for routable interface");
+	exit(EXIT_FAILURE);
+}
+
+/**
+ * get_l2_addr() - Fetch hardware addresses of external routable interface
+ * @c:		Execution context
+ */
+static void get_l2_addr(struct ctx *c)
+{
+	struct { struct nlmsghdr nlh; struct ifinfomsg ifi; } req = {
+		.nlh.nlmsg_type	 = RTM_GETLINK,
+		.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP_FILTERED,
+		.nlh.nlmsg_len	 = NLMSG_LENGTH(sizeof(struct ifinfomsg)),
+		.nlh.nlmsg_seq	 = 1,
+		.ifi.ifi_family	 = AF_UNSPEC,
+		.ifi.ifi_index	 = if_nametoindex(c->ifn),
+	};
+	struct ifinfomsg *ifi;
+	struct nlmsghdr *nh;
+	struct rtattr *rta;
+	char buf[BUFSIZ];
+	int n, na;
+
+	if (memcmp(c->mac, ((uint8_t [ETH_ALEN]){ 0 }), ETH_ALEN))
+		goto mac_guest;
+
+	nl_req(buf, &req, sizeof(req));
+	nh = (struct nlmsghdr *)buf;
+
+	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
+		if (nh->nlmsg_type != RTM_NEWLINK)
+			goto next;
+
+		ifi = (struct ifinfomsg *)NLMSG_DATA(nh);
+
+		for (rta = (struct rtattr *)IFLA_RTA(ifi), na = RTM_PAYLOAD(nh);
+		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
+			if (rta->rta_type != IFLA_ADDRESS)
+				continue;
+
+			memcpy(c->mac, RTA_DATA(rta), ETH_ALEN);
+			break;
+		}
+next:
+		if (nh->nlmsg_type == NLMSG_DONE)
+			break;
+	}
+
+	if (!memcmp(c->mac, ((uint8_t [ETH_ALEN]){ 0 }), ETH_ALEN))
+		goto out;
+
+mac_guest:
+	if (memcmp(c->mac_guest, ((uint8_t [ETH_ALEN]){ 0 }), ETH_ALEN))
+		memset(&c->mac_guest, 0xff, sizeof(c->mac_guest));
+
+	return;
+
+out:
+	err("Couldn't get hardware address for routable interface");
 	exit(EXIT_FAILURE);
 }
 
@@ -888,6 +930,8 @@ void conf_print(struct ctx *c)
 		     inet_ntop(AF_INET6, &c->addr6, buf6, sizeof(buf6)));
 		info("    router: %s",
 		     inet_ntop(AF_INET6, &c->gw6,   buf6, sizeof(buf6)));
+		info("    our link-local: %s",
+		     inet_ntop(AF_INET6, &c->addr6_ll, buf6, sizeof(buf6)));
 
 		for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[i]); i++) {
 			if (!i)
@@ -1290,7 +1334,9 @@ void conf(struct ctx *c, int argc, char **argv)
 	}
 
 	get_routes(c);
-	get_addrs(c);
+	get_l3_addrs(c);
+	if (c->v4)
+		get_l2_addr(c);
 
 	if (c->mode == MODE_PASTA && dns4 == c->dns4 && dns6 == c->dns6)
 		c->no_dns = 1;

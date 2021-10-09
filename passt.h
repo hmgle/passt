@@ -98,7 +98,7 @@ enum passt_modes {
  * @fd_tap_listen:	File descriptor for listening AF_UNIX socket, if any
  * @fd_tap:		File descriptor for AF_UNIX socket or tuntap device
  * @mac:		Host MAC address
- * @mac_guest:		Guest MAC address
+ * @mac_guest:		MAC address of guest or namespace, seen or configured
  * @v4:			Enable IPv4 transport
  * @addr4:		IPv4 address for external, routable interface
  * @addr4_seen:		Latest IPv4 address seen as source from tap
