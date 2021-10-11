@@ -1852,7 +1852,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 		struct sockaddr_in6 addr6_ll = {
 			.sin6_family = AF_INET6,
 			.sin6_addr = c->addr6_ll,
-			.sin6_scope_id = if_nametoindex(c->ifn),
+			.sin6_scope_id = c->ifi,
 		};
 		bind(s, (struct sockaddr *)&addr6_ll, sizeof(addr6_ll));
 	}

@@ -17,7 +17,6 @@
 #include <getopt.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -38,6 +37,8 @@
 #include "passt.h"
 #include "udp.h"
 #include "tcp.h"
+#include "netlink.h"
+#include "pasta.h"
 
 /**
  * get_bound_ports() - Get maps of ports with bound sockets
@@ -267,301 +268,6 @@ overlap:
 }
 
 /**
- * nl_req() - Send netlink request and read response, doesn't return on failure
- * @buf:	Buffer for response (BUFSIZ long)
- * @req:	Request with netlink header
- * @len:	Request length
- */
-static void nl_req(char *buf, void *req, ssize_t len)
-{
-	int s = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE), v = 1;
-	struct sockaddr_nl addr = { .nl_family = AF_NETLINK, };
-
-	if (s < 0							      ||
-	    setsockopt(s, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &v, sizeof(v)) ||
-	    bind(s, (struct sockaddr *)&addr, sizeof(addr)) 		      ||
-	    (send(s, req, len, 0) < len)				      ||
-	    (recv(s, buf, BUFSIZ, 0) < 0)) {
-		perror("netlink recv");
-		exit(EXIT_FAILURE);
-	}
-
-	close(s);
-}
-
-/**
- * get_routes() - Get default route and fill in routable interface name
- * @c:		Execution context
- */
-static void get_routes(struct ctx *c)
-{
-	struct { struct nlmsghdr nlh; struct rtmsg rtm; } req = {
-		.nlh.nlmsg_type	 = RTM_GETROUTE,
-		.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP | NLM_F_EXCL,
-		.nlh.nlmsg_len	 = NLMSG_LENGTH(sizeof(struct rtmsg)),
-		.nlh.nlmsg_seq	 = 1,
-		.rtm.rtm_family	 = AF_INET,
-		.rtm.rtm_table	 = RT_TABLE_MAIN,
-		.rtm.rtm_scope	 = RT_SCOPE_UNIVERSE,
-		.rtm.rtm_type	 = RTN_UNICAST,
-	};
-	char ifn[IFNAMSIZ], buf[BUFSIZ];
-	struct nlmsghdr *nh;
-	struct rtattr *rta;
-	struct rtmsg *rtm;
-	int n, na, v4, v6;
-
-	if (!c->v4 && !c->v6)
-		v4 = v6 = -1;
-	else
-		v6 = -!(v4 = -c->v4);
-
-v6:
-	nl_req(buf, &req, sizeof(req));
-	nh = (struct nlmsghdr *)buf;
-
-	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
-		rtm = (struct rtmsg *)NLMSG_DATA(nh);
-
-		if (rtm->rtm_dst_len ||
-		    (rtm->rtm_family != AF_INET && rtm->rtm_family != AF_INET6))
-			continue;
-
-		/* Filter on interface only if already given */
-		if (*c->ifn) {
-			*ifn = 0;
-			for (rta = (struct rtattr *)RTM_RTA(rtm),
-			     na = RTM_PAYLOAD(nh);
-			     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
-				if (rta->rta_type != RTA_OIF)
-					continue;
-
-				if_indextoname(*(unsigned *)RTA_DATA(rta), ifn);
-				break;
-			}
-
-			if (strcmp(ifn, c->ifn))
-				goto next;
-		}
-
-		for (rta = (struct rtattr *)RTM_RTA(rtm), na = RTM_PAYLOAD(nh);
-		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
-			if (!*c->ifn && rta->rta_type == RTA_OIF)
-				if_indextoname(*(unsigned *)RTA_DATA(rta), ifn);
-
-			if (v4 && rta->rta_type == RTA_GATEWAY &&
-			    rtm->rtm_family == AF_INET) {
-				if (!c->gw4) {
-					memcpy(&c->gw4, RTA_DATA(rta),
-					       sizeof(c->gw4));
-				}
-				v4 = 1;
-			}
-
-			if (v6 && rta->rta_type == RTA_GATEWAY &&
-			    rtm->rtm_family == AF_INET6) {
-				if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6)) {
-					memcpy(&c->gw6, RTA_DATA(rta),
-					       sizeof(c->gw6));
-				}
-				v6 = 1;
-			}
-		}
-
-next:
-		if (nh->nlmsg_type == NLMSG_DONE)
-			break;
-	}
-
-	if (v6 < 0 && req.rtm.rtm_family == AF_INET) {
-		req.rtm.rtm_family = AF_INET6;
-		req.nlh.nlmsg_seq++;
-		goto v6;
-	} else if (v6 < 0) {
-		v6 = 0;
-	}
-
-	if ((v4 <= 0 && v6 <= 0) || (!*c->ifn && !*ifn)) {
-		err("No routing information");
-		exit(EXIT_FAILURE);
-	}
-
-	if (!*c->ifn)
-		strncpy(c->ifn, ifn, IFNAMSIZ);
-	c->v4 = v4;
-	c->v6 = v6;
-}
-
-/**
- * get_l3_addrs() - Fetch IP addresses of external routable interface
- * @c:		Execution context
- */
-static void get_l3_addrs(struct ctx *c)
-{
-	struct { struct nlmsghdr nlh; struct ifaddrmsg ifa; } req = {
-		.nlh.nlmsg_type	 = RTM_GETADDR,
-		.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP,
-		.nlh.nlmsg_len	 = NLMSG_LENGTH(sizeof(struct ifaddrmsg)),
-		.nlh.nlmsg_seq	 = 1,
-		.ifa.ifa_family	 = AF_INET,
-		.ifa.ifa_index	 = if_nametoindex(c->ifn),
-	};
-	struct ifaddrmsg *ifa;
-	struct nlmsghdr *nh;
-	struct rtattr *rta;
-	int n, na, v4, v6;
-	char buf[BUFSIZ];
-
-	if (c->v4) {
-		v4 = -1;
-		if ((c->addr4_seen = c->addr4))
-			v4 = 1;
-	}
-
-	if (c->v6) {
-		v6 = -2;
-		if (!IN6_IS_ADDR_UNSPECIFIED(&c->addr6)) {
-			memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr6));
-			memcpy(&c->addr6_ll_seen, &c->addr6, sizeof(c->addr6));
-			v6 = -1;
-		}
-	}
-
-next_v:
-	if (v4 < 0)
-		req.ifa.ifa_family = AF_INET;
-	else if (v6 < 0)
-		req.ifa.ifa_family = AF_INET6;
-	else
-		goto mask_only;
-
-	nl_req(buf, &req, sizeof(req));
-	nh = (struct nlmsghdr *)buf;
-
-	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
-		if (nh->nlmsg_type != RTM_NEWADDR)
-			goto next;
-
-		ifa = (struct ifaddrmsg *)NLMSG_DATA(nh);
-
-		for (rta = (struct rtattr *)IFA_RTA(ifa), na = RTM_PAYLOAD(nh);
-		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
-			if (rta->rta_type != IFA_ADDRESS)
-				continue;
-
-			if (v4 < 0) {
-				memcpy(&c->addr4, RTA_DATA(rta),
-				       sizeof(c->addr4));
-				memcpy(&c->addr4_seen, RTA_DATA(rta),
-				       sizeof(c->addr4_seen));
-				v4 = 1;
-			} else if (v6 < 0) {
-				if (v6 == -2 &&
-				    ifa->ifa_scope == RT_SCOPE_UNIVERSE) {
-					memcpy(&c->addr6, RTA_DATA(rta),
-					       sizeof(c->addr6));
-					memcpy(&c->addr6_seen, RTA_DATA(rta),
-					       sizeof(c->addr6_seen));
-					memcpy(&c->addr6_ll_seen, RTA_DATA(rta),
-					       sizeof(c->addr6_ll_seen));
-				} else if (ifa->ifa_scope == RT_SCOPE_LINK) {
-					memcpy(&c->addr6_ll, RTA_DATA(rta),
-					       sizeof(c->addr6_ll));
-				}
-				if (!IN6_IS_ADDR_UNSPECIFIED(&c->addr6) &&
-				    !IN6_IS_ADDR_UNSPECIFIED(&c->addr6_ll))
-					v6 = 1;
-			}
-		}
-next:
-		if (nh->nlmsg_type == NLMSG_DONE)
-			break;
-	}
-
-	if (v4 >= 0 && v6 < 0)
-		goto next_v;
-
-	if (v4 < c->v4 || v6 < c->v6)
-		goto out;
-
-mask_only:
-	if (v4 && !c->mask4) {
-		if (IN_CLASSA(ntohl(c->addr4)))
-			c->mask4 = htonl(IN_CLASSA_NET);
-		else if (IN_CLASSB(ntohl(c->addr4)))
-			c->mask4 = htonl(IN_CLASSB_NET);
-		else if (IN_CLASSC(ntohl(c->addr4)))
-			c->mask4 = htonl(IN_CLASSC_NET);
-		else
-			c->mask4 = 0xffffffff;
-	}
-
-	return;
-out:
-	err("Couldn't get addresses for routable interface");
-	exit(EXIT_FAILURE);
-}
-
-/**
- * get_l2_addr() - Fetch hardware addresses of external routable interface
- * @c:		Execution context
- */
-static void get_l2_addr(struct ctx *c)
-{
-	struct { struct nlmsghdr nlh; struct ifinfomsg ifi; } req = {
-		.nlh.nlmsg_type	 = RTM_GETLINK,
-		.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP_FILTERED,
-		.nlh.nlmsg_len	 = NLMSG_LENGTH(sizeof(struct ifinfomsg)),
-		.nlh.nlmsg_seq	 = 1,
-		.ifi.ifi_family	 = AF_UNSPEC,
-		.ifi.ifi_index	 = if_nametoindex(c->ifn),
-	};
-	struct ifinfomsg *ifi;
-	struct nlmsghdr *nh;
-	struct rtattr *rta;
-	char buf[BUFSIZ];
-	int n, na;
-
-	if (memcmp(c->mac, ((uint8_t [ETH_ALEN]){ 0 }), ETH_ALEN))
-		goto mac_guest;
-
-	nl_req(buf, &req, sizeof(req));
-	nh = (struct nlmsghdr *)buf;
-
-	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
-		if (nh->nlmsg_type != RTM_NEWLINK)
-			goto next;
-
-		ifi = (struct ifinfomsg *)NLMSG_DATA(nh);
-
-		for (rta = (struct rtattr *)IFLA_RTA(ifi), na = RTM_PAYLOAD(nh);
-		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
-			if (rta->rta_type != IFLA_ADDRESS)
-				continue;
-
-			memcpy(c->mac, RTA_DATA(rta), ETH_ALEN);
-			break;
-		}
-next:
-		if (nh->nlmsg_type == NLMSG_DONE)
-			break;
-	}
-
-	if (!memcmp(c->mac, ((uint8_t [ETH_ALEN]){ 0 }), ETH_ALEN))
-		goto out;
-
-mac_guest:
-	if (memcmp(c->mac_guest, ((uint8_t [ETH_ALEN]){ 0 }), ETH_ALEN))
-		memset(&c->mac_guest, 0xff, sizeof(c->mac_guest));
-
-	return;
-
-out:
-	err("Couldn't get hardware address for routable interface");
-	exit(EXIT_FAILURE);
-}
-
-/**
  * get_dns() - Get nameserver addresses from local /etc/resolv.conf
  * @c:		Execution context
  */
@@ -731,6 +437,91 @@ static int conf_ns_opt(struct ctx *c,
 }
 
 /**
+ * conf_ip() - Verify or detect IPv4/IPv6 support, get relevant addresses
+ * @c:		Execution context
+ */
+static void conf_ip(struct ctx *c)
+{
+	int v4, v6;
+
+	if (c->v4) {
+		c->v4		= IP_VERSION_ENABLED;
+		v4		= IP_VERSION_PROBE;
+		v6 = c->v6	= IP_VERSION_DISABLED;
+	} else if (c->v6) {
+		c->v6		= IP_VERSION_ENABLED;
+		v6		= IP_VERSION_PROBE;
+		v4 = c->v4	= IP_VERSION_DISABLED;
+	} else {
+		c->v4 = c->v6	= IP_VERSION_ENABLED;
+		v4 = v6		= IP_VERSION_PROBE;
+	}
+
+	if (!c->ifi)
+		c->ifi = nl_get_ext_if(&v4, &v6);
+
+	if (v4 != IP_VERSION_DISABLED) {
+		if (!c->gw4)
+			nl_route(0, c->ifi, AF_INET, &c->gw4);
+
+		if (!c->addr4) {
+			nl_addr(0, c->ifi, AF_INET, &c->addr4, 0, NULL);
+			if (!c->mask4) {
+				if (IN_CLASSA(ntohl(c->addr4)))
+					c->mask4 = htonl(IN_CLASSA_NET);
+				else if (IN_CLASSB(ntohl(c->addr4)))
+					c->mask4 = htonl(IN_CLASSB_NET);
+				else if (IN_CLASSC(ntohl(c->addr4)))
+					c->mask4 = htonl(IN_CLASSC_NET);
+				else
+					c->mask4 = 0xffffffff;
+			}
+		}
+
+		memcpy(&c->addr4_seen, &c->addr4, sizeof(c->addr4_seen));
+
+		if (!memcmp(c->mac, MAC_ZERO, ETH_ALEN))
+			nl_link(0, c->ifi, c->mac, 0);
+	}
+
+	if (c->mode == MODE_PASST)
+		memset(&c->mac_guest, 0xff, sizeof(c->mac_guest));
+
+	if (v6 != IP_VERSION_DISABLED) {
+		if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6))
+			nl_route(0, c->ifi, AF_INET6, &c->gw6);
+
+		nl_addr(0, c->ifi, AF_INET6,
+			IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ? &c->addr6 : NULL,
+			0, &c->addr6_ll);
+
+		memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr4_seen));
+		memcpy(&c->addr6_ll_seen, &c->addr6, sizeof(c->addr4_seen));
+	}
+
+	if (!c->gw4 || !c->addr4 ||
+	    !memcmp(c->mac, ((uint8_t [ETH_ALEN]){ 0 }), ETH_ALEN))
+		v4 = IP_VERSION_DISABLED;
+	else
+		v4 = IP_VERSION_ENABLED;
+
+	if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6) ||
+	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ||
+	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6_ll))
+		v6 = IP_VERSION_DISABLED;
+	else
+		v6 = IP_VERSION_ENABLED;
+
+	if ((v4 == IP_VERSION_DISABLED) && (v6 == IP_VERSION_DISABLED)) {
+		err("External interface not usable");
+		exit(EXIT_FAILURE);
+	}
+
+	c->v4 = v4;
+	c->v6 = v6;
+}
+
+/**
  * usage() - Print usage and exit
  * @name:	Executable name
  */
@@ -868,20 +659,22 @@ pasta_opts:
 	info(   "    implied if PATH or NAME are given without --userns");
 	info(   "  --nsrun-dir		Directory for nsfs mountpoints");
 	info(   "    default: " NETNS_RUN_DIR);
+	info(   "  --config-net		Configure tap interface in namespace");
+	info(   "  --ns-mac-addr ADDR	Set MAC address on tap interface");
 
 	exit(EXIT_FAILURE);
 }
 
 void conf_print(struct ctx *c)
 {
-	char buf6[INET6_ADDRSTRLEN], buf4[INET_ADDRSTRLEN];
+	char buf6[INET6_ADDRSTRLEN], buf4[INET_ADDRSTRLEN], ifn[IFNAMSIZ];
 	int i;
 
 	if (c->mode == MODE_PASTA) {
 		info("Outbound interface: %s, namespace interface: %s",
-		     c->ifn, c->pasta_ifn);
+		     if_indextoname(c->ifi, ifn), c->pasta_ifn);
 	} else {
-		info("Outbound interface: %s", c->ifn);
+		info("Outbound interface: %s", if_indextoname(c->ifi, ifn));
 	}
 
 	if (c->v4) {
@@ -991,6 +784,8 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"userns",	required_argument,	NULL,		2 },
 		{"netns-only",	no_argument,		&c->netns_only,	1 },
 		{"nsrun-dir",	required_argument,	NULL,		3 },
+		{"config-net",	no_argument,		&c->pasta_conf_ns, 1 },
+		{"ns-mac-addr",	required_argument,	NULL,		4 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
@@ -1049,6 +844,22 @@ void conf(struct ctx *c, int argc, char **argv)
 			if (ret <= 0 || ret >= (int)sizeof(nsdir)) {
 				err("Invalid nsrun-dir: %s", optarg);
 				usage(argv[0]);
+			}
+			break;
+		case 4:
+			if (c->mode != MODE_PASTA) {
+				err("--ns-mac-addr is for pasta mode only");
+				usage(argv[0]);
+			}
+
+			for (i = 0; i < ETH_ALEN; i++) {
+				errno = 0;
+				b = strtol(optarg + i * 3, NULL, 16);
+				if (b < 0 || b > UCHAR_MAX || errno) {
+					err("Invalid MAC address: %s", optarg);
+					usage(argv[0]);
+				}
+				c->mac_guest[i] = b;
 			}
 			break;
 		case 'd':
@@ -1217,12 +1028,16 @@ void conf(struct ctx *c, int argc, char **argv)
 			usage(argv[0]);
 			break;
 		case 'i':
-			if (*c->ifn) {
+			if (c->ifi) {
 				err("Redundant interface: %s", optarg);
 				usage(argv[0]);
 			}
 
-			strncpy(c->ifn, optarg, IFNAMSIZ - 1);
+			if (!(c->ifi = if_nametoindex(optarg))) {
+				err("Invalid interface name %s: %s", optarg,
+				    strerror(errno));
+				usage(argv[0]);
+			}
 			break;
 		case 'D':
 			if (c->no_dns ||
@@ -1320,25 +1135,26 @@ void conf(struct ctx *c, int argc, char **argv)
 		usage(argv[0]);
 	}
 
-	if (c->v4 || c->v6) {
-		if (!c->v4)
-			c->no_dhcp = 1;
+	if (c->mode == MODE_PASTA && !c->pasta_netns_fd)
+		pasta_start_ns(c);
 
-		if (!c->v6) {
-			c->no_ndp = 1;
-			c->no_dhcpv6 = 1;
-		}
+	if (nl_sock_init(c)) {
+		err("Failed to get netlink socket");
+		exit(EXIT_FAILURE);
 	}
 
-	if (!c->mtu) {
-		c->mtu = (ETH_MAX_MTU - ETH_HLEN) /
-			 sizeof(uint32_t) * sizeof(uint32_t);
+	conf_ip(c);
+
+	if (!c->v4)
+		c->no_dhcp = 1;
+
+	if (!c->v6) {
+		c->no_ndp = 1;
+		c->no_dhcpv6 = 1;
 	}
 
-	get_routes(c);
-	get_l3_addrs(c);
-	if (c->v4)
-		get_l2_addr(c);
+	if (!c->mtu)
+		c->mtu = ROUND_DOWN(ETH_MAX_MTU - ETH_HLEN, sizeof(uint32_t));
 
 	if (c->mode == MODE_PASTA && dns4 == c->dns4 && dns6 == c->dns6)
 		c->no_dns = 1;
@@ -1347,7 +1163,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	get_dns(c);
 
 	if (!*c->pasta_ifn)
-		strncpy(c->pasta_ifn, c->ifn, IFNAMSIZ);
+		if_indextoname(c->ifi, c->pasta_ifn);
 
 #ifdef PASST_LEGACY_NO_OPTIONS
 	if (c->mode == MODE_PASST) {

@@ -39,6 +39,12 @@ void debug(const char *format, ...);
 #define V6		1
 #define IP_VERSIONS	2
 
+enum {
+	IP_VERSION_DISABLED = 0,
+	IP_VERSION_ENABLED,
+	IP_VERSION_PROBE,
+};
+
 #define ARRAY_SIZE(a)		((int)(sizeof(a) / sizeof((a)[0])))
 
 #define IN_INTERVAL(a, b, x)	((x) >= (a) && (x) <= (b))
@@ -47,6 +53,9 @@ void debug(const char *format, ...);
 
 #define PORT_EPHEMERAL_MIN	((1 << 15) + (1 << 14))		/* RFC 6335 */
 #define PORT_IS_EPHEMERAL(port) ((port) >= PORT_EPHEMERAL_MIN)
+
+#define MAC_ZERO		((uint8_t [ETH_ALEN]){ 0 })
+#define MAC_IS_ZERO(addr)	(!memcmp((addr), MAC_ZERO, ETH_ALEN))
 
 #define NS_FN_STACK_SIZE	(RLIMIT_STACK_VAL * 1024 / 4)
 #define NS_CALL(fn, arg)						\

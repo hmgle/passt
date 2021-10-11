@@ -62,6 +62,7 @@
 #include "pcap.h"
 #include "tap.h"
 #include "conf.h"
+#include "pasta.h"
 
 #define EPOLL_EVENTS		8
 
@@ -156,178 +157,6 @@ void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 	udp_update_l2_buf(eth_d, eth_s, ip_da);
 }
 
-static int pasta_child_pid;
-static char pasta_child_ns[PATH_MAX];
-
-/**
- * pasta_ns_cleanup() - Look for processes in namespace, terminate them
- */
-static void pasta_ns_cleanup(void)
-{
-	char proc_path[PATH_MAX], ns_link[PATH_MAX];
-	int recheck = 0, found = 0, waited = 0;
-	struct dirent *dp;
-	DIR *dirp;
-
-	if (!*pasta_child_ns)
-		return;
-
-loop:
-	if (!(dirp = opendir("/proc")))
-		return;
-
-	while ((dp = readdir(dirp))) {
-		pid_t pid;
-
-		errno = 0;
-		pid = strtol(dp->d_name, NULL, 0);
-		if (!pid || errno)
-			continue;
-
-		snprintf(proc_path, PATH_MAX, "/proc/%i/ns/net", pid);
-		if (readlink(proc_path, ns_link, PATH_MAX) < 0)
-			continue;
-
-		if (!strncmp(ns_link, pasta_child_ns, PATH_MAX)) {
-			found = 1;
-			if (waited)
-				kill(pid, SIGKILL);
-			else
-				kill(pid, SIGQUIT);
-		}
-	}
-
-	closedir(dirp);
-
-	if (!found)
-		return;
-
-	if (waited) {
-		if (recheck) {
-			info("Some processes in namespace didn't quit");
-		} else {
-			found = 0;
-			recheck = 1;
-			goto loop;
-		}
-		return;
-	}
-
-	info("Waiting for all processes in namespace to terminate");
-	sleep(1);
-	waited = 1;
-	goto loop;
-}
-
-/**
- * pasta_child_handler() - Exit once shell spawned by pasta_start_ns() exits
- * @signal:	Unused, handler deals with SIGCHLD only
- */
-static void pasta_child_handler(int signal)
-{
-	siginfo_t infop;
-
-	(void)signal;
-
-	if (pasta_child_pid &&
-	    !waitid(P_PID, pasta_child_pid, &infop, WEXITED | WNOHANG)) {
-		if (infop.si_pid == pasta_child_pid) {
-			pasta_ns_cleanup();
-			exit(EXIT_SUCCESS);
-		}
-	}
-
-	waitid(P_ALL, 0, NULL, WEXITED | WNOHANG);
-	waitid(P_ALL, 0, NULL, WEXITED | WNOHANG);
-}
-
-/**
- * pasta_wait_for_ns() - Busy loop until we can enter the target namespace
- * @arg:	Execution context
- *
- * Return: 0
- */
-static int pasta_wait_for_ns(void *arg)
-{
-	struct ctx *c = (struct ctx *)arg;
-	char ns[PATH_MAX];
-
-	if (c->netns_only)
-		goto netns;
-
-	snprintf(ns, PATH_MAX, "/proc/%i/ns/user", pasta_child_pid);
-	do
-		while ((c->pasta_userns_fd = open(ns, O_RDONLY)) < 0);
-	while (setns(c->pasta_userns_fd, 0) && !close(c->pasta_userns_fd));
-
-netns:
-	snprintf(ns, PATH_MAX, "/proc/%i/ns/net", pasta_child_pid);
-	do
-		while ((c->pasta_netns_fd = open(ns, O_RDONLY)) < 0);
-	while (setns(c->pasta_netns_fd, 0) && !close(c->pasta_netns_fd));
-
-	return 0;
-}
-
-/**
- * pasta_start_ns() - Fork shell in new namespace if target ns is not given
- * @c:		Execution context
- */
-static void pasta_start_ns(struct ctx *c)
-{
-	char buf[BUFSIZ], *shell;
-	int euid = geteuid();
-	int fd;
-
-	c->foreground = 1;
-	if (!c->debug)
-		c->quiet = 1;
-
-	if ((pasta_child_pid = fork()) == -1) {
-		perror("fork");
-		exit(EXIT_FAILURE);
-	}
-
-	if (pasta_child_pid) {
-		NS_CALL(pasta_wait_for_ns, c);
-		return;
-	}
-
-	if (unshare(CLONE_NEWNET | (c->netns_only ? 0 : CLONE_NEWUSER))) {
-		perror("unshare");
-		exit(EXIT_FAILURE);
-	}
-
-	if (!c->netns_only) {
-		snprintf(buf, BUFSIZ, "%u %u %u", 0, euid, 1);
-
-		fd = open("/proc/self/uid_map", O_WRONLY);
-		write(fd, buf, strlen(buf));
-		close(fd);
-
-		fd = open("/proc/self/setgroups", O_WRONLY);
-		write(fd, "deny", sizeof("deny"));
-		close(fd);
-
-		fd = open("/proc/self/gid_map", O_WRONLY);
-		write(fd, buf, strlen(buf));
-		close(fd);
-	}
-
-	fd = open("/proc/sys/net/ipv4/ping_group_range", O_WRONLY);
-	write(fd, "0 0", strlen("0 0"));
-	close(fd);
-
-	shell = getenv("SHELL") ? getenv("SHELL") : "/bin/sh";
-	if (strstr(shell, "/bash"))
-		execve(shell, ((char *[]) { shell, "-l", NULL }), environ);
-	else
-		execve(shell, ((char *[]) { shell, NULL }), environ);
-
-	perror("execve");
-	exit(EXIT_FAILURE);
-}
-
 /**
  * main() - Entry point and main loop
  * @argc:	Argument count
@@ -366,19 +195,11 @@ int main(int argc, char **argv)
 	openlog(log_name, 0, LOG_DAEMON);
 
 	setlogmask(LOG_MASK(LOG_EMERG));
+
 	conf(&c, argc, argv);
 
 	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
 		openlog(log_name, LOG_PERROR, LOG_DAEMON);
-
-	if (c.mode == MODE_PASTA && !c.pasta_netns_fd) {
-		char proc_path[PATH_MAX];
-
-		pasta_start_ns(&c);
-		snprintf(proc_path, PATH_MAX, "/proc/%i/ns/net",
-			 pasta_child_pid);
-		readlink(proc_path, pasta_child_ns, PATH_MAX);
-	}
 
 	c.epollfd = epoll_create1(0);
 	if (c.epollfd == -1) {

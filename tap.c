@@ -25,10 +25,10 @@
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <sys/epoll.h>
+#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/ioctl.h>
 #include <sys/uio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -50,6 +50,8 @@
 #include "ndp.h"
 #include "dhcpv6.h"
 #include "pcap.h"
+#include "netlink.h"
+#include "pasta.h"
 
 /* IPv4 (plus ARP) and IPv6 message batches from tap/guest to IP handlers */
 static struct tap_msg seq4[TAP_MSGS];
@@ -844,102 +846,23 @@ static void tap_sock_init_unix(struct ctx *c)
 static int tun_ns_fd = -1;
 
 /**
- * tap_sock_init_tun_ns() - Create tuntap fd in namespace, bring up loopback
+ * tap_ns_tun() - Get tuntap fd in namespace
  * @c:		Execution context
- */
-static int tap_sock_init_tun_ns(void *c)
-{
-	int fd;
-
-	if (ns_enter((struct ctx *)c))
-		goto fail;
-
-	if ((fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK)) < 0)
-		goto fail;
-
-	tun_ns_fd = fd;
-
-	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("socket for ioctl");
-		goto fail;
-	}
-
-	if (ioctl(fd, SIOCSIFFLAGS, &((struct ifreq){ .ifr_name = "lo",
-						      .ifr_flags = IFF_UP }))) {
-		perror("SIOCSIFFLAGS ioctl for \"lo\"");
-		close(fd);
-		goto fail;
-	}
-
-	close(fd);
-
-	return 0;
-
-fail:
-	tun_ns_fd = -1;
-	return 0;
-}
-
-/**
- * struct tap_sock_if_up_ns_arg - Arguments for tap_sock_if_up_ns()
- * @c:			Execution context
- * @ifname:		Interface name of tap device
- */
-struct tap_sock_if_up_ns_arg {
-	struct ctx *c;
-	char ifname[IFNAMSIZ];
-};
-
-/**
- * tap_sock_if_up_ns() - Bring up tap, get or set MAC address (if we have one)
- * @ifname:		Interface name
  *
- * Return: 0 -- not fundamental, the interface can be brought up later
+ * Return: 0
  */
-static int tap_sock_if_up_ns(void *arg)
+static int tap_ns_tun(void *arg)
 {
-	struct ifreq ifr = { .ifr_flags = IFF_UP };
-	struct tap_sock_if_up_ns_arg *a;
-	int fd;
+	struct ifreq ifr = { .ifr_flags = IFF_TAP | IFF_NO_PI };
+	struct ctx *c = (struct ctx *)arg;
 
-	a = (struct tap_sock_if_up_ns_arg *)arg;
+	strncpy(ifr.ifr_name, c->pasta_ifn, IFNAMSIZ);
 
-	if (ns_enter(a->c))
-		return 0;
-
-	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("socket for ioctl");
-		return 0;
-	}
-
-	strncpy(ifr.ifr_name, a->ifname, IFNAMSIZ);
-	if (ioctl(fd, SIOCSIFFLAGS, &ifr)) {
-		perror("SIOCSIFFLAGS ioctl for tap");
-		goto out;
-	}
-
-	if (memcmp(a->c->mac_guest,
-		   ((uint8_t [ETH_ALEN]){ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }),
-		   ETH_ALEN)) {
-		ifr.ifr_hwaddr.sa_family = ARPHRD_ETHER;
-		memcpy(ifr.ifr_hwaddr.sa_data, a->c->mac_guest, ETH_ALEN);
-
-		if (ioctl(fd, SIOCSIFHWADDR, &ifr) < 0) {
-			perror("SIOCSIFHWADDR ioctl for tap");
-			goto out;
-		}
-	} else {
-		if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
-			perror("SIOCGIFHWADDR ioctl for tap");
-			goto out;
-		}
-
-		memcpy(a->c->mac_guest, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
-		proto_update_l2_buf(a->c->mac_guest, NULL, NULL);
-	}
-
-out:
-	close(fd);
+	if (ns_enter(c) ||
+	    (tun_ns_fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK)) < 0 ||
+	    ioctl(tun_ns_fd, TUNSETIFF, &ifr) ||
+	    !(c->pasta_ifi = if_nametoindex(c->pasta_ifn)))
+		tun_ns_fd = -1;
 
 	return 0;
 }
@@ -950,24 +873,13 @@ out:
  */
 static void tap_sock_init_tun(struct ctx *c)
 {
-	struct ifreq ifr = { .ifr_flags = IFF_TAP | IFF_NO_PI };
-	struct tap_sock_if_up_ns_arg ifup_arg;
-
-	NS_CALL(tap_sock_init_tun_ns, c);
+	NS_CALL(tap_ns_tun, c);
 	if (tun_ns_fd == -1) {
 		err("Failed to open tun socket in namespace");
 		exit(EXIT_FAILURE);
 	}
 
-	strncpy(ifr.ifr_name, c->pasta_ifn, IFNAMSIZ);
-	if (ioctl(tun_ns_fd, TUNSETIFF, &ifr)) {
-		perror("TUNSETIFF ioctl");
-		exit(EXIT_FAILURE);
-	}
-
-	strncpy(ifup_arg.ifname, c->pasta_ifn, IFNAMSIZ);
-	ifup_arg.c = c;
-	NS_CALL(tap_sock_if_up_ns, (void *)&ifup_arg);
+	pasta_ns_conf(c);
 
 	pcap_init(c, c->pasta_netns_fd);
 

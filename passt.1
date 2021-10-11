@@ -375,6 +375,17 @@ Directory for nsfs mountpoints, used as path prefix for names of namespaces.
 
 The default path is shown with --help.
 
+.TP
+.BR \-\-config-net
+Configure networking in the namespace: set up addresses and routes as configured
+or sourced from the host, and bring up the tap interface.
+
+.TP
+.BR \-\-ns-mac-addr " " \fIaddr
+Configure MAC address \fIaddr\fR on the tap interface in the namespace.
+
+Default is to let the tap driver build a pseudorandom hardware address.
+
 .SH EXAMPLES
 
 .SS \fBpasta

@@ -113,8 +113,10 @@ enum passt_modes {
  * @addr6_ll_seen:	Latest IPv6 link-local address seen as source from tap
  * @gw6:		Default IPv6 gateway
  * @dns4:		IPv4 DNS addresses, zero-terminated
- * @ifn:		Name of routable interface
+ * @ifi:		Index of routable interface
  * @pasta_ifn:		Name of namespace interface for pasta
+ * @pasta_ifn:		Index of namespace interface for pasta
+ * @pasta_conf_ns:	Configure namespace interface after creating it
  * @no_tcp:		Disable TCP operation
  * @tcp:		Context for TCP protocol handler
  * @no_tcp:		Disable UDP operation
@@ -167,8 +169,10 @@ struct ctx {
 	struct in6_addr gw6;
 	struct in6_addr dns6[MAXNS + 1];
 
-	char ifn[IF_NAMESIZE];
+	unsigned int ifi;
 	char pasta_ifn[IF_NAMESIZE];
+	unsigned int pasta_ifi;
+	int pasta_conf_ns;
 
 	int no_tcp;
 	struct tcp_ctx tcp;

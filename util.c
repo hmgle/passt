@@ -172,7 +172,7 @@ int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
 			addr6.sin6_addr = c->addr6;
 		} else if (bind_addr == BIND_LL) {
 			addr6.sin6_addr = c->addr6_ll;
-			addr6.sin6_scope_id = if_nametoindex(c->ifn);
+			addr6.sin6_scope_id = c->ifi;
 		} else {
 			addr6.sin6_addr = in6addr_any;
 		}
