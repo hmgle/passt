@@ -695,13 +695,9 @@ option, see \fBtcp\fR(7). Before Linux 5.3, i.e. before Linux kernel commit
 8f7baad7f035 ("tcp: Add snd_wnd to TCP_INFO"), the sending window
 (\fIsnd_wnd\fR field) is not available.
 
-If the sending window cannot be queried, it will always be announced as a fixed
-value to guest or target namespace (14 600 bytes, suggested by RFC 6928), and
-segments received by guest or target namespace will be acknowledged as soon as
-the corresponding payload is enqueued to the corresponding socket. The normal
-behaviour is to acknowledge segments only as the remote peer acknowledges the
-corresponding payload, in order to reflect the congestion control dynamic back
-to the sender. This might affect throughput of TCP connections.
+If the sending window cannot be queried, it will always be announced as the
+current sending buffer size to guest or target namespace. This might affect
+throughput of TCP connections.
 
 .SH LIMITATIONS
 
