@@ -270,7 +270,7 @@ void bitmap_set(uint8_t *map, int bit)
 }
 
 /**
- * bitmap_set() - Clear single bit in bitmap
+ * bitmap_clear() - Clear single bit in bitmap
  * @map:	Pointer to bitmap
  * @bit:	Bit number to clear
  */
