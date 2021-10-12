@@ -361,7 +361,7 @@
 
 #define TCP_SOCK_POOL_SIZE		32
 #define TCP_SOCK_POOL_TSH		16 /* Refill in ns if > x used */
-#define TCP_SPLICE_PIPE_POOL_SIZE	256
+#define TCP_SPLICE_PIPE_POOL_SIZE	16
 #define REFILL_INTERVAL			1000
 
 #define PORT_DETECT_INTERVAL		1000
