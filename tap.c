@@ -10,6 +10,8 @@
  *
  * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
+ *
+ * #syscalls recvfrom sendto
  */
 
 #define _GNU_SOURCE
@@ -768,6 +770,8 @@ restart:
 /**
  * tap_sock_init_unix() - Create and bind AF_UNIX socket, wait for connection
  * @c:		Execution context
+ *
+ * #syscalls:passt unlink
  */
 static void tap_sock_init_unix(struct ctx *c)
 {
@@ -819,8 +823,13 @@ static void tap_sock_init_unix(struct ctx *c)
 	}
 
 	info("UNIX domain socket bound at %s\n", addr.sun_path);
+#ifdef PASST_LEGACY_NO_OPTIONS
+	/*
+	 * syscalls:passt chmod
+	 */
 	chmod(addr.sun_path,
 	      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+#endif
 
 	pcap_init(c, i);
 
@@ -850,6 +859,8 @@ static int tun_ns_fd = -1;
  * @c:		Execution context
  *
  * Return: 0
+ *
+ * #syscalls:pasta ioctl
  */
 static int tap_ns_tun(void *arg)
 {

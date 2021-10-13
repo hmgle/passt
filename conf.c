@@ -10,6 +10,8 @@
  *
  * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
+ *
+ * #syscalls stat
  */
 
 #define _GNU_SOURCE

@@ -303,6 +303,8 @@
  * - SPLICE_FIN_FROM:		FIN (EPOLLRDHUP) seen from originating socket
  * - SPLICE_FIN_TO:		FIN (EPOLLRDHUP) seen from connected socket
  * - SPLICE_FIN_BOTH:		FIN (EPOLLRDHUP) seen from both sides
+ *
+ * #syscalls pipe pipe2
  */
 
 #define _GNU_SOURCE
@@ -2078,6 +2080,9 @@ static void tcp_sock_consume(struct tcp_tap_conn *conn, uint32_t ack_seq)
  * @now:	Current timestamp
  *
  * Return: negative on connection reset, 0 otherwise
+ *
+ * #syscalls recvmsg
+ * #syscalls:passt sendmmsg sendmsg
  */
 static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 			      struct timespec *now)
@@ -2320,6 +2325,8 @@ out:
  * @msg:	Array of messages from tap
  * @count:	Count of messages
  * @now:	Current timestamp
+ *
+ * #syscalls sendmsg
  */
 static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 			      struct tap_l4_msg *msg, int count,
@@ -2965,6 +2972,8 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
  * @c:		Execution context
  * @ref:	epoll reference
  * @events:	epoll events bitmap
+ *
+ * #syscalls splice
  */
 void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 			     uint32_t events)
@@ -3525,6 +3534,8 @@ static int tcp_sock_refill(void *arg)
  * @c:		Execution context
  *
  * Return: 0 on success, -1 on failure
+ *
+ * #syscalls getrandom
  */
 int tcp_sock_init(struct ctx *c, struct timespec *now)
 {

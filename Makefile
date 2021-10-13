@@ -2,6 +2,7 @@ CFLAGS += -Wall -Wextra -pedantic
 CFLAGS += -DRLIMIT_STACK_VAL=$(shell ulimit -s)
 CFLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)
 CFLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
+CFLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(shell uname -m | tr [a-z] [A-Z])
 
 prefix ?= /usr/local
 
@@ -13,14 +14,12 @@ avx2: clean all
 static: CFLAGS += -static
 static: clean all
 
-passt: passt.c passt.h arp.c arp.h checksum.c checksum.h conf.c conf.h \
-	dhcp.c dhcp.h dhcpv6.c dhcpv6.h pcap.c pcap.h ndp.c ndp.h \
-	netlink.c netlink.h pasta.c pasta.h siphash.c siphash.h tap.c tap.h \
-	icmp.c icmp.h tcp.c tcp.h udp.c udp.h util.c util.h
-	$(CC) $(CFLAGS) \
-		passt.c arp.c checksum.c conf.c dhcp.c dhcpv6.c pasta.c pcap.c \
-		ndp.c netlink.c siphash.c tap.c icmp.c tcp.c udp.c util.c \
-		-o passt
+seccomp.h: *.c $(filter-out seccomp.h,$(wildcard *.h))
+	@ ./seccomp.sh
+
+passt: $(filter-out qrap.c,$(wildcard *.c)) \
+	$(filter-out qrap.h,$(wildcard *.h)) seccomp.h
+	$(CC) $(CFLAGS) $(filter-out qrap.c,$(wildcard *.c)) -o passt
 
 pasta: passt
 	ln -s passt pasta
@@ -35,7 +34,7 @@ qrap: qrap.c passt.h
 
 .PHONY: clean
 clean:
-	-${RM} passt *.o qrap pasta pasta.1 passt4netns \
+	-${RM} passt *.o seccomp.h qrap pasta pasta.1 passt4netns \
 		passt.tar passt.tar.gz *.deb *.rpm
 
 install: passt pasta qrap

@@ -419,6 +419,8 @@ static void udp_sock6_iov_init(void)
  * @splice:	UDP_BACK_TO_INIT from init, UDP_BACK_TO_NS from namespace
  *
  * Return: connected socket, negative error code on failure
+ *
+ * #syscalls:pasta getsockname
  */
 int udp_splice_connect(struct ctx *c, int v6, int bound_sock,
 		       in_port_t src, in_port_t dst, int splice)
@@ -640,6 +642,9 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
  * @ref:	epoll reference
  * @events:	epoll events bitmap
  * @now:	Current timestamp
+ *
+ * #syscalls recvmmsg
+ * #syscalls:passt sendmmsg sendmsg
  */
 void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		      struct timespec *now)
@@ -877,6 +882,8 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  * @now:	Current timestamp
  *
  * Return: count of consumed packets
+ *
+ * #syscalls sendmmsg
  */
 int udp_tap_handler(struct ctx *c, int af, void *addr,
 		    struct tap_l4_msg *msg, int count, struct timespec *now)

@@ -51,7 +51,12 @@
 #include <time.h>
 #include <syslog.h>
 #include <sys/stat.h>
+#include <seccomp.h>
+#include <sys/prctl.h>
+#include <linux/filter.h>
+#include <stddef.h>
 
+#include "seccomp.h"
 #include "util.h"
 #include "passt.h"
 #include "dhcp.h"
@@ -158,11 +163,40 @@ void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 }
 
 /**
+ * seccomp() - Set up seccomp filters depending on mode, won't return on failure
+ * @c:		Execution context
+ */
+static void seccomp(struct ctx *c)
+{
+	struct sock_fprog prog;
+
+	if (c->mode == MODE_PASST) {
+		prog.len = (unsigned short)ARRAY_SIZE(filter_passt);
+		prog.filter = filter_passt;
+	} else {
+		prog.len = (unsigned short)ARRAY_SIZE(filter_pasta);
+		prog.filter = filter_pasta;
+	}
+
+	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) ||
+	    prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)) {
+		perror("prctl");
+		exit(EXIT_FAILURE);
+	}
+}
+
+/**
  * main() - Entry point and main loop
  * @argc:	Argument count
  * @argv:	Options, plus optional target PID for pasta mode
  *
  * Return: 0 once interrupted, non-zero on failure
+ *
+ * #syscalls read write open close fork dup2 exit chdir brk ioctl writev syslog
+ * #syscalls prlimit64 epoll_ctl epoll_create1 epoll_wait accept4 accept listen
+ * #syscalls socket bind connect getsockopt setsockopt recvfrom sendto shutdown
+ * #syscalls openat fstat fcntl lseek
+ * #syscalls:pasta rt_sigreturn
  */
 int main(int argc, char **argv)
 {
@@ -197,6 +231,8 @@ int main(int argc, char **argv)
 	setlogmask(LOG_MASK(LOG_EMERG));
 
 	conf(&c, argc, argv);
+
+	seccomp(&c);
 
 	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
 		openlog(log_name, LOG_PERROR, LOG_DAEMON);

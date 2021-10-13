@@ -332,6 +332,8 @@ void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
  * @c:		Execution context
  *
  * Return: 0 on success, -1 on failure
+ *
+ * #syscalls:pasta setns
  */
 int ns_enter(struct ctx *c)
 {
