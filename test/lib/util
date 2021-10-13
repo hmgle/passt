@@ -96,16 +96,12 @@ file_def() {
 # $1:	List of substitutions
 # $2:	String where substitutions have to be applied
 subs_apply() {
-	echo "in subs_apply" >> /tmp/subs_apply
-
 	__ifs="${IFS}"
 	IFS='	'
 	__newarg="${2}"
 	__s=
 	for __t in ${1}; do
 		[ -z "${__s}" ] && __s="${__t}" && continue
-
-		echo "t: --${__t}--, --${__s}--" >> /tmp/subs_apply
 
 		__et="$(printf '%s\n' "$__t" | sed -e 's/[\/&]/\\&/g')"
 		__es="$(printf '%s\n' "$__s" | sed -e 's/[]\/$*.^[]/\\&/g')"
