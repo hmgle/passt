@@ -588,10 +588,10 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
  */
 void dhcpv6_init(struct ctx *c)
 {
-	struct tm y2k = { 0, 0, 0, 1, 0, 100, 0, 0, 0, 0, NULL };
+	time_t y2k = 946684800; /* Epoch to 2000-01-01T00:00:00Z, no mktime() */
 	uint32_t duid_time;
 
-	duid_time = htonl(difftime(time(NULL), mktime(&y2k)));
+	duid_time = htonl(difftime(time(NULL), y2k));
 
 	resp.server_id.duid_time		= duid_time;
 	resp_not_on_link.server_id.duid_time	= duid_time;

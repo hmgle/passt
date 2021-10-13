@@ -37,24 +37,27 @@
 #include "util.h"
 #include "passt.h"
 
+/* For __openlog() and __setlogmask() wrappers, and __vsyslog() (replacement) */
+static int	log_mask;
+static int	log_sock = -1;
+static char	log_ident[BUFSIZ];
+static int	log_opt;
+static time_t	log_debug_start;
+
 #define logfn(name, level)						\
 void name(const char *format, ...) {					\
-	char ts[sizeof("Mmm dd hh:mm:ss.")];				\
 	struct timespec tp;						\
-	struct tm *tm;							\
 	va_list args;							\
 									\
 	if (setlogmask(0) & LOG_MASK(LOG_DEBUG)) {			\
 		clock_gettime(CLOCK_REALTIME, &tp);			\
-		tm = gmtime(&tp.tv_sec);				\
-		strftime(ts, sizeof(ts), "%b %d %T.", tm);		\
-									\
-		fprintf(stderr, "%s%04lu: ", ts,			\
+		fprintf(stderr, "%lu.%04lu: ",				\
+			tp.tv_sec - log_debug_start,			\
 			tp.tv_nsec / (100 * 1000));			\
 	}								\
 									\
 	va_start(args, format);						\
-	vsyslog(level, format, args);					\
+	__vsyslog(level, format, args);					\
 	va_end(args);							\
 									\
 	if (setlogmask(0) & LOG_MASK(LOG_DEBUG) ||			\
@@ -71,6 +74,79 @@ logfn(err,   LOG_ERR)
 logfn(warn,  LOG_WARNING)
 logfn(info,  LOG_INFO)
 logfn(debug, LOG_DEBUG)
+
+/**
+ * __openlog() - Non-optional openlog() wrapper, to allow custom vsyslog()
+ * @ident:	openlog() identity (program name)
+ * @option:	openlog() options
+ * @facility:	openlog() facility (LOG_DAEMON)
+ */
+void __openlog(const char *ident, int option, int facility)
+{
+	struct timespec tp;
+
+	clock_gettime(CLOCK_REALTIME, &tp);
+	log_debug_start = tp.tv_sec;
+
+	if (log_sock < 0) {
+		struct sockaddr_un a = { .sun_family = AF_UNIX, };
+
+		log_sock = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+		if (log_sock < 0)
+			return;
+
+		strncpy(a.sun_path, _PATH_LOG, sizeof(a.sun_path));
+		if (connect(log_sock, (const struct sockaddr *)&a, sizeof(a))) {
+			close(log_sock);
+			log_sock = -1;
+			return;
+		}
+	}
+
+	log_mask |= facility;
+	strncpy(log_ident, ident, sizeof(log_ident) - 1);
+	log_opt = option;
+
+	openlog(ident, option, facility);
+}
+
+/**
+ * __setlogmask() - setlogmask() wrapper, to allow custom vsyslog()
+ * @mask:	Same as setlogmask() mask
+ */
+void __setlogmask(int mask)
+{
+	log_mask = mask;
+	setlogmask(mask);
+}
+
+/**
+ * __vsyslog() - vsyslog() implementation not using heap memory
+ * @pri:	Facility and level map, same as priority for vsyslog()
+ * @format:	Same as vsyslog() format
+ * @ap:		Same as vsyslog() ap
+ */
+void __vsyslog(int pri, const char *format, va_list ap)
+{
+	char buf[BUFSIZ];
+	int n;
+
+	if (!(LOG_MASK(LOG_PRI(pri)) & log_mask))
+		return;
+
+	/* Send without name and timestamp, the system logger should add them */
+	n = snprintf(buf, BUFSIZ, "<%i> ", pri);
+
+	n += vsnprintf(buf + n, BUFSIZ - n, format, ap);
+
+	if (format[strlen(format)] != '\n')
+		n += snprintf(buf + n, BUFSIZ - n, "\n");
+
+	if (log_opt | LOG_PERROR)
+		fprintf(stderr, buf + sizeof("<0>"));
+
+	send(log_sock, buf, n, 0);
+}
 
 /**
  * ipv6_l4hdr() - Find pointer to L4 header in IPv6 packet and extract protocol
@@ -292,6 +368,35 @@ int bitmap_isset(uint8_t *map, int bit)
 }
 
 /**
+ * line_read() - Same as fgets(), without using heap, a file instead of a stream
+ * @buf:	Read buffer
+ * @len:	Maximum line length
+ * @fd:		File descriptor for reading
+ *
+ * Return: @buf if a line is found, NULL on EOF or error
+ */
+char *line_read(char *buf, size_t len, int fd)
+{
+	char *p;
+	int n;
+
+	n = read(fd, buf, --len);
+	if (n <= 0)
+		return NULL;
+
+	buf[len] = 0;
+	if (!(p = strchr(buf, '\n')))
+		return buf;
+
+	*p = 0;
+	if (p == buf)
+		return buf;
+
+	lseek(fd, (p - buf) - n + 1, SEEK_CUR);
+	return buf;
+}
+
+/**
  * procfs_scan_listen() - Set bits for listening TCP or UDP sockets from procfs
  * @name:	Corresponding name of file under /proc/net/
  * @map:	Bitmap where numbers of ports in listening state will be set
@@ -302,14 +407,14 @@ void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
 	char line[200], path[PATH_MAX];
 	unsigned long port;
 	unsigned int state;
-	FILE *fp;
+	int fd;
 
 	snprintf(path, PATH_MAX, "/proc/net/%s", name);
-	if (!(fp = fopen(path, "r")))
+	if ((fd = open(path, O_RDONLY)) < 0)
 		return;
 
-	fgets(line, sizeof(line), fp);
-	while (fgets(line, sizeof(line), fp)) {
+	line_read(line, sizeof(line), fd);
+	while (line_read(line, sizeof(line), fd)) {
 		if (sscanf(line, "%*u: %*x:%lx %*x:%*x %x", &port, &state) != 2)
 			continue;
 
@@ -324,7 +429,7 @@ void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
 			bitmap_set(map, port);
 	}
 
-	fclose(fp);
+	close(fd);
 }
 
 /**

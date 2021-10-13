@@ -192,10 +192,10 @@ static void seccomp(struct ctx *c)
  *
  * Return: 0 once interrupted, non-zero on failure
  *
- * #syscalls read write open close fork dup2 exit chdir brk ioctl writev syslog
+ * #syscalls read write open close fork dup2 exit chdir ioctl writev syslog
  * #syscalls prlimit64 epoll_ctl epoll_create1 epoll_wait accept4 accept listen
  * #syscalls socket bind connect getsockopt setsockopt recvfrom sendto shutdown
- * #syscalls openat fstat fcntl lseek
+ * #syscalls openat fstat fcntl lseek clone setsid exit_group
  * #syscalls:pasta rt_sigreturn
  */
 int main(int argc, char **argv)
@@ -226,16 +226,16 @@ int main(int argc, char **argv)
 	if (madvise(pkt_buf, TAP_BUF_BYTES, MADV_HUGEPAGE))
 		perror("madvise");
 
-	openlog(log_name, 0, LOG_DAEMON);
+	__openlog(log_name, 0, LOG_DAEMON);
 
-	setlogmask(LOG_MASK(LOG_EMERG));
+	__setlogmask(LOG_MASK(LOG_EMERG));
 
 	conf(&c, argc, argv);
 
 	seccomp(&c);
 
 	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
-		openlog(log_name, LOG_PERROR, LOG_DAEMON);
+		__openlog(log_name, LOG_PERROR, LOG_DAEMON);
 
 	c.epollfd = epoll_create1(0);
 	if (c.epollfd == -1) {
@@ -271,11 +271,11 @@ int main(int argc, char **argv)
 		dhcpv6_init(&c);
 
 	if (c.debug)
-		setlogmask(LOG_UPTO(LOG_DEBUG));
+		__setlogmask(LOG_UPTO(LOG_DEBUG));
 	else if (c.quiet)
-		setlogmask(LOG_UPTO(LOG_ERR));
+		__setlogmask(LOG_UPTO(LOG_ERR));
 	else
-		setlogmask(LOG_UPTO(LOG_INFO));
+		__setlogmask(LOG_UPTO(LOG_INFO));
 
 	if (isatty(fileno(stdout)) && !c.foreground)
 		daemon(0, 0);

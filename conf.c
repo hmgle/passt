@@ -275,12 +275,11 @@ overlap:
  */
 static void get_dns(struct ctx *c)
 {
-	int dns4_set, dns6_set, dnss_set, dns_set;
+	int dns4_set, dns6_set, dnss_set, dns_set, fd;
 	struct in6_addr *dns6 = &c->dns6[0];
 	struct fqdn *s = c->dns_search;
 	uint32_t *dns4 = &c->dns4[0];
 	char buf[BUFSIZ], *p, *end;
-	FILE *r;
 
 	dns4_set = !c->v4  || !!*dns4;
 	dns6_set = !c->v6  || !IN6_IS_ADDR_UNSPECIFIED(dns6);
@@ -290,11 +289,10 @@ static void get_dns(struct ctx *c)
 	if (dns_set && dnss_set)
 		return;
 
-	r = fopen("/etc/resolv.conf", "r");
-	if (!r)
+	if ((fd = open("/etc/resolv.conf", O_RDONLY)) < 0)
 		goto out;
 
-	while (fgets(buf, BUFSIZ, r)) {
+	while (line_read(buf, BUFSIZ, fd)) {
 		if (!dns_set && strstr(buf, "nameserver ") == buf) {
 			p = strrchr(buf, ' ');
 			if (!p)
@@ -333,7 +331,7 @@ static void get_dns(struct ctx *c)
 		}
 	}
 
-	fclose(r);
+	close(fd);
 
 out:
 	if (!dns_set && dns4 == c->dns4 && dns6 == c->dns6)

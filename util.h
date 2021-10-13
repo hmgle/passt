@@ -133,6 +133,7 @@ enum {
 #include <net/if.h>
 #include <linux/ip.h>
 #include <limits.h>
+#include <stdarg.h>
 
 enum bind_type {
 	BIND_ANY = 0,
@@ -143,6 +144,9 @@ enum bind_type {
 
 struct ctx;
 
+void __openlog(const char *ident, int option, int facility);
+void __vsyslog(int pri, const char *fmt, va_list ap);
+void __setlogmask(int mask);
 char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto);
 int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
 	    enum bind_type bind_addr, uint32_t data);
@@ -151,5 +155,6 @@ int timespec_diff_ms(struct timespec *a, struct timespec *b);
 void bitmap_set(uint8_t *map, int bit);
 void bitmap_clear(uint8_t *map, int bit);
 int bitmap_isset(uint8_t *map, int bit);
+char *line_read(char *buf, size_t len, int fd);
 void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude);
 int ns_enter(struct ctx *c);
