@@ -489,6 +489,7 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 		req.rta.rta_type = IFLA_ADDRESS;
 		req.rta.rta_len = RTA_LENGTH(ETH_ALEN);
 		nl_req(ns, buf, &req, req.nlh.nlmsg_len);
+		up = 0;
 	}
 
 	if (mtu) {
@@ -497,7 +498,11 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 		req.rta.rta_type = IFLA_MTU;
 		req.rta.rta_len = RTA_LENGTH(sizeof(unsigned int));
 		nl_req(ns, buf, &req, req.nlh.nlmsg_len);
+		up = 0;
 	}
+
+	if (up)
+		nl_req(ns, buf, &req, req.nlh.nlmsg_len);
 
 	if (change)
 		return;
