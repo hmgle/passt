@@ -12,7 +12,7 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  *
  * #syscalls:pasta clone unshare waitid kill execve exit_group rt_sigprocmask
- * #syscalls:pasta geteuid getdents64 readlink setsid
+ * #syscalls:pasta geteuid getdents64 readlink setsid nanosleep clock_nanosleep
  */
 
 #define _GNU_SOURCE
