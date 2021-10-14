@@ -565,6 +565,7 @@ static void usage(const char *name)
 	else
 		info("      /tmp/passt_ISO8601-TIMESTAMP_INSTANCE-NUMBER.pcap");
 
+	info(   "  -P, --pid FILE	Write own PID to the given file");
 	info(   "  -m, --mtu MTU	Assign MTU via DHCP/NDP");
 	info(   "    a zero value disables assignment");
 	info(   "    default: 65520: maximum 802.3 MTU minus 802.3 header");
@@ -764,6 +765,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"socket",	required_argument,	NULL,		's' },
 		{"ns-ifname",	required_argument,	NULL,		'I' },
 		{"pcap",	optional_argument,	NULL,		'p' },
+		{"pid",		required_argument,	NULL,		'P' },
 		{"mtu",		required_argument,	NULL,		'm' },
 		{"address",	required_argument,	NULL,		'a' },
 		{"netmask",	required_argument,	NULL,		'n' },
@@ -807,9 +809,9 @@ void conf(struct ctx *c, int argc, char **argv)
 		const char *optstring;
 
 		if (c->mode == MODE_PASST)
-			optstring = "dqfehs:p::m:a:n:M:g:i:D::S::46t:u:";
+			optstring = "dqfehs:p::P:m:a:n:M:g:i:D::S::46t:u:";
 		else
-			optstring = "dqfehI:p::m:a:n:M:g:i:D::S::46t:u:T:U:";
+			optstring = "dqfehI:p::P:m:a:n:M:g:i:D::S::46t:u:T:U:";
 
 		name = getopt_long(argc, argv, optstring, options, NULL);
 
@@ -946,6 +948,19 @@ void conf(struct ctx *c, int argc, char **argv)
 			ret = snprintf(c->pcap, sizeof(c->pcap), "%s", optarg);
 			if (ret <= 0 || ret >= (int)sizeof(c->pcap)) {
 				err("Invalid pcap path: %s", optarg);
+				usage(argv[0]);
+			}
+			break;
+		case 'P':
+			if (*c->pid_file) {
+				err("Multiple --pid options given");
+				usage(argv[0]);
+			}
+
+			ret = snprintf(c->pid_file, sizeof(c->pid_file), "%s",
+				       optarg);
+			if (ret <= 0 || ret >= (int)sizeof(c->pid_file)) {
+				err("Invalid PID file: %s", optarg);
 				usage(argv[0]);
 			}
 			break;

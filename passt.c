@@ -228,6 +228,27 @@ static void drop_caps(void)
 }
 
 /**
+ * pid_file() - Write own PID to file, if configured
+ * @c:		Execution context
+ */
+static void pid_file(struct ctx *c) {
+	char pid_buf[12];
+	int pid_fd, n;
+
+	if (!c->pid_file)
+		return;
+
+	pid_fd = open(c->pid_file, O_CREAT | O_WRONLY);
+	if (pid_fd < 0)
+		return;
+
+	n = snprintf(pid_buf, sizeof(pid_buf), "%i\n", getpid());
+
+	write(pid_fd, pid_buf, n);
+	close(pid_fd);
+}
+
+/**
  * main() - Entry point and main loop
  * @argc:	Argument count
  * @argv:	Options, plus optional target PID for pasta mode
@@ -237,7 +258,7 @@ static void drop_caps(void)
  * #syscalls read write open close fork dup2 exit chdir ioctl writev syslog
  * #syscalls prlimit64 epoll_ctl epoll_create1 epoll_wait accept4 accept listen
  * #syscalls socket bind connect getsockopt setsockopt recvfrom sendto shutdown
- * #syscalls openat fstat fcntl lseek clone setsid exit_group
+ * #syscalls openat fstat fcntl lseek clone setsid exit_group getpid
  * #syscalls:pasta rt_sigreturn
  */
 int main(int argc, char **argv)
@@ -326,6 +347,8 @@ int main(int argc, char **argv)
 
 	if (isatty(fileno(stdout)) && !c.foreground)
 		daemon(0, 0);
+
+	pid_file(&c);
 
 	timer_init(&c, &now);
 loop:

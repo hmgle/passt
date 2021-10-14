@@ -91,6 +91,7 @@ enum passt_modes {
  * @stderr:		Force logging to stderr
  * @sock_path:		Path for UNIX domain socket
  * @pcap:		Path for packet capture file
+ * @pid_file:		Path to PID file, empty string if not configured
  * @pasta_netns_fd:	File descriptor for network namespace in pasta mode
  * @pasta_userns_fd:	File descriptor for user namespace in pasta mode
  * @netns_only:		In pasta mode, don't join or create a user namespace
@@ -142,6 +143,7 @@ struct ctx {
 	int stderr;
 	char sock_path[UNIX_PATH_MAX];
 	char pcap[PATH_MAX];
+	char pid_file[PATH_MAX];
 
 	int pasta_netns_fd;
 	int pasta_userns_fd;

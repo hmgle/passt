@@ -107,6 +107,11 @@ in \fBpasta\fR mode, where \fIinstance-number\fR is a progressive count of
 other detected instances running on the same host.
 
 .TP
+.BR \-P ", " \-\-pid " " \fIfile
+Write own PID to \fIfile\fR once initialisation is done, before forking to
+background (if configured to do so).
+
+.TP
 .BR \-m ", " \-\-mtu " " \fImtu
 Assign \fImtu\fR via DHCP (option 26) and NDP (option type 5).
 By default, no MTU options will be sent.
