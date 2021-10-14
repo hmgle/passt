@@ -56,6 +56,8 @@
 #include <linux/filter.h>
 #include <stddef.h>
 #include <linux/capability.h>
+#include <pwd.h>
+#include <grp.h>
 
 #include "seccomp.h"
 #include "util.h"
@@ -187,6 +189,30 @@ static void seccomp(struct ctx *c)
 }
 
 /**
+ * check_root() - Warn if we're running as root, exit if we can't drop to nobody
+ */
+static void check_root(void)
+{
+	struct passwd *pw;
+
+	if (getuid() && geteuid())
+		return;
+
+	fprintf(stderr, "Don't run this as root. Changing to nobody...\n");
+	pw = getpwnam("nobody");
+	if (!pw) {
+		perror("getpwnam");
+		exit(EXIT_FAILURE);
+	}
+
+	if (initgroups(pw->pw_name, pw->pw_gid) ||
+	    setgid(pw->pw_gid) || setuid(pw->pw_uid)) {
+		fprintf(stderr, "Can't change to user/group nobody, exiting");
+		exit(EXIT_FAILURE);
+	}
+}
+
+/**
  * drop_caps() - Drop capabilities we might have except for CAP_NET_BIND_SERVICE
  */
 static void drop_caps(void)
@@ -223,6 +249,9 @@ int main(int argc, char **argv)
 	char *log_name;
 	int nfds, i;
 
+#ifndef PASST_LEGACY_NO_OPTIONS
+	check_root();
+#endif
 	drop_caps();
 
 	if (strstr(argv[0], "pasta") || strstr(argv[0], "passt4netns")) {
