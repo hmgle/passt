@@ -583,12 +583,13 @@ static struct tcp4_l2_buf_t {
 	uint32_t tsum;		/* 4 */
 #ifdef __AVX2__
 	uint8_t pad[18];	/* 8, align th to 32 bytes */
+#else
+	uint8_t pad[2];		/*	align iph to 4 bytes	8 */
 #endif
-
-	uint32_t vnet_len;	/* 26 */
-	struct ethhdr eh;	/* 30 */
-	struct iphdr iph;	/* 44 */
-	struct tcphdr th;	/* 64 */
+	uint32_t vnet_len;	/* 26				10 */
+	struct ethhdr eh;	/* 30				14 */
+	struct iphdr iph;	/* 44				28 */
+	struct tcphdr th;	/* 64				48 */
 	uint8_t data[USHRT_MAX - sizeof(struct tcphdr)];
 #ifdef __AVX2__
 } __attribute__ ((packed, aligned(32)))
@@ -669,12 +670,13 @@ static struct tcp4_l2_flags_buf_t {
 	uint32_t tsum;		/* 4 */
 #ifdef __AVX2__
 	uint8_t pad[18];	/* 8, align th to 32 bytes */
+#else
+	uint8_t pad[2];		/*	align iph to 4 bytes	8 */
 #endif
-
-	uint32_t vnet_len;	/* 26 */
-	struct ethhdr eh;	/* 30 */
-	struct iphdr iph;	/* 44 */
-	struct tcphdr th	/* 64 */ __attribute__ ((aligned(4)));
+	uint32_t vnet_len;	/* 26				10 */
+	struct ethhdr eh;	/* 30				14 */
+	struct iphdr iph;	/* 44				28 */
+	struct tcphdr th;	/* 64				48 */
 	char opts[OPT_MSS_LEN + OPT_WS_LEN + 1];
 #ifdef __AVX2__
 } __attribute__ ((packed, aligned(32)))
@@ -953,9 +955,7 @@ static void tcp_sock4_iov_init(void)
 
 	for (i = 0; i < ARRAY_SIZE(tcp4_l2_buf); i++) {
 		tcp4_l2_buf[i] = (struct tcp4_l2_buf_t) { 0, 0,
-#ifdef __AVX2__
 			{ 0 },
-#endif
 			0, L2_BUF_ETH_IP4_INIT, L2_BUF_IP4_INIT(IPPROTO_TCP),
 			{ .doff = sizeof(struct tcphdr) / 4, .ack = 1 }, { 0 },
 		};
@@ -963,9 +963,7 @@ static void tcp_sock4_iov_init(void)
 
 	for (i = 0; i < ARRAY_SIZE(tcp4_l2_flags_buf); i++) {
 		tcp4_l2_flags_buf[i] = (struct tcp4_l2_flags_buf_t) { 0, 0,
-#ifdef __AVX2__
 			{ 0 },
-#endif
 			0, L2_BUF_ETH_IP4_INIT, L2_BUF_IP4_INIT(IPPROTO_TCP),
 			{ 0 }, { 0 },
 		};
