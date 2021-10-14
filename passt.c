@@ -55,6 +55,7 @@
 #include <sys/prctl.h>
 #include <linux/filter.h>
 #include <stddef.h>
+#include <linux/capability.h>
 
 #include "seccomp.h"
 #include "util.h"
@@ -186,6 +187,21 @@ static void seccomp(struct ctx *c)
 }
 
 /**
+ * drop_caps() - Drop capabilities we might have except for CAP_NET_BIND_SERVICE
+ */
+static void drop_caps(void)
+{
+	int i;
+
+	for (i = 0; i < 64; i++) {
+		if (i == CAP_NET_BIND_SERVICE)
+			continue;
+
+		prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
+	}
+}
+
+/**
  * main() - Entry point and main loop
  * @argc:	Argument count
  * @argv:	Options, plus optional target PID for pasta mode
@@ -206,6 +222,8 @@ int main(int argc, char **argv)
 	struct timespec now;
 	char *log_name;
 	int nfds, i;
+
+	drop_caps();
 
 	if (strstr(argv[0], "pasta") || strstr(argv[0], "passt4netns")) {
 		struct sigaction sa;
