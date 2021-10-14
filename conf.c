@@ -175,6 +175,7 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 	do {
 		int i, port;
 
+		errno = 0;
 		port = strtol(p, &sep, 10);
 		if (sep == p)
 			break;
