@@ -484,7 +484,7 @@ static void conf_ip(struct ctx *c)
 		memcpy(&c->addr4_seen, &c->addr4, sizeof(c->addr4_seen));
 
 		if (!memcmp(c->mac, MAC_ZERO, ETH_ALEN))
-			nl_link(0, c->ifi, c->mac, 0);
+			nl_link(0, c->ifi, c->mac, 0, 0);
 	}
 
 	if (c->mode == MODE_PASST)

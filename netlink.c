@@ -454,27 +454,28 @@ next:
  * @ifi:	Interface index
  * @mac:	MAC address to fill, if passed as zero, to set otherwise
  * @up:		If set, bring up the link
+ * @mtu:	If non-zero, set interface MTU
  */
-void nl_link(int ns, unsigned int ifi, void *mac, int up)
+void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 {
-	int change = !MAC_IS_ZERO(mac) || up;
+	int change = !MAC_IS_ZERO(mac) || up || mtu;
 	struct {
 		struct nlmsghdr nlh;
 		struct ifinfomsg ifm;
 		struct rtattr rta;
-		unsigned char mac[ETH_ALEN];
+		union {
+			unsigned char mac[ETH_ALEN];
+			unsigned int mtu;
+		};
 	} req = {
-		.nlh.nlmsg_type  = change ? RTM_NEWLINK : RTM_GETLINK,
-		.nlh.nlmsg_len   = NLMSG_LENGTH(sizeof(struct ifinfomsg)),
-		.nlh.nlmsg_flags = NLM_F_REQUEST | (change ? NLM_F_ACK : 0),
-		.nlh.nlmsg_seq	 = nl_seq++,
-		.ifm.ifi_family	 = AF_UNSPEC,
-		.ifm.ifi_index	 = ifi,
-		.ifm.ifi_flags	 = up ? IFF_UP : 0,
-		.ifm.ifi_change	 = up ? IFF_UP : 0,
-
-		.rta.rta_type	 = IFLA_ADDRESS,
-		.rta.rta_len	 = RTA_LENGTH(ETH_ALEN),
+		.nlh.nlmsg_type   = change ? RTM_NEWLINK : RTM_GETLINK,
+		.nlh.nlmsg_len    = NLMSG_LENGTH(sizeof(struct ifinfomsg)),
+		.nlh.nlmsg_flags  = NLM_F_REQUEST | (change ? NLM_F_ACK : 0),
+		.nlh.nlmsg_seq	  = nl_seq++,
+		.ifm.ifi_family	  = AF_UNSPEC,
+		.ifm.ifi_index	  = ifi,
+		.ifm.ifi_flags	  = up ? IFF_UP : 0,
+		.ifm.ifi_change	  = up ? IFF_UP : 0,
 	};
 	struct ifinfomsg *ifm;
 	struct nlmsghdr *nh;
@@ -485,12 +486,23 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up)
 	if (!MAC_IS_ZERO(mac)) {
 		req.nlh.nlmsg_len = sizeof(req);
 		memcpy(req.mac, mac, ETH_ALEN);
+		req.rta.rta_type = IFLA_ADDRESS;
+		req.rta.rta_len = RTA_LENGTH(ETH_ALEN);
+		nl_req(ns, buf, &req, req.nlh.nlmsg_len);
 	}
 
-	n = nl_req(ns, buf, &req, req.nlh.nlmsg_len);
+	if (mtu) {
+		req.nlh.nlmsg_len = sizeof(req);
+		req.mtu = mtu;
+		req.rta.rta_type = IFLA_MTU;
+		req.rta.rta_len = RTA_LENGTH(sizeof(unsigned int));
+		nl_req(ns, buf, &req, req.nlh.nlmsg_len);
+	}
 
-	if (!MAC_IS_ZERO(mac) || up)
+	if (change)
 		return;
+
+	n = nl_req(ns, buf, &req, req.nlh.nlmsg_len);
 
 	nh = (struct nlmsghdr *)buf;
 	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
