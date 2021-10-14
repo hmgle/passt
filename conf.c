@@ -369,8 +369,8 @@ static int conf_ns_check(void *arg)
 static int conf_ns_opt(struct ctx *c,
 		       char *nsdir, char *conf_userns, const char *optarg)
 {
+	int ufd = 0, nfd = 0, try, ret, netns_only_reset = c->netns_only;
 	char userns[PATH_MAX], netns[PATH_MAX];
-	int ufd = 0, nfd = 0, try, ret;
 	char *endptr;
 	pid_t pid;
 
@@ -433,6 +433,8 @@ static int conf_ns_opt(struct ctx *c,
 		if (ufd > 0)
 			close(ufd);
 	}
+
+	c->netns_only = netns_only_reset;
 
 	return -ENOENT;
 }
