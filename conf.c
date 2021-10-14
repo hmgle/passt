@@ -600,6 +600,7 @@ static void usage(const char *name)
 	info(   "  --no-ndp		Disable NDP responses");
 	info(   "  --no-dhcpv6		Disable DHCPv6 server");
 	info(   "  --no-ra		Disable router advertisements");
+	info(   "  --no-map-gw		Don't map gateway address to host");
 	info(   "  -4, --ipv4-only	Enable IPv4 operation only");
 	info(   "  -6, --ipv6-only	Enable IPv6 operation only");
 
@@ -776,6 +777,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"no-dhcpv6",	no_argument,		&c->no_dhcpv6,	1 },
 		{"no-ndp",	no_argument,		&c->no_ndp,	1 },
 		{"no-ra",	no_argument,		&c->no_ra,	1 },
+		{"no-map-gw",	no_argument,		&c->no_map_gw,	1 },
 		{"ipv4-only",	no_argument,		&c->v4,		'4' },
 		{"ipv6-only",	no_argument,		&c->v6,		'6' },
 		{"tcp-ports",	required_argument,	NULL,		't' },

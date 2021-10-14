@@ -1845,9 +1845,10 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 
 	tcp_sock_set_bufsize(c, s);
 
-	if (af == AF_INET && addr4.sin_addr.s_addr == c->gw4)
+	if (af == AF_INET && addr4.sin_addr.s_addr == c->gw4 && !c->no_map_gw)
 		addr4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	else if (af == AF_INET6 && !memcmp(addr, &c->gw6, sizeof(c->gw6)))
+	else if (af == AF_INET6 && !memcmp(addr, &c->gw6, sizeof(c->gw6)) &&
+		 !c->no_map_gw)
 		addr6.sin6_addr = in6addr_loopback;
 
 	if (af == AF_INET6 && IN6_IS_ADDR_LINKLOCAL(&addr6.sin6_addr)) {

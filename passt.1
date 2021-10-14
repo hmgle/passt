@@ -208,6 +208,11 @@ Disable Router Advertisements. Router Solicitations coming from guest or target
 namespace will be ignored.
 
 .TP
+.BR \-\-no-map-gw
+Don't remap TCP connections and untracked UDP traffic, with the gateway address
+as destination, to the host.
+
+.TP
 .BR \-4 ", " \-\-ipv4-only
 Enable IPv4-only operation. IPv6 traffic will be ignored.
 By default, IPv6 operation is enabled as long as at least an IPv6 default route
@@ -635,7 +640,7 @@ address corresponding to the default gateway will have their destination address
 translated to a loopback address, if and only if a packet, in the opposite
 direction, with a loopback destination or source address, port-wise matching for
 UDP, or connection-wise for TCP, has been recently forwarded to guest or
-namespace.
+namespace. This behaviour can be disabled with \-\-no\-map\-gw.
 
 .SS Handling of local traffic in pasta
 
