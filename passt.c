@@ -189,14 +189,27 @@ static void seccomp(struct ctx *c)
 }
 
 /**
- * check_root() - Warn if we're running as root, exit if we can't drop to nobody
+ * check_root() - Warn if root in init, exit if we can't drop to nobody
  */
 static void check_root(void)
 {
 	struct passwd *pw;
+	char buf[BUFSIZ];
+	int fd;
 
 	if (getuid() && geteuid())
 		return;
+
+	if ((fd = open("/proc/self/uid_map", O_RDONLY)) < 0)
+		return;
+
+	if (read(fd, buf, BUFSIZ) > 0 &&
+	    strcmp(buf, "         0          0 4294967295")) {
+		close(fd);
+		return;
+	}
+
+	close(fd);
 
 	fprintf(stderr, "Don't run this as root. Changing to nobody...\n");
 	pw = getpwnam("nobody");
