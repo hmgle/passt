@@ -1155,7 +1155,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		usage(argv[0]);
 	}
 
-	if (c->mode == MODE_PASTA && !c->pasta_netns_fd)
+	if (c->mode == MODE_PASTA && c->pasta_netns_fd <= 0)
 		pasta_start_ns(c);
 
 	if (nl_sock_init(c)) {
