@@ -185,68 +185,68 @@ th	flow init>ns ns>init
 set	OPTS -P4 -l 1M -w 32M -i1 --pacing-timer 100000
 
 tr	TCP/IPv6 throughput
-nsb	sleep 10; iperf3 -c ::1 __OPTS__
-hout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
-bw	__BW__ 10.0 20.0
-sleep	5
 hostb	sleep 10; iperf3 -c ::1 __OPTS__
 nsout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
 bw	__BW__ 10.0 20.0
+sleep	5
+nsb	sleep 10; iperf3 -c ::1 __OPTS__
+hout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
+bw	__BW__ 10.0 20.0
 
 tl	TCP/IPv6 RR latency
-hostb	tcp_rr -6 --nolog
-sleep	2
-nsout	LAT tcp_rr --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
-lat	__LAT__ 1000 500
-sleep	2
 nsb	tcp_rr -6 --nolog
 sleep	2
 hout	LAT tcp_rr --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 1000 500
 sleep	2
-
-tl	TCP/IPv6 CRR latency
-hostb	tcp_crr -6 --nolog
+hostb	tcp_rr -6 --nolog
 sleep	2
-nsout	LAT tcp_crr --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+nsout	LAT tcp_rr --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 1000 500
 sleep	2
+
+tl	TCP/IPv6 CRR latency
 nsb	tcp_crr -6 --nolog
 sleep	2
 hout	LAT tcp_crr --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 1000 500
 sleep	2
+hostb	tcp_crr -6 --nolog
+sleep	2
+nsout	LAT tcp_crr --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 500
+sleep	2
 
 tr	TCP/IPv4 throughput
-nsb	sleep 10; iperf3 -c 127.0.0.1 __OPTS__
-hout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
-bw	__BW__ 10.0 20.0
-sleep	5
 hostb	sleep 10; iperf3 -c 127.0.0.1 __OPTS__
 nsout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
 bw	__BW__ 10.0 20.0
+sleep	5
+nsb	sleep 10; iperf3 -c 127.0.0.1 __OPTS__
+hout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
+bw	__BW__ 10.0 20.0
 
 tl	TCP/IPv4 RR latency
-hostb	tcp_rr -4 --nolog
-sleep	2
-nsout	LAT tcp_rr --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
-lat	__LAT__ 1000 500
-sleep	2
 nsb	tcp_rr -4 --nolog
 sleep	2
 hout	LAT tcp_rr --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 1000 500
 sleep	2
-
-tl	TCP/IPv4 CRR latency
-hostb	tcp_crr -4 --nolog
+hostb	tcp_rr -4 --nolog
 sleep	2
-nsout	LAT tcp_crr --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+nsout	LAT tcp_rr --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 1000 500
 sleep	2
+
+tl	TCP/IPv4 CRR latency
 nsb	tcp_crr -4 --nolog
 sleep	2
 hout	LAT tcp_crr --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 1000 500
+sleep	2
+hostb	tcp_crr -4 --nolog
+sleep	2
+nsout	LAT tcp_crr --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 1000 500
 sleep	2
 
