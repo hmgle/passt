@@ -368,8 +368,8 @@ int bitmap_isset(uint8_t *map, int bit)
 }
 
 /**
- * line_read() - Same as fgets(), without using heap, a file instead of a stream
- * @buf:	Read buffer
+ * line_read() - Similar to fgets(), no heap usage, a file instead of a stream
+ * @buf:	Read buffer: on non-empty string, use that instead of reading
  * @len:	Maximum line length
  * @fd:		File descriptor for reading
  *
@@ -377,14 +377,31 @@ int bitmap_isset(uint8_t *map, int bit)
  */
 char *line_read(char *buf, size_t len, int fd)
 {
+	int n, do_read = !*buf;
 	char *p;
-	int n;
+
+	if (!do_read) {
+		char *nl;
+
+		buf[len - 1] = 0;
+		if (!strlen(buf))
+			return NULL;
+
+		p = buf + strlen(buf) + 1;
+
+		if (!(nl = strchr(p, '\n')))
+			return NULL;
+		*nl = 0;
+
+		return memmove(buf, p, len - (p - buf));
+	}
 
 	n = read(fd, buf, --len);
 	if (n <= 0)
 		return NULL;
 
 	buf[len] = 0;
+
 	if (!(p = strchr(buf, '\n')))
 		return buf;
 
@@ -393,6 +410,7 @@ char *line_read(char *buf, size_t len, int fd)
 		return buf;
 
 	lseek(fd, (p - buf) - n + 1, SEEK_CUR);
+
 	return buf;
 }
 
@@ -404,7 +422,7 @@ char *line_read(char *buf, size_t len, int fd)
  */
 void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
 {
-	char line[200], path[PATH_MAX];
+	char line[BUFSIZ], path[PATH_MAX];
 	unsigned long port;
 	unsigned int state;
 	int fd;
@@ -413,6 +431,7 @@ void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
 	if ((fd = open(path, O_RDONLY)) < 0)
 		return;
 
+	*line = 0;
 	line_read(line, sizeof(line), fd);
 	while (line_read(line, sizeof(line), fd)) {
 		if (sscanf(line, "%*u: %*x:%lx %*x:%*x %x", &port, &state) != 2)
