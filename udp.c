@@ -927,7 +927,6 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 				return count;
 
 			udp_tap_map[V4][src].sock = s;
-			udp_tap_map[V4][src].ts = s;
 			bitmap_set(udp_act[V4][UDP_ACT_TAP], src);
 		}
 
