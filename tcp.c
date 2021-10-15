@@ -352,6 +352,11 @@
 #define MAX_WS				10
 #define MAX_WINDOW			(1 << (16 + (MAX_WS)))
 #define MSS_DEFAULT			536
+#define MSS4	(USHRT_MAX - sizeof(uint32_t) - sizeof(struct ethhdr) -	\
+		 sizeof(struct iphdr) - sizeof(struct tcphdr))
+#define MSS6	(USHRT_MAX - sizeof(uint32_t) - sizeof(struct ethhdr) -	\
+		 sizeof(struct ipv6hdr) - sizeof(struct tcphdr))
+
 #define WINDOW_DEFAULT			14600		/* RFC 6928 */
 
 #define SYN_TIMEOUT			240000		/* ms */
@@ -590,7 +595,8 @@ static struct tcp4_l2_buf_t {
 	struct ethhdr eh;	/* 30				14 */
 	struct iphdr iph;	/* 44				28 */
 	struct tcphdr th;	/* 64				48 */
-	uint8_t data[USHRT_MAX - sizeof(struct tcphdr)];
+	uint8_t data[MSS4];	/* 84				68 */
+				/* 65541			65525 */
 #ifdef __AVX2__
 } __attribute__ ((packed, aligned(32)))
 #else
@@ -622,8 +628,8 @@ struct tcp6_l2_buf_t {
 	struct ethhdr eh;	/* 18				6 */
 	struct ipv6hdr ip6h;	/* 32				20 */
 	struct tcphdr th;	/* 72				60 */
-	uint8_t data[USHRT_MAX -
-		     (sizeof(struct ipv6hdr) + sizeof(struct tcphdr))];
+	uint8_t data[MSS6];	/* 92				80 */
+				/* 65639			65627 */
 #ifdef __AVX2__
 } __attribute__ ((packed, aligned(32)))
 #else
@@ -1868,14 +1874,12 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	if (conn->mss_guest < 0)
 		conn->mss_guest = MSS_DEFAULT;
 
+	/* Don't upset qemu */
 	if (c->mode == MODE_PASST) {
-		/* Don't upset qemu */
-		conn->mss_guest = MIN(USHRT_MAX -
-				      sizeof(uint32_t) -
-				      sizeof(struct ethhdr) -
-				      sizeof(struct ipv6hdr) -
-				      sizeof(struct tcphdr),
-				      conn->mss_guest);
+		if (af == AF_INET)
+			conn->mss_guest = MIN(MSS4, conn->mss_guest);
+		else
+			conn->mss_guest = MIN(MSS6, conn->mss_guest);
 	}
 
 	sl = sizeof(conn->mss_guest);
@@ -2563,14 +2567,12 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		if (conn->mss_guest < 0)
 			conn->mss_guest = MSS_DEFAULT;
 
+		/* Don't upset qemu */
 		if (c->mode == MODE_PASST) {
-			/* Don't upset qemu */
-			conn->mss_guest = MIN(USHRT_MAX -
-					      sizeof(uint32_t) -
-					      sizeof(struct ethhdr) -
-					      sizeof(struct ipv6hdr) -
-					      sizeof(struct tcphdr),
-					      conn->mss_guest);
+			if (af == AF_INET)
+				conn->mss_guest = MIN(MSS4, conn->mss_guest);
+			else
+				conn->mss_guest = MIN(MSS6, conn->mss_guest);
 		}
 
 		/* info.tcpi_bytes_acked already includes one byte for SYN, but
