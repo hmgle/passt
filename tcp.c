@@ -1883,7 +1883,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 			sock_pool_p = &init_sock_pool6[i];
 		else
 			sock_pool_p = &init_sock_pool4[i];
-		if ((ref.s = s = *sock_pool_p) > 0) {
+		if ((ref.s = s = *sock_pool_p) >= 0) {
 			*sock_pool_p = -1;
 			break;
 		}
@@ -2701,7 +2701,7 @@ static void tcp_splice_connect_finish(struct ctx *c,
 		}
 	}
 
-	if (conn->pipe_from_to[0] <= 0) {
+	if (conn->pipe_from_to[0] < 0) {
 		if (pipe2(conn->pipe_to_from, O_NONBLOCK) ||
 		    pipe2(conn->pipe_from_to, O_NONBLOCK)) {
 			tcp_splice_destroy(c, conn);
@@ -2736,9 +2736,9 @@ static void tcp_splice_connect_finish(struct ctx *c,
 static int tcp_splice_connect(struct ctx *c, struct tcp_splice_conn *conn,
 			      int s, int v6, in_port_t port)
 {
-	int sock_conn = (s > 0) ? s : socket(v6 ? AF_INET6 : AF_INET,
-					     SOCK_STREAM | SOCK_NONBLOCK,
-					     IPPROTO_TCP);
+	int sock_conn = (s >= 0) ? s : socket(v6 ? AF_INET6 : AF_INET,
+					      SOCK_STREAM | SOCK_NONBLOCK,
+					      IPPROTO_TCP);
 	union epoll_ref ref_accept = { .proto = IPPROTO_TCP, .s = conn->from,
 				       .tcp = { .splice = 1, .v6 = v6,
 						.index = conn - ts } };
@@ -2763,10 +2763,10 @@ static int tcp_splice_connect(struct ctx *c, struct tcp_splice_conn *conn,
 
 	conn->to = sock_conn;
 
-	if (s <= 0)
-		tcp_sock_set_bufsize(c, sock_conn);
+	if (s < 0)
+		tcp_sock_set_bufsize(c, conn->to);
 
-	setsockopt(s, SOL_TCP, TCP_QUICKACK, &one, sizeof(one));
+	setsockopt(conn->to, SOL_TCP, TCP_QUICKACK, &one, sizeof(one));
 
 	if (v6) {
 		sa = (struct sockaddr *)&addr6;
@@ -2853,13 +2853,13 @@ static int tcp_splice_new(struct ctx *c, struct tcp_splice_conn *conn,
 		sock_pool_p = v6 ? init_sock_pool6 : init_sock_pool4;
 
 	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++, sock_pool_p++) {
-		if ((s = *sock_pool_p) > 0) {
+		if ((s = *sock_pool_p) >= 0) {
 			*sock_pool_p = -1;
 			break;
 		}
 	}
 
-	if (s <= 0 && bitmap_isset(c->tcp.port_to_tap, port)) {
+	if (s < 0 && bitmap_isset(c->tcp.port_to_tap, port)) {
 		NS_CALL(tcp_splice_connect_ns, &ns_arg);
 		return ns_arg.ret;
 	}
@@ -3358,7 +3358,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
 				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
 				    tref.u32);
-			if (s > 0)
+			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
 			else
 				s = -1;
@@ -3371,7 +3371,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 			tref.splice = 1;
 			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
 				    BIND_LOOPBACK, tref.u32);
-			if (s > 0)
+			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
 			else
 				s = -1;
@@ -3393,7 +3393,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
 				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
 				    tref.u32);
-			if (s > 0)
+			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
 			else
 				s = -1;
@@ -3406,7 +3406,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 			tref.splice = 1;
 			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
 				    BIND_LOOPBACK, tref.u32);
-			if (s > 0)
+			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
 			else
 				s = -1;
@@ -3453,7 +3453,7 @@ static void tcp_splice_pipe_refill(struct ctx *c)
 	int i;
 
 	for (i = 0; i < TCP_SPLICE_PIPE_POOL_SIZE; i++) {
-		if (splice_pipe_pool[i][0][0] > 0)
+		if (splice_pipe_pool[i][0][0] >= 0)
 			break;
 		if (pipe2(splice_pipe_pool[i][0], O_NONBLOCK))
 			continue;
@@ -3502,7 +3502,7 @@ static int tcp_sock_refill(void *arg)
 	}
 
 	for (i = 0; a->c->v4 && i < TCP_SOCK_POOL_SIZE; i++, p4++) {
-		if (*p4 > 0) {
+		if (*p4 >= 0) {
 			break;
 		}
 		*p4 = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
@@ -3510,7 +3510,7 @@ static int tcp_sock_refill(void *arg)
 	}
 
 	for (i = 0; a->c->v6 && i < TCP_SOCK_POOL_SIZE; i++, p6++) {
-		if (*p6 > 0) {
+		if (*p6 >= 0) {
 			break;
 		}
 		*p6 = socket(AF_INET6, SOCK_STREAM | SOCK_NONBLOCK,
@@ -3552,6 +3552,15 @@ int tcp_sock_init(struct ctx *c, struct timespec *now)
 
 	if (c->v6)
 		tcp_sock6_iov_init();
+
+	memset(splice_pipe_pool,	0xff,	sizeof(splice_pipe_pool));
+	memset(init_sock_pool4,		0xff,	sizeof(init_sock_pool4));
+	memset(init_sock_pool6,		0xff,	sizeof(init_sock_pool6));
+	memset(ns_sock_pool4,		0xff,	sizeof(ns_sock_pool4));
+	memset(ns_sock_pool6,		0xff,	sizeof(ns_sock_pool6));
+	memset(tcp_sock_init_lo,	0xff,	sizeof(tcp_sock_init_lo));
+	memset(tcp_sock_init_ext,	0xff,	sizeof(tcp_sock_init_ext));
+	memset(tcp_sock_ns,		0xff,	sizeof(tcp_sock_ns));
 
 	c->tcp.refill_ts = *now;
 	tcp_sock_refill(&refill_arg);
@@ -3715,14 +3724,14 @@ static int tcp_port_rebind(void *arg)
 
 		for (port = 0; port < USHRT_MAX; port++) {
 			if (!bitmap_isset(a->c->tcp.port_to_init, port)) {
-				if (tcp_sock_ns[port][V4] > 0) {
+				if (tcp_sock_ns[port][V4] >= 0) {
 					close(tcp_sock_ns[port][V4]);
-					tcp_sock_ns[port][V4] = 0;
+					tcp_sock_ns[port][V4] = -1;
 				}
 
-				if (tcp_sock_ns[port][V6] > 0) {
+				if (tcp_sock_ns[port][V6] >= 0) {
 					close(tcp_sock_ns[port][V6]);
-					tcp_sock_ns[port][V6] = 0;
+					tcp_sock_ns[port][V6] = -1;
 				}
 
 				continue;
@@ -3732,31 +3741,31 @@ static int tcp_port_rebind(void *arg)
 			if (bitmap_isset(a->c->tcp.port_to_tap, port))
 				continue;
 
-			if ((a->c->v4 && !tcp_sock_ns[port][V4]) ||
-			    (a->c->v6 && !tcp_sock_ns[port][V6]))
+			if ((a->c->v4 && tcp_sock_ns[port][V4] == -1) ||
+			    (a->c->v6 && tcp_sock_ns[port][V6] == -1))
 				tcp_sock_init_one(a->c, 1, port);
 		}
 	} else {
 		for (port = 0; port < USHRT_MAX; port++) {
 			if (!bitmap_isset(a->c->tcp.port_to_tap, port)) {
-				if (tcp_sock_init_ext[port][V4] > 0) {
+				if (tcp_sock_init_ext[port][V4] >= 0) {
 					close(tcp_sock_init_ext[port][V4]);
-					tcp_sock_init_ext[port][V4] = 0;
+					tcp_sock_init_ext[port][V4] = -1;
 				}
 
-				if (tcp_sock_init_ext[port][V6] > 0) {
+				if (tcp_sock_init_ext[port][V6] >= 0) {
 					close(tcp_sock_init_ext[port][V6]);
-					tcp_sock_init_ext[port][V6] = 0;
+					tcp_sock_init_ext[port][V6] = -1;
 				}
 
-				if (tcp_sock_init_lo[port][V4] > 0) {
+				if (tcp_sock_init_lo[port][V4] >= 0) {
 					close(tcp_sock_init_lo[port][V4]);
-					tcp_sock_init_lo[port][V4] = 0;
+					tcp_sock_init_lo[port][V4] = -1;
 				}
 
-				if (tcp_sock_init_lo[port][V6] > 0) {
+				if (tcp_sock_init_lo[port][V6] >= 0) {
 					close(tcp_sock_init_lo[port][V6]);
-					tcp_sock_init_lo[port][V6] = 0;
+					tcp_sock_init_lo[port][V6] = -1;
 				}
 				continue;
 			}
@@ -3765,8 +3774,8 @@ static int tcp_port_rebind(void *arg)
 			if (bitmap_isset(a->c->tcp.port_to_init, port))
 				continue;
 
-			if ((a->c->v4 && !tcp_sock_init_ext[port][V4]) ||
-			    (a->c->v6 && !tcp_sock_init_ext[port][V6]))
+			if ((a->c->v4 && tcp_sock_init_ext[port][V4] == -1) ||
+			    (a->c->v6 && tcp_sock_init_ext[port][V6] == -1))
 				tcp_sock_init_one(a->c, 0, port);
 		}
 	}
@@ -3812,8 +3821,8 @@ void tcp_timer(struct ctx *c, struct timespec *now)
 		tcp_sock_refill(&refill_arg);
 		if (c->mode == MODE_PASTA) {
 			refill_arg.ns = 1;
-			if ((c->v4 && ns_sock_pool4[TCP_SOCK_POOL_TSH] <= 0) ||
-			    (c->v6 && ns_sock_pool6[TCP_SOCK_POOL_TSH] <= 0))
+			if ((c->v4 && ns_sock_pool4[TCP_SOCK_POOL_TSH] < 0) ||
+			    (c->v6 && ns_sock_pool6[TCP_SOCK_POOL_TSH] < 0))
 				NS_CALL(tcp_sock_refill, &refill_arg);
 
 			tcp_splice_pipe_refill(c);
