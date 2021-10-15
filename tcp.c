@@ -604,10 +604,8 @@ static struct tcp4_l2_buf_t {
 #endif
 tcp4_l2_buf[TCP_TAP_FRAMES];
 
-static int tcp4_l2_buf_mss;
-static int tcp4_l2_buf_mss_nr_set;
-static int tcp4_l2_buf_mss_tap;
-static int tcp4_l2_buf_mss_tap_nr_set;
+static unsigned int tcp4_l2_buf_used;
+static size_t tcp4_l2_buf_bytes;
 
 /**
  * tcp6_l2_buf_t - Pre-cooked IPv6 packet buffers for tap connections
@@ -637,23 +635,17 @@ struct tcp6_l2_buf_t {
 #endif
 tcp6_l2_buf[TCP_TAP_FRAMES];
 
-static int tcp6_l2_buf_mss;
-static int tcp6_l2_buf_mss_nr_set;
-static int tcp6_l2_buf_mss_tap;
-static int tcp6_l2_buf_mss_tap_nr_set;
+static unsigned int tcp6_l2_buf_used;
+static size_t tcp6_l2_buf_bytes;
 
 /* recvmsg()/sendmsg() data for tap */
-static struct iovec	tcp4_l2_iov_sock	[TCP_TAP_FRAMES + 1];
-static struct iovec	tcp6_l2_iov_sock	[TCP_TAP_FRAMES + 1];
 static char 		tcp_buf_discard		[MAX_WINDOW];
+static struct iovec	iov_sock		[TCP_TAP_FRAMES + 1];
 
 static struct iovec	tcp4_l2_iov_tap		[TCP_TAP_FRAMES];
 static struct iovec	tcp6_l2_iov_tap		[TCP_TAP_FRAMES];
 static struct iovec	tcp4_l2_flags_iov_tap	[TCP_TAP_FRAMES];
 static struct iovec	tcp6_l2_flags_iov_tap	[TCP_TAP_FRAMES];
-
-static struct msghdr	tcp4_l2_mh_sock;
-static struct msghdr	tcp6_l2_mh_sock;
 
 static struct mmsghdr	tcp_l2_mh_tap		[TCP_TAP_FRAMES];
 
@@ -975,15 +967,6 @@ static void tcp_sock4_iov_init(void)
 		};
 	}
 
-	tcp4_l2_iov_sock[0].iov_base = tcp_buf_discard;
-	for (i = 0, iov = tcp4_l2_iov_sock + 1; i < TCP_TAP_FRAMES;
-	     i++, iov++) {
-		iov->iov_base = &tcp4_l2_buf[i].data;
-		iov->iov_len = MSS_DEFAULT;
-	}
-
-	tcp4_l2_mh_sock.msg_iov = tcp4_l2_iov_sock;
-
 	for (i = 0, iov = tcp4_l2_iov_tap; i < TCP_TAP_FRAMES; i++, iov++) {
 		iov->iov_base = &tcp4_l2_buf[i].vnet_len;
 		iov->iov_len = MSS_DEFAULT;
@@ -1016,15 +999,6 @@ static void tcp_sock6_iov_init(void)
 			{ 0 }, { 0 },
 		};
 	}
-
-	tcp6_l2_iov_sock[0].iov_base = tcp_buf_discard;
-	for (i = 0, iov = tcp6_l2_iov_sock + 1; i < TCP_TAP_FRAMES;
-	     i++, iov++) {
-		iov->iov_base = &tcp6_l2_buf[i].data;
-		iov->iov_len = MSS_DEFAULT;
-	}
-
-	tcp6_l2_mh_sock.msg_iov = tcp6_l2_iov_sock;
 
 	for (i = 0, iov = tcp6_l2_iov_tap; i < TCP_TAP_FRAMES; i++, iov++) {
 		iov->iov_base = &tcp6_l2_buf[i].vnet_len;
@@ -1374,12 +1348,87 @@ static void tcp_l2_flags_buf_flush(struct ctx *c)
 }
 
 /**
+ * tcp_l2_buf_flush_part() - Ensure a complete last message on partial sendmsg()
+ * @c:		Execution context
+ * @mh:		Message header that was partially sent by sendmsg()
+ * @sent:	Bytes already sent
+ */
+static void tcp_l2_buf_flush_part(struct ctx *c, struct msghdr *mh, size_t sent)
+{
+	size_t end = 0, missing;
+	struct iovec *iov;
+	unsigned int i;
+	char *p;
+
+	for (i = 0, iov = mh->msg_iov; i < mh->msg_iovlen; i++, iov++) {
+		end += iov->iov_len;
+		if (end >= sent)
+			break;
+	}
+
+	missing = end - sent;
+	p = (char *)iov->iov_base + iov->iov_len - missing;
+	send(c->fd_tap, p, missing, MSG_NOSIGNAL);
+}
+
+/**
+ * tcp_l2_flags_buf() - Send out buffers for segments with data
+ * @c:		Execution context
+ */
+static void tcp_l2_buf_flush(struct ctx *c)
+{
+	struct msghdr mh = { 0 };
+	size_t i, n;
+
+	mh.msg_iov = tcp6_l2_iov_tap;
+	if (!(mh.msg_iovlen = tcp6_l2_buf_used))
+		goto v4;
+
+	if (c->mode == MODE_PASST) {
+		n = sendmsg(c->fd_tap, &mh, MSG_NOSIGNAL | MSG_DONTWAIT);
+		if (n > 0 && n < tcp6_l2_buf_bytes)
+			tcp_l2_buf_flush_part(c, &mh, n);
+	} else {
+		for (i = 0; i < mh.msg_iovlen; i++) {
+			struct iovec *iov = &mh.msg_iov[i];
+
+			write(c->fd_tap, (char *)iov->iov_base + 4,
+			      iov->iov_len - 4);
+		}
+	}
+	tcp6_l2_buf_used = tcp6_l2_buf_bytes = 0;
+	pcapm(&mh);
+
+v4:
+	mh.msg_iov = tcp4_l2_iov_tap;
+	if (!(mh.msg_iovlen = tcp4_l2_buf_used))
+		return;
+
+	if (c->mode == MODE_PASST) {
+		n = sendmsg(c->fd_tap, &mh, MSG_NOSIGNAL | MSG_DONTWAIT);
+
+		if (n > 0 && n < tcp4_l2_buf_bytes)
+			tcp_l2_buf_flush_part(c, &mh, n);
+	} else {
+		for (i = 0; i < mh.msg_iovlen; i++) {
+			struct iovec *iov = &mh.msg_iov[i];
+
+			write(c->fd_tap, (char *)iov->iov_base + 4,
+			      iov->iov_len - 4);
+		}
+	}
+	tcp4_l2_buf_used = tcp4_l2_buf_bytes = 0;
+	pcapm(&mh);
+}
+
+/**
  * tcp_defer_handler() - Handler for TCP deferred tasks
  * @c:		Execution context
  */
 void tcp_defer_handler(struct ctx *c)
 {
 	tcp_l2_flags_buf_flush(c);
+	tcp_l2_buf_flush(c);
 }
 
 /**
@@ -2085,19 +2134,17 @@ static void tcp_sock_consume(struct tcp_tap_conn *conn, uint32_t ack_seq)
  * Return: negative on connection reset, 0 otherwise
  *
  * #syscalls recvmsg
- * #syscalls:passt sendmmsg sendmsg
  */
 static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 			      struct timespec *now)
 {
-	int *buf_mss, *buf_mss_nr_set, *buf_mss_tap, *buf_mss_tap_nr_set;
-	int mss_tap, fill_bufs, send_bufs = 0, last_len, iov_rem = 0;
+	int fill_bufs, send_bufs = 0, last_len, iov_rem = 0;
 	int send, len, plen, v4 = CONN_V4(conn);
 	uint32_t seq_to_tap = conn->seq_to_tap;
 	int s = conn->sock, i, ret = 0;
-	struct iovec *iov, *iov_tap;
+	struct msghdr mh_sock = { 0 };
 	uint32_t already_sent;
-	struct mmsghdr *mh;
+	struct iovec *iov;
 
 	already_sent = conn->seq_to_tap - conn->seq_ack_from_tap;
 
@@ -2121,35 +2168,30 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 		iov_rem = (conn->wnd_from_tap - already_sent) % conn->mss_guest;
 	}
 
-	/* Adjust iovec length for recvmsg() based on what was set last time. */
-	if (v4) {
-		iov = tcp4_l2_iov_sock + 1;
-		buf_mss = &tcp4_l2_buf_mss;
-		buf_mss_nr_set = &tcp4_l2_buf_mss_nr_set;
-	} else {
-		iov = tcp6_l2_iov_sock + 1;
-		buf_mss = &tcp6_l2_buf_mss;
-		buf_mss_nr_set = &tcp6_l2_buf_mss_nr_set;
-	}
-	if (*buf_mss != conn->mss_guest)
-		*buf_mss_nr_set = 0;
-	for (i = *buf_mss_nr_set; i < fill_bufs; i++)
-		iov[i].iov_len = conn->mss_guest;
-	*buf_mss = conn->mss_guest;
-	*buf_mss_nr_set = fill_bufs - 1;
+	mh_sock.msg_iov = iov_sock;
+	mh_sock.msg_iovlen = fill_bufs + 1;
 
-	/* First buffer is to discard data, last one may be partially filled. */
-	iov[-1].iov_len = already_sent;
+	iov_sock[0].iov_base = tcp_buf_discard;
+	iov_sock[0].iov_len = already_sent;
+
+	if (v4 && tcp4_l2_buf_used + fill_bufs > ARRAY_SIZE(tcp4_l2_buf))
+		tcp_l2_buf_flush(c);
+	else if (!v4 && tcp6_l2_buf_used + fill_bufs > ARRAY_SIZE(tcp6_l2_buf))
+		tcp_l2_buf_flush(c);
+
+	for (i = 0, iov = iov_sock + 1; i < fill_bufs; i++, iov++) {
+		if (v4)
+			iov->iov_base = &tcp4_l2_buf[tcp4_l2_buf_used + i].data;
+		else
+			iov->iov_base = &tcp6_l2_buf[tcp6_l2_buf_used + i].data;
+		iov->iov_len = conn->mss_guest;
+	}
 	if (iov_rem)
-		iov[fill_bufs - 1].iov_len = iov_rem;
-	if (v4)
-		tcp4_l2_mh_sock.msg_iovlen = fill_bufs + 1;
-	else
-		tcp6_l2_mh_sock.msg_iovlen = fill_bufs + 1;
+		iov_sock[fill_bufs].iov_len = iov_rem;
 
 	/* Don't dequeue until acknowledged by guest. */
 recvmsg:
-	len = recvmsg(s, v4 ? &tcp4_l2_mh_sock : &tcp6_l2_mh_sock, MSG_PEEK);
+	len = recvmsg(s, &mh_sock, MSG_PEEK);
 	if (len < 0) {
 		if (errno == EINTR)
 			goto recvmsg;
@@ -2162,7 +2204,7 @@ recvmsg:
 	send = len - already_sent;
 	if (send <= 0) {
 		tcp_tap_epoll_mask(c, conn, conn->events | EPOLLET);
-		goto out;
+		return 0;
 	}
 
 	tcp_tap_epoll_mask(c, conn, conn->events & ~EPOLLET);
@@ -2170,55 +2212,35 @@ recvmsg:
 	send_bufs = DIV_ROUND_UP(send, conn->mss_guest);
 	last_len = send - (send_bufs - 1) * conn->mss_guest;
 
-	/* Adjust iovec length for sending based on what was set last time. */
-	if (v4) {
-		mss_tap = conn->mss_guest +
-			  offsetof(struct tcp4_l2_buf_t, data) -
-			  offsetof(struct tcp4_l2_buf_t, vnet_len);
-
-		iov_tap = tcp4_l2_iov_tap;
-		buf_mss_tap = &tcp4_l2_buf_mss_tap;
-		buf_mss_tap_nr_set = &tcp4_l2_buf_mss_tap_nr_set;
-	} else {
-		mss_tap = conn->mss_guest +
-			  offsetof(struct tcp6_l2_buf_t, data) -
-			  offsetof(struct tcp6_l2_buf_t, vnet_len);
-
-		iov_tap = tcp6_l2_iov_tap;
-		buf_mss_tap = &tcp6_l2_buf_mss_tap;
-		buf_mss_tap_nr_set = &tcp6_l2_buf_mss_tap_nr_set;
-	}
-	if (*buf_mss_tap != mss_tap)
-		*buf_mss_tap_nr_set = 0;
-	for (i = *buf_mss_tap_nr_set; i < send_bufs; i++)
-		iov_tap[i].iov_len = mss_tap;
-	*buf_mss_tap = mss_tap;
-	*buf_mss_tap_nr_set = send_bufs;
-
-	iov_tap[send_bufs - 1].iov_len = mss_tap - conn->mss_guest + last_len;
-
 	/* Likely, some new data was acked too. */
 	tcp_update_seqack_wnd(c, conn, 0, NULL);
 
 	plen = conn->mss_guest;
-	for (i = 0, mh = tcp_l2_mh_tap; i < send_bufs; i++, mh++) {
+	for (i = 0; i < send_bufs; i++) {
 		ssize_t eth_len;
 
 		if (i == send_bufs - 1)
 			plen = last_len;
 
 		if (v4) {
-			struct tcp4_l2_buf_t *b = &tcp4_l2_buf[i];
+			struct tcp4_l2_buf_t *b = &tcp4_l2_buf[tcp4_l2_buf_used];
 			uint16_t *check = NULL;
 
-			if (i && i != send_bufs - 1)
-				check = &tcp4_l2_buf[0].iph.check;
+			if (i && i != send_bufs - 1 && tcp4_l2_buf_used)
+				check = &(b - 1)->iph.check;
 
 			eth_len = tcp_l2_buf_fill_headers(c, conn, b, plen,
 							  check, seq_to_tap);
 
 			if (c->mode == MODE_PASST) {
-				mh->msg_hdr.msg_iov = &tcp4_l2_iov_tap[i];
+				iov = tcp4_l2_iov_tap + tcp4_l2_buf_used++;
+				iov->iov_len = eth_len + sizeof(uint32_t);
+				tcp4_l2_buf_bytes += iov->iov_len;
+
+				if (tcp4_l2_buf_used >
+				    ARRAY_SIZE(tcp4_l2_buf) - 1)
+					tcp_l2_buf_flush(c);
+
 				seq_to_tap += plen;
 				continue;
 			}
@@ -2226,13 +2248,20 @@ recvmsg:
 			pcap((char *)&b->eh, eth_len);
 			ret = write(c->fd_tap, &b->eh, eth_len);
 		} else {
-			struct tcp6_l2_buf_t *b = &tcp6_l2_buf[i];
+			struct tcp6_l2_buf_t *b = &tcp6_l2_buf[tcp6_l2_buf_used];
 
 			eth_len = tcp_l2_buf_fill_headers(c, conn, b, plen,
 							  NULL, seq_to_tap);
 
 			if (c->mode == MODE_PASST) {
-				mh->msg_hdr.msg_iov = &tcp6_l2_iov_tap[i];
+				iov = tcp6_l2_iov_tap + tcp6_l2_buf_used++;
+				iov->iov_len = eth_len + sizeof(uint32_t);
+				tcp6_l2_buf_bytes += iov->iov_len;
+
+				if (tcp6_l2_buf_used >
+				    ARRAY_SIZE(tcp6_l2_buf) - 1)
+					tcp_l2_buf_flush(c);
+
 				seq_to_tap += plen;
 				continue;
 			}
@@ -2257,53 +2286,21 @@ recvmsg:
 	}
 
 	if (c->mode == MODE_PASTA)
-		goto out;
-
-sendmmsg:
-	ret = sendmmsg(c->fd_tap, tcp_l2_mh_tap, mh - tcp_l2_mh_tap,
-		       MSG_NOSIGNAL | MSG_DONTWAIT);
-	if (ret < 0 && errno == EINTR)
-		goto sendmmsg;
-
-	if (ret <= 0)
-		goto out;
+		return ret;
 
 	conn->tap_data_noack = *now;
-	conn->seq_to_tap += conn->mss_guest * (ret - 1) + last_len;
-
-	/* sendmmsg() indicates how many messages were sent at least partially.
-	 * Kernel commit 3023898b7d4a ("sock: fix sendmmsg for partial sendmsg")
-	 * gives us the guarantee that at most one message, namely the last sent
-	 * one, might have been sent partially. Check how many bytes of that
-	 * message were sent, and re-send any missing bytes with a blocking
-	 * sendmsg(), otherwise qemu will fail to parse any subsequent message.
-	 */
-	mh = &tcp_l2_mh_tap[ret - 1];
-	if (mh->msg_len < mh->msg_hdr.msg_iov->iov_len) {
-		uint8_t **iov_base = (uint8_t **)&mh->msg_hdr.msg_iov->iov_base;
-		int part_sent = mh->msg_len;
-
-		mh->msg_hdr.msg_iov->iov_len -= part_sent;
-		*iov_base += part_sent;
-
-		sendmsg(c->fd_tap, &mh->msg_hdr, MSG_NOSIGNAL);
-
-		mh->msg_hdr.msg_iov->iov_len += part_sent;
-		*iov_base -= part_sent;
-	}
+	conn->seq_to_tap += conn->mss_guest * (send_bufs - 1) + last_len;
 
 	conn->ts_ack_to_tap = *now;
 
-	pcapmm(tcp_l2_mh_tap, ret);
-
-	goto out;
+	return 0;
 
 err:
 	if (errno != EAGAIN && errno != EWOULDBLOCK) {
 		tcp_rst(c, conn);
 		ret = -errno;
 	}
-	goto out;
+	return ret;
 
 zero_len:
 	if (conn->state == ESTABLISHED_SOCK_FIN) {
@@ -2312,13 +2309,7 @@ zero_len:
 		tcp_tap_state(conn, ESTABLISHED_SOCK_FIN_SENT);
 	}
 
-out:
-	if (iov_rem)
-		iov[fill_bufs - 1].iov_len = conn->mss_guest;
-	if (send_bufs)
-		iov_tap[send_bufs - 1].iov_len = mss_tap;
-
-	return ret;
+	return 0;
 }
 
 /**
