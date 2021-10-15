@@ -217,9 +217,9 @@ static uint32_t csum_avx2(const void *buf, size_t len, uint32_t init)
 					    _mm256_unpacklo_epi32(b, zero));
 	}
 
-	/* Fold four 256bit sums into one 128-bit sum. TODO */
-	sum256 = _mm256_add_epi64(_mm256_add_epi64(sum_a_hi, sum_a_lo),
-				  _mm256_add_epi64(sum_b_hi, sum_b_lo));
+	/* Fold four 256bit sums into one 128-bit sum. */
+	sum256 = _mm256_add_epi64(_mm256_add_epi64(sum_a_hi, sum_b_lo),
+				  _mm256_add_epi64(sum_b_hi, sum_a_lo));
 	sum128 = _mm_add_epi64(_mm256_extracti128_si256(sum256, 0),
 			       _mm256_extracti128_si256(sum256, 1));
 
