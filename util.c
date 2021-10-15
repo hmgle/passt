@@ -54,11 +54,11 @@ void name(const char *format, ...) {					\
 		fprintf(stderr, "%lu.%04lu: ",				\
 			tp.tv_sec - log_debug_start,			\
 			tp.tv_nsec / (100 * 1000));			\
+	} else {							\
+		va_start(args, format);					\
+		__vsyslog(level, format, args);				\
+		va_end(args);						\
 	}								\
-									\
-	va_start(args, format);						\
-	__vsyslog(level, format, args);					\
-	va_end(args);							\
 									\
 	if (setlogmask(0) & LOG_MASK(LOG_DEBUG) ||			\
 	    setlogmask(0) == LOG_MASK(LOG_EMERG)) {			\
