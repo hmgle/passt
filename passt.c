@@ -248,7 +248,7 @@ static void pid_file(struct ctx *c) {
 	char pid_buf[12];
 	int pid_fd, n;
 
-	if (!c->pid_file)
+	if (!*c->pid_file)
 		return;
 
 	pid_fd = open(c->pid_file, O_CREAT | O_WRONLY);
