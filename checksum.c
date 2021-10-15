@@ -156,6 +156,8 @@ void csum_tcp4(struct iphdr *iph)
  *   UDP headers, and that the data is not used immediately afterwards, reducing
  *   cache pollution significantly and latency (e.g. on Intel Skylake: 0 instead
  *   of 7)
+ * - read from four streams in parallel as long as we have more than 128 bytes,
+ *   not just two
  * - replace the ADCQ implementation for the portion remaining after the
  *   checksum computation for 128-byte blocks by a load/unpack/add loop on a
  *   single stream, and do the rest with a for loop, auto-vectorisation seems to
@@ -165,20 +167,21 @@ void csum_tcp4(struct iphdr *iph)
  */
 static uint32_t csum_avx2(const void *buf, size_t len, uint32_t init)
 {
-	__m256i zero, a, b, sum256, sum_a_hi, sum_a_lo, sum_b_hi, sum_b_lo;
+	__m256i a, b, sum256, sum_a_hi, sum_a_lo, sum_b_hi, sum_b_lo, c, d;
+	__m256i __sum_a_hi, __sum_a_lo, __sum_b_hi, __sum_b_lo;
 	const uint64_t *buf64 = (const uint64_t *)buf;
-	const __m256i *buf256 = (__m256i *)buf64;
+	const __m256i *buf256;
 	const uint16_t *buf16;
 	uint64_t sum64 = init;
 	int odd = len & 1;
 	__m128i sum128;
+	__m256i zero;
 
 	zero = _mm256_setzero_si256();
 	buf256 = (const __m256i *)buf64;
 
 	if (len < sizeof(__m256i) * 4)
 		goto less_than_128_bytes;
-
 
 	/* We parallelize two ymm streams to minimize register dependency:
 	 *
@@ -202,6 +205,47 @@ static uint32_t csum_avx2(const void *buf, size_t len, uint32_t init)
 
 	len -= sizeof(__m256i) * 2;
 	buf256 += 2;
+
+	/* As long as we have more than 128 bytes, (stream) load from four
+	 * streams instead of two, interleaving loads and register usage, to
+	 * further decrease stalls, but don't double the number of accumulators
+	 * and don't make this a general case to keep branching reasonable.
+	 */
+	if (len >= sizeof(a) * 4) {
+		a = _mm256_stream_load_si256(buf256);
+		b = _mm256_stream_load_si256(buf256 + 1);
+		c = _mm256_stream_load_si256(buf256 + 2);
+		d = _mm256_stream_load_si256(buf256 + 3);
+	}
+	for (; len >= sizeof(a) * 4; len -= sizeof(a) * 4, buf256 += 4) {
+		__sum_a_hi = _mm256_add_epi64(sum_a_hi,
+					    _mm256_unpackhi_epi32(a, zero));
+		__sum_b_hi = _mm256_add_epi64(sum_b_hi,
+					    _mm256_unpackhi_epi32(b, zero));
+		__sum_a_lo = _mm256_add_epi64(sum_a_lo,
+					    _mm256_unpacklo_epi32(a, zero));
+		__sum_b_lo = _mm256_add_epi64(sum_b_lo,
+					    _mm256_unpacklo_epi32(b, zero));
+
+		if (len >= sizeof(a) * 8) {
+			a = _mm256_stream_load_si256(buf256 + 4);
+			b = _mm256_stream_load_si256(buf256 + 5);
+		}
+
+		sum_a_hi = _mm256_add_epi64(__sum_a_hi,
+					    _mm256_unpackhi_epi32(c, zero));
+		sum_b_hi = _mm256_add_epi64(__sum_b_hi,
+					    _mm256_unpackhi_epi32(d, zero));
+		sum_a_lo = _mm256_add_epi64(__sum_a_lo,
+					    _mm256_unpacklo_epi32(c, zero));
+		sum_b_lo = _mm256_add_epi64(__sum_b_lo,
+					    _mm256_unpacklo_epi32(d, zero));
+
+		if (len >= sizeof(a) * 8) {
+			c = _mm256_stream_load_si256(buf256 + 6);
+			d = _mm256_stream_load_si256(buf256 + 7);
+		}
+	}
 
 	for (; len >= sizeof(a) * 2; len -= sizeof(a) * 2, buf256 += 2) {
 		a = _mm256_stream_load_si256(buf256);
