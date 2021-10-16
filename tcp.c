@@ -2156,6 +2156,7 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 
 	if (!conn->wnd_from_tap || already_sent >= conn->wnd_from_tap) {
 		tcp_tap_epoll_mask(c, conn, conn->events | EPOLLET);
+		conn->tap_data_noack = *now;
 		return 0;
 	}
 
@@ -2374,7 +2375,7 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 				/* Fast re-transmit */
 				retr = !len && !th->fin &&
 				       ack_seq == max_ack_seq &&
-				       max_ack_seq_wnd == ntohs(th->window);
+				       ntohs(th->window) == max_ack_seq_wnd;
 
 				max_ack_seq_wnd = ntohs(th->window);
 				max_ack_seq = ack_seq;
@@ -2435,7 +2436,8 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 
 	if (ack) {
 		conn->ts_ack_from_tap = *now;
-		conn->tap_data_noack = ((struct timespec) { 0, 0 });
+		if (max_ack_seq == conn->seq_to_tap)
+			conn->tap_data_noack = ((struct timespec) { 0, 0 });
 		tcp_sock_consume(conn, max_ack_seq);
 	}
 
