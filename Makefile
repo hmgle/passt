@@ -11,7 +11,7 @@ all: passt pasta passt4netns qrap
 avx2: CFLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
 avx2: clean all
 
-static: CFLAGS += -static
+static: CFLAGS += -static -DGLIBC_NO_STATIC_NSS
 static: clean all
 
 seccomp.h: *.c $(filter-out seccomp.h,$(wildcard *.h))

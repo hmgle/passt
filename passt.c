@@ -212,17 +212,22 @@ static void check_root(void)
 	close(fd);
 
 	fprintf(stderr, "Don't run this as root. Changing to nobody...\n");
+#ifndef GLIBC_NO_STATIC_NSS
 	pw = getpwnam("nobody");
 	if (!pw) {
 		perror("getpwnam");
 		exit(EXIT_FAILURE);
 	}
 
-	if (initgroups(pw->pw_name, pw->pw_gid) ||
-	    setgid(pw->pw_gid) || setuid(pw->pw_uid)) {
-		fprintf(stderr, "Can't change to user/group nobody, exiting");
-		exit(EXIT_FAILURE);
-	}
+	if (!initgroups(pw->pw_name, pw->pw_gid) &&
+	    !setgid(pw->pw_gid) && !setuid(pw->pw_uid))
+		return;
+#else
+	(void)pw;
+#endif
+
+	fprintf(stderr, "Can't change to user/group nobody, exiting");
+	exit(EXIT_FAILURE);
 }
 
 /**

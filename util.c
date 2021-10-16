@@ -37,7 +37,7 @@
 #include "util.h"
 #include "passt.h"
 
-/* For __openlog() and __setlogmask() wrappers, and __vsyslog() (replacement) */
+/* For __openlog() and __setlogmask() wrappers, and passt_vsyslog() */
 static int	log_mask;
 static int	log_sock = -1;
 static char	log_ident[BUFSIZ];
@@ -56,7 +56,7 @@ void name(const char *format, ...) {					\
 			tp.tv_nsec / (100 * 1000));			\
 	} else {							\
 		va_start(args, format);					\
-		__vsyslog(level, format, args);				\
+		passt_vsyslog(level, format, args);			\
 		va_end(args);						\
 	}								\
 									\
@@ -121,12 +121,12 @@ void __setlogmask(int mask)
 }
 
 /**
- * __vsyslog() - vsyslog() implementation not using heap memory
+ * passt_vsyslog() - vsyslog() implementation not using heap memory
  * @pri:	Facility and level map, same as priority for vsyslog()
  * @format:	Same as vsyslog() format
  * @ap:		Same as vsyslog() ap
  */
-void __vsyslog(int pri, const char *format, va_list ap)
+void passt_vsyslog(int pri, const char *format, va_list ap)
 {
 	char buf[BUFSIZ];
 	int n;
@@ -388,6 +388,9 @@ char *line_read(char *buf, size_t len, int fd)
 			return NULL;
 
 		p = buf + strlen(buf) + 1;
+
+		while (*p == '\n' && strlen(p) && (size_t)(p - buf) < len)
+			p++;
 
 		if (!(nl = strchr(p, '\n')))
 			return NULL;

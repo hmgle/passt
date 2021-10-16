@@ -147,7 +147,7 @@ enum bind_type {
 struct ctx;
 
 void __openlog(const char *ident, int option, int facility);
-void __vsyslog(int pri, const char *fmt, va_list ap);
+void passt_vsyslog(int pri, const char *fmt, va_list ap);
 void __setlogmask(int mask);
 char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto);
 int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
