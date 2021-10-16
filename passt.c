@@ -277,6 +277,7 @@ static void pid_file(struct ctx *c) {
  * #syscalls prlimit64 epoll_ctl epoll_create1 epoll_wait accept4 accept listen
  * #syscalls socket bind connect getsockopt setsockopt recvfrom sendto shutdown
  * #syscalls openat fstat fcntl lseek clone setsid exit_group getpid
+ * #syscalls clock_gettime
  * #syscalls:pasta rt_sigreturn
  */
 int main(int argc, char **argv)
