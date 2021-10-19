@@ -3075,7 +3075,7 @@ swap:
 
 retry:
 		read = splice(move_from, NULL, pipes[1], NULL, c->tcp.pipe_size,
-			      SPLICE_F_MOVE);
+			      SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
 		if (read < 0) {
 			if (errno == EINTR)
 				goto retry;
@@ -3099,7 +3099,7 @@ retry:
 
 eintr:
 		written = splice(pipes[0], NULL, move_to, NULL, to_write,
-				 SPLICE_F_MOVE | more);
+				 SPLICE_F_MOVE | more | SPLICE_F_NONBLOCK);
 
 		/* Most common case: skip updating counters. */
 		if (read > 0 && read == written) {
