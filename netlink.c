@@ -50,13 +50,14 @@ static int __nl_sock_init(void *arg)
 	int *s = &nl_sock, v = 1;
 
 ns:
-	if (((*s) = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE)) < 0	||
-	    bind(*s, (struct sockaddr *)&addr, sizeof(addr))		||
-	    setsockopt(*s, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &v, sizeof(v)))
+	if (((*s) = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE)) < 0 ||
+	    bind(*s, (struct sockaddr *)&addr, sizeof(addr)))
 		*s = -1;
 
 	if (*s == -1 || !c || s == &nl_sock_ns)
 		return 0;
+
+	setsockopt(*s, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &v, sizeof(v));
 
 	ns_enter((struct ctx *)arg);
 	s = &nl_sock_ns;
@@ -425,6 +426,8 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 			goto next;
 
 		ifa = (struct ifaddrmsg *)NLMSG_DATA(nh);
+		if (ifa->ifa_index != ifi)
+			goto next;
 
 		for (rta = (struct rtattr *)IFA_RTA(ifa), na = RTM_PAYLOAD(nh);
 		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
