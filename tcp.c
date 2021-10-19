@@ -2910,48 +2910,53 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	ref_conn.s = conn->sock = s;
 
 	if (ref.tcp.v6) {
-		struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&sa;
+		struct sockaddr_in6 sa6;
 
-		if (IN6_IS_ADDR_LOOPBACK(&sa6->sin6_addr) ||
-		    !memcmp(&sa6->sin6_addr, &c->addr6_seen, sizeof(c->gw6)) ||
-		    !memcmp(&sa6->sin6_addr, &c->addr6, sizeof(c->gw6)))
-			memcpy(&sa6->sin6_addr, &c->gw6, sizeof(c->gw6));
+		memcpy(&sa6, &sa, sizeof(sa6));
 
-		memcpy(&conn->a.a6, &sa6->sin6_addr, sizeof(conn->a.a6));
+		if (IN6_IS_ADDR_LOOPBACK(&sa6.sin6_addr) ||
+		    !memcmp(&sa6.sin6_addr, &c->addr6_seen, sizeof(c->gw6)) ||
+		    !memcmp(&sa6.sin6_addr, &c->addr6, sizeof(c->gw6)))
+			memcpy(&sa6.sin6_addr, &c->gw6, sizeof(c->gw6));
 
-		conn->sock_port = ntohs(sa6->sin6_port);
+		memcpy(&conn->a.a6, &sa6.sin6_addr, sizeof(conn->a.a6));
+
+		conn->sock_port = ntohs(sa6.sin6_port);
 		conn->tap_port = ref.tcp.index;
 
-		conn->seq_to_tap = tcp_seq_init(c, AF_INET6, &sa6->sin6_addr,
+		conn->seq_to_tap = tcp_seq_init(c, AF_INET6, &sa6.sin6_addr,
 						conn->sock_port,
 						conn->tap_port,
 						now);
 		conn->seq_init_to_tap = conn->seq_to_tap;
 
-		tcp_hash_insert(c, conn, AF_INET6, &sa6->sin6_addr);
+		tcp_hash_insert(c, conn, AF_INET6, &sa6.sin6_addr);
 	} else {
-		struct sockaddr_in *sa4 = (struct sockaddr_in *)&sa;
-		in_addr_t s_addr = ntohl(sa4->sin_addr.s_addr);
+		struct sockaddr_in sa4;
+		in_addr_t s_addr;
+
+		memcpy(&sa4, &sa, sizeof(sa4));
+		s_addr = sa4.sin_addr.s_addr;
 
 		memset(&conn->a.a4.zero,   0, sizeof(conn->a.a4.zero));
 		memset(&conn->a.a4.one, 0xff, sizeof(conn->a.a4.one));
 
 		if (s_addr >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
 		    s_addr == INADDR_ANY || s_addr == htonl(c->addr4_seen))
-			sa4->sin_addr.s_addr = c->gw4;
+			sa4.sin_addr.s_addr = c->gw4;
 
-		memcpy(&conn->a.a4.a, &sa4->sin_addr, sizeof(conn->a.a4.a));
+		memcpy(&conn->a.a4.a, &s_addr, sizeof(conn->a.a4.a));
 
-		conn->sock_port = ntohs(sa4->sin_port);
+		conn->sock_port = ntohs(sa4.sin_port);
 		conn->tap_port = ref.tcp.index;
 
-		conn->seq_to_tap = tcp_seq_init(c, AF_INET, &sa4->sin_addr,
+		conn->seq_to_tap = tcp_seq_init(c, AF_INET, &s_addr,
 						conn->sock_port,
 						conn->tap_port,
 						now);
 		conn->seq_init_to_tap = conn->seq_to_tap;
 
-		tcp_hash_insert(c, conn, AF_INET, &sa4->sin_addr);
+		tcp_hash_insert(c, conn, AF_INET, &s_addr);
 	}
 
 	conn->seq_ack_from_tap = conn->seq_to_tap + 1;

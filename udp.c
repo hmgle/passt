@@ -461,10 +461,17 @@ int udp_splice_connect(struct ctx *c, int v6, int bound_sock,
 	if (getsockname(s, (struct sockaddr *)&sa, &sl))
 		goto fail;
 
-	if (v6)
-		ref.udp.port = ntohs(((struct sockaddr_in6 *)&sa)->sin6_port);
-	else
-		ref.udp.port = ntohs(((struct sockaddr_in *)&sa)->sin_port);
+	if (v6) {
+		struct sockaddr_in6 sa6;
+
+		memcpy(&sa6, &sa, sizeof(sa6));
+		ref.udp.port = ntohs(sa6.sin6_port);
+	} else {
+		struct sockaddr_in sa4;
+
+		memcpy(&sa4, &sa, sizeof(sa4));
+		ref.udp.port = ntohs(sa4.sin_port);
+	}
 
 	sp = &udp_splice_map[v6 ? V6 : V4][ref.udp.port];
 	if (splice == UDP_BACK_TO_INIT) {

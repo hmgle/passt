@@ -323,7 +323,9 @@ static void get_dns(struct ctx *c)
 			if (end)
 				*end = 0;
 
-			p = strtok(buf, " \t");
+			if (!strtok(buf, " \t"))
+				continue;
+
 			while (s - c->dns_search < ARRAY_SIZE(c->dns_search) - 1
 			       && (p = strtok(NULL, " \t"))) {
 				strncpy(s->n, p, sizeof(c->dns_search[0]));
@@ -371,7 +373,7 @@ static int conf_ns_opt(struct ctx *c,
 		       char *nsdir, char *conf_userns, const char *optarg)
 {
 	int ufd = 0, nfd = 0, try, ret, netns_only_reset = c->netns_only;
-	char userns[PATH_MAX], netns[PATH_MAX];
+	char userns[PATH_MAX] = { 0 }, netns[PATH_MAX];
 	char *endptr;
 	pid_t pid;
 

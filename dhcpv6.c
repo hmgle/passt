@@ -99,15 +99,19 @@ struct opt_server_id {
 	uint8_t duid_lladdr[ETH_ALEN];
 };
 
-static const struct opt_server_id server_id_const = {
-	{ OPT_SERVERID,		OPT_SIZE(server_id) },
 #if __BYTE_ORDER == __BIG_ENDIAN
-	  DUID_TYPE_LLT, ARPHRD_ETHER,
+#define SERVER_ID {						\
+	{ OPT_SERVERID,	OPT_SIZE(server_id) },				\
+	  DUID_TYPE_LLT, ARPHRD_ETHER, 0, { 0 }				\
+}
 #else
-	  __bswap_constant_16(DUID_TYPE_LLT), __bswap_constant_16(ARPHRD_ETHER),
+#define SERVER_ID {						\
+	{ OPT_SERVERID,	OPT_SIZE(server_id) },				\
+	__bswap_constant_16(DUID_TYPE_LLT),				\
+	__bswap_constant_16(ARPHRD_ETHER),				\
+	0, { 0 }							\
+}
 #endif
-	  0, { 0 }
-};
 
 /**
  * struct opt_ia_na - Identity Association for Non-temporary Addresses Option
@@ -200,13 +204,11 @@ struct msg_hdr {
 	uint32_t xid:24;
 } __attribute__((__packed__));
 
-static const struct udphdr uh_resp = {
 #if __BYTE_ORDER == __BIG_ENDIAN
-	547, 546, 0, 0,
+#define UH_RESP { 547, 546, 0, 0, }
 #else
-	__bswap_constant_16(547), __bswap_constant_16(546), 0, 0,
+#define UH_RESP { __bswap_constant_16(547), __bswap_constant_16(546), 0, 0 }
 #endif
-};
 
 /**
  * struct resp_t - Normal advertise and reply message
@@ -230,9 +232,9 @@ static struct resp_t {
 	struct opt_dns_servers dns_servers;
 	struct opt_dns_search dns_search;
 } __attribute__((__packed__)) resp = {
-	uh_resp,
+	UH_RESP,
 	{ 0 },
-	server_id_const,
+	SERVER_ID,
 
 	{ { OPT_IA_NA,		OPT_SIZE_CONV(sizeof(struct opt_ia_na) +
 					      sizeof(struct opt_ia_addr) -
@@ -278,9 +280,9 @@ static struct resp_not_on_link_t {
 	uint8_t var[sizeof(struct opt_ia_na) + sizeof(struct opt_status_code) +
 		    sizeof(struct opt_client_id)];
 } __attribute__((__packed__)) resp_not_on_link = {
-	uh_resp,
+	UH_RESP,
 	{ TYPE_REPLY, 0 },
-	server_id_const,
+	SERVER_ID,
 	{ 0, },
 };
 
@@ -390,6 +392,7 @@ static size_t dhcpv6_dns_fill(struct ctx *c, char *buf, int offset)
 {
 	struct opt_dns_servers *srv = NULL;
 	struct opt_dns_search *srch = NULL;
+	char *p = NULL;
 	int i;
 
 	for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[i]); i++) {
@@ -409,8 +412,6 @@ static size_t dhcpv6_dns_fill(struct ctx *c, char *buf, int offset)
 		srv->hdr.l = htons(srv->hdr.l);
 
 	for (i = 0; *c->dns_search[i].n; i++) {
-		char *p;
-
 		if (!i) {
 			srch = (struct opt_dns_search *)(buf + offset);
 			offset += sizeof(struct opt_hdr);
