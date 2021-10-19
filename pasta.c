@@ -184,7 +184,8 @@ void pasta_start_ns(struct ctx *c)
 
 		snprintf(proc_path, PATH_MAX, "/proc/%i/ns/net",
 			 pasta_child_pid);
-		readlink(proc_path, pasta_child_ns, PATH_MAX);
+		if (readlink(proc_path, pasta_child_ns, PATH_MAX) < 0)
+			warn("Cannot read link to ns, won't clean up on exit");
 
 		return;
 	}
@@ -198,20 +199,24 @@ void pasta_start_ns(struct ctx *c)
 		snprintf(buf, BUFSIZ, "%u %u %u", 0, euid, 1);
 
 		fd = open("/proc/self/uid_map", O_WRONLY);
-		write(fd, buf, strlen(buf));
+		if (write(fd, buf, strlen(buf)) < 0)
+			warn("Cannot set uid_map in namespace");
 		close(fd);
 
 		fd = open("/proc/self/setgroups", O_WRONLY);
-		write(fd, "deny", sizeof("deny"));
+		if (write(fd, "deny", sizeof("deny")))
+			warn("Cannot write to setgroups in namespace");
 		close(fd);
 
 		fd = open("/proc/self/gid_map", O_WRONLY);
-		write(fd, buf, strlen(buf));
+		if (write(fd, buf, strlen(buf)) < 0)
+			warn("Cannot set gid_map in namespace");
 		close(fd);
 	}
 
 	fd = open("/proc/sys/net/ipv4/ping_group_range", O_WRONLY);
-	write(fd, "0 0", strlen("0 0"));
+	if (write(fd, "0 0", strlen("0 0")) < 0)
+		warn("Cannot set ping_group_range, ICMP requests might fail");
 	close(fd);
 
 	shell = getenv("SHELL") ? getenv("SHELL") : "/bin/sh";

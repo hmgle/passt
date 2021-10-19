@@ -536,8 +536,8 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 				    uint32_t events, struct timespec *now)
 {
 	struct msghdr *mh = &udp_splice_mmh_recv[0].msg_hdr;
+	in_port_t src, dst = ref.udp.port, send_dst = 0;
 	struct sockaddr_storage *sa_s = mh->msg_name;
-	in_port_t src, dst = ref.udp.port, send_dst;
 	int s, v6 = ref.udp.v6, n, i;
 
 	if (!(events & EPOLLIN))
@@ -721,7 +721,8 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 
 			if (c->mode == MODE_PASTA) {
 				ip_len += sizeof(struct ethhdr);
-				write(c->fd_tap, &b->eh, ip_len);
+				if (write(c->fd_tap, &b->eh, ip_len) < 0)
+					debug("tap write: %s", strerror(errno));
 				pcap((char *)&b->eh, ip_len);
 				continue;
 			}
@@ -791,7 +792,8 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 
 			if (c->mode == MODE_PASTA) {
 				ip_len += sizeof(struct ethhdr);
-				write(c->fd_tap, &b->eh, ip_len);
+				if (write(c->fd_tap, &b->eh, ip_len) < 0)
+					debug("tap write: %s", strerror(errno));
 				pcap((char *)&b->eh, ip_len);
 				continue;
 			}

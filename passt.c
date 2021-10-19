@@ -257,13 +257,16 @@ static void pid_file(struct ctx *c) {
 	if (!*c->pid_file)
 		return;
 
-	pid_fd = open(c->pid_file, O_CREAT | O_WRONLY);
+	pid_fd = open(c->pid_file, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
 	if (pid_fd < 0)
 		return;
 
 	n = snprintf(pid_buf, sizeof(pid_buf), "%i\n", getpid());
 
-	write(pid_fd, pid_buf, n);
+	if (write(pid_fd, pid_buf, n) < 0) {
+		perror("PID file write");
+		exit(EXIT_FAILURE);
+	}
 	close(pid_fd);
 }
 
@@ -365,8 +368,10 @@ int main(int argc, char **argv)
 	else
 		__setlogmask(LOG_UPTO(LOG_INFO));
 
-	if (isatty(fileno(stdout)) && !c.foreground)
-		daemon(0, 0);
+	if (isatty(fileno(stdout)) && !c.foreground && daemon(0, 0)) {
+		perror("daemon");
+		exit(EXIT_FAILURE);
+	}
 
 	pid_file(&c);
 

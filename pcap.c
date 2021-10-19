@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <time.h>
+#include <errno.h>
 #include <net/ethernet.h>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -87,8 +88,8 @@ void pcap(char *pkt, size_t len)
 	h.tv_usec = tv.tv_usec;
 	h.caplen = h.len = len;
 
-	write(pcap_fd, &h, sizeof(h));
-	write(pcap_fd, pkt, len);
+	if (write(pcap_fd, &h, sizeof(h)) < 0 || write(pcap_fd, pkt, len) < 0)
+		debug("Cannot log packet, length %u", len);
 }
 
 /**
@@ -98,6 +99,7 @@ void pcap(char *pkt, size_t len)
 void pcapm(struct msghdr *mh)
 {
 	struct pcap_pkthdr h;
+	struct iovec *iov;
 	struct timeval tv;
 	unsigned int i;
 
@@ -109,13 +111,19 @@ void pcapm(struct msghdr *mh)
 	h.tv_usec = tv.tv_usec;
 
 	for (i = 0; i < mh->msg_iovlen; i++) {
-		struct iovec *iov = &mh->msg_iov[i];
+		iov = &mh->msg_iov[i];
 
 		h.caplen = h.len = iov->iov_len - 4;
-		write(pcap_fd, &h, sizeof(h));
 
-		write(pcap_fd, (char *)iov->iov_base + 4, iov->iov_len - 4);
+		if (write(pcap_fd, &h, sizeof(h)) < 0)
+			goto fail;
+		if (write(pcap_fd, (char *)iov->iov_base + 4, iov->iov_len - 4))
+			goto fail;
 	}
+
+	return;
+fail:
+	debug("Cannot log packet, length %u", iov->iov_len - 4);
 }
 
 /**
@@ -125,6 +133,7 @@ void pcapm(struct msghdr *mh)
 void pcapmm(struct mmsghdr *mmh, unsigned int vlen)
 {
 	struct pcap_pkthdr h;
+	struct iovec *iov;
 	struct timeval tv;
 	unsigned int i, j;
 
@@ -139,15 +148,20 @@ void pcapmm(struct mmsghdr *mmh, unsigned int vlen)
 		struct msghdr *mh = &mmh[i].msg_hdr;
 
 		for (j = 0; j < mh->msg_iovlen; j++) {
-			struct iovec *iov = &mh->msg_iov[j];
+			iov = &mh->msg_iov[j];
 
 			h.caplen = h.len = iov->iov_len - 4;
-			write(pcap_fd, &h, sizeof(h));
 
-			write(pcap_fd, (char *)iov->iov_base + 4,
-			      iov->iov_len - 4);
+			if (write(pcap_fd, &h, sizeof(h)) < 0)
+				goto fail;
+			if (write(pcap_fd, (char *)iov->iov_base + 4,
+				  iov->iov_len - 4) < 0)
+				goto fail;
 		}
 	}
+	return;
+fail:
+	debug("Cannot log packet, length %u", iov->iov_len - 4);
 }
 
 /**
@@ -194,5 +208,6 @@ void pcap_init(struct ctx *c, int index)
 
 	info("Saving packet capture at %s", c->pcap);
 
-	write(pcap_fd, &pcap_hdr, sizeof(pcap_hdr));
+	if (write(pcap_fd, &pcap_hdr, sizeof(pcap_hdr)) < 0)
+		warn("Cannot write PCAP header: %s", strerror(errno));
 }

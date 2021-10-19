@@ -311,6 +311,7 @@
 #include <sched.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <limits.h>
 #include <net/ethernet.h>
@@ -1103,6 +1104,9 @@ static int tcp_hash_match(struct tcp_tap_conn *conn, int af, void *addr,
  *
  * Return: hash value, already modulo size of the hash table
  */
+#if TCP_HASH_NOINLINE
+__attribute__((__noinline__))	/* See comment in Makefile */
+#endif
 static unsigned int tcp_hash(struct ctx *c, int af, void *addr,
 			     in_port_t tap_port, in_port_t sock_port)
 {
@@ -1322,8 +1326,9 @@ static void tcp_l2_flags_buf_flush(struct ctx *c)
 			for (i = 0; i < mh.msg_iovlen; i++) {
 				struct iovec *iov = &mh.msg_iov[i];
 
-				write(c->fd_tap, (char *)iov->iov_base + 4,
-				      iov->iov_len - 4);
+				if (write(c->fd_tap, (char *)iov->iov_base + 4,
+					  iov->iov_len - 4) < 0)
+					debug("tap write: %s", strerror(errno));
 			}
 		}
 		tcp6_l2_flags_buf_used = 0;
@@ -1338,8 +1343,9 @@ static void tcp_l2_flags_buf_flush(struct ctx *c)
 			for (i = 0; i < mh.msg_iovlen; i++) {
 				struct iovec *iov = &mh.msg_iov[i];
 				
-				write(c->fd_tap, (char *)iov->iov_base + 4,
-				      iov->iov_len - 4);
+				if (write(c->fd_tap, (char *)iov->iov_base + 4,
+					  iov->iov_len - 4) < 0)
+					debug("tap write: %s", strerror(errno));
 			}
 		}
 		tcp4_l2_flags_buf_used = 0;
@@ -1392,8 +1398,9 @@ static void tcp_l2_buf_flush(struct ctx *c)
 		for (i = 0; i < mh.msg_iovlen; i++) {
 			struct iovec *iov = &mh.msg_iov[i];
 
-			write(c->fd_tap, (char *)iov->iov_base + 4,
-			      iov->iov_len - 4);
+			if (write(c->fd_tap, (char *)iov->iov_base + 4,
+				  iov->iov_len - 4) < 0)
+				debug("tap write: %s", strerror(errno));
 		}
 	}
 	tcp6_l2_buf_used = tcp6_l2_buf_bytes = 0;
@@ -1413,8 +1420,9 @@ v4:
 		for (i = 0; i < mh.msg_iovlen; i++) {
 			struct iovec *iov = &mh.msg_iov[i];
 
-			write(c->fd_tap, (char *)iov->iov_base + 4,
-			      iov->iov_len - 4);
+			if (write(c->fd_tap, (char *)iov->iov_base + 4,
+				  iov->iov_len - 4) < 0)
+				debug("tap write: %s", strerror(errno));
 		}
 	}
 	tcp4_l2_buf_used = tcp4_l2_buf_bytes = 0;
@@ -1628,13 +1636,15 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 		iov = tcp4_l2_flags_iov_tap + tcp4_l2_flags_buf_used;
 		p = b4 = tcp4_l2_flags_buf  + tcp4_l2_flags_buf_used++;
 		th = &b4->th;
+
+		/* gcc 11.2 would complain on data = (char *)(th + 1); */
+		data = b4->opts;
 	} else {
 		iov = tcp6_l2_flags_iov_tap + tcp6_l2_flags_buf_used;
 		p = b6 = tcp6_l2_flags_buf  + tcp6_l2_flags_buf_used++;
 		th = &b6->th;
+		data = b6->opts;
 	}
-
-	data = (char *)(th + 1);
 
 	if (flags & SYN) {
 		uint16_t mss;
@@ -3538,7 +3548,11 @@ int tcp_sock_init(struct ctx *c, struct timespec *now)
 	in_port_t port;
 	int i;
 
-	getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret), GRND_RANDOM);
+	if (getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret),
+		      GRND_RANDOM) < 0) {
+		perror("TCP initial sequence getrandom");
+		exit(EXIT_FAILURE);
+	}
 
 	for (port = 0; port < USHRT_MAX; port++) {
 		if (!bitmap_isset(c->tcp.port_to_tap, port))

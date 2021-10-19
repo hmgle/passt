@@ -146,6 +146,9 @@ uint32_t siphash_12b(const uint8_t *in, const uint64_t *k)
  *
  * Return: the 64-bit hash output
  */
+#if SIPHASH_20B_NOINLINE
+__attribute__((__noinline__))	/* See comment in Makefile */
+#endif
 uint64_t siphash_20b(const uint8_t *in, const uint64_t *k)
 {
 	uint32_t *in32 = (uint32_t *)in;

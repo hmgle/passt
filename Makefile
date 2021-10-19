@@ -15,6 +15,20 @@ CFLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)
 CFLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
 CFLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(shell uname -m | tr [a-z] [A-Z])
 
+# On gcc 11.2, with -O2 and -flto, tcp_hash() and siphash_20b(), if inlined,
+# seem to be hitting something similar to:
+#	https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78993
+# from the pointer arithmetic used from the tcp_tap_handler() path to get the
+# remote connection address.
+ifeq ($(shell $(CC) -dumpversion),11)
+ifneq (,$(filter -flto%,$(CFLAGS)))
+ifneq (,$(filter -O2,$(CFLAGS)))
+	CFLAGS += -DTCP_HASH_NOINLINE
+	CFLAGS += -DSIPHASH_20B_NOINLINE
+endif
+endif
+endif
+
 prefix ?= /usr/local
 
 all: passt pasta passt4netns qrap
