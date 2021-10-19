@@ -1558,16 +1558,16 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 	if (!c->tcp.kernel_snd_wnd) {
 		tcp_get_sndbuf(conn);
 		conn->wnd_to_tap = MIN(conn->snd_buf, MAX_WINDOW);
-		return 0;
+		goto out;
 	}
 
 	if (!info) {
 		if (conn->wnd_to_tap > WINDOW_DEFAULT)
-			return 0;
+			goto out;
 
 		info = &__info;
 		if (getsockopt(s, SOL_TCP, TCP_INFO, info, &sl))
-			return 0;
+			goto out;
 	}
 
 	if (conn->local || tcp_rtt_dst_low(conn)) {
@@ -1579,6 +1579,7 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 
 	conn->wnd_to_tap = MIN(conn->wnd_to_tap, MAX_WINDOW);
 
+out:
 	return conn->wnd_to_tap     != prev_wnd_to_tap ||
 	       conn->seq_ack_to_tap != prev_ack_to_tap;
 }
