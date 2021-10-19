@@ -233,16 +233,21 @@ void pasta_ns_conf(struct ctx *c)
 	nl_link(1, 1 /* lo */, MAC_ZERO, 1, 0);
 
 	if (c->pasta_conf_ns) {
+		int prefix_len;
+
 		nl_link(1, c->pasta_ifi, c->mac_guest, 1, c->mtu);
 
 		if (c->v4) {
+			prefix_len = __builtin_popcount(c->mask4);
 			nl_addr(1, c->pasta_ifi, AF_INET, &c->addr4,
-				__builtin_popcount(c->mask4), NULL);
+				&prefix_len, NULL);
 			nl_route(1, c->pasta_ifi, AF_INET, &c->gw4);
 		}
 
 		if (c->v6) {
-			nl_addr(1, c->pasta_ifi, AF_INET6, &c->addr6, 64, NULL);
+			prefix_len = 64;
+			nl_addr(1, c->pasta_ifi, AF_INET6, &c->addr6,
+				&prefix_len, NULL);
 			nl_route(1, c->pasta_ifi, AF_INET6, &c->gw6);
 		}
 	} else {

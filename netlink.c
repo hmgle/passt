@@ -346,10 +346,11 @@ next:
  * @ifi:	Interface index
  * @af:		Address family
  * @addr:	Global address to fill if zero, to set if not, ignored if NULL
+ * @prefix_len:	Mask or prefix length, set or fetched (for IPv4)
  * @addr_l:	Link-scoped address to fill, NULL if not requested
  */
 void nl_addr(int ns, unsigned int ifi, sa_family_t af,
-	     void *addr, int prefix_len, void *addr_l)
+	     void *addr, int *prefix_len, void *addr_l)
 {
 	int set = addr && ((af == AF_INET6 && !IN6_IS_ADDR_UNSPECIFIED(addr)) ||
 			   (af == AF_INET && *(uint32_t *)addr));
@@ -380,7 +381,7 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 
 		.ifa.ifa_family    = af,
 		.ifa.ifa_index     = ifi,
-		.ifa.ifa_prefixlen = prefix_len,
+		.ifa.ifa_prefixlen = *prefix_len,
 	};
 	struct ifaddrmsg *ifa;
 	struct nlmsghdr *nh;
@@ -430,12 +431,14 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 			if (rta->rta_type != IFA_ADDRESS)
 				continue;
 
-			if (af == AF_INET && addr && !*(uint32_t *)addr)
+			if (af == AF_INET && addr && !*(uint32_t *)addr) {
 				memcpy(addr, RTA_DATA(rta), RTA_PAYLOAD(rta));
-			else if (af == AF_INET6 && addr &&
+				*prefix_len = ifa->ifa_prefixlen;
+			} else if (af == AF_INET6 && addr &&
 				 ifa->ifa_scope == RT_SCOPE_UNIVERSE &&
-				 IN6_IS_ADDR_UNSPECIFIED(addr))
+				 IN6_IS_ADDR_UNSPECIFIED(addr)) {
 				memcpy(addr, RTA_DATA(rta), RTA_PAYLOAD(rta));
+			}
 
 			if (addr_l &&
 			    af == AF_INET6 && ifa->ifa_scope == RT_SCOPE_LINK &&

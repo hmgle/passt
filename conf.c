@@ -469,7 +469,11 @@ static void conf_ip(struct ctx *c)
 			nl_route(0, c->ifi, AF_INET, &c->gw4);
 
 		if (!c->addr4) {
-			nl_addr(0, c->ifi, AF_INET, &c->addr4, 0, NULL);
+			int mask_len = 0;
+
+			nl_addr(0, c->ifi, AF_INET, &c->addr4, &mask_len, NULL);
+			c->mask4 = htonl(0xffffffff << (32 - mask_len));
+
 			if (!c->mask4) {
 				if (IN_CLASSA(ntohl(c->addr4)))
 					c->mask4 = htonl(IN_CLASSA_NET);
@@ -492,12 +496,14 @@ static void conf_ip(struct ctx *c)
 		memset(&c->mac_guest, 0xff, sizeof(c->mac_guest));
 
 	if (v6 != IP_VERSION_DISABLED) {
+		int prefix_len = 0;
+
 		if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6))
 			nl_route(0, c->ifi, AF_INET6, &c->gw6);
 
 		nl_addr(0, c->ifi, AF_INET6,
 			IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ? &c->addr6 : NULL,
-			0, &c->addr6_ll);
+			&prefix_len, &c->addr6_ll);
 
 		memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr4_seen));
 		memcpy(&c->addr6_ll_seen, &c->addr6, sizeof(c->addr4_seen));
