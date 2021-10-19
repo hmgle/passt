@@ -204,7 +204,7 @@ void pasta_start_ns(struct ctx *c)
 		close(fd);
 
 		fd = open("/proc/self/setgroups", O_WRONLY);
-		if (write(fd, "deny", sizeof("deny")))
+		if (write(fd, "deny", sizeof("deny")) < 0)
 			warn("Cannot write to setgroups in namespace");
 		close(fd);
 

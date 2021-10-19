@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/build/clang_tidy - Run source through clang-tidy(1) linter
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+htools	clang-tidy
+
+test	Run clang-tidy
+hout	RET make clang-tidy; echo $?
+check	[ __RET__ -eq 0 ]

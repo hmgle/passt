@@ -225,9 +225,8 @@ static void opt_set_dns_search(struct ctx *c, size_t max_len)
 					buf[n++] = '\xc0';
 					buf[n++] = dup;
 					break;
-				} else {
-					buf[n++] = '.';
 				}
+				buf[n++] = '.';
 			} else {
 				buf[n++] = *p;
 			}

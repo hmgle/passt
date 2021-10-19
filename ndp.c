@@ -53,7 +53,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 	char buf[BUFSIZ] = { 0 };
 	uint8_t proto, *p;
 
-	if (len < sizeof(*ehr) + sizeof(*ip6h) + sizeof(ih))
+	if (len < sizeof(*ehr) + sizeof(*ip6h) + sizeof(*ih))
 		return 0;
 
 	ih = (struct icmp6hdr *)ipv6_l4hdr(ip6h, &proto);
@@ -72,7 +72,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 	ihr = (struct icmp6hdr *)(ip6hr + 1);
 
 	if (ih->icmp6_type == NS) {
-		if (len < sizeof(*ehr) + sizeof(*ip6h) + sizeof(ih) +
+		if (len < sizeof(*ehr) + sizeof(*ip6h) + sizeof(*ih) +
 			  sizeof(struct in6_addr))
 			return -1;
 

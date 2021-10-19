@@ -912,10 +912,6 @@ void conf(struct ctx *c, int argc, char **argv)
 
 			c->foreground = 1;
 			break;
-		case '?':
-		case 'h':
-			usage(argv[0]);
-			break;
 		case 's':
 			if (*c->sock_path) {
 				err("Multiple --socket options given");
@@ -1141,6 +1137,11 @@ void conf(struct ctx *c, int argc, char **argv)
 			if (conf_ports(c, name, optarg, set))
 				usage(argv[0]);
 
+			break;
+		case '?':
+		case 'h':
+		default:
+			usage(argv[0]);
 			break;
 		}
 	} while (name != -1);

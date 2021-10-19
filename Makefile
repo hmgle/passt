@@ -87,3 +87,78 @@ pkgs:
 	fakeroot alien --to-rpm --target=$(shell uname -m) \
 		--description="User-mode networking for VMs and namespaces" \
 		-k --version=g$(shell git rev-parse --short HEAD) passt.tar.gz
+
+# Checkers currently disabled for clang-tidy:
+# - llvmlibc-restrict-system-libc-headers
+#	TODO: this is Linux-only for the moment, nice to fix eventually
+#
+# - bugprone-macro-parentheses
+# - google-readability-braces-around-statements
+# - hicpp-braces-around-statements
+# - readability-braces-around-statements
+#	Debatable whether that improves readability, right now it would look
+#	like a mess
+#
+# - readability-magic-numbers
+# - cppcoreguidelines-avoid-magic-numbers
+#	TODO: in most cases they are justified, but probably not everywhere
+#
+# - clang-analyzer-valist.Uninitialized
+#	TODO: enable once https://bugs.llvm.org/show_bug.cgi?id=41311 is fixed
+#
+# - clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+#	Probably not doable to impement this without plain memcpy(), memset()
+#
+# - cppcoreguidelines-init-variables
+#	Dubious value, would kill readability
+#
+# - hicpp-signed-bitwise
+#	Those are needed for syscalls, epoll_wait flags, etc.
+#
+# - bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp
+#	This flags _GNU_SOURCE, currently needed
+#
+# - llvm-include-order
+#	TODO: not really important, but nice to fix eventually
+#
+# - readability-isolate-declaration
+#	Dubious value, would kill readability
+#
+# - android-cloexec-open
+# - android-cloexec-pipe
+# - android-cloexec-pipe2
+# - android-cloexec-epoll-create1
+#	TODO: check, fix except for the few cases where we need to share fds
+#
+# - bugprone-narrowing-conversions
+# - cppcoreguidelines-narrowing-conversions
+#	TODO: nice to fix eventually
+#
+# - cppcoreguidelines-avoid-non-const-global-variables
+#	TODO: check, fix, and more in general constify wherever possible
+#
+# - bugprone-suspicious-string-compare
+#	Return value of memcmp(), not really suspicious
+clang-tidy: $(wildcard *.c)
+	clang-tidy -checks=*,-modernize-*,\
+	-clang-analyzer-valist.Uninitialized,\
+	-cppcoreguidelines-init-variables,\
+	-bugprone-macro-parentheses,\
+	-google-readability-braces-around-statements,\
+	-hicpp-braces-around-statements,\
+	-readability-braces-around-statements,\
+	-readability-magic-numbers,\
+	-llvmlibc-restrict-system-libc-headers,\
+	-hicpp-signed-bitwise,\
+	-bugprone-reserved-identifier,-cert-dcl37-c,-cert-dcl51-cpp,\
+	-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,\
+	-llvm-include-order,\
+	-cppcoreguidelines-avoid-magic-numbers,\
+	-readability-isolate-declaration,\
+	-android-cloexec-open,-android-cloexec-pipe,-android-cloexec-pipe2,\
+	-android-cloexec-epoll-create1,\
+	-bugprone-narrowing-conversions,\
+	-cppcoreguidelines-narrowing-conversions,\
+	-cppcoreguidelines-avoid-non-const-global-variables,\
+	-bugprone-suspicious-string-compare \
+	--warnings-as-errors=* $(wildcard *.c) -- $(CFLAGS)

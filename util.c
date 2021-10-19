@@ -143,7 +143,7 @@ void passt_vsyslog(int pri, const char *format, va_list ap)
 		n += snprintf(buf + n, BUFSIZ - n, "\n");
 
 	if (log_opt | LOG_PERROR)
-		fprintf(stderr, buf + sizeof("<0>"));
+		fprintf(stderr, "%s", buf + sizeof("<0>"));
 
 	send(log_sock, buf, n, 0);
 }
@@ -362,7 +362,7 @@ void bitmap_clear(uint8_t *map, int bit)
  *
  * Return: non-zero if given bit is set, zero if it's not
  */
-int bitmap_isset(uint8_t *map, int bit)
+int bitmap_isset(const uint8_t *map, int bit)
 {
 	return map[bit / 8] & (1 << bit % 8);
 }
@@ -437,6 +437,7 @@ void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
 	*line = 0;
 	line_read(line, sizeof(line), fd);
 	while (line_read(line, sizeof(line), fd)) {
+		/* NOLINTNEXTLINE(cert-err34-c): != 2 if conversion fails */
 		if (sscanf(line, "%*u: %*x:%lx %*x:%*x %x", &port, &state) != 2)
 			continue;
 

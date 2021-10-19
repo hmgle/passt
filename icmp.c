@@ -254,11 +254,11 @@ void icmp_timer(struct ctx *c, struct timespec *ts)
 
 v6:
 	word = (long *)icmp_act[v6 ? V6 : V4];
-	for (i = 0; i < sizeof(icmp_act[0]) / sizeof(long); i++, word++) {
+	for (i = 0; i < ARRAY_SIZE(icmp_act); i += sizeof(long), word++) {
 		tmp = *word;
 		while ((n = ffsl(tmp))) {
 			tmp &= ~(1UL << (n - 1));
-			icmp_timer_one(c, v6, i * sizeof(long) * 8 + n - 1, ts);
+			icmp_timer_one(c, v6, i * 8 + n - 1, ts);
 		}
 	}
 

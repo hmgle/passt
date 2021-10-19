@@ -15,7 +15,7 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 int udp_sock_init(struct ctx *c, struct timespec *now);
 void udp_timer(struct ctx *c, struct timespec *ts);
 void udp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
-		       uint32_t *ip_da);
+		       const uint32_t *ip_da);
 void udp_remap_to_tap(in_port_t port, in_port_t delta);
 void udp_remap_to_init(in_port_t port, in_port_t delta);
 

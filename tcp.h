@@ -18,10 +18,10 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		    struct tap_l4_msg *msg, int count, struct timespec *now);
 int tcp_sock_init(struct ctx *c, struct timespec *now);
-void tcp_timer(struct ctx *c, struct timespec *ts);
+void tcp_timer(struct ctx *c, struct timespec *now);
 void tcp_defer_handler(struct ctx *c);
 void tcp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
-		       uint32_t *ip_da);
+		       const uint32_t *ip_da);
 void tcp_remap_to_tap(in_port_t port, in_port_t delta);
 void tcp_remap_to_init(in_port_t port, in_port_t delta);
 

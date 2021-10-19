@@ -319,7 +319,7 @@ static void udp_update_check4(struct udp4_l2_buf_t *buf)
  * @ip_da:	Pointer to IPv4 destination address, NULL if unchanged
  */
 void udp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
-		       uint32_t *ip_da)
+		       const uint32_t *ip_da)
 {
 	int i;
 
@@ -1017,7 +1017,7 @@ int udp_sock_init_ns(void *arg)
 {
 	union udp_epoll_ref uref = { .bound = 1, .splice = UDP_TO_INIT };
 	struct ctx *c = (struct ctx *)arg;
-	in_port_t dst;
+	int dst;
 
 	ns_enter(c);
 
@@ -1105,8 +1105,7 @@ static void udp_splice_iov_init(void)
 int udp_sock_init(struct ctx *c, struct timespec *now)
 {
 	union udp_epoll_ref uref = { .bound = 1 };
-	in_port_t dst;
-	int s;
+	int dst, s;
 
 	(void)now;
 
@@ -1224,21 +1223,22 @@ void udp_timer(struct ctx *c, struct timespec *ts)
 	unsigned int i;
 	long *word, tmp;
 
+	if (!c->v4)
+		v6 = 1;
 v6:
 	for (t = 0; t < UDP_ACT_TYPE_MAX; t++) {
 		word = (long *)udp_act[v6 ? V6 : V4][t];
-		for (i = 0; i < sizeof(udp_act[0][0]) / sizeof(long);
-		     i++, word++) {
+		for (i = 0; i < ARRAY_SIZE(udp_act[0][0]);
+		     i += sizeof(long), word++) {
 			tmp = *word;
 			while ((n = ffsl(tmp))) {
 				tmp &= ~(1UL << (n - 1));
-				udp_timer_one(c, v6, t,
-					      i * sizeof(long) * 8 + n - 1, ts);
+				udp_timer_one(c, v6, t, i * 8 + n - 1, ts);
 			}
 		}
 	}
 
-	if (!v6) {
+	if (!v6 && c->v6) {
 		v6 = 1;
 		goto v6;
 	}

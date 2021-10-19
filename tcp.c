@@ -511,7 +511,7 @@ struct tcp_tap_conn {
 	struct timespec ts_ack_to_tap;
 	struct timespec tap_data_noack;
 
-	int mss_guest;
+	unsigned int mss_guest;
 
 	uint32_t events;
 };
@@ -898,7 +898,7 @@ static void tcp_update_check_tcp6(struct tcp6_l2_buf_t *buf)
  * @ip_da:	Pointer to IPv4 destination address, NULL if unchanged
  */
 void tcp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
-		       uint32_t *ip_da)
+		       const uint32_t *ip_da)
 {
 	int i;
 
@@ -1452,7 +1452,7 @@ void tcp_defer_handler(struct ctx *c)
  */
 static size_t tcp_l2_buf_fill_headers(struct ctx *c, struct tcp_tap_conn *conn,
 				      void *p, size_t plen,
-				      uint16_t *check, uint32_t seq)
+				      const uint16_t *check, uint32_t seq)
 {
 	size_t ip_len, eth_len;
 
@@ -1582,7 +1582,7 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 		conn->wnd_to_tap = info->tcpi_snd_wnd;
 	} else {
 		tcp_get_sndbuf(conn);
-		conn->wnd_to_tap = MIN(info->tcpi_snd_wnd, conn->snd_buf);
+		conn->wnd_to_tap = MIN((int)info->tcpi_snd_wnd, conn->snd_buf);
 	}
 
 	conn->wnd_to_tap = MIN(conn->wnd_to_tap, MAX_WINDOW);
@@ -1622,7 +1622,7 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 		return 0;
 
 	if (getsockopt(s, SOL_TCP, TCP_INFO, &info, &sl)) {
-		tcp_rst(c, conn);
+		tcp_tap_destroy(c, conn);
 		return -ECONNRESET;
 	}
 
@@ -1658,7 +1658,7 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 		if (c->mtu == -1) {
 			mss = info.tcpi_snd_mss;
 		} else {
-			mss = c->mtu - sizeof(sizeof *th);
+			mss = c->mtu - sizeof(struct tcphdr);
 			if (CONN_V4(conn))
 				mss -= sizeof(struct iphdr);
 			else
@@ -1880,9 +1880,9 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 		.sin6_addr = *(struct in6_addr *)addr,
 	};
 	union epoll_ref ref = { .proto = IPPROTO_TCP };
+	int i, s, *sock_pool_p, mss;
 	const struct sockaddr *sa;
 	struct tcp_tap_conn *conn;
-	int i, s, *sock_pool_p;
 	struct epoll_event ev;
 	socklen_t sl;
 
@@ -1921,7 +1921,10 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 			.sin6_addr = c->addr6_ll,
 			.sin6_scope_id = c->ifi,
 		};
-		bind(s, (struct sockaddr *)&addr6_ll, sizeof(addr6_ll));
+		if (bind(s, (struct sockaddr *)&addr6_ll, sizeof(addr6_ll))) {
+			close(s);
+			return;
+		}
 	}
 
 	conn = &tt[c->tcp.tap_conn_count++];
@@ -1930,9 +1933,10 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 
 	conn->wnd_to_tap = WINDOW_DEFAULT;
 
-	conn->mss_guest = tcp_opt_get(th, len, OPT_MSS, NULL, NULL);
-	if (conn->mss_guest < 0)
+	if ((mss = tcp_opt_get(th, len, OPT_MSS, NULL, NULL)) < 0)
 		conn->mss_guest = MSS_DEFAULT;
+	else
+		conn->mss_guest = mss;
 
 	/* Don't upset qemu */
 	if (c->mode == MODE_PASST) {
@@ -2186,9 +2190,8 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 	iov_sock[0].iov_base = tcp_buf_discard;
 	iov_sock[0].iov_len = already_sent;
 
-	if (v4 && tcp4_l2_buf_used + fill_bufs > ARRAY_SIZE(tcp4_l2_buf))
-		tcp_l2_buf_flush(c);
-	else if (!v4 && tcp6_l2_buf_used + fill_bufs > ARRAY_SIZE(tcp6_l2_buf))
+	if (( v4 && tcp4_l2_buf_used + fill_bufs > ARRAY_SIZE(tcp4_l2_buf)) ||
+	    (!v4 && tcp6_l2_buf_used + fill_bufs > ARRAY_SIZE(tcp6_l2_buf)))
 		tcp_l2_buf_flush(c);
 
 	for (i = 0, iov = iov_sock + 1; i < fill_bufs; i++, iov++) {
@@ -2543,6 +2546,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 	struct tcphdr *th = (struct tcphdr *)(pkt_buf + msg[0].pkt_buf_offset);
 	uint16_t len = msg[0].l4_len;
 	struct tcp_tap_conn *conn;
+	int mss;
 
 	conn = tcp_hash_lookup(c, af, addr, htons(th->source), htons(th->dest));
 	if (!conn) {
@@ -2567,9 +2571,10 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 
 		tcp_clamp_window(conn, th, len, 0, 1);
 
-		conn->mss_guest = tcp_opt_get(th, len, OPT_MSS, NULL, NULL);
-		if (conn->mss_guest < 0)
+		if ((mss = tcp_opt_get(th, len, OPT_MSS, NULL, NULL)) < 0)
 			conn->mss_guest = MSS_DEFAULT;
+		else
+			conn->mss_guest = mss;
 
 		/* Don't upset qemu */
 		if (c->mode == MODE_PASST) {
@@ -2936,7 +2941,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		in_addr_t s_addr;
 
 		memcpy(&sa4, &sa, sizeof(sa4));
-		s_addr = sa4.sin_addr.s_addr;
+		s_addr = ntohl(sa4.sin_addr.s_addr);
 
 		memset(&conn->a.a4.zero,   0, sizeof(conn->a.a4.zero));
 		memset(&conn->a.a4.one, 0xff, sizeof(conn->a.a4.one));
@@ -3156,9 +3161,12 @@ eintr:
 			ev.data.u64 = ref.u64,
 			epoll_ctl(c->epollfd, EPOLL_CTL_MOD, move_to, &ev);
 			break;
-		} else if (never_read && written == (long)(c->tcp.pipe_size)) {
+		}
+
+		if (never_read && written == (long)(c->tcp.pipe_size))
 			goto retry;
-		} else if (!never_read && written < to_write) {
+
+		if (!never_read && written < to_write) {
 			to_write -= written;
 			goto retry;
 		}
@@ -3221,7 +3229,6 @@ close:
 	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, conn->from, NULL);
 	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, conn->to, NULL);
 	conn->state = CLOSED;
-	return;
 }
 
 /**
@@ -3448,7 +3455,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 static int tcp_sock_init_ns(void *arg)
 {
 	struct ctx *c = (struct ctx *)arg;
-	in_port_t port;
+	int port;
 
 	ns_enter(c);
 
@@ -3550,8 +3557,7 @@ static int tcp_sock_refill(void *arg)
 int tcp_sock_init(struct ctx *c, struct timespec *now)
 {
 	struct tcp_sock_refill_arg refill_arg = { c, 0 };
-	in_port_t port;
-	int i;
+	int i, port;
 
 	if (getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret),
 		      GRND_RANDOM) < 0) {
@@ -3646,9 +3652,7 @@ static void tcp_timer_one(struct ctx *c, struct tcp_tap_conn *conn,
 			break;
 		}
 
-		if (!conn->wnd_to_tap)
-			tcp_send_to_tap(c, conn, 0, ts);
-		else if (ack_to_tap > ACK_INTERVAL)
+		if (!conn->wnd_to_tap || ack_to_tap > ACK_INTERVAL)
 			tcp_send_to_tap(c, conn, 0, ts);
 
 		if (tap_data_noack > ACK_TIMEOUT) {
@@ -3673,9 +3677,7 @@ static void tcp_timer_one(struct ctx *c, struct tcp_tap_conn *conn,
 			tcp_rst(c, conn);
 		break;
 	case LAST_ACK:
-		if (sock_act > LAST_ACK_TIMEOUT)
-			tcp_rst(c, conn);
-		else if (tap_act > LAST_ACK_TIMEOUT)
+		if (sock_act > LAST_ACK_TIMEOUT || tap_act > LAST_ACK_TIMEOUT)
 			tcp_rst(c, conn);
 		break;
 	case TAP_SYN_SENT:
@@ -3739,7 +3741,7 @@ struct tcp_port_rebind_arg {
 static int tcp_port_rebind(void *arg)
 {
 	struct tcp_port_rebind_arg *a = (struct tcp_port_rebind_arg *)arg;
-	in_port_t port;
+	int port;
 
 	if (a->bind_in_ns) {
 		ns_enter(a->c);
@@ -3808,7 +3810,7 @@ static int tcp_port_rebind(void *arg)
 /**
  * tcp_timer() - Scan activity bitmap for sockets waiting for timed events
  * @c:		Execution context
- * @ts:		Timestamp from caller
+ * @now:	Timestamp from caller
  */
 void tcp_timer(struct ctx *c, struct timespec *now)
 {

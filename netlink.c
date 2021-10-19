@@ -97,13 +97,15 @@ int nl_sock_init(struct ctx *c)
  */
 static int nl_req(int ns, char *buf, void *req, ssize_t len)
 {
-	int n, s = ns ? nl_sock_ns : nl_sock, done = 0;
+	int s = ns ? nl_sock_ns : nl_sock, done = 0;
 	char flush[BUFSIZ];
+	ssize_t n;
 
 	while (!done && (n = recv(s, flush, sizeof(flush), MSG_DONTWAIT)) > 0) {
 		struct nlmsghdr *nh = (struct nlmsghdr *)flush;
+		size_t nm = n;
 
-		for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
+		for ( ; NLMSG_OK(nh, nm); nh = NLMSG_NEXT(nh, nm)) {
 			if (nh->nlmsg_type == NLMSG_DONE ||
 			    nh->nlmsg_type == NLMSG_ERROR) {
 				done = 1;
@@ -129,7 +131,7 @@ unsigned int nl_get_ext_if(int *v4, int *v6)
 {
 	struct { struct nlmsghdr nlh; struct rtmsg rtm; } req = {
 		.nlh.nlmsg_type	 = RTM_GETROUTE,
-		.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP | NLM_F_EXCL,
+		.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP,
 		.nlh.nlmsg_len	 = NLMSG_LENGTH(sizeof(struct rtmsg)),
 		.nlh.nlmsg_seq	 = nl_seq++,
 
@@ -145,8 +147,9 @@ unsigned int nl_get_ext_if(int *v4, int *v6)
 	struct rtmsg *rtm;
 	char buf[BUFSIZ];
 	long *word, tmp;
-	int n, na, *v;
 	uint8_t *vmap;
+	size_t n, na;
+	int *v;
 
 	if (*v4 == IP_VERSION_PROBE) {
 		v = v4;
@@ -170,8 +173,8 @@ v6:
 		if (rtm->rtm_dst_len || rtm->rtm_family != req.rtm.rtm_family)
 			continue;
 
-		for (rta = (struct rtattr *)RTM_RTA(rtm), na = RTM_PAYLOAD(nh);
-		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
+		for (rta = RTM_RTA(rtm), na = RTM_PAYLOAD(nh); RTA_OK(rta, na);
+		     rta = RTA_NEXT(rta, na)) {
 			unsigned int ifi;
 
 			if (rta->rta_type != RTA_OIF)
@@ -283,7 +286,7 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 	struct rtattr *rta;
 	struct rtmsg *rtm;
 	char buf[BUFSIZ];
-	int n, na;
+	size_t n, na;
 
 	if (set) {
 		if (af == AF_INET6) {
@@ -326,8 +329,8 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 		if (rtm->rtm_dst_len)
 			continue;
 
-		for (rta = (struct rtattr *)RTM_RTA(rtm), na = RTM_PAYLOAD(nh);
-		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
+		for (rta = RTM_RTA(rtm), na = RTM_PAYLOAD(nh); RTA_OK(rta, na);
+		     rta = RTA_NEXT(rta, na)) {
 			if (rta->rta_type != RTA_GATEWAY)
 				continue;
 
@@ -388,7 +391,7 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 	struct nlmsghdr *nh;
 	struct rtattr *rta;
 	char buf[BUFSIZ];
-	int n, na;
+	size_t n, na;
 
 	if (set) {
 		if (af == AF_INET6) {
@@ -429,8 +432,8 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 		if (ifa->ifa_index != ifi)
 			goto next;
 
-		for (rta = (struct rtattr *)IFA_RTA(ifa), na = RTM_PAYLOAD(nh);
-		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
+		for (rta = IFA_RTA(ifa), na = RTM_PAYLOAD(nh); RTA_OK(rta, na);
+		     rta = RTA_NEXT(rta, na)) {
 			if (rta->rta_type != IFA_ADDRESS)
 				continue;
 
@@ -487,7 +490,7 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 	struct nlmsghdr *nh;
 	struct rtattr *rta;
 	char buf[BUFSIZ];
-	int n, na;
+	size_t n, na;
 
 	if (!MAC_IS_ZERO(mac)) {
 		req.nlh.nlmsg_len = sizeof(req);
@@ -522,8 +525,8 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 
 		ifm = (struct ifinfomsg *)NLMSG_DATA(nh);
 
-		for (rta = (struct rtattr *)IFLA_RTA(ifm), na = RTM_PAYLOAD(nh);
-		     RTA_OK(rta, na); rta = RTA_NEXT(rta, na)) {
+		for (rta = IFLA_RTA(ifm), na = RTM_PAYLOAD(nh); RTA_OK(rta, na);
+		     rta = RTA_NEXT(rta, na)) {
 			if (rta->rta_type != IFLA_ADDRESS)
 				continue;
 
