@@ -21,7 +21,7 @@
  *	http://cr.yp.to/siphash/siphash-20120918.pdf
  *
  * This includes code from the reference SipHash implementation at
- * https://github.com/veorq/SipHash/ licensed as follows:
+ * https://github.com/veorq/SipHash/ originally licensed as follows:
  *
  * --
  *  SipHash reference C implementation
@@ -40,8 +40,8 @@
  * <http://creativecommons.org/publicdomain/zero/1.0/>.
  * --
  *
- * and from the Linux kernel implementation (lib/siphash.c), licensed as
- * follows:
+ * and from the Linux kernel implementation (lib/siphash.c), originally licensed
+ * as follows:
  *
  * --
  * Copyright (C) 2016 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.

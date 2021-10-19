@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2021 Red Hat GmbH <sbrivio@redhat.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 [/]
 allow-bold=true
 background-color='#121212121212'

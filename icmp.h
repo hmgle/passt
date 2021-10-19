@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Copyright (c) 2021 Red Hat GmbH
+ * Author: Stefano Brivio <sbrivio@redhat.com>
+ */
+
 #ifndef ICMP_H
 #define ICMP_H
 

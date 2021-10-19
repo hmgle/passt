@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Copyright (c) 2021 Red Hat GmbH
+ * Author: Stefano Brivio <sbrivio@redhat.com>
+ */
+
 #define UNIX_SOCK_MAX		100
 #define UNIX_SOCK_PATH		"/tmp/passt_%i.socket"
 

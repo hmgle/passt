@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Copyright (c) 2021 Red Hat GmbH
+ * Author: Stefano Brivio <sbrivio@redhat.com>
+ */
+
 void err(const char *format, ...);
 void warn(const char *format, ...);
 void info(const char *format, ...);

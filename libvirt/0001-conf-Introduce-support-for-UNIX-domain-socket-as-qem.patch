@@ -13,6 +13,9 @@ instead of address and port.
 
 Signed-off-by: Stefano Brivio <sbrivio@redhat.com>
 ---
+SPDX-FileCopyrightText: 2020-2021 Red Hat GmbH <sbrivio@redhat.com>
+SPDX-License-Identifier: AGPL-3.0-or-later
+
  docs/formatdomain.rst         | 41 +++++++++++++++++++------
  docs/schemas/domaincommon.rng | 50 +++++++++++++++++++++++-------
  src/conf/domain_conf.c        | 58 +++++++++++++++++++++++++++--------

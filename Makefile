@@ -1,3 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
 CFLAGS += -Wall -Wextra -pedantic
 CFLAGS += -DRLIMIT_STACK_VAL=$(shell ulimit -s)
 CFLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)

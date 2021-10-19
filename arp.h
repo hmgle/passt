@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Copyright (c) 2021 Red Hat GmbH
+ * Author: Stefano Brivio <sbrivio@redhat.com>
+ */
+
 /**
  * struct arpmsg - 802.2 ARP IPv4 payload
  * @sha:	Sender hardware address

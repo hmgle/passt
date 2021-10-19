@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-License-Identifier: AGPL-3.0-or-later AND BSD-3-Clause
 
 /* PASST - Plug A Simple Socket Transport
  *  for qemu/UNIX domain socket mode

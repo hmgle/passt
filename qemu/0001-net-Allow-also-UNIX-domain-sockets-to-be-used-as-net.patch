@@ -10,6 +10,9 @@ and the adaptation is trivial.
 
 Signed-off-by: Stefano Brivio <sbrivio@redhat.com>
 ---
+SPDX-FileCopyrightText: 2020-2021 Red Hat GmbH <sbrivio@redhat.com>
+SPDX-License-Identifier: AGPL-3.0-or-later
+
  net/socket.c    | 106 ++++++++++++++++++++++++++++++++++++++++--------
  qemu-options.hx |  12 +++---
  2 files changed, 94 insertions(+), 24 deletions(-)
