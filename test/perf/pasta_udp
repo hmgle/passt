@@ -12,12 +12,12 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 onlyfor	passt_in_ns
-htools	cpupower ip sleep iperf3 udp_rr jq sed
+htools	bc head ip sleep iperf3 udp_rr jq sed
 nstools	ip sleep iperf3 udp_rr jq sed
 
 test	pasta: throughput and latency (local traffic)
 
-hout	FREQ cpupower frequency-info -lm | sed -n 's/.*- \(.*\) GHz$/\1/p'
+hout	FREQ (echo "scale=1"; sed -n 's/cpu MHz.*: \([0-9]*\)\..*$/(\1+10^2\/2)\/10^3/p' /proc/cpuinfo) | bc -l | head -n1
 
 set	THREADS 1
 set	STREAMS 4

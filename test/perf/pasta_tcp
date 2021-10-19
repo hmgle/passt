@@ -12,7 +12,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 onlyfor	passt_in_ns
-htools	cpupower ip seq bc sleep iperf3 tcp_rr tcp_crr jq sed
+htools	head ip seq bc sleep iperf3 tcp_rr tcp_crr jq sed
 nstools	sysctl nproc ip seq bc sleep iperf3 tcp_rr tcp_crr jq sed
 
 test	pasta: throughput and latency (local connections)
@@ -25,7 +25,7 @@ ns	sysctl -w net.ipv4.tcp_timestamps=0
 set	THREADS 2
 set	STREAMS 2
 set	OPTS -Z -w 4M -l 1M -P __STREAMS__ -i1 -t30 -O5 --pacing-timer 10000
-hout	FREQ cpupower frequency-info -lm | sed -n 's/.*- \(.*\) GHz$/\1/p'
+hout	FREQ (echo "scale=1"; sed -n 's/cpu MHz.*: \([0-9]*\)\..*$/(\1+10^2\/2)\/10^3/p' /proc/cpuinfo) | bc -l | head -n1
 
 
 info	Throughput in Gbps, latency in µs, __THREADS__ threads at __FREQ__ GHz, __STREAMS__ streams each

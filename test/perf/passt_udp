@@ -14,7 +14,7 @@
 onlyfor	passt_in_ns
 gtools	sysctl ip jq nproc sleep iperf3 udp_rr # From neper
 nstools	ip jq sleep iperf3 udp_rr
-htools	cpupower sed
+htools	bc head sed
 
 test	passt: throughput and latency
 
@@ -26,7 +26,7 @@ guest	/sbin/sysctl -w net.core.wmem_default=16777216
 gout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
 gout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
 gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
-hout	FREQ cpupower frequency-info -lm | sed -n 's/.*- \(.*\) GHz$/\1/p'
+hout	FREQ (echo "scale=1"; sed -n 's/cpu MHz.*: \([0-9]*\)\..*$/(\1+10^2\/2)\/10^3/p' /proc/cpuinfo) | bc -l | head -n1
 
 set	THREADS 2
 set	STREAMS 1

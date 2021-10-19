@@ -14,7 +14,7 @@
 onlyfor	passt_in_ns
 gtools	sysctl ip jq nproc seq sleep bc iperf3 tcp_rr tcp_crr # From neper
 nstools	sysctl ip jq nproc seq sleep bc iperf3 tcp_rr tcp_crr
-htools	cpupower sed seq
+htools	bc head sed seq
 
 test	passt: throughput and latency
 
@@ -33,7 +33,7 @@ ns	sysctl -w net.ipv4.tcp_timestamps=0
 gout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
 gout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
 gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
-hout	FREQ cpupower frequency-info -lm | sed -n 's/.*- \(.*\) GHz$/\1/p'
+hout	FREQ (echo "scale=1"; sed -n 's/cpu MHz.*: \([0-9]*\)\..*$/(\1+10^2\/2)\/10^3/p' /proc/cpuinfo) | bc -l | head -n1
 
 
 set	THREADS 1
