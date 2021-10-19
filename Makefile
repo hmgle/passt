@@ -38,17 +38,17 @@ clean:
 		passt.tar passt.tar.gz *.deb *.rpm
 
 install: passt pasta qrap
-	mkdir -p $(DESTDIR)$(prefix)/bin $(DESTDIR)$(prefix)/man/man1
+	mkdir -p $(DESTDIR)$(prefix)/bin $(DESTDIR)$(prefix)/share/man/man1
 	cp -d passt pasta qrap $(DESTDIR)$(prefix)/bin
-	cp -d passt.1 pasta.1 qrap.1 $(DESTDIR)$(prefix)/man/man1
+	cp -d passt.1 pasta.1 qrap.1 $(DESTDIR)$(prefix)/share/man/man1
 
 uninstall:
 	-${RM} $(DESTDIR)$(prefix)/bin/passt
 	-${RM} $(DESTDIR)$(prefix)/bin/pasta
 	-${RM} $(DESTDIR)$(prefix)/bin/qrap
-	-${RM} $(DESTDIR)$(prefix)/man/man1/passt.1
-	-${RM} $(DESTDIR)$(prefix)/man/man1/pasta.1
-	-${RM} $(DESTDIR)$(prefix)/man/man1/qrap.1
+	-${RM} $(DESTDIR)$(prefix)/share/man/man1/passt.1
+	-${RM} $(DESTDIR)$(prefix)/share/man/man1/pasta.1
+	-${RM} $(DESTDIR)$(prefix)/share/man/man1/qrap.1
 
 pkgs:
 	tar cf passt.tar -P --xform 's//\/usr\/bin\//' passt pasta qrap

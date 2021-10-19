@@ -20,15 +20,15 @@ host	prefix=__TEMP__ make install
 check	[ -f __TEMP__/bin/passt ]
 check	[ -h __TEMP__/bin/pasta ]
 check	[ -f __TEMP__/bin/qrap ]
-check	man -M __TEMP__/man -W passt
-check	man -M __TEMP__/man -W pasta
-check	man -M __TEMP__/man -W qrap
+check	man -M __TEMP__/share/man -W passt
+check	man -M __TEMP__/share/man -W pasta
+check	man -M __TEMP__/share/man -W qrap
 
 test	Uninstall
 host	prefix=__TEMP__ make uninstall
 check	! [ -f __TEMP__/bin/passt ]
 check	! [ -h __TEMP__/bin/pasta ]
 check	! [ -f __TEMP__/bin/qrap ]
-check	! man -M __TEMP__/man -W passt 2>/dev/null
-check	! man -M __TEMP__/man -W pasta 2>/dev/null
-check	! man -M __TEMP__/man -W qrap 2>/dev/null
+check	! man -M __TEMP__/share/man -W passt 2>/dev/null
+check	! man -M __TEMP__/share/man -W pasta 2>/dev/null
+check	! man -M __TEMP__/share/man -W qrap 2>/dev/null
