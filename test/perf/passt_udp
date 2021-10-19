@@ -123,7 +123,7 @@ iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 4G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 4.0 5.0
 ns	ip link set dev lo mtu 65520
-iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 6G
+iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 4G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 5.0 5.5
 
@@ -162,7 +162,7 @@ iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 4G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 4.0 5.0
 ns	ip link set dev lo mtu 65520
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 6G
+iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 4G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 5.0 5.5
 
