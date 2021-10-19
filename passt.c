@@ -51,7 +51,8 @@
 #include <time.h>
 #include <syslog.h>
 #include <sys/stat.h>
-#include <seccomp.h>
+#include <linux/seccomp.h>
+#include <linux/audit.h>
 #include <sys/prctl.h>
 #include <linux/filter.h>
 #include <stddef.h>
