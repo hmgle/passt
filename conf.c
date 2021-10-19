@@ -293,8 +293,7 @@ static void get_dns(struct ctx *c)
 	if ((fd = open("/etc/resolv.conf", O_RDONLY)) < 0)
 		goto out;
 
-	*buf = 0;
-	while (line_read(buf, BUFSIZ, fd)) {
+	while (!(*buf = 0) && line_read(buf, BUFSIZ, fd)) {
 		if (!dns_set && strstr(buf, "nameserver ") == buf) {
 			p = strrchr(buf, ' ');
 			if (!p)
