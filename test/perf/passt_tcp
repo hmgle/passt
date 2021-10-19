@@ -59,11 +59,11 @@ iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -w 4M
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 1.6 1.8
 guest	ip link set dev __IFNAME__ mtu 9000
-iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -w 32M
+iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -w 8M
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 4.0 5.0
 guest	ip link set dev __IFNAME__ mtu 65520
-iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -w 128M
+iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -w 16M
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 7.0 8.0
 
@@ -106,11 +106,11 @@ iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -w 4M
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 1.6 1.8
 guest	ip link set dev __IFNAME__ mtu 9000
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -w 32M
+iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -w 8M
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 4.0 5.0
 guest	ip link set dev __IFNAME__ mtu 65520
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -w 128M
+iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -w 16M
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 7.0 8.0
 
@@ -147,11 +147,11 @@ iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -w 4M
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 2.0 3.0
 ns	ip link set dev lo mtu 9000
-iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -w 32M
+iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -w 8M
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 5.0 6.0
 ns	ip link set dev lo mtu 65520
-iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -w 64M
+iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -w 16M
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 6.0 6.8
 ns	ip link set dev lo mtu 65535
@@ -196,11 +196,11 @@ iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -w 4M
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 2.0 3.0
 ns	ip link set dev lo mtu 9000
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -w 32M
+iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -w 8M
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 5.0 6.0
 ns	ip link set dev lo mtu 65520
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -w 64M
+iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -w 16M
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 6.0 6.8
 ns	ip link set dev lo mtu 65535
