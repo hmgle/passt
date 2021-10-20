@@ -29,6 +29,11 @@ endif
 endif
 endif
 
+C := \#include <linux/tcp.h>\nstruct tcp_info x = { .tcpi_snd_wnd = 0 };
+ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
+	CFLAGS += -DHAS_SND_WND
+endif
+
 prefix ?= /usr/local
 
 all: passt pasta passt4netns qrap

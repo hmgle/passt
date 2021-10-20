@@ -67,7 +67,9 @@ struct tcp_ctx {
 	uint8_t port_to_init	[USHRT_MAX / 8];
 	int ns_detect_ports;
 	struct timespec timer_run;
+#ifdef HAS_SND_WND
 	int kernel_snd_wnd;
+#endif
 	size_t pipe_size;
 	struct timespec refill_ts;
 	struct timespec port_detect_ts;

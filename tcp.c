@@ -359,6 +359,11 @@
 		 sizeof(struct ipv6hdr) - sizeof(struct tcphdr))
 
 #define WINDOW_DEFAULT			14600		/* RFC 6928 */
+#ifdef HAS_SND_WND
+# define KERNEL_REPORTS_SND_WND(c)	(c->tcp.kernel_snd_wnd)
+#else
+# define KERNEL_REPORTS_SND_WND(c)	(0 && (c))
+#endif
 
 #define SYN_TIMEOUT			240000		/* ms */
 #define ACK_TIMEOUT			2000
@@ -1563,7 +1568,7 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 			conn->seq_ack_to_tap = prev_ack_to_tap;
 	}
 
-	if (!c->tcp.kernel_snd_wnd) {
+	if (!KERNEL_REPORTS_SND_WND(c)) {
 		tcp_get_sndbuf(conn);
 		conn->wnd_to_tap = MIN(conn->snd_buf, MAX_WINDOW);
 		goto out;
@@ -1675,8 +1680,10 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 		data += OPT_MSS_LEN - 2;
 		th->doff += OPT_MSS_LEN / 4;
 
+#ifdef HAS_SND_WND
 		if (!c->tcp.kernel_snd_wnd && info.tcpi_snd_wnd)
 			c->tcp.kernel_snd_wnd = 1;
+#endif
 
 		conn->ws = MIN(MAX_WS, info.tcpi_snd_wscale);
 
