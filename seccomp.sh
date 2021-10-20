@@ -8,7 +8,7 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# seccomp.sh - Build seccomp profiles from "#syscalls[:PROFILE]" comments in code
+# seccomp.sh - Build seccomp profiles from "#syscalls[:PROFILE]" code comments
 #
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
@@ -41,8 +41,15 @@ CALL='	BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, @NR@, @ALLOW@, 0), /* @NAME@ */'
 # Binary search tree node or leaf, @NR@: value, @R@: right jump, @L@: left jump
 BST='	BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, @NR@, @R@, @L@),'
 
+# cleanup() - Remove temporary file if it exists
+cleanup() {
+	rm -f "${TMP}"
+}
+trap "cleanup" EXIT
+
 # sub() - Substitute in-place file line with processed template line
 # $1:	Line number
+# $2:	Template name (variable name)
 # $@:	Replacement for @KEY@ in the form KEY:value
 sub() {
 	IFS=
@@ -90,6 +97,15 @@ log2() {
 	echo ${__x}
 }
 
+# cc_syscall_nr - Try to get syscall number from compiler
+# $1:	Name of syscall
+cc_syscall_nr() {
+	__in="$(printf "#include <sys/syscall.h>\n__NR_%s" ${1})"
+	__out="$(echo "${__in}" | cc -E -xc - -o - | tail -1)"
+	[ "${__out}" = "__NR_$1" ] && return 1
+	echo "${__out}"
+}
+
 # gen_profile() - Build struct sock_filter for a single profile
 # $1:	Profile name
 # $@:	Names of allowed system calls, amount padded to next power of two
@@ -106,7 +122,14 @@ gen_profile() {
 		echo -1 >> "${TMP}"
 	done
 	for __i in $(seq 1 ${__statements_calls} ); do
-		ausyscall $(eval echo \${${__i}}) --exact >> "${TMP}"
+		__syscall_name="$(eval echo \${${__i}})"
+		if { ! command -V ausyscall >/dev/null 2>&1 || \
+		     ! ausyscall "${__syscall_name}" --exact >> "${TMP}"; } && \
+		   ! cc_syscall_nr "${__syscall_name}" >> "${TMP}"; then
+			echo "Cannot get syscall number for ${__syscall_name}"
+			exit 1
+		fi
+		eval __syscall_nr_$(tail -1 "${TMP}")="${__syscall_name}"
 	done
 	sort -go "${TMP}" "${TMP}"
 
@@ -153,7 +176,7 @@ gen_profile() {
 	# Calls
 	for __i in $(seq $(( __statements_bst + 1 )) ${__statements}); do
 		__nr="$(sed -n ${__i}p "${TMP}")"
-		__name=$(ausyscall ${__nr})
+		eval __name="\${__syscall_nr_${__nr}}"
 		__allow=$(( __statements - __i + 1 ))
 		sub ${__i} CALL "NR:${__nr}" "NAME:${__name}" "ALLOW:${__allow}"
 	done
