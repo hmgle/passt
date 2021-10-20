@@ -1,6 +1,8 @@
-.. SPDX-License-Identifier: AGPL-3.0-or-later
-.. Copyright (c) 2021 Red Hat GmbH
-.. Author: Stefano Brivio <sbrivio@redhat.com>
+<!---
+SPDX-License-Identifier: AGPL-3.0-or-later
+Copyright (c) 2021 Red Hat GmbH
+Author: Stefano Brivio <sbrivio@redhat.com>
+-->
 
 <span style="font-weight: bold; color: red;">While functional and tested to some extent, this project is still in early development phase: don't use in production or critical environments yet.</span>
 
