@@ -405,7 +405,11 @@ char *line_read(char *buf, size_t len, int fd)
 
 	buf[len] = 0;
 
-	if (!(p = strchr(buf, '\n')))
+	p = buf;
+	while (*p == '\n' && strlen(p) && (size_t)(p - buf) < len)
+		p++;
+
+	if (!(p = strchr(p, '\n')))
 		return buf;
 
 	*p = 0;
