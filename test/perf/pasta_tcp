@@ -25,7 +25,10 @@ ns	sysctl -w net.ipv4.tcp_timestamps=0
 set	THREADS 2
 set	STREAMS 2
 set	OPTS -Z -w 4M -l 1M -P __STREAMS__ -i1 -t30 -O5 --pacing-timer 10000
-hout	FREQ (echo "scale=1"; sed -n 's/cpu MHz.*: \([0-9]*\)\..*$/(\1+10^2\/2)\/10^3/p' /proc/cpuinfo) | bc -l | head -n1
+
+hout	FREQ_PROCFS (echo "scale=1"; sed -n 's/cpu MHz.*: \([0-9]*\)\..*$/(\1+10^2\/2)\/10^3/p' /proc/cpuinfo) | bc -l | head -n1
+hout	FREQ_CPUFREQ (echo "scale=1"; printf '( %i + 10^5 / 2 ) / 10^6\n' $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) ) | bc -l
+hout	FREQ [ -n "__FREQ_CPUFREQ__" ] && echo __FREQ_CPUFREQ__ || echo __FREQ_PROCFS__
 
 
 info	Throughput in Gbps, latency in µs, __THREADS__ threads at __FREQ__ GHz, __STREAMS__ streams each
