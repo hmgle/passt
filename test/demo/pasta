@@ -169,7 +169,7 @@ sleep	3
 passt	exit
 passt	CFLAGS="-g" make avx2
 sleep	2
-passt	perf record -g ./pasta
+passtb	perf record -g ./pasta
 sleep	2
 
 pout	TARGET_PID echo $$

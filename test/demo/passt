@@ -71,7 +71,7 @@ say	  'pasta' demo above.
 sleep	3
 
 passt	cd __TEMPDIR__/passt
-passt	./pasta
+passtb	./pasta
 sleep	3
 passt	/sbin/dhclient
 sleep	2
