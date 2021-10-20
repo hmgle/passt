@@ -452,6 +452,7 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 {
 	struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1);
 	struct opt_hdr *ia, *bad_ia, *client_id, *server_id;
+	struct in6_addr *src;
 	struct msg_hdr *mh;
 	struct udphdr *uh;
 	uint8_t proto;
@@ -475,6 +476,11 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 		return -1;
 
 	c->addr6_ll_seen = ip6h->saddr;
+
+	if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
+		src = &c->gw6;
+	else
+		src = &c->addr6_ll;
 
 	mh = (struct msg_hdr *)(uh + 1);
 	mlen -= sizeof(struct msg_hdr);
@@ -527,7 +533,7 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 
 			resp_not_on_link.hdr.xid = mh->xid;
 
-			tap_ip_send(c, &c->gw6, IPPROTO_UDP,
+			tap_ip_send(c, src, IPPROTO_UDP,
 				    (char *)&resp_not_on_link, n, mh->xid);
 
 			return 1;
@@ -577,7 +583,7 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 
 	resp.hdr.xid = mh->xid;
 
-	tap_ip_send(c, &c->gw6, IPPROTO_UDP, (char *)&resp, n, mh->xid);
+	tap_ip_send(c, src, IPPROTO_UDP, (char *)&resp, n, mh->xid);
 	c->addr6_seen = c->addr6;
 
 	return 1;

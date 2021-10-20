@@ -2921,8 +2921,16 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 
 		if (IN6_IS_ADDR_LOOPBACK(&sa6.sin6_addr) ||
 		    !memcmp(&sa6.sin6_addr, &c->addr6_seen, sizeof(c->gw6)) ||
-		    !memcmp(&sa6.sin6_addr, &c->addr6, sizeof(c->gw6)))
-			memcpy(&sa6.sin6_addr, &c->gw6, sizeof(c->gw6));
+		    !memcmp(&sa6.sin6_addr, &c->addr6, sizeof(c->gw6))) {
+			struct in6_addr *src;
+
+			if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
+				src = &c->gw6;
+			else
+				src = &c->addr6_ll;
+
+			memcpy(&sa6.sin6_addr, src, sizeof(*src));
+		}
 
 		memcpy(&conn->a.a6, &sa6.sin6_addr, sizeof(conn->a.a6));
 

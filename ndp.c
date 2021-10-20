@@ -183,7 +183,11 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		c->addr6_seen = ip6h->saddr;
 
 	ip6hr->daddr = ip6h->saddr;
-	ip6hr->saddr = c->gw6;
+	if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
+		ip6hr->saddr = c->gw6;
+	else
+		ip6hr->saddr = c->addr6_ll;
+
 	ip6hr->payload_len = htons(sizeof(*ihr) + len);
 	ip6hr->hop_limit = IPPROTO_ICMPV6;
 	ihr->icmp6_cksum = 0;

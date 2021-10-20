@@ -698,6 +698,11 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 				in_port_t src = htons(b->s_in6.sin6_port);
 
 				b->ip6h.daddr = c->addr6_ll_seen;
+				if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
+					b->ip6h.saddr = c->gw6;
+				else
+					b->ip6h.saddr = c->addr6_ll;
+
 				b->ip6h.saddr = c->gw6;
 
 				udp_tap_map[V6][src].ts_local = now->tv_sec;
