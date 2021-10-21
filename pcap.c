@@ -118,7 +118,8 @@ void pcapm(struct msghdr *mh)
 
 		if (write(pcap_fd, &h, sizeof(h)) < 0)
 			goto fail;
-		if (write(pcap_fd, (char *)iov->iov_base + 4, iov->iov_len - 4))
+		if (write(pcap_fd, (char *)iov->iov_base + 4,
+			  iov->iov_len - 4) < 0)
 			goto fail;
 	}
 
