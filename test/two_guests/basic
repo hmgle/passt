@@ -32,7 +32,8 @@ check	[ "__ADDR1__" = "__HOST_ADDR__" ]
 check	[ "__ADDR2__" = "__HOST_ADDR__" ]
 
 test	DHCPv6: addresses
-sleep	2 # Link is up now: DAD
+# Link is up now, wait for DAD to complete
+sleep	2
 guest1	/sbin/dhclient -6 __IFNAME1__
 guest2	/sbin/dhclient -6 __IFNAME1__
 g1out	ADDR1_6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME1__").addr_info[] | select(.prefixlen == 128).local'
