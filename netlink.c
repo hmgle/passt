@@ -398,7 +398,7 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 
 	if (set) {
 		if (af == AF_INET6) {
-			size_t rta_len = sizeof(req.set.a6.l);
+			size_t rta_len = RTA_LENGTH(sizeof(req.set.a6.l));
 
 			req.nlh.nlmsg_len = sizeof(req);
 
@@ -409,7 +409,7 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 			req.set.a6.rta_a.rta_len = rta_len;
 			req.set.a6.rta_a.rta_type = IFA_ADDRESS;
 		} else {
-			size_t rta_len = sizeof(req.set.a4.l);
+			size_t rta_len = RTA_LENGTH(sizeof(req.set.a4.l));
 
 			req.nlh.nlmsg_len = offsetof(struct req_t, set.a4.end);
 
