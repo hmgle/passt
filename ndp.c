@@ -76,6 +76,9 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 			  sizeof(struct in6_addr))
 			return -1;
 
+		if (IN6_IS_ADDR_UNSPECIFIED(&ip6h->saddr))
+			return 1;
+
 		info("NDP: received NS, sending NA");
 		ihr->icmp6_type = NA;
 		ihr->icmp6_code = 0;
