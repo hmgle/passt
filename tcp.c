@@ -2970,9 +2970,10 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		memset(&conn->a.a4.one, 0xff, sizeof(conn->a.a4.one));
 
 		if (s_addr >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
-		    s_addr == INADDR_ANY || s_addr == htonl(c->addr4_seen))
-			sa4.sin_addr.s_addr = c->gw4;
+		    s_addr == INADDR_ANY || htonl(s_addr) == c->addr4_seen)
+			s_addr = ntohl(c->gw4);
 
+		s_addr = htonl(s_addr);
 		memcpy(&conn->a.a4.a, &s_addr, sizeof(conn->a.a4.a));
 
 		conn->sock_port = ntohs(sa4.sin_port);
