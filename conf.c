@@ -14,32 +14,30 @@
  * #syscalls stat
  */
 
-#define _GNU_SOURCE
-#include <sched.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <string.h>
-#include <errno.h>
+#include <sched.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
-#include <ifaddrs.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <time.h>
-#include <arpa/inet.h>
 #include <netinet/in.h>
-#include <linux/if_ether.h>
-#include <linux/netlink.h>
-#include <linux/rtnetlink.h>
+#include <netinet/if_ether.h>
+
+#include <linux/ipv6.h>
 
 #include "util.h"
 #include "passt.h"
+#include "netlink.h"
 #include "udp.h"
 #include "tcp.h"
-#include "netlink.h"
 #include "pasta.h"
 
 /**

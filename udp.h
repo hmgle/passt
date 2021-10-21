@@ -38,7 +38,7 @@ union udp_epoll_ref {
 
 				v6:1,
 				port:16;
-	};
+	} udp;
 	uint32_t u32;
 };
 

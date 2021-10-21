@@ -9,7 +9,7 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-CFLAGS += -Wall -Wextra -pedantic
+CFLAGS += -Wall -Wextra -pedantic -std=c99 -D_XOPEN_SOURCE=700 -D_GNU_SOURCE
 CFLAGS += -DRLIMIT_STACK_VAL=$(shell ulimit -s)
 CFLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)
 CFLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
@@ -120,9 +120,6 @@ pkgs:
 # - hicpp-signed-bitwise
 #	Those are needed for syscalls, epoll_wait flags, etc.
 #
-# - bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp
-#	This flags _GNU_SOURCE, currently needed
-#
 # - llvm-include-order
 #	TODO: not really important, but nice to fix eventually
 #
@@ -155,7 +152,6 @@ clang-tidy: $(wildcard *.c)
 	-readability-magic-numbers,\
 	-llvmlibc-restrict-system-libc-headers,\
 	-hicpp-signed-bitwise,\
-	-bugprone-reserved-identifier,-cert-dcl37-c,-cert-dcl51-cpp,\
 	-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,\
 	-llvm-include-order,\
 	-cppcoreguidelines-avoid-magic-numbers,\

@@ -19,7 +19,6 @@
  * created in a separate network namespace).
  */
 
-#define _GNU_SOURCE
 #include <sched.h>
 #include <stdio.h>
 #include <sys/epoll.h>
@@ -32,15 +31,7 @@
 #include <sys/resource.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
-#include <linux/if_ether.h>
-#include <linux/if_packet.h>
-#include <linux/ip.h>
-#include <linux/ipv6.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
-#include <linux/icmpv6.h>
-#include <linux/un.h>
-#include <linux/if_link.h>
+#include <netinet/ip.h>
 #include <net/ethernet.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -51,14 +42,20 @@
 #include <time.h>
 #include <syslog.h>
 #include <sys/stat.h>
-#include <linux/seccomp.h>
-#include <linux/audit.h>
 #include <sys/prctl.h>
-#include <linux/filter.h>
 #include <stddef.h>
-#include <linux/capability.h>
 #include <pwd.h>
 #include <grp.h>
+#include <netinet/udp.h>
+#include <netinet/tcp.h>
+#include <netinet/if_ether.h>
+
+#include <linux/seccomp.h>
+#include <linux/audit.h>
+#include <linux/filter.h>
+#include <linux/capability.h>
+#include <linux/ipv6.h>
+#include <linux/icmpv6.h>
 
 #include "seccomp.h"
 #include "util.h"
@@ -100,14 +97,14 @@ static void sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 {
 	debug("%s: %s packet from socket %i (events: 0x%08x)",
 	      c->mode == MODE_PASST ? "passt" : "pasta",
-	      IP_PROTO_STR(ref.proto), ref.s, events);
+	      IP_PROTO_STR(ref.r.proto), ref.r.s, events);
 
-	if (!c->no_tcp && ref.proto == IPPROTO_TCP)
+	if (!c->no_tcp && ref.r.proto == IPPROTO_TCP)
 		tcp_sock_handler( c, ref, events, now);
-	else if (!c->no_udp && ref.proto == IPPROTO_UDP)
+	else if (!c->no_udp && ref.r.proto == IPPROTO_UDP)
 		udp_sock_handler( c, ref, events, now);
 	else if (!c->no_icmp &&
-		 (ref.proto == IPPROTO_ICMP || ref.proto == IPPROTO_ICMPV6))
+		 (ref.r.proto == IPPROTO_ICMP || ref.r.proto == IPPROTO_ICMPV6))
 		icmp_sock_handler(c, ref, events, now);
 }
 

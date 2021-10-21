@@ -12,13 +12,11 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-#define _GNU_SOURCE
 #include <sched.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <unistd.h>
-#include <linux/ipv6.h>
 #include <arpa/inet.h>
 #include <net/ethernet.h>
 #include <net/if.h>
@@ -33,6 +31,8 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+
+#include <linux/ipv6.h>
 
 #include "util.h"
 #include "passt.h"
@@ -204,14 +204,16 @@ char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto)
 int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
 	    enum bind_type bind_addr, uint32_t data)
 {
-	union epoll_ref ref = { .proto = proto, .data = data };
+	union epoll_ref ref = { .r.proto = proto, .r.p.data = data };
 	struct sockaddr_in addr4 = {
 		.sin_family = AF_INET,
 		.sin_port = htons(port),
+		{ 0 }, { 0 },
 	};
 	struct sockaddr_in6 addr6 = {
 		.sin6_family = AF_INET6,
 		.sin6_port = htons(port),
+		0, IN6ADDR_ANY_INIT, 0,
 	};
 	const struct sockaddr *sa;
 	struct epoll_event ev;
@@ -229,7 +231,7 @@ int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
 		perror("L4 socket");
 		return -1;
 	}
-	ref.s = fd;
+	ref.r.s = fd;
 
 	if (af == AF_INET) {
 		if (bind_addr == BIND_LOOPBACK)

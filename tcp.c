@@ -307,7 +307,6 @@
  * #syscalls pipe pipe2
  */
 
-#define _GNU_SOURCE
 #include <sched.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -317,6 +316,7 @@
 #include <net/ethernet.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -326,10 +326,10 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#include <linux/ip.h>
-#include <linux/ipv6.h>
-#include <linux/tcp.h>
 #include <time.h>
+
+#include <linux/ipv6.h>
+#include <linux/tcp.h> /* For struct tcp_info */
 
 #include "checksum.h"
 #include "util.h"
@@ -1019,14 +1019,14 @@ static void tcp_sock6_iov_init(void)
  * tcp_opt_get() - Get option, and value if any, from TCP header
  * @th:		Pointer to TCP header
  * @len:	Length of buffer, including TCP header
- * @__type:	Option type to look for
- * @__optlen:	Optional, filled with option length if passed
- * @__value:	Optional, set to start of option value if passed
+ * @type:	Option type to look for
+ * @optlen_set:	Optional, filled with option length if passed
+ * @value_set:	Optional, set to start of option value if passed
  *
  * Return: Option value, meaningful for up to 4 bytes, -1 if not found
  */
-static int tcp_opt_get(struct tcphdr *th, size_t len, uint8_t __type,
-		       uint8_t *__optlen, char **__value)
+static int tcp_opt_get(struct tcphdr *th, size_t len, uint8_t type_search,
+		       uint8_t *optlen_set, char **value_set)
 {
 	uint8_t type, optlen;
 	char *p;
@@ -1049,13 +1049,13 @@ static int tcp_opt_get(struct tcphdr *th, size_t len, uint8_t __type,
 			optlen = *(p++) - 2;
 			len -= 2;
 
-			if (type != __type)
+			if (type != type_search)
 				break;
 
-			if (__optlen)
-				*__optlen = optlen;
-			if (__value)
-				*__value = p;
+			if (optlen_set)
+				*optlen_set = optlen;
+			if (value_set)
+				*value_set = p;
 
 			switch (optlen) {
 			case 0:
@@ -1249,9 +1249,9 @@ static struct tcp_tap_conn *tcp_hash_lookup(struct ctx *c, int af, void *addr,
 static void tcp_tap_epoll_mask(struct ctx *c, struct tcp_tap_conn *conn,
 			       uint32_t events)
 {
-	union epoll_ref ref = { .proto = IPPROTO_TCP, .s = conn->sock,
-				.tcp.index = conn - tt,
-				.tcp.v6 = CONN_V6(conn) };
+	union epoll_ref ref = { .r.proto = IPPROTO_TCP, .r.s = conn->sock,
+				.r.p.tcp.tcp.index = conn - tt,
+				.r.p.tcp.tcp.v6 = CONN_V6(conn) };
 	struct epoll_event ev = { .data.u64 = ref.u64, .events = events };
 
 	if (conn->events == events)
@@ -1547,7 +1547,7 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 	uint32_t prev_ack_to_tap = conn->seq_ack_to_tap;
 	uint32_t prev_wnd_to_tap = conn->wnd_to_tap;
 	socklen_t sl = sizeof(*info);
-	struct tcp_info __info;
+	struct tcp_info info_new;
 	int s = conn->sock;
 
 	if (conn->state > ESTABLISHED || (flags & (DUP_ACK | FORCE_ACK)) ||
@@ -1556,7 +1556,7 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 		conn->seq_ack_to_tap = conn->seq_from_tap;
 	} else if (conn->seq_ack_to_tap != conn->seq_from_tap) {
 		if (!info) {
-			info = &__info;
+			info = &info_new;
 			if (getsockopt(s, SOL_TCP, TCP_INFO, info, &sl))
 				return 0;
 		}
@@ -1578,7 +1578,7 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 		if (conn->wnd_to_tap > WINDOW_DEFAULT)
 			goto out;
 
-		info = &__info;
+		info = &info_new;
 		if (getsockopt(s, SOL_TCP, TCP_INFO, info, &sl))
 			goto out;
 	}
@@ -1876,6 +1876,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 			      struct tcphdr *th, size_t len,
 			      struct timespec *now)
 {
+	union epoll_ref ref = { .r.proto = IPPROTO_TCP };
 	struct sockaddr_in addr4 = {
 		.sin_family = AF_INET,
 		.sin_port = th->dest,
@@ -1886,7 +1887,6 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 		.sin6_port = th->dest,
 		.sin6_addr = *(struct in6_addr *)addr,
 	};
-	union epoll_ref ref = { .proto = IPPROTO_TCP };
 	int i, s, *sock_pool_p, mss;
 	const struct sockaddr *sa;
 	struct tcp_tap_conn *conn;
@@ -1901,15 +1901,16 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 			sock_pool_p = &init_sock_pool6[i];
 		else
 			sock_pool_p = &init_sock_pool4[i];
-		if ((ref.s = s = *sock_pool_p) >= 0) {
+		if ((ref.r.s = s = *sock_pool_p) >= 0) {
 			*sock_pool_p = -1;
 			break;
 		}
 	}
 
-	if (s < 0)
-		ref.s = s = socket(af, SOCK_STREAM | SOCK_NONBLOCK,
-				   IPPROTO_TCP);
+	if (s < 0) {
+		s = socket(af, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
+		ref.r.s = s;
+	}
 
 	if (s < 0)
 		return;
@@ -2016,7 +2017,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	}
 
 	conn->events = ev.events;
-	ref.tcp.index = conn - tt;
+	ref.r.p.tcp.tcp.index = conn - tt;
 	ev.data.u64 = ref.u64;
 	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, s, &ev);
 }
@@ -2029,10 +2030,12 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 static void tcp_table_splice_compact(struct ctx *c,
 				     struct tcp_splice_conn *hole)
 {
-	union epoll_ref ref_from = { .proto = IPPROTO_TCP, .tcp.splice = 1,
-				     .tcp.index = hole - ts };
-	union epoll_ref ref_to = { .proto = IPPROTO_TCP, .tcp.splice = 1,
-				   .tcp.index = hole - ts };
+	union epoll_ref ref_from = { .r.proto = IPPROTO_TCP,
+				     .r.p.tcp.tcp.splice = 1,
+				     .r.p.tcp.tcp.index = hole - ts };
+	union epoll_ref ref_to = { .r.proto = IPPROTO_TCP,
+				   .r.p.tcp.tcp.splice = 1,
+				   .r.p.tcp.tcp.index = hole - ts };
 	struct tcp_splice_conn *move;
 	struct epoll_event ev_from;
 	struct epoll_event ev_to;
@@ -2057,10 +2060,10 @@ static void tcp_table_splice_compact(struct ctx *c,
 	move->state = CLOSED;
 	move = hole;
 
-	ref_from.s = move->from;
-	ref_from.tcp.v6 = move->v6;
-	ref_to.s = move->to;
-	ref_to.tcp.v6 = move->v6;
+	ref_from.r.s = move->from;
+	ref_from.r.p.tcp.tcp.v6 = move->v6;
+	ref_to.r.s = move->to;
+	ref_to.r.p.tcp.tcp.v6 = move->v6;
 
 	if (move->state == SPLICE_ACCEPTED) {
 		ev_from.events = ev_to.events = 0;
@@ -2704,12 +2707,12 @@ static void tcp_connect_finish(struct ctx *c, struct tcp_tap_conn *conn,
 static void tcp_splice_connect_finish(struct ctx *c,
 				      struct tcp_splice_conn *conn, int v6)
 {
-	union epoll_ref ref_from = { .proto = IPPROTO_TCP, .s = conn->from,
-				      .tcp = { .splice = 1, .v6 = v6,
-					       .index = conn - ts } };
-	union epoll_ref ref_to = { .proto = IPPROTO_TCP, .s = conn->to,
-				   .tcp = { .splice = 1, .v6 = v6,
-					    .index = conn - ts } };
+	union epoll_ref ref_from = { .r.proto = IPPROTO_TCP, .r.s = conn->from,
+				     .r.p.tcp.tcp = { .splice = 1, .v6 = v6,
+						      .index = conn - ts } };
+	union epoll_ref ref_to = { .r.proto = IPPROTO_TCP, .r.s = conn->to,
+				   .r.p.tcp.tcp = { .splice = 1, .v6 = v6,
+						    .index = conn - ts } };
 	struct epoll_event ev_from, ev_to;
 	int i;
 
@@ -2764,12 +2767,13 @@ static int tcp_splice_connect(struct ctx *c, struct tcp_splice_conn *conn,
 	int sock_conn = (s >= 0) ? s : socket(v6 ? AF_INET6 : AF_INET,
 					      SOCK_STREAM | SOCK_NONBLOCK,
 					      IPPROTO_TCP);
-	union epoll_ref ref_accept = { .proto = IPPROTO_TCP, .s = conn->from,
-				       .tcp = { .splice = 1, .v6 = v6,
-						.index = conn - ts } };
-	union epoll_ref ref_conn = { .proto = IPPROTO_TCP, .s = sock_conn,
-				     .tcp = { .splice = 1, .v6 = v6,
-					      .index = conn - ts } };
+	union epoll_ref ref_accept = { .r.proto = IPPROTO_TCP,
+				       .r.s = conn->from,
+				       .r.p.tcp.tcp = { .splice = 1, .v6 = v6,
+							.index = conn - ts } };
+	union epoll_ref ref_conn = { .r.proto = IPPROTO_TCP, .r.s = sock_conn,
+				     .r.p.tcp.tcp = { .splice = 1, .v6 = v6,
+						      .index = conn - ts } };
 	struct epoll_event ev_accept = { .data.u64 = ref_accept.u64 };
 	struct epoll_event ev_conn = { .data.u64 = ref_conn.u64 };
 	struct sockaddr_in6 addr6 = {
@@ -2901,8 +2905,8 @@ static int tcp_splice_new(struct ctx *c, struct tcp_splice_conn *conn,
 static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 			       struct timespec *now)
 {
-	union epoll_ref ref_conn = { .proto = IPPROTO_TCP,
-				     .tcp.v6 = ref.tcp.v6 };
+	union epoll_ref ref_conn = { .r.proto = IPPROTO_TCP,
+				     .r.p.tcp.tcp.v6 = ref.r.p.tcp.tcp.v6 };
 	struct sockaddr_storage sa;
 	struct tcp_tap_conn *conn;
 	struct epoll_event ev;
@@ -2913,15 +2917,15 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		return;
 
 	sl = sizeof(sa);
-	s = accept4(ref.s, (struct sockaddr *)&sa, &sl, SOCK_NONBLOCK);
+	s = accept4(ref.r.s, (struct sockaddr *)&sa, &sl, SOCK_NONBLOCK);
 	if (s < 0)
 		return;
 
 	conn = &tt[c->tcp.tap_conn_count++];
-	ref_conn.tcp.index = conn - tt;
-	ref_conn.s = conn->sock = s;
+	ref_conn.r.p.tcp.tcp.index = conn - tt;
+	ref_conn.r.s = conn->sock = s;
 
-	if (ref.tcp.v6) {
+	if (ref.r.p.tcp.tcp.v6) {
 		struct sockaddr_in6 sa6;
 
 		memcpy(&sa6, &sa, sizeof(sa6));
@@ -2942,7 +2946,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		memcpy(&conn->a.a6, &sa6.sin6_addr, sizeof(conn->a.a6));
 
 		conn->sock_port = ntohs(sa6.sin6_port);
-		conn->tap_port = ref.tcp.index;
+		conn->tap_port = ref.r.p.tcp.tcp.index;
 
 		conn->seq_to_tap = tcp_seq_init(c, AF_INET6, &sa6.sin6_addr,
 						conn->sock_port,
@@ -2968,7 +2972,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		memcpy(&conn->a.a4.a, &s_addr, sizeof(conn->a.a4.a));
 
 		conn->sock_port = ntohs(sa4.sin_port);
-		conn->tap_port = ref.tcp.index;
+		conn->tap_port = ref.r.p.tcp.tcp.index;
 
 		conn->seq_to_tap = tcp_seq_init(c, AF_INET, &s_addr,
 						conn->sock_port,
@@ -3014,13 +3018,13 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 	struct tcp_splice_conn *conn;
 	struct epoll_event ev;
 
-	if (ref.tcp.listen) {
+	if (ref.r.p.tcp.tcp.listen) {
 		int s, one = 1;
 
 		if (c->tcp.splice_conn_count >= MAX_SPLICE_CONNS)
 			return;
 
-		if ((s = accept4(ref.s, NULL, NULL, SOCK_NONBLOCK)) < 0)
+		if ((s = accept4(ref.r.s, NULL, NULL, SOCK_NONBLOCK)) < 0)
 			return;
 
 		setsockopt(s, SOL_TCP, TCP_QUICKACK, &one, sizeof(one));
@@ -3029,13 +3033,14 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 		conn->from = s;
 		tcp_splice_state(conn, SPLICE_ACCEPTED);
 
-		if (tcp_splice_new(c, conn, ref.tcp.v6, ref.tcp.index))
+		if (tcp_splice_new(c, conn, ref.r.p.tcp.tcp.v6,
+				   ref.r.p.tcp.tcp.index))
 			tcp_splice_destroy(c, conn);
 
 		return;
 	}
 
-	conn = &ts[ref.tcp.index];
+	conn = &ts[ref.r.p.tcp.tcp.index];
 
 	if (events & EPOLLERR)
 		goto close;
@@ -3050,12 +3055,12 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 		};
 
 		if (conn->state == SPLICE_CONNECT)
-			tcp_splice_connect_finish(c, conn, ref.tcp.v6);
+			tcp_splice_connect_finish(c, conn, ref.r.p.tcp.tcp.v6);
 		else if (conn->state == SPLICE_ESTABLISHED)
-			epoll_ctl(c->epollfd, EPOLL_CTL_MOD, ref.s, &ev);
+			epoll_ctl(c->epollfd, EPOLL_CTL_MOD, ref.r.s, &ev);
 
-		move_to = ref.s;
-		if (ref.s == conn->to) {
+		move_to = ref.r.s;
+		if (ref.r.s == conn->to) {
 			move_from = conn->from;
 			pipes = conn->pipe_from_to;
 		} else {
@@ -3063,8 +3068,8 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 			pipes = conn->pipe_to_from;
 		}
 	} else {
-		move_from = ref.s;
-		if (ref.s == conn->from) {
+		move_from = ref.r.s;
+		if (ref.r.s == conn->from) {
 			move_to = conn->to;
 			pipes = conn->pipe_from_to;
 		} else {
@@ -3074,7 +3079,7 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 	}
 
 	if (events & EPOLLRDHUP) {
-		if (ref.s == conn->from) {
+		if (ref.r.s == conn->from) {
 			if (conn->state == SPLICE_ESTABLISHED)
 				tcp_splice_state(conn, SPLICE_FIN_FROM);
 			else if (conn->state == SPLICE_FIN_TO)
@@ -3172,7 +3177,7 @@ eintr:
 				goto retry;
 
 			ev.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP;
-			ref.s = move_to;
+			ref.r.s = move_to;
 			ev.data.u64 = ref.u64,
 			epoll_ctl(c->epollfd, EPOLL_CTL_MOD, move_to, &ev);
 			break;
@@ -3199,7 +3204,7 @@ eintr:
 				conn->from_fin_sent = 1;
 
 				ev.events = 0;
-				ref.s = move_from;
+				ref.r.s = move_from;
 				ev.data.u64 = ref.u64,
 				epoll_ctl(c->epollfd, EPOLL_CTL_MOD,
 					  move_from, &ev);
@@ -3215,7 +3220,7 @@ eintr:
 				conn->to_fin_sent = 1;
 
 				ev.events = 0;
-				ref.s = move_from;
+				ref.r.s = move_from;
 				ev.data.u64 = ref.u64,
 				epoll_ctl(c->epollfd, EPOLL_CTL_MOD,
 					  move_from, &ev);
@@ -3258,17 +3263,17 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 {
 	struct tcp_tap_conn *conn;
 
-	if (ref.tcp.splice) {
+	if (ref.r.p.tcp.tcp.splice) {
 		tcp_sock_handler_splice(c, ref, events);
 		return;
 	}
 
-	if (ref.tcp.listen) {
+	if (ref.r.p.tcp.tcp.listen) {
 		tcp_conn_from_sock(c, ref, now);
 		return;
 	}
 
-	conn = &tt[ref.tcp.index];
+	conn = &tt[ref.r.p.tcp.tcp.index];
 
 	conn->ts_sock_act = *now;
 
@@ -3382,18 +3387,21 @@ smaller:
  */
 static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 {
-	union tcp_epoll_ref tref = { .listen = 1 };
+	union tcp_epoll_ref tref = { .tcp.listen = 1 };
 	int s;
 
-	if (ns)
-		tref.index = (in_port_t)(port + tcp_port_delta_to_init[port]);
-	else
-		tref.index = (in_port_t)(port + tcp_port_delta_to_tap[port]);
+	if (ns) {
+		tref.tcp.index = (in_port_t)(port +
+					     tcp_port_delta_to_init[port]);
+	} else {
+		tref.tcp.index = (in_port_t)(port +
+					     tcp_port_delta_to_tap[port]);
+	}
 
 	if (c->v4) {
-		tref.v6 = 0;
+		tref.tcp.v6 = 0;
 
-		tref.splice = 0;
+		tref.tcp.splice = 0;
 		if (!ns) {
 			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
 				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
@@ -3408,7 +3416,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 		}
 
 		if (c->mode == MODE_PASTA) {
-			tref.splice = 1;
+			tref.tcp.splice = 1;
 			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
 				    BIND_LOOPBACK, tref.u32);
 			if (s >= 0)
@@ -3426,9 +3434,9 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 	}
 
 	if (c->v6) {
-		tref.v6 = 1;
+		tref.tcp.v6 = 1;
 
-		tref.splice = 0;
+		tref.tcp.splice = 0;
 		if (!ns) {
 			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
 				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
@@ -3443,7 +3451,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
 		}
 
 		if (c->mode == MODE_PASTA) {
-			tref.splice = 1;
+			tref.tcp.splice = 1;
 			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
 				    BIND_LOOPBACK, tref.u32);
 			if (s >= 0)

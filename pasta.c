@@ -15,7 +15,6 @@
  * #syscalls:pasta geteuid getdents64 readlink setsid nanosleep clock_nanosleep
  */
 
-#define _GNU_SOURCE
 #include <sched.h>
 #include <stdio.h>
 #include <string.h>
@@ -35,6 +34,8 @@
 #include <netinet/in.h>
 #include <net/ethernet.h>
 #include <sys/syscall.h>
+
+#include <linux/ipv6.h>
 
 #include "util.h"
 #include "passt.h"

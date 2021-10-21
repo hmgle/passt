@@ -12,24 +12,24 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-#include <stdio.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <unistd.h>
-#include <string.h>
-#include <linux/if_ether.h>
-#include <linux/ip.h>
-#include <linux/ipv6.h>
-#include <linux/udp.h>
+#include <arpa/inet.h>
+#include <limits.h>
 #include <net/if.h>
 #include <net/if_arp.h>
-#include <arpa/inet.h>
+#include <netinet/if_ether.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <string.h>
+
+#include <linux/ipv6.h>
 
 #include "util.h"
-#include "passt.h"
-#include "dhcp.h"
-#include "tap.h"
 #include "arp.h"
+#include "dhcp.h"
+#include "passt.h"
+#include "tap.h"
 
 /**
  * arp() - Check if this is an ARP message, reply as needed

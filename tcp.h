@@ -39,7 +39,7 @@ union tcp_epoll_ref {
 				splice:1,
 				v6:1,
 				index:20;
-	};
+	} tcp;
 	uint32_t u32;
 };
 

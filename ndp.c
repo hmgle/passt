@@ -19,13 +19,13 @@
 #include <unistd.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include <linux/if_ether.h>
-#include <linux/ip.h>
-#include <linux/ipv6.h>
-#include <linux/icmpv6.h>
-#include <linux/udp.h>
+#include <netinet/ip.h>
 #include <net/if.h>
 #include <net/if_arp.h>
+#include <netinet/if_ether.h>
+
+#include <linux/ipv6.h>
+#include <linux/icmpv6.h>
 
 #include "checksum.h"
 #include "util.h"

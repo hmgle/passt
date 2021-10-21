@@ -12,12 +12,14 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-#include <stdio.h>
 #include <errno.h>
-#include <limits.h>
 #include <net/ethernet.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
+#include <stdio.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -25,11 +27,10 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <linux/ip.h>
-#include <linux/ipv6.h>
-#include <linux/icmp.h>
-#include <linux/icmpv6.h>
 #include <time.h>
+
+#include <linux/icmpv6.h>
+#include <linux/ipv6.h>
 
 #include "util.h"
 #include "passt.h"
@@ -39,19 +40,19 @@
 #define ICMP_ECHO_TIMEOUT	60 /* s, timeout for ICMP socket activity */
 
 /**
- * struct icmp_id - Tracking information for single ICMP echo identifier
+ * struct icmp_id_sock - Tracking information for single ICMP echo identifier
  * @sock:	Bound socket for identifier
  * @ts:		Last associated activity from tap, seconds
  * @seq:	Last sequence number sent to tap, host order
  */
-struct icmp_id {
+struct icmp_id_sock {
 	int sock;
 	time_t ts;
 	uint16_t seq;
 };
 
 /* Indexed by ICMP echo identifier */
-static struct icmp_id icmp_id_map	[IP_VERSIONS][USHRT_MAX];
+static struct icmp_id_sock icmp_id_map	[IP_VERSIONS][USHRT_MAX];
 
 /* Bitmaps, activity monitoring needed for identifier */
 static uint8_t icmp_act			[IP_VERSIONS][USHRT_MAX / 8];
@@ -70,6 +71,7 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 					       0,    0,    0,    0,
 					       0,    0, 0xff, 0xff,
 					       0,    0,    0,    0 } };
+	union icmp_epoll_ref *iref = &ref.r.p.icmp;
 	struct sockaddr_storage sr;
 	socklen_t sl = sizeof(sr);
 	char buf[USHRT_MAX];
@@ -79,11 +81,11 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 	(void)events;
 	(void)now;
 
-	n = recvfrom(ref.s, buf, sizeof(buf), 0, (struct sockaddr *)&sr, &sl);
+	n = recvfrom(ref.r.s, buf, sizeof(buf), 0, (struct sockaddr *)&sr, &sl);
 	if (n < 0)
 		return;
 
-	if (ref.icmp.v6) {
+	if (iref->icmp.v6) {
 		struct sockaddr_in6 *sr6 = (struct sockaddr_in6 *)&sr;
 		struct icmp6hdr *ih = (struct icmp6hdr *)buf;
 
@@ -92,8 +94,8 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		/* If bind() fails e.g. because of a broken SELinux policy, this
 		 * might happen. Fix up the identifier to match the sent one.
 		 */
-		if (id != ref.icmp.id)
-			ih->icmp6_identifier = htons(ref.icmp.id);
+		if (id != iref->icmp.id)
+			ih->icmp6_identifier = htons(iref->icmp.id);
 
 		/* In PASTA mode, we'll get any reply we send, discard them. */
 		if (c->mode == MODE_PASTA) {
@@ -111,8 +113,8 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		struct icmphdr *ih = (struct icmphdr *)buf;
 
 		id = ntohs(ih->un.echo.id);
-		if (id != ref.icmp.id)
-			ih->un.echo.id = htons(ref.icmp.id);
+		if (id != iref->icmp.id)
+			ih->un.echo.id = htons(iref->icmp.id);
 
 		if (c->mode == MODE_PASTA) {
 			seq = ntohs(ih->un.echo.sequence);
@@ -146,7 +148,7 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 	(void)count;
 
 	if (af == AF_INET) {
-		union icmp_epoll_ref iref = { .v6 = 0 };
+		union icmp_epoll_ref iref = { .icmp.v6 = 0 };
 		struct sockaddr_in sa = {
 			.sin_family = AF_INET,
 			.sin_addr = { .s_addr = INADDR_ANY },
@@ -161,7 +163,7 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 
 		sa.sin_port = ih->un.echo.id;
 
-		iref.id = id = ntohs(ih->un.echo.id);
+		iref.icmp.id = id = ntohs(ih->un.echo.id);
 
 		if ((s = icmp_id_map[V4][id].sock) <= 0) {
 			s = sock_l4(c, AF_INET, IPPROTO_ICMP, id, 0, iref.u32);
@@ -177,7 +179,7 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		sendto(s, ih, msg[0].l4_len, MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
 	} else if (af == AF_INET6) {
-		union icmp_epoll_ref iref = { .v6 = 1 };
+		union icmp_epoll_ref iref = { .icmp.v6 = 1 };
 		struct sockaddr_in6 sa = {
 			.sin6_family = AF_INET6,
 			.sin6_addr = IN6ADDR_ANY_INIT,
@@ -193,7 +195,7 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 
 		sa.sin6_port = ih->icmp6_identifier;
 
-		iref.id = id = ntohs(ih->icmp6_identifier);
+		iref.icmp.id = id = ntohs(ih->icmp6_identifier);
 		if ((s = icmp_id_map[V6][id].sock) <= 0) {
 			s = sock_l4(c, AF_INET6, IPPROTO_ICMPV6, id, 0,
 				    iref.u32);
@@ -229,7 +231,7 @@ fail_sock:
 static void icmp_timer_one(struct ctx *c, int v6, uint16_t id,
 			   struct timespec *ts)
 {
-	struct icmp_id *id_map = &icmp_id_map[v6 ? V6 : V4][id];
+	struct icmp_id_sock *id_map = &icmp_id_map[v6 ? V6 : V4][id];
 
 	if (ts->tv_sec - id_map->ts <= ICMP_ECHO_TIMEOUT)
 		return;

@@ -12,7 +12,6 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -28,6 +27,8 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <net/if.h>
+
+#include <linux/ipv6.h>
 
 #include "util.h"
 #include "passt.h"

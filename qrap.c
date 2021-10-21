@@ -19,14 +19,14 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <errno.h>
-#include <linux/if_ether.h>
-#include <linux/ipv6.h>
 #include <linux/limits.h>
-#include <linux/un.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <net/if_arp.h>
 #include <netinet/in.h>
+#include <netinet/if_ether.h>
+
+#include <linux/ipv6.h>
 
 #include "util.h"
 #include "passt.h"

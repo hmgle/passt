@@ -12,19 +12,20 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#include <arpa/inet.h>
+#include <net/if_arp.h>
+#include <net/if.h>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
+#include <netinet/if_ether.h>
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
-#include <arpa/inet.h>
-#include <linux/if_ether.h>
-#include <linux/ip.h>
+
 #include <linux/ipv6.h>
-#include <linux/udp.h>
-#include <net/if.h>
-#include <net/if_arp.h>
 
 #include "util.h"
 #include "passt.h"
@@ -205,9 +206,9 @@ struct msg_hdr {
 } __attribute__((__packed__));
 
 #if __BYTE_ORDER == __BIG_ENDIAN
-#define UH_RESP { 547, 546, 0, 0, }
+#define UH_RESP {{{ 547, 546, 0, 0, }}}
 #else
-#define UH_RESP { __bswap_constant_16(547), __bswap_constant_16(546), 0, 0 }
+#define UH_RESP {{{ __bswap_constant_16(547), __bswap_constant_16(546), 0, 0 }}}
 #endif
 
 /**
@@ -316,26 +317,26 @@ static struct opt_hdr *dhcpv6_opt(struct opt_hdr *o, uint16_t type, size_t *len)
 /**
  * dhcpv6_ia_notonlink() - Check if any IA contains non-appropriate addresses
  * @o:			First option header to check for IAs
- * @len:		Remaining message length, host order
+ * @rem_len:		Remaining message length, host order
  * @addr:		Address we want to lease to the client
  *
  * Return: pointer to non-appropriate IA_NA or IA_TA, if any, NULL otherwise
  */
-static struct opt_hdr *dhcpv6_ia_notonlink(struct opt_hdr *o, size_t len,
+static struct opt_hdr *dhcpv6_ia_notonlink(struct opt_hdr *o, size_t rem_len,
 					   struct in6_addr *addr)
 {
 	struct opt_hdr *ia, *ia_addr;
 	char buf[INET6_ADDRSTRLEN];
 	struct in6_addr *req_addr;
-	size_t __len;
+	size_t len;
 	int ia_type;
 
 	ia_type = OPT_IA_NA;
 ia_ta:
-	__len = len;
+	len = rem_len;
 	ia = o;
 
-	while ((ia = dhcpv6_opt(ia, ia_type, &__len))) {
+	while ((ia = dhcpv6_opt(ia, ia_type, &len))) {
 		size_t ia_len = ntohs(ia->l);
 
 		if (ia_type == OPT_IA_NA) {

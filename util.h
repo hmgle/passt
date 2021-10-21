@@ -136,9 +136,7 @@ enum {
 #define SNDBUF_BIG		(4 * 1024 * 1024)
 #define SNDBUF_SMALL		(128 * 1024)
 
-#include <linux/ipv6.h>
 #include <net/if.h>
-#include <linux/ip.h>
 #include <limits.h>
 #include <stdarg.h>
 
@@ -151,6 +149,7 @@ enum bind_type {
 
 struct ctx;
 
+__attribute__ ((weak)) int ffsl(long int i) { return __builtin_ffsl(i); }
 void __openlog(const char *ident, int option, int facility);
 void passt_vsyslog(int pri, const char *format, va_list ap);
 void __setlogmask(int mask);

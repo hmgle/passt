@@ -12,7 +12,6 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-#define _GNU_SOURCE
 #include <sched.h>
 #include <string.h>
 #include <stddef.h>
@@ -24,7 +23,9 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <linux/if_ether.h>
+#include <netinet/if_ether.h>
+
+#include <linux/ipv6.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
@@ -38,12 +39,12 @@ static int nl_sock_ns	= -1;
 static int nl_seq;
 
 /**
- * __nl_sock_init() - Set up netlink sockets in init and target namespace
+ * nl_sock_init_do() - Set up netlink sockets in init and target namespace
  * @arg:	Execution context
  *
  * Return: 0
  */
-static int __nl_sock_init(void *arg)
+static int nl_sock_init_do(void *arg)
 {
 	struct sockaddr_nl addr = { .nl_family = AF_NETLINK, };
 	struct ctx *c = (struct ctx *)arg;
@@ -65,7 +66,7 @@ ns:
 }
 
 /**
- * nl_sock_init() - Call __nl_sock_init() and check for failures
+ * nl_sock_init() - Call nl_sock_init_do() and check for failures
  * @c:		Execution context
  *
  * Return: -EIO if sockets couldn't be set up, 0 otherwise
@@ -73,11 +74,11 @@ ns:
 int nl_sock_init(struct ctx *c)
 {
 	if (c->mode == MODE_PASTA) {
-		NS_CALL(__nl_sock_init, c);
+		NS_CALL(nl_sock_init_do, c);
 		if (nl_sock_ns == -1)
 			return -EIO;
 	} else {
-		__nl_sock_init(NULL);
+		nl_sock_init_do(NULL);
 	}
 
 	if (nl_sock == -1)
@@ -267,7 +268,7 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 				uint32_t a;
 				uint8_t end;
 			} r4;
-		};
+		} set;
 	} req = {
 		.nlh.nlmsg_type	  = set ? RTM_NEWROUTE : RTM_GETROUTE,
 		.nlh.nlmsg_flags  = NLM_F_REQUEST,
@@ -290,29 +291,33 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 
 	if (set) {
 		if (af == AF_INET6) {
+			size_t rta_len = RTA_LENGTH(sizeof(req.set.r6.d));
+
 			req.nlh.nlmsg_len = sizeof(req);
 
-			req.r6.rta_dst.rta_type = RTA_DST;
-			req.r6.rta_dst.rta_len = RTA_LENGTH(sizeof(req.r6.d));
+			req.set.r6.rta_dst.rta_type = RTA_DST;
+			req.set.r6.rta_dst.rta_len = rta_len;
 
-			memcpy(&req.r6.a, gw, sizeof(req.r6.a));
-			req.r6.rta_gw.rta_type = RTA_GATEWAY;
-			req.r6.rta_gw.rta_len = RTA_LENGTH(sizeof(req.r6.a));
+			memcpy(&req.set.r6.a, gw, sizeof(req.set.r6.a));
+			req.set.r6.rta_gw.rta_type = RTA_GATEWAY;
+			req.set.r6.rta_gw.rta_len = rta_len;
 		} else {
-			req.nlh.nlmsg_len = offsetof(struct req_t, r4.end);
+			size_t rta_len = RTA_LENGTH(sizeof(req.set.r4.d));
 
-			req.r4.rta_dst.rta_type = RTA_DST;
-			req.r4.rta_dst.rta_len = RTA_LENGTH(sizeof(req.r4.d));
+			req.nlh.nlmsg_len = offsetof(struct req_t, set.r4.end);
 
-			req.r4.a = *(uint32_t *)gw;
-			req.r4.rta_gw.rta_type = RTA_GATEWAY;
-			req.r4.rta_gw.rta_len = RTA_LENGTH(sizeof(req.r4.a));
+			req.set.r4.rta_dst.rta_type = RTA_DST;
+			req.set.r4.rta_dst.rta_len = rta_len;
+
+			req.set.r4.a = *(uint32_t *)gw;
+			req.set.r4.rta_gw.rta_type = RTA_GATEWAY;
+			req.set.r4.rta_gw.rta_len = rta_len;
 		}
 
 		req.rtm.rtm_protocol = RTPROT_BOOT;
 		req.nlh.nlmsg_flags |= NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE;
 	} else {
-		req.nlh.nlmsg_len = offsetof(struct req_t, r6);
+		req.nlh.nlmsg_len = offsetof(struct req_t, set.r6);
 		req.nlh.nlmsg_flags |= NLM_F_DUMP;
 	}
 
@@ -376,7 +381,7 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 				struct rtattr rta_a;
 				struct in6_addr a;
 			} a6;
-		};
+		} set;
 	} req = {
 		.nlh.nlmsg_type    = set ? RTM_NEWADDR : RTM_GETADDR,
 		.nlh.nlmsg_flags   = NLM_F_REQUEST,
@@ -395,22 +400,26 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 
 	if (set) {
 		if (af == AF_INET6) {
+			size_t rta_len = sizeof(req.set.a6.l);
+
 			req.nlh.nlmsg_len = sizeof(req);
 
-			memcpy(&req.a6.l, addr, sizeof(req.a6.l));
-			req.a6.rta_l.rta_len = RTA_LENGTH(sizeof(req.a6.l));
-			req.a4.rta_l.rta_type = IFA_LOCAL;
-			memcpy(&req.a6.a, addr, sizeof(req.a6.a));
-			req.a6.rta_a.rta_len = RTA_LENGTH(sizeof(req.a6.a));
-			req.a6.rta_a.rta_type = IFA_ADDRESS;
+			memcpy(&req.set.a6.l, addr, sizeof(req.set.a6.l));
+			req.set.a6.rta_l.rta_len = rta_len;
+			req.set.a4.rta_l.rta_type = IFA_LOCAL;
+			memcpy(&req.set.a6.a, addr, sizeof(req.set.a6.a));
+			req.set.a6.rta_a.rta_len = rta_len;
+			req.set.a6.rta_a.rta_type = IFA_ADDRESS;
 		} else {
-			req.nlh.nlmsg_len = offsetof(struct req_t, a4.end);
+			size_t rta_len = sizeof(req.set.a4.l);
 
-			req.a4.l = req.a4.a = *(uint32_t *)addr;
-			req.a4.rta_l.rta_len = RTA_LENGTH(sizeof(req.a4.l));
-			req.a4.rta_l.rta_type = IFA_LOCAL;
-			req.a4.rta_a.rta_len = RTA_LENGTH(sizeof(req.a4.a));
-			req.a4.rta_a.rta_type = IFA_ADDRESS;
+			req.nlh.nlmsg_len = offsetof(struct req_t, set.a4.end);
+
+			req.set.a4.l = req.set.a4.a = *(uint32_t *)addr;
+			req.set.a4.rta_l.rta_len = rta_len;
+			req.set.a4.rta_l.rta_type = IFA_LOCAL;
+			req.set.a4.rta_a.rta_len = rta_len;
+			req.set.a4.rta_a.rta_type = IFA_ADDRESS;
 		}
 
 		req.ifa.ifa_scope = RT_SCOPE_UNIVERSE;
@@ -475,7 +484,7 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 		union {
 			unsigned char mac[ETH_ALEN];
 			unsigned int mtu;
-		};
+		} set;
 	} req = {
 		.nlh.nlmsg_type   = change ? RTM_NEWLINK : RTM_GETLINK,
 		.nlh.nlmsg_len    = NLMSG_LENGTH(sizeof(struct ifinfomsg)),
@@ -494,7 +503,7 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 
 	if (!MAC_IS_ZERO(mac)) {
 		req.nlh.nlmsg_len = sizeof(req);
-		memcpy(req.mac, mac, ETH_ALEN);
+		memcpy(req.set.mac, mac, ETH_ALEN);
 		req.rta.rta_type = IFLA_ADDRESS;
 		req.rta.rta_len = RTA_LENGTH(ETH_ALEN);
 		nl_req(ns, buf, &req, req.nlh.nlmsg_len);
@@ -503,7 +512,7 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 
 	if (mtu) {
 		req.nlh.nlmsg_len = sizeof(req);
-		req.mtu = mtu;
+		req.set.mtu = mtu;
 		req.rta.rta_type = IFLA_MTU;
 		req.rta.rta_len = RTA_LENGTH(sizeof(unsigned int));
 		nl_req(ns, buf, &req, req.nlh.nlmsg_len);

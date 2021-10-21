@@ -14,7 +14,6 @@
  * #syscalls recvfrom sendto
  */
 
-#define _GNU_SOURCE
 #include <sched.h>
 #include <stdio.h>
 #include <errno.h>
@@ -34,14 +33,14 @@
 #include <sys/uio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <linux/un.h>
-#include <linux/if.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/if_ether.h>
+
 #include <linux/if_tun.h>
-#include <linux/ip.h>
 #include <linux/ipv6.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
-#include <linux/icmp.h>
 #include <linux/icmpv6.h>
 
 #include "checksum.h"

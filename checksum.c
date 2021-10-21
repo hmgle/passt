@@ -46,12 +46,11 @@
  * See the comment to csum_avx2() for further details.
  */
 
-#include <stdint.h>
-#include <stddef.h>
-#include <linux/ip.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
 #include <arpa/inet.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /**
  * sum_16b() - Calculate sum of 16-bit words

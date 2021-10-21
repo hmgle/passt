@@ -12,23 +12,24 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-#include <stdio.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <netinet/if_ether.h>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
-#include <linux/if_ether.h>
-#include <linux/ip.h>
-#include <linux/ipv6.h>
-#include <linux/udp.h>
-#include <net/if.h>
-#include <arpa/inet.h>
 
-#include "checksum.h"
+#include <linux/ipv6.h>
+
 #include "util.h"
+#include "checksum.h"
 #include "passt.h"
-#include "dhcp.h"
 #include "tap.h"
+#include "dhcp.h"
 
 /**
  * struct opt - DHCP option

@@ -26,7 +26,7 @@ union icmp_epoll_ref {
 	struct {
 		uint32_t	v6:1,
 				id:16;
-	};
+	} icmp;
 	uint32_t u32;
 };
 

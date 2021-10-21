@@ -51,8 +51,8 @@ union epoll_ref {
 			union udp_epoll_ref udp;
 			union icmp_epoll_ref icmp;
 			uint32_t data;
-		};
-	};
+		} p;
+	} r;
 	uint64_t u64;
 };
 
