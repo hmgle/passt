@@ -65,7 +65,7 @@
 	int __i;							  \
 									  \
 	do {								  \
-		for (__i = sizeof(v) / sizeof(v[0]); __i >= 0; __i--)	  \
+		for (__i = sizeof(v) / sizeof(v[0]) - 1; __i >= 0; __i--) \
 			v[__i] = k[__i % 2];				  \
 	} while (0)
 
@@ -152,13 +152,13 @@ __attribute__((__noinline__))	/* See comment in Makefile */
 uint64_t siphash_20b(const uint8_t *in, const uint64_t *k)
 {
 	uint32_t *in32 = (uint32_t *)in;
-	uint64_t combined;
 	int i;
 
 	PREAMBLE(20);
 
 	for (i = 0; i < 2; i++, in32 += 2) {
-		combined = (uint64_t)(*(in32 + 1)) << 32 | *in32;
+		uint64_t combined = (uint64_t)(*(in32 + 1)) << 32 | *in32;
+
 		v[3] ^= combined;
 		SIPROUND(2);
 		v[0] ^= combined;
@@ -205,13 +205,13 @@ uint32_t siphash_32b(const uint8_t *in, const uint64_t *k)
 uint32_t siphash_36b(const uint8_t *in, const uint64_t *k)
 {
 	uint32_t *in32 = (uint32_t *)in;
-	uint64_t combined;
 	int i;
 
 	PREAMBLE(36);
 
 	for (i = 0; i < 4; i++, in32 += 2) {
-		combined = (uint64_t)(*(in32 + 1)) << 32 | *in32;
+		uint64_t combined = (uint64_t)(*(in32 + 1)) << 32 | *in32;
+
 		v[3] ^= combined;
 		SIPROUND(2);
 		v[0] ^= combined;

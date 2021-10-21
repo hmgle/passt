@@ -167,8 +167,8 @@ static uint32_t csum_avx2(const void *buf, size_t len, uint32_t init)
 {
 	__m256i a, b, sum256, sum_a_hi, sum_a_lo, sum_b_hi, sum_b_lo, c, d;
 	__m256i __sum_a_hi, __sum_a_lo, __sum_b_hi, __sum_b_lo;
-	const uint64_t *buf64 = (const uint64_t *)buf;
-	const __m256i *buf256;
+	const __m256i *buf256 = (const __m256i *)buf;
+	const uint64_t *buf64;
 	const uint16_t *buf16;
 	uint64_t sum64 = init;
 	int odd = len & 1;
@@ -176,7 +176,6 @@ static uint32_t csum_avx2(const void *buf, size_t len, uint32_t init)
 	__m256i zero;
 
 	zero = _mm256_setzero_si256();
-	buf256 = (const __m256i *)buf64;
 
 	if (len < sizeof(__m256i) * 4)
 		goto less_than_128_bytes;
@@ -267,7 +266,6 @@ static uint32_t csum_avx2(const void *buf, size_t len, uint32_t init)
 
 	/* Fold 128-bit sum into 64 bits. */
 	sum64 += _mm_extract_epi64(sum128, 0) + _mm_extract_epi64(sum128, 1);
-	buf64 = (const uint64_t *)buf256;
 
 less_than_128_bytes:
 	for (; len >= sizeof(a); len -= sizeof(a), buf256++) {

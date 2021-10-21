@@ -757,13 +757,14 @@ static int tcp_rtt_dst_low(struct tcp_tap_conn *conn)
 /**
  * tcp_rtt_dst_check() - Check tcpi_min_rtt, insert endpoint in table if low
  * @conn:	Connection pointer
- * @info:	Pointer to struct tcp_info for socket
+ * @tinfo:	Pointer to struct tcp_info for socket
  */
-static void tcp_rtt_dst_check(struct tcp_tap_conn *conn, struct tcp_info *info)
+static void tcp_rtt_dst_check(struct tcp_tap_conn *conn, struct tcp_info *tinfo)
 {
 	int i, hole = -1;
 
-	if (!info->tcpi_min_rtt || (int)info->tcpi_min_rtt > LOW_RTT_THRESHOLD)
+	if (!tinfo->tcpi_min_rtt ||
+	    (int)tinfo->tcpi_min_rtt > LOW_RTT_THRESHOLD)
 		return;
 
 	for (i = 0; i < LOW_RTT_TABLE_SIZE; i++) {
@@ -809,21 +810,23 @@ static void tcp_splice_state(struct tcp_splice_conn *conn, enum tcp_state state)
  */
 static void tcp_get_sndbuf(struct tcp_tap_conn *conn)
 {
-	int s = conn->sock, v;
+	int s = conn->sock, sndbuf;
 	socklen_t sl;
+	uint64_t v;
 
-	sl = sizeof(v);
-	if (getsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, &sl)) {
+	sl = sizeof(sndbuf);
+	if (getsockopt(s, SOL_SOCKET, SO_SNDBUF, &sndbuf, &sl)) {
 		conn->snd_buf = WINDOW_DEFAULT;
 		return;
 	}
 
+	v = sndbuf;
 	if (v >= SNDBUF_BIG)
 		v /= 2;
 	else if (v > SNDBUF_SMALL)
 		v -= v * (v - SNDBUF_SMALL) / (SNDBUF_BIG - SNDBUF_SMALL) / 2;
 
-	conn->snd_buf = v;
+	conn->snd_buf = MIN(INT_MAX, v);
 }
 
 /**
@@ -1537,17 +1540,17 @@ static size_t tcp_l2_buf_fill_headers(struct ctx *c, struct tcp_tap_conn *conn,
  * @c:		Execution context
  * @conn:	Connection pointer
  * @flags:	TCP header flags we are about to send, if any
- * @info:	tcp_info from kernel, can be NULL if not pre-fetched
+ * @tinfo:	tcp_info from kernel, can be NULL if not pre-fetched
  *
  * Return: 1 if sequence or window were updated, 0 otherwise
  */
 static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
-				 int flags, struct tcp_info *info)
+				 int flags, struct tcp_info *tinfo)
 {
 	uint32_t prev_ack_to_tap = conn->seq_ack_to_tap;
 	uint32_t prev_wnd_to_tap = conn->wnd_to_tap;
-	socklen_t sl = sizeof(*info);
-	struct tcp_info info_new;
+	socklen_t sl = sizeof(*tinfo);
+	struct tcp_info tinfo_new;
 	int s = conn->sock;
 
 	if (conn->state > ESTABLISHED || (flags & (DUP_ACK | FORCE_ACK)) ||
@@ -1555,13 +1558,13 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 	    conn->snd_buf < SNDBUF_SMALL) {
 		conn->seq_ack_to_tap = conn->seq_from_tap;
 	} else if (conn->seq_ack_to_tap != conn->seq_from_tap) {
-		if (!info) {
-			info = &info_new;
-			if (getsockopt(s, SOL_TCP, TCP_INFO, info, &sl))
+		if (!tinfo) {
+			tinfo = &tinfo_new;
+			if (getsockopt(s, SOL_TCP, TCP_INFO, tinfo, &sl))
 				return 0;
 		}
 
-		conn->seq_ack_to_tap = info->tcpi_bytes_acked +
+		conn->seq_ack_to_tap = tinfo->tcpi_bytes_acked +
 				       conn->seq_init_from_tap;
 
 		if (SEQ_LT(conn->seq_ack_to_tap, prev_ack_to_tap))
@@ -1574,20 +1577,20 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 		goto out;
 	}
 
-	if (!info) {
+	if (!tinfo) {
 		if (conn->wnd_to_tap > WINDOW_DEFAULT)
 			goto out;
 
-		info = &info_new;
-		if (getsockopt(s, SOL_TCP, TCP_INFO, info, &sl))
+		tinfo = &tinfo_new;
+		if (getsockopt(s, SOL_TCP, TCP_INFO, tinfo, &sl))
 			goto out;
 	}
 
 	if (conn->local || tcp_rtt_dst_low(conn)) {
-		conn->wnd_to_tap = info->tcpi_snd_wnd;
+		conn->wnd_to_tap = tinfo->tcpi_snd_wnd;
 	} else {
 		tcp_get_sndbuf(conn);
-		conn->wnd_to_tap = MIN((int)info->tcpi_snd_wnd, conn->snd_buf);
+		conn->wnd_to_tap = MIN((int)tinfo->tcpi_snd_wnd, conn->snd_buf);
 	}
 
 	conn->wnd_to_tap = MIN(conn->wnd_to_tap, MAX_WINDOW);
@@ -1613,8 +1616,8 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 	uint32_t prev_wnd_to_tap = conn->wnd_to_tap;
 	struct tcp4_l2_flags_buf_t *b4 = NULL;
 	struct tcp6_l2_flags_buf_t *b6 = NULL;
-	struct tcp_info info = { 0 };
-	socklen_t sl = sizeof(info);
+	struct tcp_info tinfo = { 0 };
+	socklen_t sl = sizeof(tinfo);
 	size_t optlen = 0, eth_len;
 	int s = conn->sock;
 	struct iovec *iov;
@@ -1626,15 +1629,15 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 	    !flags && conn->wnd_to_tap)
 		return 0;
 
-	if (getsockopt(s, SOL_TCP, TCP_INFO, &info, &sl)) {
+	if (getsockopt(s, SOL_TCP, TCP_INFO, &tinfo, &sl)) {
 		tcp_tap_destroy(c, conn);
 		return -ECONNRESET;
 	}
 
 	if (!conn->local)
-		tcp_rtt_dst_check(conn, &info);
+		tcp_rtt_dst_check(conn, &tinfo);
 
-	if (!tcp_update_seqack_wnd(c, conn, flags, &info) && !flags)
+	if (!tcp_update_seqack_wnd(c, conn, flags, &tinfo) && !flags)
 		return 0;
 
 	if (CONN_V4(conn)) {
@@ -1661,7 +1664,7 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 		*data++ = OPT_MSS_LEN;
 
 		if (c->mtu == -1) {
-			mss = info.tcpi_snd_mss;
+			mss = tinfo.tcpi_snd_mss;
 		} else {
 			mss = c->mtu - sizeof(struct tcphdr);
 			if (CONN_V4(conn))
@@ -1681,11 +1684,11 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 		th->doff += OPT_MSS_LEN / 4;
 
 #ifdef HAS_SND_WND
-		if (!c->tcp.kernel_snd_wnd && info.tcpi_snd_wnd)
+		if (!c->tcp.kernel_snd_wnd && tinfo.tcpi_snd_wnd)
 			c->tcp.kernel_snd_wnd = 1;
 #endif
 
-		conn->ws = MIN(MAX_WS, info.tcpi_snd_wscale);
+		conn->ws = MIN(MAX_WS, tinfo.tcpi_snd_wscale);
 
 		*data++ = OPT_NOP;
 		*data++ = OPT_WS;
@@ -1768,7 +1771,7 @@ static void tcp_rst(struct ctx *c, struct tcp_tap_conn *conn)
 static void tcp_clamp_window(struct tcp_tap_conn *conn, struct tcphdr *th,
 			     int len, unsigned int window, int init)
 {
-	if (init) {
+	if (init && th) {
 		int ws = tcp_opt_get(th, len, OPT_WS, NULL, NULL);
 
 		conn->ws_tap = ws;
@@ -1901,7 +1904,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 			sock_pool_p = &init_sock_pool6[i];
 		else
 			sock_pool_p = &init_sock_pool4[i];
-		if ((ref.r.s = s = *sock_pool_p) >= 0) {
+		if ((ref.r.s = s = (*sock_pool_p)) >= 0) {
 			*sock_pool_p = -1;
 			break;
 		}
@@ -2164,7 +2167,7 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn,
 			      struct timespec *now)
 {
 	int fill_bufs, send_bufs = 0, last_len, iov_rem = 0;
-	int send, len, plen, v4 = CONN_V4(conn);
+	int sendlen, len, plen, v4 = CONN_V4(conn);
 	uint32_t seq_to_tap = conn->seq_to_tap;
 	int s = conn->sock, i, ret = 0;
 	struct msghdr mh_sock = { 0 };
@@ -2226,16 +2229,16 @@ recvmsg:
 	if (!len)
 		goto zero_len;
 
-	send = len - already_sent;
-	if (send <= 0) {
+	sendlen = len - already_sent;
+	if (sendlen <= 0) {
 		tcp_tap_epoll_mask(c, conn, conn->events | EPOLLET);
 		return 0;
 	}
 
 	tcp_tap_epoll_mask(c, conn, conn->events & ~EPOLLET);
 
-	send_bufs = DIV_ROUND_UP(send, conn->mss_guest);
-	last_len = send - (send_bufs - 1) * conn->mss_guest;
+	send_bufs = DIV_ROUND_UP(sendlen, conn->mss_guest);
+	last_len = sendlen - (send_bufs - 1) * conn->mss_guest;
 
 	/* Likely, some new data was acked too. */
 	tcp_update_seqack_wnd(c, conn, 0, NULL);
@@ -2594,7 +2597,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 				conn->mss_guest = MIN(MSS6, conn->mss_guest);
 		}
 
-		/* info.tcpi_bytes_acked already includes one byte for SYN, but
+		/* tinfo.tcpi_bytes_acked already includes one byte for SYN, but
 		 * not for incoming connections.
 		 */
 		conn->seq_init_from_tap = ntohl(th->seq) + 1;
@@ -2787,8 +2790,8 @@ static int tcp_splice_connect(struct ctx *c, struct tcp_splice_conn *conn,
 		.sin_addr = { .s_addr = htonl(INADDR_LOOPBACK) },
 	};
 	const struct sockaddr *sa;
-	int ret, one = 1;
 	socklen_t sl;
+	int one = 1;
 
 	conn->to = sock_conn;
 
@@ -2807,7 +2810,8 @@ static int tcp_splice_connect(struct ctx *c, struct tcp_splice_conn *conn,
 
 	if (connect(conn->to, sa, sl)) {
 		if (errno != EINPROGRESS) {
-			ret = -errno;
+			int ret = -errno;
+
 			close(sock_conn);
 			return ret;
 		}
@@ -3049,10 +3053,8 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 		goto close;
 
 	if (events & EPOLLOUT) {
-		struct epoll_event ev = {
-			.events = EPOLLIN | EPOLLRDHUP,
-			.data.u64 = ref.u64,
-		};
+		ev.events = EPOLLIN | EPOLLRDHUP;
+		ev.data.u64 = ref.u64;
 
 		if (conn->state == SPLICE_CONNECT)
 			tcp_splice_connect_finish(c, conn, ref.r.p.tcp.tcp.v6);
@@ -3111,12 +3113,13 @@ swap:
 
 	while (1) {
 		int retry_write = 0, more = 0;
-		ssize_t read, to_write = 0, written;
+		ssize_t readlen, to_write = 0, written;
 
 retry:
-		read = splice(move_from, NULL, pipes[1], NULL, c->tcp.pipe_size,
-			      SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
-		if (read < 0) {
+		readlen = splice(move_from, NULL, pipes[1], NULL,
+				 c->tcp.pipe_size,
+				 SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
+		if (readlen < 0) {
 			if (errno == EINTR)
 				goto retry;
 
@@ -3124,13 +3127,13 @@ retry:
 				goto close;
 
 			to_write = c->tcp.pipe_size;
-		} else if (!read) {
+		} else if (!readlen) {
 			eof = 1;
 			to_write = c->tcp.pipe_size;
 		} else {
 			never_read = 0;
-			to_write += read;
-			if (read >= (long)c->tcp.pipe_size * 90 / 100)
+			to_write += readlen;
+			if (readlen >= (long)c->tcp.pipe_size * 90 / 100)
 				more = SPLICE_F_MORE;
 
 			if (bitmap_isset(rcvlowat_set, conn - ts))
@@ -3142,12 +3145,12 @@ eintr:
 				 SPLICE_F_MOVE | more | SPLICE_F_NONBLOCK);
 
 		/* Most common case: skip updating counters. */
-		if (read > 0 && read == written) {
-			if (read >= (long)c->tcp.pipe_size * 10 / 100)
+		if (readlen > 0 && readlen == written) {
+			if (readlen >= (long)c->tcp.pipe_size * 10 / 100)
 				continue;
 
 			if (!bitmap_isset(rcvlowat_set, conn - ts) &&
-			    read > (long)c->tcp.pipe_size / 10) {
+			    readlen > (long)c->tcp.pipe_size / 10) {
 				int lowat = c->tcp.pipe_size / 4;
 
 				setsockopt(move_from, SOL_SOCKET, SO_RCVLOWAT,
@@ -3160,7 +3163,7 @@ eintr:
 			break;
 		}
 
-		*seq_read  += read > 0    ? read : 0;
+		*seq_read  += readlen > 0 ? readlen : 0;
 		*seq_write += written > 0 ? written : 0;
 
 		if (written < 0) {

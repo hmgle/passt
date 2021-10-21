@@ -51,7 +51,7 @@ void name(const char *format, ...) {					\
 									\
 	if (setlogmask(0) & LOG_MASK(LOG_DEBUG)) {			\
 		clock_gettime(CLOCK_REALTIME, &tp);			\
-		fprintf(stderr, "%lu.%04lu: ",				\
+		fprintf(stderr, "%li.%04li: ",				\
 			tp.tv_sec - log_debug_start,			\
 			tp.tv_nsec / (100 * 1000));			\
 	} else {							\
@@ -142,7 +142,7 @@ void passt_vsyslog(int pri, const char *format, va_list ap)
 	if (format[strlen(format)] != '\n')
 		n += snprintf(buf + n, BUFSIZ - n, "\n");
 
-	if (log_opt | LOG_PERROR)
+	if (log_opt & LOG_PERROR)
 		fprintf(stderr, "%s", buf + sizeof("<0>"));
 
 	send(log_sock, buf, n, 0);

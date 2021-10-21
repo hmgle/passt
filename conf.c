@@ -678,7 +678,7 @@ pasta_opts:
 
 void conf_print(struct ctx *c)
 {
-	char buf6[INET6_ADDRSTRLEN], buf4[INET_ADDRSTRLEN], ifn[IFNAMSIZ];
+	char buf4[INET_ADDRSTRLEN], ifn[IFNAMSIZ];
 	int i;
 
 	if (c->mode == MODE_PASTA) {
@@ -723,6 +723,8 @@ void conf_print(struct ctx *c)
 	}
 
 	if (c->v6) {
+		char buf6[INET6_ADDRSTRLEN];
+
 		if (!c->no_ndp && !c->no_dhcpv6)
 			info("NDP/DHCPv6:");
 		else if (!c->no_ndp)
@@ -1013,7 +1015,7 @@ void conf(struct ctx *c, int argc, char **argv)
 
 			errno = 0;
 			mask = strtol(optarg, NULL, 0);
-			if (mask >= 0 && mask <= 32 && !errno) {
+			if (mask > 0 && mask <= 32 && !errno) {
 				c->mask4 = htonl(0xffffffff << (32 - mask));
 				break;
 			}

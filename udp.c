@@ -616,9 +616,9 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 	if (ref.r.p.udp.udp.splice == UDP_TO_NS ||
 	    ref.r.p.udp.udp.splice == UDP_TO_INIT) {
 		for (i = 0; i < n; i++) {
-			struct msghdr *mh = &udp_splice_mmh_send[i].msg_hdr;
+			struct msghdr *mh_s = &udp_splice_mmh_send[i].msg_hdr;
 
-			mh->msg_iov->iov_len = udp_splice_mmh_recv[i].msg_len;
+			mh_s->msg_iov->iov_len = udp_splice_mmh_recv[i].msg_len;
 		}
 
 		sendmmsg(s, udp_splice_mmh_send, n, MSG_NOSIGNAL);
@@ -626,9 +626,9 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 	}
 
 	for (i = 0; i < n; i++) {
-		struct msghdr *mh = &udp_splice_mmh_sendto[i].msg_hdr;
+		struct msghdr *mh_s = &udp_splice_mmh_sendto[i].msg_hdr;
 
-		mh->msg_iov->iov_len = udp_splice_mmh_recv[i].msg_len;
+		mh_s->msg_iov->iov_len = udp_splice_mmh_recv[i].msg_len;
 	}
 
 	if (v6) {
@@ -709,8 +709,6 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 					b->ip6h.saddr = c->gw6;
 				else
 					b->ip6h.saddr = c->addr6_ll;
-
-				b->ip6h.saddr = c->gw6;
 
 				udp_tap_map[V6][src].ts_local = now->tv_sec;
 
@@ -1000,11 +998,11 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 	}
 
 	for (i = 0; i < count; i++) {
-		struct udphdr *uh;
+		struct udphdr *uh_send;
 
-		uh = (struct udphdr *)(msg[i].pkt_buf_offset + pkt_buf);
-		m[i].iov_base = (char *)(uh + 1);
-		m[i].iov_len = msg[i].l4_len - sizeof(*uh);
+		uh_send = (struct udphdr *)(msg[i].pkt_buf_offset + pkt_buf);
+		m[i].iov_base = (char *)(uh_send + 1);
+		m[i].iov_len = msg[i].l4_len - sizeof(*uh_send);
 
 		mm[i].msg_hdr.msg_name = sa;
 		mm[i].msg_hdr.msg_namelen = sl;

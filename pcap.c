@@ -172,9 +172,7 @@ fail:
  */
 void pcap_init(struct ctx *c, int index)
 {
-	char name[] = PCAP_PREFIX PCAP_ISO8601_STR STR(UINT_MAX) ".pcap";
 	struct timeval tv;
-	struct tm *tm;
 
 	if (pcap_fd != -1)
 		return;
@@ -183,6 +181,10 @@ void pcap_init(struct ctx *c, int index)
 		return;
 
 	if (*c->pcap == 1) {
+		char name[] = PCAP_PREFIX PCAP_ISO8601_STR STR(UINT_MAX)
+			      ".pcap";
+		struct tm *tm;
+
 		if (c->mode == MODE_PASTA)
 			memcpy(name, PCAP_PREFIX_PASTA,
 			       sizeof(PCAP_PREFIX_PASTA));

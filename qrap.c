@@ -127,7 +127,7 @@ int main(int argc, char **argv)
 		struct arphdr ah;
 		struct arpmsg am;
 	} probe = {
-		htonl(42),
+		.vnet_len = htonl(42),
 		{
 			.h_dest   = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
 			.h_source = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
@@ -198,11 +198,12 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[i], "-device") && i + 1 < argc) {
 			char *p;
-			long n;
 
 			has_dev = 1;
 
 			if ((p = strstr(argv[i + 1], dev->template))) {
+				long n;
+
 				n = strtol(p + strlen(dev->template), NULL, 16);
 				if (!errno)
 					addr_map |= (1 << n);

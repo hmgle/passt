@@ -167,9 +167,8 @@ netns:
  */
 void pasta_start_ns(struct ctx *c)
 {
-	char buf[BUFSIZ], *shell, proc_path[PATH_MAX];
-	int euid = geteuid();
-	int fd;
+	int euid = geteuid(), fd;
+	char *shell;
 
 	c->foreground = 1;
 	if (!c->debug)
@@ -181,6 +180,8 @@ void pasta_start_ns(struct ctx *c)
 	}
 
 	if (pasta_child_pid) {
+		char proc_path[PATH_MAX];
+
 		NS_CALL(pasta_wait_for_ns, c);
 
 		snprintf(proc_path, PATH_MAX, "/proc/%i/ns/net",
@@ -197,7 +198,9 @@ void pasta_start_ns(struct ctx *c)
 	}
 
 	if (!c->netns_only) {
-		snprintf(buf, BUFSIZ, "%u %u %u", 0, euid, 1);
+		char buf[BUFSIZ];
+
+		snprintf(buf, BUFSIZ, "%i %i %i", 0, euid, 1);
 
 		fd = open("/proc/self/uid_map", O_WRONLY);
 		if (write(fd, buf, strlen(buf)) < 0)

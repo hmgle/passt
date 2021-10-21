@@ -265,19 +265,22 @@ static void tap_packet_debug(struct iphdr *iph, struct ipv6hdr *ip6h,
 {
 	char buf6s[INET6_ADDRSTRLEN], buf6d[INET6_ADDRSTRLEN];
 	char buf4s[INET_ADDRSTRLEN], buf4d[INET_ADDRSTRLEN];
-	uint8_t proto;
+	uint8_t proto = 0;
 
 	if (iph || seq4) {
 		inet_ntop(AF_INET,   iph ? &iph->saddr  : &seq4->saddr,
-			  buf4s, sizeof(buf4s)),
+			  buf4s, sizeof(buf4s));
 		inet_ntop(AF_INET,   iph ? &iph->daddr  : &seq4->daddr,
-			  buf4d, sizeof(buf4d)),
-		proto = iph ? iph->protocol : seq4->protocol;
+			  buf4d, sizeof(buf4d));
+		if (iph)
+			proto = iph->protocol;
+		else if (seq4)
+			proto = seq4->protocol;
 	} else {
 		inet_ntop(AF_INET6, ip6h ? &ip6h->saddr : &seq6->saddr,
-			  buf6s, sizeof(buf6s)),
+			  buf6s, sizeof(buf6s));
 		inet_ntop(AF_INET6, ip6h ? &ip6h->daddr : &seq6->daddr,
-			  buf6d, sizeof(buf6d)),
+			  buf6d, sizeof(buf6d));
 		proto = proto6;
 	}
 
@@ -397,12 +400,12 @@ resume:
 		for (seq = l4_seq4 + seq_count - 1; seq >= l4_seq4; seq--) {
 			if (L4_MATCH(iph, uh, seq)) {
 				if (seq->msgs >= UIO_MAXIOV)
-					seq = l4_seq4 - 1;
+					seq = NULL;
 				break;
 			}
 		}
 
-		if (seq < l4_seq4) {
+		if (!seq || seq < l4_seq4) {
 			seq = l4_seq4 + seq_count++;
 			L4_SET(iph, uh, seq);
 			seq->msgs = 0;
@@ -560,12 +563,12 @@ resume:
 		for (seq = l4_seq6 + seq_count - 1; seq >= l4_seq6; seq--) {
 			if (L4_MATCH(ip6h, proto, uh, seq)) {
 				if (seq->msgs >= UIO_MAXIOV)
-					seq = l4_seq6 - 1;
+					seq = NULL;
 				break;
 			}
 		}
 
-		if (seq < l4_seq6) {
+		if (!seq || seq < l4_seq6) {
 			seq = l4_seq6 + seq_count++;
 			L4_SET(ip6h, proto, uh, seq);
 			seq->msgs = 0;
@@ -711,7 +714,7 @@ next:
 static int tap_handler_pasta(struct ctx *c, struct timespec *now)
 {
 	ssize_t n = 0, len;
-	int err, seq4_i = 0, seq6_i = 0;
+	int ret, seq4_i = 0, seq6_i = 0;
 
 restart:
 	while ((len = read(c->fd_tap, pkt_buf + n, TAP_BUF_BYTES - n)) > 0) {
@@ -749,7 +752,7 @@ restart:
 	if (len < 0 && errno == EINTR)
 		goto restart;
 
-	err = errno;
+	ret = errno;
 
 	if (seq4_i)
 		tap4_handler(c, seq4, seq4_i, now);
@@ -757,7 +760,7 @@ restart:
 	if (seq6_i)
 		tap6_handler(c, seq6, seq6_i, now);
 
-	if (len > 0 || err == EAGAIN)
+	if (len > 0 || ret == EAGAIN)
 		return 0;
 
 	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_tap, NULL);

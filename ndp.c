@@ -91,7 +91,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		memcpy(p, c->mac, ETH_ALEN);
 		p += 6;
 	} else if (ih->icmp6_type == RS) {
-		size_t len = 0;
+		size_t dns_s_len = 0;
 		int i, n;
 
 		if (c->no_ra)
@@ -139,7 +139,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		}
 
 		for (n = 0; *c->dns_search[n].n; n++)
-			len += strlen(c->dns_search[n].n) + 2;
+			dns_s_len += strlen(c->dns_search[n].n) + 2;
 		if (len) {
 			*p++ = 31;			/* DNSSL */
 			*p++ = (len + 8 - 1) / 8 + 1;	/* length */
@@ -163,8 +163,8 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 				*(p++) = 0;
 			}
 
-			memset(p, 0, 8 - len % 8);	/* padding */
-			p += 8 - len % 8;
+			memset(p, 0, 8 - dns_s_len % 8);	/* padding */
+			p += 8 - dns_s_len % 8;
 		}
 
 		*p++ = 1;			/* source ll */

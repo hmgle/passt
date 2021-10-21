@@ -44,7 +44,7 @@ union epoll_ref;
  */
 union epoll_ref {
 	struct {
-		uint32_t	proto:8,
+		int32_t		proto:8,
 				s:24;
 		union {
 			union tcp_epoll_ref tcp;

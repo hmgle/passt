@@ -47,7 +47,6 @@ static int nl_seq;
 static int nl_sock_init_do(void *arg)
 {
 	struct sockaddr_nl addr = { .nl_family = AF_NETLINK, };
-	struct ctx *c = (struct ctx *)arg;
 	int *s = &nl_sock, v = 1;
 
 ns:
@@ -55,7 +54,7 @@ ns:
 	    bind(*s, (struct sockaddr *)&addr, sizeof(addr)))
 		*s = -1;
 
-	if (*s == -1 || !c || s == &nl_sock_ns)
+	if (*s == -1 || !arg || s == &nl_sock_ns)
 		return 0;
 
 	setsockopt(*s, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &v, sizeof(v));
@@ -206,11 +205,10 @@ v6:
 
 	word = (long *)has_v4;
 	for (i = 0; i < ARRAY_SIZE(has_v4) / sizeof(long); i++, word++) {
-		int ifi;
-
 		tmp = *word;
 		while ((n = ffsl(tmp))) {
-			ifi = i * sizeof(long) * 8 + n - 1;
+			int ifi = i * sizeof(long) * 8 + n - 1;
+
 			if (!first_v4)
 				first_v4 = ifi;
 

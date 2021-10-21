@@ -212,19 +212,20 @@ static void opt_set_dns_search(struct ctx *c, size_t max_len)
 
 	for (i = 0; *c->dns_search[i].n; i++) {
 		unsigned int n;
-		int dup = -1;
+		int count = -1;
 		char *p;
 
 		buf[0] = 0;
 		for (p = c->dns_search[i].n, n = 1; *p; p++) {
 			if (*p == '.') {
 				/* RFC 1035 4.1.4 Message compression */
-				dup = opt_dns_search_dup_ptr(opts[119].s, p + 1,
-							     opts[119].slen);
+				count = opt_dns_search_dup_ptr(opts[119].s,
+							       p + 1,
+							       opts[119].slen);
 
-				if (dup >= 0) {
+				if (count >= 0) {
 					buf[n++] = '\xc0';
-					buf[n++] = dup;
+					buf[n++] = count;
 					break;
 				}
 				buf[n++] = '.';
@@ -234,7 +235,7 @@ static void opt_set_dns_search(struct ctx *c, size_t max_len)
 		}
 
 		/* The compression pointer is also an end of label */
-		if (dup < 0)
+		if (count < 0)
 			buf[n++] = 0;
 
 		if (n >= max_len)

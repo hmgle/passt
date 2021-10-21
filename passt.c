@@ -272,7 +272,7 @@ static void pid_file(struct ctx *c) {
  * @argc:	Argument count
  * @argv:	Options, plus optional target PID for pasta mode
  *
- * Return: 0 once interrupted, non-zero on failure
+ * Return: non-zero on failure
  *
  * #syscalls read write open close fork dup2 exit chdir ioctl writev syslog
  * #syscalls prlimit64 epoll_ctl epoll_create1 epoll_wait accept4 accept listen
@@ -394,6 +394,4 @@ loop:
 	post_handler(&c, &now);
 
 	goto loop;
-
-	return 0;
 }
