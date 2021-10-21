@@ -43,7 +43,7 @@ test_iperf3() {
 		pane_run "${__pane}" 'for i in $(seq 0 '${__procs}');'	\
 			'do ( iperf3 -c '"${__dest}"' -p '"${__port}"	\
 			"${@}" ' -T s${i} & echo $! > c${i}.pid & ); done'
-		sleep 36
+		sleep 40
 		pane_run "${__pane}" 'for i in $(seq 0 '${__procs}'); do'\
 			 'kill -INT $(cat c${i}.pid) 2>/dev/null; done'
 		) &
@@ -71,10 +71,10 @@ test_iperf3() {
 	fi
 
 	pane_wait "${__pane}"
-	sleep 38
+	sleep 45
 	pane_run "${__pane}" 'for i in $(seq 0 '${__procs}'); do'	\
 		 'kill -INT $(cat s${i}.pid) 2>/dev/null; done'
-	sleep 1
+	sleep 4
 	pane_wait "${__pane}"
 	pane_run "${__pane}" '(cat s*.bw |'				\
 		'sed '"'"'s/\(.*\)/\1\+/g'"'"' |'			\
