@@ -193,7 +193,7 @@ static uint8_t udp_act[IP_VERSIONS][UDP_ACT_TYPE_MAX][USHRT_MAX / 8];
  * @uh:		Headroom for UDP header
  * @data:	Storage for UDP payload
  */
-__extension__  static struct udp4_l2_buf_t {
+static struct udp4_l2_buf_t {
 	struct sockaddr_in s_in;
 	uint32_t psum;
 
@@ -204,12 +204,7 @@ __extension__  static struct udp4_l2_buf_t {
 	uint8_t data[USHRT_MAX -
 		     (sizeof(struct iphdr) + sizeof(struct udphdr))];
 } __attribute__ ((packed, aligned(__alignof__(unsigned int))))
-udp4_l2_buf[UDP_TAP_FRAMES] = {
-	[ 0 ... UDP_TAP_FRAMES - 1 ] = {
-		{ 0 }, 0, 0, L2_BUF_ETH_IP4_INIT, L2_BUF_IP4_INIT(IPPROTO_UDP),
-		{{{ 0 }}}, { 0 },
-	},
-};
+udp4_l2_buf[UDP_TAP_FRAMES];
 
 /**
  * udp6_l2_buf_t - Pre-cooked IPv6 packet buffers for tap connections
@@ -220,7 +215,7 @@ udp4_l2_buf[UDP_TAP_FRAMES] = {
  * @uh:		Headroom for UDP header
  * @data:	Storage for UDP payload
  */
-__extension__ struct udp6_l2_buf_t {
+struct udp6_l2_buf_t {
 	struct sockaddr_in6 s_in6;
 #ifdef __AVX2__
 	/* Align ip6h to 32-byte boundary. */
@@ -239,16 +234,7 @@ __extension__ struct udp6_l2_buf_t {
 #else
 } __attribute__ ((packed, aligned(__alignof__(unsigned int))))
 #endif
-udp6_l2_buf[UDP_TAP_FRAMES] = {
-	[ 0 ... UDP_TAP_FRAMES - 1 ] = {
-		{ 0 },
-#ifdef __AVX2__
-		{ 0 },
-#endif
-		0, L2_BUF_ETH_IP6_INIT, L2_BUF_IP6_INIT(IPPROTO_UDP),
-		{{{ 0 }}}, { 0 },
-	},
-};
+udp6_l2_buf[UDP_TAP_FRAMES];
 
 static struct sockaddr_storage udp_splice_namebuf;
 static uint8_t udp_splice_buf[UDP_SPLICE_FRAMES][USHRT_MAX];
@@ -360,6 +346,14 @@ static void udp_sock4_iov_init(void)
 	struct mmsghdr *h;
 	int i;
 
+	for (i = 0; i < ARRAY_SIZE(udp4_l2_buf); i++) {
+		udp4_l2_buf[i] = (struct udp4_l2_buf_t) {
+			{ 0 }, 0, 0,
+			L2_BUF_ETH_IP4_INIT, L2_BUF_IP4_INIT(IPPROTO_UDP),
+			{{{ 0 }}}, { 0 },
+		};
+	}
+
 	for (i = 0, h = udp4_l2_mh_sock; i < UDP_TAP_FRAMES; i++, h++) {
 		struct msghdr *mh = &h->msg_hdr;
 
@@ -388,6 +382,17 @@ static void udp_sock6_iov_init(void)
 {
 	struct mmsghdr *h;
 	int i;
+
+	for (i = 0; i < ARRAY_SIZE(udp6_l2_buf); i++) {
+		udp6_l2_buf[i] = (struct udp6_l2_buf_t) {
+			{ 0 },
+#ifdef __AVX2__
+			{ 0 },
+#endif
+			0, L2_BUF_ETH_IP6_INIT, L2_BUF_IP6_INIT(IPPROTO_UDP),
+			{{{ 0 }}}, { 0 },
+		};
+	}
 
 	for (i = 0, h = udp6_l2_mh_sock; i < UDP_TAP_FRAMES; i++, h++) {
 		struct msghdr *mh = &h->msg_hdr;
