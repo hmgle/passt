@@ -365,7 +365,7 @@ int main(int argc, char **argv)
 	else
 		__setlogmask(LOG_UPTO(LOG_INFO));
 
-	if (isatty(fileno(stdout)) && !c.foreground && daemon(0, 0)) {
+	if (!c.foreground && daemon(0, 0)) {
 		perror("daemon");
 		exit(EXIT_FAILURE);
 	}
