@@ -17,6 +17,7 @@
 
 PASTA_PID="$(mktemp)"
 PASTA_OPTS="-q --ipv4-only -a 10.0.2.0 -n 24 -g 10.0.2.2 -m 1500 --no-ndp --no-dhcpv6 --no-dhcp -P ${PASTA_PID}"
+USAGE_RET=1
 
 # add() - Add single option to $PASTA_OPTS
 # $1:	Option name, with or without argument
@@ -111,7 +112,7 @@ opt() {
 # usage() - Print slirpnetns(1) usage and exit indicating failure
 # $1:	Invalid option name, if any
 usage() {
-	[ ${#} -eq 1 ] && printf "s: invalid option -- '%s'\n" "${0}" "${1}"
+	[ ${#} -eq 1 ] && printf "%s: invalid option -- '%s'\n" "${0}" "${1}"
 	cat << EOF
 Usage: ${0} [OPTION]... PID|PATH TAPNAME
 User-mode networking for unprivileged network namespaces.
@@ -131,7 +132,7 @@ User-mode networking for unprivileged network namespaces.
 -h, --help               show this help and exit
 -v, --version            show version and exit
 EOF
-	exit 1
+	exit ${USAGE_RET}
 }
 
 # version() - Print version
@@ -178,10 +179,10 @@ while getopts ce:r:m:6a:hv-: OPT 2>/dev/null; do
 	userns-path)		opt_str USERNS_NAME "${OPTARG}"		      ;;
 	enable-sandbox) 	: Not supported yet			      ;;
 	enable-seccomp)		: Cannot be disabled			      ;;
-	h | help)		usage "${0}"				      ;;
+	h | help)		USAGE_RET=0 && usage			      ;;
 	v | version)		version					      ;;
-	??*)			usage "${0}" "${OPT}"			      ;;
-	?)			usage "${0}"				      ;;
+	??*)			usage "${OPT}"				      ;;
+	?)			usage "${OPT}"				      ;;
 	esac
 done
 
