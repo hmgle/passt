@@ -120,7 +120,7 @@
 
 #define UDP_CONN_TIMEOUT	180 /* s, timeout for ephemeral or local bind */
 #define UDP_SPLICE_FRAMES	128
-#define UDP_TAP_FRAMES		16
+#define UDP_TAP_FRAMES		128
 
 /**
  * struct udp_tap_port - Port tracking based on tap-facing source port
@@ -201,7 +201,8 @@ __extension__  static struct udp4_l2_buf_t {
 	struct ethhdr eh;
 	struct iphdr iph;
 	struct udphdr uh;
-	uint8_t data[USHRT_MAX - sizeof(struct udphdr)];
+	uint8_t data[USHRT_MAX -
+		     (sizeof(struct iphdr) + sizeof(struct udphdr))];
 } __attribute__ ((packed, aligned(__alignof__(unsigned int))))
 udp4_l2_buf[UDP_TAP_FRAMES] = {
 	[ 0 ... UDP_TAP_FRAMES - 1 ] = {
