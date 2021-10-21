@@ -13,9 +13,9 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-VCPUS="$( [ $(nproc) -ge 8 ] && echo 4 || echo $(( $(nproc) / 2 + 1 )) )"
+VCPUS="$( [ $(nproc) -ge 8 ] && echo 6 || echo $(( $(nproc) / 2 + 1 )) )"
 __mem_kib="$(sed -n 's/MemTotal:[ ]*\([0-9]*\) kB/\1/p' /proc/meminfo)"
-VMEM="$((${__mem_kib} / 1024 / 8))"
+VMEM="$((${__mem_kib} / 1024 / 4))"
 
 # setup_build() - Set up pane layout for build tests
 setup_build() {
@@ -107,6 +107,9 @@ setup_passt_in_ns() {
 	#  10011    as server  | forwarded to guest |  spliced to ns
 	#  10012               |     as server      |  spliced to ns
 	#  10013               |   spliced to init  |    as server
+	#
+	#  10021    as server  | forwarded to guest |
+	#  10031    as server  | forwarded to guest |
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_with_passt.pcap"
@@ -138,8 +141,8 @@ setup_passt_in_ns() {
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_in_pasta.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 
-	#pane_run PASST "valgrind --max-stackframe=3000000 ./passt -f ${__opts} -t 10001,10011 -u 10001,10011"
-	pane_run PASST "./passt -f ${__opts} -t 10001,10011 -u 10001,10011"
+	#pane_run PASST "valgrind --max-stackframe=3000000 ./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031"
+	pane_run PASST "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031"
 	sleep 1
 
 	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS}	\
@@ -148,7 +151,7 @@ setup_passt_in_ns() {
 		'-nodefaults '						\
 		'-append "console=ttyS0 mitigations=off apparmor=0 '	\
 		'virtio-net.napi_tx=1"'					\
-		"-device virtio-net-pci,netdev=hostnet0,x-txburst=131072"\
+		"-device virtio-net-pci,netdev=hostnet0,x-txburst=262144"\
 		"-netdev socket,fd=5,id=hostnet0"
 	pane_wait GUEST
 }

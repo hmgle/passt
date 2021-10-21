@@ -31,9 +31,9 @@ hout	FREQ_PROCFS (echo "scale=1"; sed -n 's/cpu MHz.*: \([0-9]*\)\..*$/(\1+10^2\
 hout	FREQ_CPUFREQ (echo "scale=1"; printf '( %i + 10^5 / 2 ) / 10^6\n' $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) ) | bc -l
 hout	FREQ [ -n "__FREQ_CPUFREQ__" ] && echo __FREQ_CPUFREQ__ || echo __FREQ_PROCFS__
 
-set	THREADS 2
+set	THREADS 4
 set	STREAMS 1
-set	OPTS -u -i1 -t30 -P __STREAMS__ --pacing-timer 10000
+set	OPTS -u -i1 -t30 -P __STREAMS__ --pacing-timer 1000
 
 info	Throughput in Gbps, latency in µs, __THREADS__ threads at __FREQ__ GHz, one stream each
 
@@ -50,15 +50,15 @@ iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 2G
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 0.8 1.2
 guest	ip link set dev __IFNAME__ mtu 1500
-iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 2G
+iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 1.0 1.5
 guest	ip link set dev __IFNAME__ mtu 9000
-iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 4G
+iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 5G
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 4.0 5.0
 guest	ip link set dev __IFNAME__ mtu 65520
-iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 5G
+iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 7G
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 4.0 5.0
 
@@ -75,11 +75,11 @@ lat	__LAT__ 200 150
 
 tr	UDP throughput over IPv4: guest to host
 guest	ip link set dev __IFNAME__ mtu 256
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 300M
+iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 500M
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 0.1 0.2
 guest	ip link set dev __IFNAME__ mtu 576
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 500M
+iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 1G
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 0.4 0.6
 guest	ip link set dev __IFNAME__ mtu 1280
@@ -87,15 +87,15 @@ iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 2G
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 0.8 1.2
 guest	ip link set dev __IFNAME__ mtu 1500
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 2G
+iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 1.0 1.5
 guest	ip link set dev __IFNAME__ mtu 9000
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 4G
+iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 6G
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 4.0 5.0
 guest	ip link set dev __IFNAME__ mtu 65520
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 5G
+iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 7G
 iperf3s	BW ns 100${i}2 __THREADS__
 bw	__BW__ 4.0 5.0
 
@@ -122,11 +122,11 @@ iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 2G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 1.0 1.5
 ns	ip link set dev lo mtu 9000
-iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 4G
+iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 4.0 5.0
 ns	ip link set dev lo mtu 65520
-iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 4G
+iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 5.0 5.5
 
@@ -144,28 +144,28 @@ ns	ip link set dev lo mtu 65535
 
 tr	UDP throughput over IPv4: host to guest
 ns	ip link set dev lo mtu 256
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 300M
+iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 1G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 0.1 0.2
 ns	ip link set dev lo mtu 576
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 500M
+iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 1G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 0.4 0.6
 ns	ip link set dev lo mtu 1280
 ns	ip addr add ::1 dev lo
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 2G
+iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 0.8 1.2
 ns	ip link set dev lo mtu 1500
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 2G
+iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 1.0 1.5
 ns	ip link set dev lo mtu 9000
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 4G
+iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 4.0 5.0
 ns	ip link set dev lo mtu 65520
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 4G
+iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW guest 100${i}1 __THREADS__
 bw	__BW__ 5.0 5.5
 
