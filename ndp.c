@@ -140,10 +140,11 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 				memcpy(p, &c->dns6[i], 16);	/* address */
 				p += 16;
 			}
+
+			for (n = 0; *c->dns_search[n].n; n++)
+				dns_s_len += strlen(c->dns_search[n].n) + 2;
 		}
 
-		for (n = 0; *c->dns_search[n].n; n++)
-			dns_s_len += strlen(c->dns_search[n].n) + 2;
 		if (dns_s_len) {
 			*p++ = 31;			/* DNSSL */
 			*p++ = (len + 8 - 1) / 8 + 1;	/* length */
