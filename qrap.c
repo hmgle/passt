@@ -36,7 +36,7 @@ static char *qemu_names[] = {
 	"kvm",
 	"qemu-kvm",
 #ifdef ARCH
-	"qemu-system-" ARCH,
+	( "qemu-system-" ARCH ),
 #endif
 	"/usr/libexec/qemu-kvm",
 	NULL,
