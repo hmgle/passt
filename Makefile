@@ -14,6 +14,7 @@ CFLAGS += -DRLIMIT_STACK_VAL=$(shell ulimit -s)
 CFLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)
 CFLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
 CFLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(shell uname -m | tr [a-z] [A-Z])
+CFLAGS += -DARCH=\"$(shell uname -m)\"
 
 # On gcc 11.2, with -O2 and -flto, tcp_hash() and siphash_20b(), if inlined,
 # seem to be hitting something similar to:
@@ -59,7 +60,7 @@ passt4netns: passt
 	ln -s passt passt4netns
 
 qrap: qrap.c passt.h
-	$(CC) $(CFLAGS) -DARCH=\"$(shell uname -m)\" \
+	$(CC) $(CFLAGS) \
 		qrap.c -o qrap
 
 .PHONY: clean
@@ -176,20 +177,32 @@ cppcheck: $(wildcard *.c) $(wildcard *.h)
 	cppcheck --std=c99 --error-exitcode=1 --enable=all --force	\
 	--inconclusive --library=posix					\
 	-I/usr/include $(EXTRA_INCLUDES_OPT)				\
+									\
+	--suppress=syntaxError:/usr/include/stdlib.h			\
 	--suppress=missingIncludeSystem					\
 	--suppress="*:$(EXTRA_INCLUDES)/avx512fintrin.h"		\
 	--suppress="*:$(EXTRA_INCLUDES)/xmmintrin.h"			\
 	--suppress="*:$(EXTRA_INCLUDES)/emmintrin.h"			\
 	--suppress="*:$(EXTRA_INCLUDES)/avxintrin.h"			\
 	--suppress="*:$(EXTRA_INCLUDES)/bmiintrin.h"			\
+									\
 	--suppress=objectIndex:tcp.c --suppress=objectIndex:udp.c	\
 	--suppress=va_list_usedBeforeStarted:util.c			\
-	--suppress=unusedFunction:igmp.c				\
-	--suppress=unusedFunction:siphash.c				\
+	--suppress=unusedFunction					\
 	--suppress=knownConditionTrueFalse:conf.c			\
 	--suppress=strtokCalled:conf.c --suppress=strtokCalled:qrap.c	\
 	--suppress=getpwnamCalled:passt.c				\
 	--suppress=localtimeCalled:pcap.c				\
 	--suppress=unusedStructMember:pcap.c				\
 	--suppress=funcArgNamesDifferent:util.h				\
+									\
+	--suppress=unmatchedSuppression:conf.c				\
+	--suppress=unmatchedSuppression:passt.c				\
+	--suppress=unmatchedSuppression:pcap.c				\
+	--suppress=unmatchedSuppression:qrap.c				\
+	--suppress=unmatchedSuppression:tcp.c				\
+	--suppress=unmatchedSuppression:udp.c				\
+	--suppress=unmatchedSuppression:util.c				\
+	--suppress=unmatchedSuppression:util.h				\
+	$(filter -D%,$(CFLAGS))						\
 	.
