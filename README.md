@@ -183,13 +183,14 @@ traffic outside the namespace using native Layer-4 sockets.
 Existing approaches typically implement a full, generic TCP/IP stack for this
 translation between data and transport layers, without the possibility of
 speeding up local connections, and usually requiring NAT. _pasta_:
+
 * avoids the need for a generic, full-fledged TCP/IP stack by coordinating TCP
-connection dynamics between sender and receiver
+  connection dynamics between sender and receiver
 * offers a fast bypass path for local connections: if a process connects to
-another process on the same host across namespaces, data is directly forwarded
-using pairs of Layer-4 sockets
+  another process on the same host across namespaces, data is directly forwarded
+  using pairs of Layer-4 sockets
 * with default options, maps routing and addressing information to the
-namespace, avoiding any need for NAT
+  namespace, avoiding any need for NAT
 
 ## Non-functional Targets
 
@@ -331,12 +332,12 @@ Test logs [here](/builds/latest/test/).
         cd passt
         make
 
-  * alternatively, static builds for x86_64, with or without AVX2 instructions,
-    as of the latest commit are also available for convenience
-    [here](/builds/latest/x86_64/avx2/) and
-    [here](/builds/latest/x86_64/). Convenience, non-official
-    packages for Debian (and derivatives) and RPM-based distributions are also
-    available there. These binaries and packages are simply built with:
+    * alternatively, static builds for x86_64, with or without AVX2 instructions,
+      as of the latest commit are also available for convenience
+      [here](/builds/latest/x86_64/avx2/) and
+      [here](/builds/latest/x86_64/). Convenience, non-official
+      packages for Debian (and derivatives) and RPM-based distributions are also
+      available there. These binaries and packages are simply built with:
 
             CFLAGS="-static" make avx2
             make pkgs
@@ -356,13 +357,13 @@ Test logs [here](/builds/latest/test/).
 * from the same network namespace, start qemu. At the moment, qemu doesn't
   support UNIX domain sockets for the `socket` back-end. Two alternatives:
 
-  * use the _qrap_ wrapper, which maps a tap socket descriptor to _passt_'s
-    UNIX domain socket, for example:
+    * use the _qrap_ wrapper, which maps a tap socket descriptor to _passt_'s
+      UNIX domain socket, for example:
 
             ip netns exec passt ./qrap 5 qemu-system-x86_64 ... -net socket,fd=5 -net nic,model=virtio ...
 
-  * or patch qemu with [this patch](/passt/tree/qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch)
-    and start it like this:
+    * or patch qemu with [this patch](/passt/tree/qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch)
+      and start it like this:
 
             qemu-system-x86_64 ... -net socket,connect=/tmp/passt.socket -net nic,model=virtio
 
@@ -394,12 +395,12 @@ Test logs [here](/builds/latest/test/).
         cd passt
         make
 
-  * alternatively, static builds for x86_64, with or without AVX2 instructions,
-    as of the latest commit are also available for convenience
-    [here](/builds/latest/x86_64/avx2/) and
-    [here](/builds/latest/x86_64/). Convenience, non-official
-    packages for Debian (and derivatives) and RPM-based distributions are also
-    available there. These binaries and packages are simply built with:
+    * alternatively, static builds for x86_64, with or without AVX2 instructions,
+      as of the latest commit are also available for convenience
+      [here](/builds/latest/x86_64/avx2/) and
+      [here](/builds/latest/x86_64/). Convenience, non-official
+      packages for Debian (and derivatives) and RPM-based distributions are also
+      available there. These binaries and packages are simply built with:
 
             CFLAGS="-static" make avx2
             make pkgs
@@ -420,7 +421,7 @@ Test logs [here](/builds/latest/test/).
 
         dhclient
 
-  and, optionally:
+    and, optionally:
 
         dhclient -6
 

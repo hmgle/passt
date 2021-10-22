@@ -21,10 +21,10 @@ Throughput in Gbps, latency in µs. Threads are <span style="font-family: monosp
 Click on numbers to show test execution. Measured at head, commit <span style="font-family: monospace;">__commit__</span>.
 
 <style type="text/CSS">
-table td { border: 0px solid; padding: 10px; }
-table td { text-align: right; }
-table th { text-align: center; font-weight: bold; }
-table tr:not(:first-of-type) td:not(:first-of-type) { font-family: monospace; font-weight: bolder; }
+table.passt td { border: 0px solid; padding: 6px; line-height: 1; }
+table.passt td { text-align: right; }
+table.passt th { text-align: center; font-weight: bold; }
+table.passt tr:not(:first-of-type) td:not(:first-of-type) { font-family: monospace; font-weight: bolder; }
 table.passt tr:nth-child(3n+0) { background-color: #112315; }
 table.passt tr:not(:nth-child(3n+0)) td { background-color: #101010; }
 table.passt td:nth-child(6n+7) { background-color: #603302; }
@@ -49,9 +49,10 @@ td:empty { visibility: hidden; }
 </table>
 
 <style type="text/CSS">
-table td { border: 0px solid; padding: 10px; }
-table td { text-align: right; }
-table th { text-align: center; font-weight: bold; }
+table.pasta td { border: 0px solid; padding: 6px; line-height: 1; }
+table.pasta td { text-align: right; }
+table.pasta th { text-align: center; font-weight: bold; }
+table.pasta tr:not(:first-of-type) td:not(:first-of-type) { font-family: monospace; font-weight: bolder; }
 table.pasta tr:nth-child(3n+0) { background-color: #112315; }
 table.pasta tr:not(:nth-child(3n+0)) td { background-color: #101010; }
 table.pasta td:nth-child(4n+5) { background-color: #603302; }
