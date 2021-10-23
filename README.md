@@ -115,7 +115,7 @@ for TCP and UDP, respectively.
 <img src="/builds/latest/web/pasta_overview.png" class="bright" style="z-index: 20; position: relative;">
 
 - [Motivation](#motivation)
-- [Non-functional Targets](#non-functional-targets)
+- [Features](#features)
 - [Interfaces and Environment](#interfaces-and-environment)
 - [Services](#services)
 - [Addresses](#addresses)
@@ -126,6 +126,7 @@ for TCP and UDP, respectively.
 - [Performance](#performance)
 - [Try it](#try-it)
 - [Contribute](#contribute)
+- [Security and Vulnerability Reports](#security-and-vulnerability-reports)
 
 ## Motivation
 
@@ -192,13 +193,109 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * with default options, maps routing and addressing information to the
   namespace, avoiding any need for NAT
 
-## Non-functional Targets
+## Features
 
-Security and maintainability goals:
+### Protocols
+* ✅ IPv4
+    * ✅ all features, except for
+    * ❌ fragmentation
+* ✅ IPv6
+    * ✅ all features, except for
+    * ❌ fragmentation
+    * ❌ jumbograms
+* ✅ [TCP](/passt/tree/tcp.c)
+    * ✅ Window Scaling (RFC 7323)
+    * ✅ Defenses against Sequence Number Attacks (RFC 6528)
+    * ⌚ [Protection Against Wrapped Sequences](https://bugs.passt.top/show_bug.cgi?id=1) (PAWS, RFC 7323)
+    * ⌚ [Timestamps](https://bugs.passt.top/show_bug.cgi?id=1) (RFC 7323)
+    * ❌ Selective Acknowledgment (RFC 2018)
+* ✅ [UDP](/passt/tree/udp.c)
+* ✅ ICMP/ICMPv6 Echo
+* ⌚ [IGMP/MLD](https://bugs.passt.top/show_bug.cgi?id=1) proxy
+* ⌚ [SCTP](https://bugs.passt.top/show_bug.cgi?id=3)
 
-* no dynamic memory allocation
-* ~5 000 LoC target
-* no external dependencies
+### Portability
+* Linux
+    * ✅ starting from 4.18 kernel version
+    * 🛠 starting from 3.8 kernel version
+* 🛠 build-time selection of AVX2 instructions (as much as possible)
+* ⌚ [_musl_](https://bugs.passt.top/show_bug.cgi?id=4) and
+  [_uClibc-ng_](https://bugs.passt.top/show_bug.cgi?id=5)
+* ⌚ [FreeBSD](https://bugs.passt.top/show_bug.cgi?id=6),
+  [Darwin](https://bugs.passt.top/show_bug.cgi?id=6)
+* ⌚ [NetBSD](https://bugs.passt.top/show_bug.cgi?id=7),
+  [OpenBSD](https://bugs.passt.top/show_bug.cgi?id=7)
+* ⌚ [Win2k](https://bugs.passt.top/show_bug.cgi?id=8)
+
+### Security
+* ✅ no dynamic memory allocation (`sbrk`(2), `brk`(2), `mmap`(2) [blocked via
+  `seccomp`](/passt/tree/seccomp.sh))
+* ✅ root operation not allowed outside user namespaces
+* ✅ all capabilities dropped, other than `CAP_NET_BIND_SERVICE` (if granted)
+* ✅ no external dependencies (other than a standard C library)
+* ✅ restrictive seccomp profiles (46 syscalls allowed for _passt_, 58 for
+  _pasta_)
+* ✅ static checkers in continuous integration (clang-tidy, cppcheck)
+* 🛠️ rework of TCP state machine (flags instead of states), TCP timers, and code
+  de-duplication
+* 🛠️ clearly defined packet abstraction
+* 🛠️ ~5 000 LoC target
+* ⌚ [fuzzing](https://bugs.passt.top/show_bug.cgi?id=9), _packetdrill_ tests
+* ⌚ stricter [synflood protection](https://bugs.passt.top/show_bug.cgi?id=10)
+* 💡 [your](https://lists.passt.top/) [ideas](https://bugs.passt.top/)
+  [here](https://chat.passt.top)
+
+### Configurability
+* ✅ all addresses, ports, port ranges
+* ✅ optional NAT, not required
+* ✅ all protocols
+* ✅ _pasta_: auto-detection of bound ports
+* 🛠 run-time configuration of port ranges without autodetection
+* 🛠 configuration of port ranges for autodetection
+* 💡 [your](https://lists.passt.top/) [ideas](https://bugs.passt.top/)
+  [here](https://chat.passt.top)
+
+### Performance
+* ✅ maximum two (cache hot) copies on every data path
+* ✅ _pasta_: zero-copy for local connections by design (no configuration
+  needed)
+* ✅ generalised coalescing and batching on every path for every supported
+  protocol
+* ✅ 4 to 50 times IPv4 TCP throughput of existing, conceptually similar
+  solutions depending on MTU (UDP and IPv6 hard to compare)
+* 🛠 _vhost-user_ support for maximum one copy on every data path and lower
+  request-response latency
+* ⌚ [multithreading](https://bugs.passt.top/show_bug.cgi?id=13)
+* ⌚ [raw IP socket support](https://bugs.passt.top/show_bug.cgi?id=14) if
+  `CAP_NET_RAW` is granted
+* ⌚ eBPF support (might not improve performance over vhost-user)
+
+### Interfaces
+* ✅ qemu, libvirt support with [`qrap` wrapper](/passt/tree/qrap.c)
+* ✅ out-of-tree patches for [qemu](/passt/tree/qemu) and
+  [libvirt](/passt/tree/libvirt) available
+* 🛠 bug-to-bug compatible
+  [_slirp4netns_ replacement](/passt/tree/slirp4netns.sh) (rootless Podman,
+  RootlessKit)
+* 🛠 native [qemu](https://bugs.passt.top/show_bug.cgi?id=11),
+  [libvirt](https://bugs.passt.top/show_bug.cgi?id=12) support
+* ⌚ drop-in replacement for VPNKit (rootless Docker)
+
+### Availability
+* ✅ convenience unofficial packages for Debian, RPM-based distributions on
+  x86_64 (static builds)
+* 🛠 official
+  [OpenSUSE packages](https://build.opensuse.org/package/show/home:mnhauke/passt)
+* 🛠 testing on non-x86 architectures
+* ⌚ packages for Debian, Fedora, etc.
+
+### Services
+* ✅ built-in [ARP proxy](/passt/tree/arp.c)
+* ✅ minimalistic [DHCP server](/passt/tree/dhcp.c)
+* ✅ minimalistic [NDP proxy](/passt/tree/ndp.c) with router advertisements and
+  SLAAC support
+* ✅ minimalistic [DHCPv6 server](/passt/tree/dhcpv6.c)
+* ⌚ fine-grained configurability of DHCP, NDP, DHCPv6 options
 
 ## Interfaces and Environment
 
@@ -433,5 +530,20 @@ Test logs [here](/builds/latest/test/).
 
 ## Contribute
 
-Public bug tracker and mailing lists are coming soon. For the moment being, send
-patches and issue reports to [sbrivio@redhat.com](mailto:sbrivio@redhat.com).
+### [Mailing Lists](/passt/lists)
+* Submit, review patches, and discuss development ideas on
+  [`passt-dev`](https://lists.passt.top/postorius/lists/passt-dev.passt.top/)
+
+* Ask your questions and discuss usage needs on
+  [`passt-user`](https://lists.passt.top/postorius/lists/passt-user.passt.top/)
+
+### [Bug Reports and Feature Requests](/passt/bugs)
+* [File a bug](https://bugs.passt.top/enter_bug.cgi) for those
+
+### [Chat](/passt/chat)
+* Somebody might be available on [IRC](https://irc.passt.top)
+
+## Security and Vulnerability Reports
+
+* Please send an email to [passt-sec](mailto:passt-sec@passt.top), private list,
+  no subscription required
