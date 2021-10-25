@@ -1586,12 +1586,14 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 			goto out;
 	}
 
+#ifdef HAS_SND_WND
 	if (conn->local || tcp_rtt_dst_low(conn)) {
 		conn->wnd_to_tap = tinfo->tcpi_snd_wnd;
 	} else {
 		tcp_get_sndbuf(conn);
 		conn->wnd_to_tap = MIN((int)tinfo->tcpi_snd_wnd, conn->snd_buf);
 	}
+#endif
 
 	conn->wnd_to_tap = MIN(conn->wnd_to_tap, MAX_WINDOW);
 
