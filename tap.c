@@ -340,7 +340,7 @@ resume:
 		iph = (struct iphdr *)(eh + 1);
 		if ((iph->ihl * 4) + sizeof(*eh) > len)
 			continue;
-		if (iph->ihl * 4 < sizeof(*iph))
+		if (iph->ihl * 4 < (int)sizeof(*iph))
 			continue;
 
 		if (iph->saddr && c->addr4_seen != iph->saddr) {

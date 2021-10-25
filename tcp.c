@@ -1034,7 +1034,7 @@ static int tcp_opt_get(struct tcphdr *th, size_t len, uint8_t type_search,
 	uint8_t type, optlen;
 	char *p;
 
-	if (len > th->doff * 4)
+	if (len > (unsigned)th->doff * 4)
 		len = th->doff * 4;
 
 	len -= sizeof(*th);
