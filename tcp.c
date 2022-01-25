@@ -2518,7 +2518,7 @@ eintr:
 	}
 
 
-	if (n < (seq_from_tap - conn->seq_from_tap)) {
+	if (n < (int)(seq_from_tap - conn->seq_from_tap)) {
 		partial_send = 1;
 		conn->seq_from_tap += n;
 		tcp_send_to_tap(c, conn, 0, now);

@@ -342,7 +342,9 @@ int timespec_diff_ms(struct timespec *a, struct timespec *b)
  */
 void bitmap_set(uint8_t *map, int bit)
 {
-	map[bit / 8] |= 1 << (bit % 8);
+	unsigned long *word = (unsigned long *)map + BITMAP_WORD(bit);
+
+	*word |= BITMAP_BIT(bit);
 }
 
 /**
@@ -352,7 +354,9 @@ void bitmap_set(uint8_t *map, int bit)
  */
 void bitmap_clear(uint8_t *map, int bit)
 {
-	map[bit / 8] &= ~(1 << (bit % 8));
+	unsigned long *word = (unsigned long *)map + BITMAP_WORD(bit);
+
+	*word &= ~BITMAP_BIT(bit);
 }
 
 /**
@@ -364,7 +368,9 @@ void bitmap_clear(uint8_t *map, int bit)
  */
 int bitmap_isset(const uint8_t *map, int bit)
 {
-	return map[bit / 8] & (1 << bit % 8);
+	unsigned long *word = (unsigned long *)map + BITMAP_WORD(bit);
+
+	return *word & BITMAP_BIT(bit);
 }
 
 /**

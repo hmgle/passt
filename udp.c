@@ -684,7 +684,7 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		cur_mh->msg_iov = &udp6_l2_iov_tap[0];
 		msg_i = msglen = iov_in_msg = 0;
 
-		for (i = 0; i < n; i++) {
+		for (i = 0; i < (unsigned)n; i++) {
 			struct udp6_l2_buf_t *b = &udp6_l2_buf[i];
 			size_t ip_len, iov_len;
 
@@ -770,7 +770,7 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		cur_mh->msg_iov = &udp4_l2_iov_tap[0];
 		msg_i = msglen = iov_in_msg = 0;
 
-		for (i = 0; i < n; i++) {
+		for (i = 0; i < (unsigned)n; i++) {
 			struct udp4_l2_buf_t *b = &udp4_l2_buf[i];
 			size_t ip_len, iov_len;
 			in_addr_t s_addr;

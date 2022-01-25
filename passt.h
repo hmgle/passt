@@ -67,7 +67,8 @@ extern char pkt_buf		[PKT_BUF_BYTES];
 
 extern char *ip_proto_str[];
 #define IP_PROTO_STR(n)							\
-	(((n) <= IPPROTO_SCTP && ip_proto_str[(n)]) ? ip_proto_str[(n)] : "?")
+	(((uint8_t)(n) <= IPPROTO_SCTP && ip_proto_str[(n)]) ?		\
+			  ip_proto_str[(n)] : "?")
 
 #include <resolv.h>	/* For MAXNS below */
 

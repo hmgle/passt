@@ -43,6 +43,8 @@ void debug(const char *format, ...);
 #define ROUND_DOWN(x, y)	((x) & ~((y) - 1))
 #define ROUND_UP(x, y)		(((x) + (y) - 1) & ~((y) - 1))
 
+#define BITMAP_BIT(n)		(1UL << (n) % (sizeof(long) * 8))
+#define BITMAP_WORD(n)		(n / (sizeof(long) * 8))
 
 #define SWAP(a, b)							\
 	do {								\
