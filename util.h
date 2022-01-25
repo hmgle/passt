@@ -8,6 +8,16 @@ void warn(const char *format, ...);
 void info(const char *format, ...);
 void debug(const char *format, ...);
 
+#ifndef SECCOMP_RET_KILL_PROCESS
+#define SECCOMP_RET_KILL_PROCESS	SECCOMP_RET_KILL
+#endif
+#ifndef ETH_MAX_MTU
+#define ETH_MAX_MTU			USHRT_MAX
+#endif
+#ifndef ETH_MIN_MTU
+#define ETH_MIN_MTU			68
+#endif
+
 #define CHECK_SET_MIN_MAX(basename, fd)					\
 	do {								\
 		if ((fd) < basename##min)				\
