@@ -45,6 +45,21 @@ ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
 	CFLAGS += -DHAS_SND_WND
 endif
 
+C := \#include <linux/tcp.h>\nstruct tcp_info x = { .tcpi_bytes_acked = 0 };
+ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
+	CFLAGS += -DHAS_BYTES_ACKED
+endif
+
+C := \#include <linux/tcp.h>\nstruct tcp_info x = { .tcpi_min_rtt = 0 };
+ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
+	CFLAGS += -DHAS_MIN_RTT
+endif
+
+C := \#include <sys/random.h>\nint main(){int a=getrandom(0, 0, 0);}
+ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
+	CFLAGS += -DHAS_GETRANDOM
+endif
+
 prefix ?= /usr/local
 
 all: passt pasta passt4netns qrap

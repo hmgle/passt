@@ -321,7 +321,9 @@
 #include <stddef.h>
 #include <string.h>
 #include <sys/epoll.h>
+#ifdef HAS_GETRANDOM
 #include <sys/random.h>
+#endif
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -760,6 +762,7 @@ static int tcp_rtt_dst_low(struct tcp_tap_conn *conn)
  */
 static void tcp_rtt_dst_check(struct tcp_tap_conn *conn, struct tcp_info *tinfo)
 {
+#ifdef HAS_MIN_RTT
 	int i, hole = -1;
 
 	if (!tinfo->tcpi_min_rtt ||
@@ -777,6 +780,10 @@ static void tcp_rtt_dst_check(struct tcp_tap_conn *conn, struct tcp_info *tinfo)
 	if (hole == LOW_RTT_TABLE_SIZE)
 		hole = 0;
 	memcpy(low_rtt_dst + hole, &in6addr_any, sizeof(conn->a.a6));
+#else
+	(void)conn;
+	(void)tinfo;
+#endif /* HAS_MIN_RTT */
 }
 
 /**
@@ -1552,6 +1559,13 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 	struct tcp_info tinfo_new;
 	int s = conn->sock;
 
+#ifndef HAS_BYTES_ACKED
+	(void)flags;
+
+	conn->seq_ack_to_tap = conn->seq_from_tap;
+	if (SEQ_LT(conn->seq_ack_to_tap, prev_ack_to_tap))
+		conn->seq_ack_to_tap = prev_ack_to_tap;
+#else
 	if (conn->state > ESTABLISHED || (flags & (DUP_ACK | FORCE_ACK)) ||
 	    conn->local || tcp_rtt_dst_low(conn) ||
 	    conn->snd_buf < SNDBUF_SMALL) {
@@ -1569,6 +1583,7 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 		if (SEQ_LT(conn->seq_ack_to_tap, prev_ack_to_tap))
 			conn->seq_ack_to_tap = prev_ack_to_tap;
 	}
+#endif /* !HAS_BYTES_ACKED */
 
 	if (!KERNEL_REPORTS_SND_WND(c)) {
 		tcp_get_sndbuf(conn);
@@ -3586,9 +3601,30 @@ int tcp_sock_init(struct ctx *c, struct timespec *now)
 {
 	struct tcp_sock_refill_arg refill_arg = { c, 0 };
 	int i, port;
+#ifndef HAS_GETRANDOM
+	int dev_random = open("/dev/random", O_RDONLY);
+	unsigned int random_read = 0;
 
+	while (dev_random && random_read < sizeof(c->tcp.hash_secret)) {
+		int ret = read(dev_random,
+			       (uint8_t *)&c->tcp.hash_secret + random_read,
+			       sizeof(c->tcp.hash_secret) - random_read);
+
+		if (ret == -1 && errno == EINTR)
+			continue;
+
+		if (ret <= 0)
+			break;
+
+		random_read += ret;
+	}
+	if (dev_random >= 0)
+		close(dev_random);
+	if (random_read < sizeof(c->tcp.hash_secret)) {
+#else
 	if (getrandom(&c->tcp.hash_secret, sizeof(c->tcp.hash_secret),
 		      GRND_RANDOM) < 0) {
+#endif /* !HAS_GETRANDOM */
 		perror("TCP initial sequence getrandom");
 		exit(EXIT_FAILURE);
 	}

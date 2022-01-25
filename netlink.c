@@ -46,7 +46,10 @@ static int nl_seq;
 static int nl_sock_init_do(void *arg)
 {
 	struct sockaddr_nl addr = { .nl_family = AF_NETLINK, };
-	int *s = &nl_sock, v = 1;
+	int *s = &nl_sock;
+#ifdef NETLINK_GET_STRICT_CHK
+	int y = 1;
+#endif
 
 ns:
 	if (((*s) = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE)) < 0 ||
@@ -56,7 +59,9 @@ ns:
 	if (*s == -1 || !arg || s == &nl_sock_ns)
 		return 0;
 
-	setsockopt(*s, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &v, sizeof(v));
+#ifdef NETLINK_GET_STRICT_CHK
+	setsockopt(*s, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &y, sizeof(y));
+#endif
 
 	ns_enter((struct ctx *)arg);
 	s = &nl_sock_ns;
