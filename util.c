@@ -469,10 +469,10 @@ void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
  */
 int ns_enter(struct ctx *c)
 {
-	if (!c->netns_only && setns(c->pasta_userns_fd, 0))
+	if (!c->netns_only && setns(c->pasta_userns_fd, CLONE_NEWUSER))
 		return -errno;
 
-	if (setns(c->pasta_netns_fd, 0))
+	if (setns(c->pasta_netns_fd, CLONE_NEWNET))
 		return -errno;
 
 	return 0;

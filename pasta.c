@@ -148,13 +148,15 @@ static int pasta_wait_for_ns(void *arg)
 	snprintf(ns, PATH_MAX, "/proc/%i/ns/user", pasta_child_pid);
 	do
 		while ((c->pasta_userns_fd = open(ns, O_RDONLY)) < 0);
-	while (setns(c->pasta_userns_fd, 0) && !close(c->pasta_userns_fd));
+	while (setns(c->pasta_userns_fd, CLONE_NEWUSER) &&
+	       !close(c->pasta_userns_fd));
 
 netns:
 	snprintf(ns, PATH_MAX, "/proc/%i/ns/net", pasta_child_pid);
 	do
 		while ((c->pasta_netns_fd = open(ns, O_RDONLY)) < 0);
-	while (setns(c->pasta_netns_fd, 0) && !close(c->pasta_netns_fd));
+	while (setns(c->pasta_netns_fd, CLONE_NEWNET) &&
+	       !close(c->pasta_netns_fd));
 
 	return 0;
 }

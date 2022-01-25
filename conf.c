@@ -347,8 +347,8 @@ static int conf_ns_check(void *arg)
 {
 	struct ctx *c = (struct ctx *)arg;
 
-	if ((!c->netns_only && setns(c->pasta_userns_fd, 0)) ||
-	    setns(c->pasta_netns_fd, 0))
+	if ((!c->netns_only && setns(c->pasta_userns_fd, CLONE_NEWUSER)) ||
+	    setns(c->pasta_netns_fd, CLONE_NEWNET))
 		c->pasta_userns_fd = c->pasta_netns_fd = -1;
 
 	return 0;
