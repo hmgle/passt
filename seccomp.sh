@@ -63,6 +63,7 @@ sub() {
 
 	sed -i "${__line_no}s#.*#${__template}#" "${TMP}"
 
+	IFS=' '
 	for __def in ${@}; do
 		__key="@${__def%%:*}@"
 		__value="${__def#*:}"
@@ -79,6 +80,7 @@ finish() {
 	__out="$(eval printf '%s' "\${${1}}")"
 	shift
 
+	IFS=' '
 	for __def in ${@}; do
 		__key="@${__def%%:*}@"
 		__value="${__def#*:}"
@@ -101,13 +103,52 @@ log2() {
 	echo ${__x}
 }
 
-# cc_syscall_nr - Try to get syscall number from compiler
+# syscall_nr - Get syscall number from compiler
 # $1:	Name of syscall
-cc_syscall_nr() {
-	__in="$(printf "#include <sys/syscall.h>\n__NR_%s" ${1})"
+syscall_nr() {
+	__in="$(printf "#include <asm-generic/unistd.h>\n#include <sys/syscall.h>\n__NR_%s" ${1})"
 	__out="$(echo "${__in}" | cc -E -xc - -o - | tail -1)"
 	[ "${__out}" = "__NR_$1" ] && return 1
 	echo "${__out}"
+}
+
+filter() {
+	__filtered=
+	for __c in ${@}; do
+		__arch_match=0
+		case ${__c} in
+		*:*)
+			case ${__c} in
+			$(uname -m):*)
+				__arch_match=1
+				__c=${__c##*:}
+				;;
+			esac
+			;;
+		*)
+			__arch_match=1
+			;;
+		esac
+		[ ${__arch_match} -eq 0 ] && continue
+
+		IFS='| '
+		__found=0
+		for __name in ${__c}; do
+			syscall_nr "${__name}" >/dev/null && __found=1 && break
+		done
+		unset IFS
+
+		if [ ${__found} -eq 0 ]; then
+			echo
+			echo "Warning: no syscall number for ${__c}" >&2
+			echo "  none of these syscalls will be allowed" >&2
+			continue
+		fi
+
+		__filtered="${__filtered} ${__name}"
+	done
+
+	echo "${__filtered}" | tr ' ' '\n' | sort -u
 }
 
 # gen_profile() - Build struct sock_filter for a single profile
@@ -127,9 +168,7 @@ gen_profile() {
 	done
 	for __i in $(seq 1 ${__statements_calls} ); do
 		__syscall_name="$(eval echo \${${__i}})"
-		if { ! command -V ausyscall >/dev/null 2>&1 || \
-		     ! ausyscall "${__syscall_name}" --exact >> "${TMP}"; } && \
-		   ! cc_syscall_nr "${__syscall_name}" >> "${TMP}"; then
+		if ! syscall_nr ${__syscall_name} >> "${TMP}"; then
 			echo "Cannot get syscall number for ${__syscall_name}"
 			exit 1
 		fi
@@ -191,8 +230,8 @@ gen_profile() {
 printf '%s\n' "${HEADER}" > "${OUT}"
 __profiles="$(sed -n 's/[\t ]*\*[\t ]*#syscalls:\([^ ]*\).*/\1/p' *.[ch] | sort -u)"
 for __p in ${__profiles}; do
-	__calls="$(sed -n 's/[\t ]*\*[\t ]*#syscalls\(:'"${__p}"'\|\)[\t ]\{1,\}\(.*\)/\2/p' *.[ch] | tr ' ' '\n' | sort -u)"
-
+	__calls="$(sed -n 's/[\t ]*\*[\t ]*#syscalls\(:'"${__p}"'\|\)[\t ]\{1,\}\(.*\)/\2/p' *.[ch])"
+	__calls="$(filter ${__calls})"
 	echo "seccomp profile ${__p} allows: ${__calls}" | tr '\n' ' ' | fmt -t
 
 	# Pad here to keep gen_profile() "simple"
@@ -200,7 +239,7 @@ for __p in ${__profiles}; do
 	for __c in ${__calls}; do __count=$(( __count + 1 )); done
 	__padded=$(( 1 << (( $(log2 ${__count}) + 1 )) ))
 	for __i in $( seq ${__count} $(( __padded - 1 )) ); do
-		__calls="${__calls} tuxcall"
+		__calls="${__calls} read"
 	done
 
 	gen_profile "${__p}" ${__calls}
