@@ -231,8 +231,8 @@ v6:
 	}
 
 	if (first_v6) {
-		*v4 = IP_VERSION_ENABLED;
-		*v6 = IP_VERSION_DISABLED;
+		*v4 = IP_VERSION_DISABLED;
+		*v6 = IP_VERSION_ENABLED;
 		return first_v6;
 	}
 
