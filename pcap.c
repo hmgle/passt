@@ -28,8 +28,6 @@
 #include <unistd.h>
 #include <net/if.h>
 
-#include <linux/ipv6.h>
-
 #include "util.h"
 #include "passt.h"
 

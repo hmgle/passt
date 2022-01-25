@@ -328,7 +328,6 @@
 #include <unistd.h>
 #include <time.h>
 
-#include <linux/ipv6.h>
 #include <linux/tcp.h> /* For struct tcp_info */
 
 #include "checksum.h"

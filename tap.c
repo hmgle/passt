@@ -40,7 +40,6 @@
 #include <netinet/if_ether.h>
 
 #include <linux/if_tun.h>
-#include <linux/ipv6.h>
 #include <linux/icmpv6.h>
 
 #include "checksum.h"

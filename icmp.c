@@ -30,7 +30,6 @@
 #include <time.h>
 
 #include <linux/icmpv6.h>
-#include <linux/ipv6.h>
 
 #include "util.h"
 #include "passt.h"

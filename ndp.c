@@ -24,7 +24,6 @@
 #include <net/if_arp.h>
 #include <netinet/if_ether.h>
 
-#include <linux/ipv6.h>
 #include <linux/icmpv6.h>
 
 #include "checksum.h"

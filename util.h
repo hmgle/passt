@@ -149,6 +149,34 @@ enum bind_type {
 
 struct ctx;
 
+struct ipv6hdr {
+#pragma GCC diagnostic ignored "-Wpedantic"
+#if __BYTE_ORDER == __BIG_ENDIAN
+	__u8			version:4,
+				priority:4;
+#else
+	uint8_t			priority:4,
+				version:4;
+#endif
+#pragma GCC diagnostic pop
+	uint8_t			flow_lbl[3];
+
+	__be16			payload_len;
+	__u8			nexthdr;
+	__u8			hop_limit;
+
+	struct in6_addr		saddr;
+	struct in6_addr		daddr;
+};
+
+struct ipv6_opt_hdr {
+	__u8			nexthdr;
+	__u8			hdrlen;
+	/*
+	 * TLV encoded option data follows.
+	 */
+} __attribute__((packed));	/* required for some archs */
+
 __attribute__ ((weak)) int ffsl(long int i) { return __builtin_ffsl(i); }
 void __openlog(const char *ident, int option, int facility);
 void passt_vsyslog(int pri, const char *format, va_list ap);

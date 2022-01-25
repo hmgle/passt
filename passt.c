@@ -54,7 +54,6 @@
 #include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/capability.h>
-#include <linux/ipv6.h>
 #include <linux/icmpv6.h>
 
 #include "seccomp.h"

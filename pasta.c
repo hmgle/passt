@@ -35,8 +35,6 @@
 #include <net/ethernet.h>
 #include <sys/syscall.h>
 
-#include <linux/ipv6.h>
-
 #include "util.h"
 #include "passt.h"
 #include "netlink.h"

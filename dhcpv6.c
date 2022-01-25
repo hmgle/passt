@@ -25,8 +25,6 @@
 #include <string.h>
 #include <time.h>
 
-#include <linux/ipv6.h>
-
 #include "util.h"
 #include "passt.h"
 #include "tap.h"

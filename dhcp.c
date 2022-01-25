@@ -23,8 +23,6 @@
 #include <unistd.h>
 #include <string.h>
 
-#include <linux/ipv6.h>
-
 #include "util.h"
 #include "checksum.h"
 #include "passt.h"

@@ -25,7 +25,6 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 
-#include <linux/ipv6.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 

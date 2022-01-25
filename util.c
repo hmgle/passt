@@ -32,8 +32,6 @@
 #include <time.h>
 #include <errno.h>
 
-#include <linux/ipv6.h>
-
 #include "util.h"
 #include "passt.h"
 

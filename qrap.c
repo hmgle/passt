@@ -26,8 +26,6 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 
-#include <linux/ipv6.h>
-
 #include "util.h"
 #include "passt.h"
 #include "arp.h"

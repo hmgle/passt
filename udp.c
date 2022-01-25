@@ -110,8 +110,6 @@
 #include <unistd.h>
 #include <time.h>
 
-#include <linux/ipv6.h>
-
 #include "checksum.h"
 #include "util.h"
 #include "passt.h"
