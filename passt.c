@@ -56,8 +56,8 @@
 #include <linux/capability.h>
 #include <linux/icmpv6.h>
 
-#include "seccomp.h"
 #include "util.h"
+#include "seccomp.h"
 #include "passt.h"
 #include "dhcp.h"
 #include "dhcpv6.h"

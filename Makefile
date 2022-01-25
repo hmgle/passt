@@ -9,11 +9,21 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
+RLIMIT_STACK_VAL := $(shell /bin/sh -c 'ulimit -s')
+ifeq ($(RLIMIT_STACK_VAL),unlimited)
+RLIMIT_STACK_VAL := 1024
+endif
+
+AUDIT_ARCH := $(shell uname -m | tr [a-z] [A-Z])
+AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
+AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
+AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
+
 CFLAGS += -Wall -Wextra -pedantic -std=c99 -D_XOPEN_SOURCE=700 -D_GNU_SOURCE
-CFLAGS += -DRLIMIT_STACK_VAL=$(shell ulimit -s)
 CFLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)
 CFLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
-CFLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(shell uname -m | tr [a-z] [A-Z])
+CFLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
+CFLAGS += -DRLIMIT_STACK_VAL=$(RLIMIT_STACK_VAL)
 CFLAGS += -DARCH=\"$(shell uname -m)\"
 
 # On gcc 11.2, with -O2 and -flto, tcp_hash() and siphash_20b(), if inlined,
