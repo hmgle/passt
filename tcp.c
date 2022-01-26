@@ -2319,7 +2319,7 @@ recvmsg:
 				if (errno == EAGAIN || errno == EWOULDBLOCK)
 					return 0;
 
-				tap_handler(c, EPOLLERR, now);
+				tap_handler(c, c->fd_tap, EPOLLERR, now);
 			}
 
 			i--;

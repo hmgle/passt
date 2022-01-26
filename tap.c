@@ -769,7 +769,7 @@ restart:
 }
 
 /**
- * tap_sock_init_unix() - Create and bind AF_UNIX socket, wait for connection
+ * tap_sock_init_unix() - Create and bind AF_UNIX socket, listen for connection
  * @c:		Execution context
  *
  * #syscalls:passt unlink|unlinkat
@@ -777,19 +777,21 @@ restart:
 static void tap_sock_init_unix(struct ctx *c)
 {
 	int fd = socket(AF_UNIX, SOCK_STREAM, 0), ex;
+	struct epoll_event ev = { 0 };
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
 	};
-	int i, ret, v = INT_MAX / 2;
+	int i, ret;
 
-	if (c->fd_tap_listen)
+	if (c->fd_tap_listen != -1) {
+		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_tap_listen, &ev);
 		close(c->fd_tap_listen);
+	}
 
 	if (fd < 0) {
 		perror("UNIX socket");
 		exit(EXIT_FAILURE);
 	}
-	c->fd_tap_listen = fd;
 
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
 		char *path = addr.sun_path;
@@ -836,6 +838,10 @@ static void tap_sock_init_unix(struct ctx *c)
 
 	listen(fd, 0);
 
+	ev.data.fd = c->fd_tap_listen = fd;
+	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, c->fd_tap_listen, &ev);
+
 	info("You can now start qrap:");
 	info("    ./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio");
 	info("or directly qemu, patched with:");
@@ -843,14 +849,32 @@ static void tap_sock_init_unix(struct ctx *c)
 	info("as follows:");
 	info("    kvm ... -net socket,connect=%s -net nic,model=virtio",
 	     addr.sun_path);
+}
 
-	c->fd_tap = accept(fd, NULL, NULL);
+/**
+ * tap_sock_accept_unix() - Accept connection on listening socket
+ * @c:		Execution context
+ */
+static void tap_sock_accept_unix(struct ctx *c)
+{
+	struct epoll_event ev = { 0 };
+	int v = INT_MAX / 2;
+
+	c->fd_tap = accept(c->fd_tap_listen, NULL, NULL);
+
+	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_tap_listen, &ev);
+	close(c->fd_tap_listen);
+	c->fd_tap_listen = -1;
 
 	if (!c->low_rmem)
 		setsockopt(c->fd_tap, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v));
 
 	if (!c->low_wmem)
 		setsockopt(c->fd_tap, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v));
+
+	ev.data.fd = c->fd_tap;
+	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, c->fd_tap, &ev);
 }
 
 static int tun_ns_fd = -1;
@@ -885,6 +909,8 @@ static int tap_ns_tun(void *arg)
  */
 static void tap_sock_init_tun(struct ctx *c)
 {
+	struct epoll_event ev = { 0 };
+
 	NS_CALL(tap_ns_tun, c);
 	if (tun_ns_fd == -1) {
 		err("Failed to open tun socket in namespace");
@@ -896,6 +922,10 @@ static void tap_sock_init_tun(struct ctx *c)
 	pcap_init(c, c->pasta_netns_fd);
 
 	c->fd_tap = tun_ns_fd;
+
+	ev.data.fd = c->fd_tap;
+	ev.events = EPOLLIN | EPOLLRDHUP;
+	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, c->fd_tap, &ev);
 }
 
 /**
@@ -904,33 +934,31 @@ static void tap_sock_init_tun(struct ctx *c)
  */
 void tap_sock_init(struct ctx *c)
 {
-	struct epoll_event ev = { 0 };
-
-	if (c->fd_tap) {
+	if (c->fd_tap != -1) {
 		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_tap, NULL);
 		close(c->fd_tap);
 	}
 
-	if (c->mode == MODE_PASST) {
+	if (c->mode == MODE_PASST)
 		tap_sock_init_unix(c);
-		ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
-	} else {
+	else
 		tap_sock_init_tun(c);
-		ev.events = EPOLLIN | EPOLLRDHUP;
-	}
-
-	ev.data.fd = c->fd_tap;
-	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, c->fd_tap, &ev);
 }
 
 /**
  * tap_handler() - Packet handler for AF_UNIX or tuntap file descriptor
  * @c:		Execution context
+ * @fd:		File descriptor where event occurred
  * @events:	epoll events
  * @now:	Current timestamp
  */
-void tap_handler(struct ctx *c, uint32_t events, struct timespec *now)
+void tap_handler(struct ctx *c, int fd, uint32_t events, struct timespec *now)
 {
+	if (fd == c->fd_tap_listen && events == EPOLLIN) {
+		tap_sock_accept_unix(c);
+		return;
+	}
+
 	if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
 		goto fail;
 

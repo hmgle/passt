@@ -345,6 +345,7 @@ int main(int argc, char **argv)
 	}
 	sock_probe_mem(&c);
 
+	c.fd_tap = c.fd_tap_listen = -1;
 	tap_sock_init(&c);
 
 	clock_gettime(CLOCK_MONOTONIC, &now);
@@ -387,9 +388,10 @@ loop:
 
 	for (i = 0; i < nfds; i++) {
 		union epoll_ref ref = *((union epoll_ref *)&events[i].data.u64);
+		int fd = events[i].data.fd;
 
-		if (events[i].data.fd == c.fd_tap)
-			tap_handler(&c, events[i].events, &now);
+		if (fd == c.fd_tap || fd == c.fd_tap_listen)
+			tap_handler(&c, fd, events[i].events, &now);
 		else
 			sock_handler(&c, ref, events[i].events, &now);
 	}
