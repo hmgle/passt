@@ -11,7 +11,7 @@
  * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
  *
- * #syscalls stat
+ * #syscalls stat|statx
  */
 
 #include <arpa/inet.h>

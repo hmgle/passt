@@ -304,7 +304,7 @@
  * - SPLICE_FIN_TO:		FIN (EPOLLRDHUP) seen from connected socket
  * - SPLICE_FIN_BOTH:		FIN (EPOLLRDHUP) seen from both sides
  *
- * #syscalls pipe pipe2
+ * #syscalls pipe|pipe2 pipe2
  */
 
 #include <sched.h>

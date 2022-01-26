@@ -273,12 +273,16 @@ static void pid_file(struct ctx *c) {
  *
  * Return: non-zero on failure
  *
- * #syscalls read write open close fork dup2 exit chdir ioctl writev syslog
- * #syscalls prlimit64 epoll_ctl epoll_create1 epoll_wait accept4 accept listen
+ * #syscalls read write open|openat close fork|clone dup2|dup3 ioctl writev
  * #syscalls socket bind connect getsockopt setsockopt recvfrom sendto shutdown
- * #syscalls openat fstat fcntl lseek clone setsid exit_group getpid
- * #syscalls clock_gettime newfstatat
- * #syscalls:pasta rt_sigreturn
+ * #syscalls accept4 accept listen set_robust_list getrlimit setrlimit
+ * #syscalls openat fcntl lseek clone setsid exit exit_group getpid chdir
+ * #syscalls epoll_ctl epoll_create1 epoll_wait|epoll_pwait epoll_pwait
+ * #syscalls prlimit64 clock_gettime fstat|newfstat newfstatat syslog
+ * #syscalls ppc64le:_llseek ppc64le:recv ppc64le:send ppc64le:getuid
+ * #syscalls ppc64:_llseek ppc64:recv ppc64:send ppc64:getuid ppc64:ugetrlimit
+ * #syscalls s390x:socketcall s390x:sigreturn
+ * #syscalls:pasta rt_sigreturn|sigreturn ppc64:sigreturn ppc64:fcntl64
  */
 int main(int argc, char **argv)
 {

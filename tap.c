@@ -772,7 +772,7 @@ restart:
  * tap_sock_init_unix() - Create and bind AF_UNIX socket, wait for connection
  * @c:		Execution context
  *
- * #syscalls:passt unlink
+ * #syscalls:passt unlink|unlinkat
  */
 static void tap_sock_init_unix(struct ctx *c)
 {

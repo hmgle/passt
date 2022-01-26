@@ -233,7 +233,7 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ✅ root operation not allowed outside user namespaces
 * ✅ all capabilities dropped, other than `CAP_NET_BIND_SERVICE` (if granted)
 * ✅ no external dependencies (other than a standard C library)
-* ✅ restrictive seccomp profiles (46 syscalls allowed for _passt_, 58 for
+* ✅ restrictive seccomp profiles (50 syscalls allowed for _passt_, 62 for
   _pasta_)
 * ✅ static checkers in continuous integration (clang-tidy, cppcheck)
 * 🛠️ rework of TCP state machine (flags instead of states), TCP timers, and code
