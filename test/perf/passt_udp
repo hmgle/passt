@@ -124,11 +124,11 @@ bw	__BW__ 1.0 1.5
 ns	ip link set dev lo mtu 9000
 iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW guest 100${i}1 __THREADS__
-bw	__BW__ 4.0 5.0
+bw	__BW__ 3.0 4.0
 ns	ip link set dev lo mtu 65520
 iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW guest 100${i}1 __THREADS__
-bw	__BW__ 5.0 5.5
+bw	__BW__ 3.0 4.0
 
 tl	UDP RR latency over IPv6: host to guest
 lat	-
@@ -163,11 +163,11 @@ bw	__BW__ 1.0 1.5
 ns	ip link set dev lo mtu 9000
 iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW guest 100${i}1 __THREADS__
-bw	__BW__ 4.0 5.0
+bw	__BW__ 3.0 4.0
 ns	ip link set dev lo mtu 65520
 iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW guest 100${i}1 __THREADS__
-bw	__BW__ 5.0 5.5
+bw	__BW__ 3.0 4.0
 
 tl	UDP RR latency over IPv4: host to guest
 lat	-
