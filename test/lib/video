@@ -89,7 +89,7 @@ video_grab() {
 	sleep 3
 	VIDEO_START_SECONDS=$(sed -n 's/\([0-9]*\).[0-9]* [0-9]*.[0-9]*/\1/p' /proc/uptime)
 	[ ${XVFB} -eq 1 ] && __disp=":99.0" || __disp=
-	ffmpeg -f x11grab -framerate 15 -video_size "${__width}x${__height}" -i "${__disp}+${__x},${__y}" -vcodec libx264 -preset ultrafast -qp 0 -pix_fmt yuv444p -draw_mouse 0 "${BASEPATH}/${VIDEO_NAME}.mp4" & echo $! > "${FFMPEG_PID_FILE}"
+	ffmpeg -f x11grab -framerate 15 -video_size "${__width}x${__height}" -i "${__disp}+${__x},${__y}" -vcodec libx264 -qp 0 -draw_mouse 0 "${BASEPATH}/${VIDEO_NAME}.mp4" & echo $! > "${FFMPEG_PID_FILE}"
 }
 
 # video_time_now() - Print current video timestamp, in seconds
