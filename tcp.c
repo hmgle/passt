@@ -1671,7 +1671,7 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 	}
 
 	if (flags & SYN) {
-		uint16_t mss;
+		int mss;
 
 		/* Options: MSS, NOP and window scale (8 bytes) */
 		optlen = OPT_MSS_LEN + 1 + OPT_WS_LEN;
@@ -1691,10 +1691,10 @@ static int tcp_send_to_tap(struct ctx *c, struct tcp_tap_conn *conn, int flags,
 			if (c->low_wmem &&
 			    !conn->local && !tcp_rtt_dst_low(conn))
 				mss = MIN(mss, PAGE_SIZE);
-			else
+			else if (mss > PAGE_SIZE)
 				mss = ROUND_DOWN(mss, PAGE_SIZE);
 		}
-		*(uint16_t *)data = htons(mss);
+		*(uint16_t *)data = htons(MIN(USHRT_MAX, mss));
 
 		data += OPT_MSS_LEN - 2;
 		th->doff += OPT_MSS_LEN / 4;
