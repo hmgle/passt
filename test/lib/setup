@@ -52,14 +52,14 @@ setup_passt() {
 	pane_run PASST "./passt ${__opts} -f -t 10001 -u 10001"
 	sleep 1
 
-	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS}	\
-		'-kernel' "/boot/vmlinuz-$(uname -r)"			\
-		'-initrd mbuto.img -nographic -serial stdio'		\
-		'-nodefaults '						\
-		'-append "console=ttyS0 mitigations=off apparmor=0 '	\
-		'virtio-net.napi_tx=1"'					\
-		"-device virtio-net-pci,netdev=hostnet0,x-txburst=16384"\
-		"-netdev socket,fd=5,id=hostnet0"
+	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS} \
+		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
+		' -initrd mbuto.img -nographic -serial stdio'		   \
+		' -nodefaults'						   \
+		' -append "console=ttyS0 mitigations=off apparmor=0 '	   \
+		'virtio-net.napi_tx=1"'					   \
+		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"  \
+		" -netdev socket,fd=5,id=hostnet0"
 	pane_wait GUEST
 }
 
@@ -145,14 +145,14 @@ setup_passt_in_ns() {
 	pane_run PASST "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031"
 	sleep 1
 
-	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS}	\
-		'-kernel' "/boot/vmlinuz-$(uname -r)"			\
-		'-initrd mbuto.img -nographic -serial stdio'		\
-		'-nodefaults '						\
-		'-append "console=ttyS0 mitigations=off apparmor=0 '	\
-		'virtio-net.napi_tx=1"'					\
-		"-device virtio-net-pci,netdev=hostnet0,x-txburst=262144"\
-		"-netdev socket,fd=5,id=hostnet0"
+	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS} \
+		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
+		' -initrd mbuto.img -nographic -serial stdio'		   \
+		' -nodefaults'						   \
+		' -append "console=ttyS0 mitigations=off apparmor=0 '	   \
+		'virtio-net.napi_tx=1"'					   \
+		" -device virtio-net-pci,netdev=hostnet0,x-txburst=524288" \
+		" -netdev socket,fd=5,id=hostnet0"
 	pane_wait GUEST
 }
 
@@ -226,22 +226,22 @@ setup_two_guests() {
 	pane_run GUEST_2 'cp mbuto.img mbuto_2.img'
 	pane_wait GUEST_2
 
-	pane_run GUEST_1 './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS}	\
-		'-kernel' "/boot/vmlinuz-$(uname -r)"			\
-		'-initrd mbuto.img -nographic -serial stdio'		\
-		'-nodefaults '						\
-		'-append "console=ttyS0 mitigations=off apparmor=0 '	\
-		'virtio-net.napi_tx=1"'					\
-		"-device virtio-net-pci,netdev=hostnet0,x-txburst=16384"\
-		"-netdev socket,fd=5,id=hostnet0"
-	pane_run GUEST_2 './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS}	\
-		'-kernel' "/boot/vmlinuz-$(uname -r)"			\
-		'-initrd mbuto_2.img -nographic -serial stdio'		\
-		'-nodefaults '						\
-		'-append "console=ttyS0 mitigations=off apparmor=0 '	\
-		'virtio-net.napi_tx=1"'					\
-		"-device virtio-net-pci,netdev=hostnet0,x-txburst=16384"\
-		"-netdev socket,fd=5,id=hostnet0"
+	pane_run GUEST_1 './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS} \
+		' -kernel ' "/boot/vmlinuz-$(uname -r)"			     \
+		' -initrd mbuto.img -nographic -serial stdio'		     \
+		' -nodefaults'						     \
+		' -append "console=ttyS0 mitigations=off apparmor=0 '	     \
+		'virtio-net.napi_tx=1"'					     \
+		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
+		" -netdev socket,fd=5,id=hostnet0"
+	pane_run GUEST_2 './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS} \
+		' -kernel ' "/boot/vmlinuz-$(uname -r)"			     \
+		' -initrd mbuto_2.img -nographic -serial stdio'		     \
+		' -nodefaults'						     \
+		' -append "console=ttyS0 mitigations=off apparmor=0 '	     \
+		'virtio-net.napi_tx=1"'					     \
+		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
+		" -netdev socket,fd=5,id=hostnet0"
 	pane_wait GUEST_1
 	pane_wait GUEST_2
 }
