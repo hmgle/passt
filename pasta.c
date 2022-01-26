@@ -63,7 +63,7 @@ loop:
 		struct dirent *dp = (struct dirent *)buf;
 		int pos = 0;
 
-		while (pos < n) {
+		while (dp->d_reclen && pos < n) {
 			pid_t pid;
 
 			errno = 0;
