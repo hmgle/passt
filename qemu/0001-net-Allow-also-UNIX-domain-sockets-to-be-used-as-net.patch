@@ -1,7 +1,6 @@
-From ba51349d353f11e05c6341a7e065f2ade3874c68 Mon Sep 17 00:00:00 2001
-Message-Id: <ba51349d353f11e05c6341a7e065f2ade3874c68.1619091389.git.sbrivio@redhat.com>
+From 83c3f76b8fe6b4a6bb45dcf5cfad65ec6f98a10e Mon Sep 17 00:00:00 2001
 From: Stefano Brivio <sbrivio@redhat.com>
-Date: Wed, 21 Apr 2021 18:51:18 +0200
+Date: Wed, 26 Jan 2022 16:45:15 +0100
 Subject: [PATCH 1/2] net: Allow also UNIX domain sockets to be used as -netdev
  socket
 
@@ -10,18 +9,17 @@ and the adaptation is trivial.
 
 Signed-off-by: Stefano Brivio <sbrivio@redhat.com>
 ---
-SPDX-FileCopyrightText: 2020-2021 Red Hat GmbH <sbrivio@redhat.com>
+SPDX-FileCopyrightText: 2020-2022 Red Hat GmbH <sbrivio@redhat.com>
 SPDX-License-Identifier: AGPL-3.0-or-later
 
- net/socket.c    | 106 ++++++++++++++++++++++++++++++++++++++++--------
- qemu-options.hx |  12 +++---
- 2 files changed, 94 insertions(+), 24 deletions(-)
+ net/socket.c | 106 ++++++++++++++++++++++++++++++++++++++++++---------
+ 1 file changed, 87 insertions(+), 19 deletions(-)
 
 diff --git a/net/socket.c b/net/socket.c
-index 15b410e8d825..aadd11dae2b3 100644
+index 2e5f3ac923..b901e22836 100644
 --- a/net/socket.c
 +++ b/net/socket.c
-@@ -511,26 +511,60 @@ static int net_socket_listen_init(NetClientState *peer,
+@@ -511,26 +511,59 @@ static int net_socket_listen_init(NetClientState *peer,
  {
      NetClientState *nc;
      NetSocketState *s;
@@ -41,6 +39,7 @@ index 15b410e8d825..aadd11dae2b3 100644
  
 -    if (parse_host_port(&saddr, host_str, errp) < 0) {
 -        return -1;
+-    }
 +        pf = PF_INET;
 +        saddr_size = sizeof(*saddr_in);
 +#ifndef WIN32
@@ -56,16 +55,15 @@ index 15b410e8d825..aadd11dae2b3 100644
 +            error_setg_errno(errp, errno, "path provided is not a socket");
 +            return -1;
 +        }
-+
+ 
+-    fd = qemu_socket(PF_INET, SOCK_STREAM, 0);
 +        saddr_un->sun_family = PF_UNIX;
 +        strncpy(saddr_un->sun_path, host_str, sizeof(saddr_un->sun_path));
 +
 +        pf = PF_UNIX;
 +        saddr_size = sizeof(*saddr_un);
-     }
++    }
 +#endif /* !WIN32 */
- 
--    fd = qemu_socket(PF_INET, SOCK_STREAM, 0);
 +    fd = qemu_socket(pf, SOCK_STREAM, 0);
      if (fd < 0) {
          error_setg_errno(errp, errno, "can't create stream socket");
@@ -91,7 +89,7 @@ index 15b410e8d825..aadd11dae2b3 100644
          closesocket(fd);
          return -1;
      }
-@@ -559,14 +593,44 @@ static int net_socket_connect_init(NetClientState *peer,
+@@ -559,14 +592,43 @@ static int net_socket_connect_init(NetClientState *peer,
                                     Error **errp)
  {
      NetSocketState *s;
@@ -103,15 +101,14 @@ index 15b410e8d825..aadd11dae2b3 100644
 +    struct sockaddr_in *saddr_in = (struct sockaddr_in *)&saddr;
 +#ifndef WIN32
 +    struct sockaddr_un *saddr_un = (struct sockaddr_un *)&saddr;
- 
--    if (parse_host_port(&saddr, host_str, errp) < 0) {
--        return -1;
 +
 +    if (strchr(host_str, ':')) {
 +#endif
 +        if (parse_host_port(saddr_in, host_str, errp) < 0)
 +            return -1;
-+
+ 
+-    if (parse_host_port(&saddr, host_str, errp) < 0) {
+-        return -1;
 +        pf = PF_INET;
 +        saddr_size = sizeof(*saddr_in);
 +#ifndef WIN32
@@ -141,7 +138,7 @@ index 15b410e8d825..aadd11dae2b3 100644
      if (fd < 0) {
          error_setg_errno(errp, errno, "can't create stream socket");
          return -1;
-@@ -575,7 +639,7 @@ static int net_socket_connect_init(NetClientState *peer,
+@@ -575,7 +637,7 @@ static int net_socket_connect_init(NetClientState *peer,
  
      connected = 0;
      for(;;) {
@@ -150,7 +147,7 @@ index 15b410e8d825..aadd11dae2b3 100644
          if (ret < 0) {
              if (errno == EINTR || errno == EWOULDBLOCK) {
                  /* continue */
-@@ -598,9 +662,15 @@ static int net_socket_connect_init(NetClientState *peer,
+@@ -597,9 +659,15 @@ static int net_socket_connect_init(NetClientState *peer,
          return -1;
      }
  
@@ -169,30 +166,6 @@ index 15b410e8d825..aadd11dae2b3 100644
      return 0;
  }
  
-diff --git a/qemu-options.hx b/qemu-options.hx
-index fd21002bd61d..625a31dcdbc8 100644
---- a/qemu-options.hx
-+++ b/qemu-options.hx
-@@ -2847,13 +2847,13 @@ SRST
-         #connect a TAP device to bridge qemubr0
-         |qemu_system| linux.img -netdev bridge,br=qemubr0,id=n1 -device virtio-net,netdev=n1
- 
--``-netdev socket,id=id[,fd=h][,listen=[host]:port][,connect=host:port]``
-+``-netdev socket,id=id[,fd=h][,listen=[host]:port|path][,connect=host:port|path]``
-     This host network backend can be used to connect the guest's network
--    to another QEMU virtual machine using a TCP socket connection. If
--    ``listen`` is specified, QEMU waits for incoming connections on port
--    (host is optional). ``connect`` is used to connect to another QEMU
--    instance using the ``listen`` option. ``fd``\ =h specifies an
--    already opened TCP socket.
-+    to another QEMU virtual machine using a TCP or a UNIX domain socket
-+    connection. If ``listen`` is specified, QEMU waits for incoming
-+    connections on port (host is optional), or on path. ``connect`` is used
-+    to connect to another QEMU instance using the ``listen`` option.
-+    ``fd``\ =h specifies an already opened TCP or UNIX domain socket.
- 
-     Example:
- 
 -- 
-2.29.2
+2.28.0
 
