@@ -217,7 +217,7 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 ### Portability
 * Linux
     * ✅ starting from 4.18 kernel version
-    * 🛠 starting from 3.8 kernel version
+    * ✅ starting from 3.13 kernel version
 * 🛠 build-time selection of AVX2 instructions (as much as possible)
 * ⌚ [_musl_](https://bugs.passt.top/show_bug.cgi?id=4) and
   [_uClibc-ng_](https://bugs.passt.top/show_bug.cgi?id=5)
@@ -284,9 +284,9 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 ### Availability
 * ✅ convenience unofficial packages for Debian, RPM-based distributions on
   x86_64 (static builds)
+* ✅ testing on non-x86 architectures
 * 🛠 official
   [OpenSUSE packages](https://build.opensuse.org/package/show/home:mnhauke/passt)
-* 🛠 testing on non-x86 architectures
 * ⌚ packages for Debian, Fedora, etc.
 
 ### Services

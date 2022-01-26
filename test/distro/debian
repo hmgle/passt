@@ -1,0 +1,343 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/distro/debian - Debian builds, get packages via passt, test pasta
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+temp	PIDFILE
+htools	wget virt-edit guestfish head sed cat kill qemu-system-aarch64 qemu-system-ppc64le
+
+# Quick pasta test: send message from init to ns, and from ns to init
+def	distro_quick_pasta_test
+host	export SHELL="/bin/dash"
+host	dash
+host	(nc -w1 -6 -l -p 10000 > /tmp/init_msg; echo "from_init" | nc -q0 ::1 9999) &
+hostb	./pasta
+sleep	1
+host	nc -w1 -6 -l -p 9999 > /tmp/ns_msg &
+sleep	2
+host	echo "from_ns" | nc -q0 ::1 10000
+sleep	2
+host	echo
+hout	NS_MSG cat /tmp/ns_msg
+check	[ __NS_MSG__ = "from_init" ]
+hostb	exit
+host	echo
+hout	INIT_MSG cat /tmp/init_msg
+check	[ __INIT_MSG__ = "from_ns" ]
+endef
+
+# Start passt, set common variables
+hostb	./passt -P __PIDFILE__ &
+sleep	1
+host	echo
+hout	GUEST_FILES ls -1 *.c *.h *.sh Makefile | tr '\n' ' '; echo
+
+
+test	Debian GNU/Linux 8 (jessie), amd64
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/OpenStack/archive/8.11.0/debian-8.11.0-openstack-amd64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-config
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-final
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__IMG__,if=virtio -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+# TODO: pasta test skipped for the moment: clone() as called by NS_CALL hangs
+# with wrapper provided by glibc 2.19, probably wrong argument order.
+
+hint
+sleep	1
+
+# PIDFILE is cleaned up when the next test starts, read it now
+hout	PID cat __PIDFILE__
+
+
+test	Debian GNU/Linux 9 (stretch, oldoldstable), amd64
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/stretch/daily/20200210-166/debian-9-nocloud-amd64-daily-20200210-166.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux 10 (buster, oldstable), amd64
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/buster/latest/debian-10-nocloud-amd64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux 10 (buster, oldstable), aarch64
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/buster/latest/debian-10-generic-arm64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-config
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-final
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux 10 (buster, oldstable), ppc64le
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/buster/latest/debian-10-generic-ppc64el.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-config
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-final
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-ppc64le -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+
+
+test	Debian GNU/Linux 11 (bullseye, stable), amd64
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/bullseye/latest/debian-11-nocloud-amd64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux 11 (bullseye, stable), aarch64
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/bullseye/latest/debian-11-generic-arm64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-config
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-final
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux 11 (bullseye, stable), ppc64le
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/bullseye/latest/debian-11-generic-ppc64el.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-config
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-final
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
+host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-ppc64le -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+
+
+test	Debian GNU/Linux sid (experimental), amd64
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/sid/daily/latest/debian-sid-nocloud-amd64-daily.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux sid (experimental), aarch64
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/sid/daily/latest/debian-sid-nocloud-arm64-daily.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux sid (experimental), ppc64le
+
+temp	IMG
+host	wget https://cloud.debian.org/images/cloud/sid/daily/latest/debian-sid-nocloud-ppc64el-daily.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-ppc64le -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+
+
+sleep	1
+host	kill __PID__

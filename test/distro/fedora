@@ -1,0 +1,563 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/distro/fedora - Fedora builds, get packages via passt, test pasta
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+temp	PIDFILE
+htools	wget virt-edit guestfish head sed cat kill
+
+# Quick pasta test: send message from init to ns, and from ns to init
+def	distro_quick_pasta_test
+host	(nc -6 -l -p 10000 > /tmp/init_msg; echo "from_init" | nc ::1 9999) &
+hostb	./pasta
+sleep	1
+host	PS1='$ '
+host	nc -6 -l -p 9999 > /tmp/ns_msg &
+sleep	2
+host	echo "from_ns" | nc ::1 10000
+sleep	2
+host	echo
+hout	NS_MSG cat /tmp/ns_msg
+check	[ __NS_MSG__ = "from_init" ]
+hostb	exit
+host	echo
+hout	INIT_MSG cat /tmp/init_msg
+check	[ __INIT_MSG__ = "from_ns" ]
+endef
+
+# Explicit listening address, bracketed paste mode off, needed from Fedora 34
+def	distro_quick_pasta_test_fedora34
+host	bind 'set enable-bracketed-paste off'
+host	(nc -6 -l -p 10000 > /tmp/init_msg; echo "from_init" | nc -6 ::1 9999) &
+hostb	./pasta
+sleep	1
+host	PS1='$ '
+host	bind 'set enable-bracketed-paste off'
+host	nc -6 -l ::1 9999 > /tmp/ns_msg &
+sleep	2
+host	echo "from_ns" | nc -6 ::1 10000
+sleep	2
+host	echo
+hout	NS_MSG cat /tmp/ns_msg
+check	[ __NS_MSG__ = "from_init" ]
+hostb	exit
+host	echo
+hout	INIT_MSG cat /tmp/init_msg
+check	[ __INIT_MSG__ = "from_ns" ]
+endef
+
+# Start passt, set common variables
+hostb	./passt -P __PIDFILE__ &
+sleep	1
+host	echo
+hout	DNS6 sed -n 's/^nameserver \([^:]*:\)\([^%]*\).*/\1\2/p' /etc/resolv.conf | head -1
+hout	GUEST_FILES ls -1 *.c *.h *.sh Makefile | tr '\n' ' '; echo
+
+
+test	Fedora 26, x86_64
+
+temp	IMG
+host	wget http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/26/CloudImages/x86_64/images/Fedora-Cloud-Base-26-1.5.x86_64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+# PIDFILE is cleaned up when the next test starts, read it now
+hout	PID cat __PIDFILE__
+
+
+test	Fedora 27, x86_64
+
+temp	IMG
+host	wget http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/27/CloudImages/x86_64/images/Fedora-Cloud-Base-27-1.6.x86_64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Fedora 28, x86_64
+
+temp	IMG
+host	wget http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/28/Cloud/x86_64/images/Fedora-Cloud-Base-28-1.1.x86_64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Fedora 28, aarch64
+
+temp	IMG
+host	wget http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/28/Cloud/aarch64/images/Fedora-Cloud-Base-28-1.1.aarch64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+test	Fedora 29, x86_64
+
+temp	IMG
+host	wget http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/29/Cloud/x86_64/images/Fedora-Cloud-Base-29-1.2.x86_64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Fedora 29, aarch64
+
+temp	IMG
+host	wget http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/29/Cloud/aarch64/images/Fedora-Cloud-Base-29-1.2.aarch64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+test	Fedora 30, x86_64
+
+temp	IMG
+host	wget http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/30/Cloud/x86_64/images/Fedora-Cloud-Base-30-1.2.x86_64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Fedora 30, aarch64
+
+temp	IMG
+host	wget http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/30/Cloud/aarch64/images/Fedora-Cloud-Base-30-1.2.aarch64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+test	Fedora 31, x86_64
+
+temp	IMG
+host	wget http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/31/Cloud/x86_64/images/Fedora-Cloud-Base-31-1.9.x86_64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Fedora 31, aarch64
+
+temp	IMG
+host	wget http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/31/Cloud/aarch64/images/Fedora-Cloud-Base-31-1.9.aarch64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+test	Fedora 32, x86_64
+
+temp	IMG
+host	wget https://download.fedoraproject.org/pub/fedora/linux/releases/32/Cloud/x86_64/images/Fedora-Cloud-Base-32-1.6.x86_64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Fedora 32, aarch64
+
+temp	IMG
+host	wget https://download.fedoraproject.org/pub/fedora/linux/releases/32/Cloud/aarch64/images/Fedora-Cloud-Base-32-1.6.aarch64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+test	Fedora 33, x86_64
+
+temp	IMG
+host	wget https://download.fedoraproject.org/pub/fedora/linux/releases/33/Cloud/x86_64/images/Fedora-Cloud-Base-33-1.2.x86_64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Fedora 33, aarch64
+
+temp	IMG
+host	wget https://download.fedoraproject.org/pub/fedora/linux/releases/33/Cloud/aarch64/images/Fedora-Cloud-Base-33-1.2.aarch64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+test	Fedora 34, x86_64
+
+temp	IMG
+host	wget https://download.fedoraproject.org/pub/fedora/linux//releases/34/Cloud/x86_64/images/Fedora-Cloud-Base-34-1.2.x86_64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test_fedora34
+
+hint
+sleep	1
+
+
+test	Fedora 34, aarch64
+
+temp	IMG
+host	wget https://download.fedoraproject.org/pub/fedora/linux//releases/34/Cloud/aarch64/images/Fedora-Cloud-Base-34-1.2.aarch64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test_fedora34
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+test	Fedora 35, x86_64
+
+temp	IMG
+host	wget https://download.fedoraproject.org/pub/fedora/linux/releases/35/Cloud/x86_64/images/Fedora-Cloud-Base-35-1.2.x86_64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test_fedora34
+
+hint
+sleep	1
+
+
+test	Fedora 35, aarch64
+
+temp	IMG
+host	wget https://download.fedoraproject.org/pub/fedora/linux/releases/35/Cloud/aarch64/images/Fedora-Cloud-Base-35-1.2.aarch64.qcow2 -O __IMG__
+host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	PS1='$ '
+sleep	2
+host	yum -y install make gcc nmap-ncat
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test_fedora34
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+host	kill __PID__

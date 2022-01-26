@@ -1,0 +1,182 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/distro/opensuse - OpenSUSE builds, get packages via passt, test pasta
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+temp	PIDFILE
+htools	wget virt-edit guestfish head sed cat kill kvm qemu-system-aarch64 xzcat tr
+
+# Quick pasta test: send message from init to ns, and from ns to init
+def	distro_quick_pasta_test
+host	(nc -6 -l -p 10000 > /tmp/init_msg; echo "from_init" | nc -N ::1 9999) &
+hostb	./pasta
+sleep	1
+host	PS1='$ '
+host	nc -6 -l -p 9999 > /tmp/ns_msg &
+sleep	2
+host	echo "from_ns" | nc -N ::1 10000
+sleep	2
+host	echo
+hout	NS_MSG cat /tmp/ns_msg
+check	[ __NS_MSG__ = "from_init" ]
+hostb	exit
+host	echo
+hout	INIT_MSG cat /tmp/init_msg
+check	[ __INIT_MSG__ = "from_ns" ]
+endef
+
+# Start passt, set common variables
+hostb	./passt -P __PIDFILE__ &
+sleep	1
+host	echo
+hout	DNS6 sed -n 's/^nameserver \([^:]*:\)\([^%]*\).*/\1\2/p' /etc/resolv.conf | head -1
+hout	GUEST_FILES ls -1 *.c *.h *.sh Makefile | tr '\n' ' '; echo
+
+
+test	OpenSUSE Leap 15.1
+
+temp	IMG
+host	wget https://download.opensuse.org/distribution/leap/15.1/jeos/openSUSE-Leap-15.1-JeOS.x86_64-kvm-and-xen.qcow2 -O __IMG__
+host	guestfish --rw -a __IMG__ -i rm '/usr/lib/systemd/system/systemd-journald.service'
+host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/jeos-firstboot.service
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+host	ip link set eth0 up
+sleep	2
+host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
+# zypper sometimes segfaults, hence the retries
+host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+# PIDFILE is cleaned up when the next test starts, read it now
+hout	PID cat __PIDFILE__
+
+
+test	OpenSUSE Leap 15.2
+
+host	wget https://download.opensuse.org/distribution/leap/15.2/appliances/openSUSE-Leap-15.2-JeOS.x86_64-kvm-and-xen.qcow2 -O __IMG__
+host	guestfish --rw -a __IMG__ -i rm '/usr/lib/systemd/system/systemd-journald.service'
+host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/jeos-firstboot.service
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+host	ip link set eth0 up
+sleep	2
+host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
+# zypper sometimes segfaults, hence the retries
+host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	OpenSUSE Leap 15.3
+
+host	wget https://download.opensuse.org/distribution/leap/15.3/appliances/openSUSE-Leap-15.3-JeOS.x86_64-kvm-and-xen.qcow2 -O __IMG__
+host	guestfish --rw -a __IMG__ -i rm '/usr/lib/systemd/system/systemd-journald.service'
+host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/jeos-firstboot.service
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+# Multiple prompt logins might come up here
+sleep	10
+host	PS1='$ '
+host	ip link set eth0 up
+sleep	2
+host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
+# zypper sometimes segfaults, hence the retries
+host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	OpenSUSE Tumbleweed aarch64
+
+temp	IMG
+host	wget http://download.opensuse.org/ports/aarch64/tumbleweed/appliances/openSUSE-Tumbleweed-ARM-JeOS-efi.aarch64.raw.xz -O - | xzcat > __IMG__
+host	virt-edit -a __IMG__ -m /dev/sda3 /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+host	ip link set enp0s1 up
+sleep	10
+host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i enp0s1
+sleep	10
+# No segfaults ever seen with this
+host	zypper install -y gcc make netcat-openbsd; echo
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	OpenSUSE Tumbleweed
+
+temp	IMG
+host	wget https://download.opensuse.org/tumbleweed/appliances/openSUSE-Tumbleweed-JeOS.x86_64-kvm-and-xen.qcow2 -O __IMG__
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/systemd-journald.service
+host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/jeos-firstboot.service
+host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/serial-getty@.service
+host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	PS1='$ '
+host	ip link set ens2 up
+sleep	2
+host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i ens2
+# zypper sometimes segfaults, hence the retries
+host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+host	kill __PID__
