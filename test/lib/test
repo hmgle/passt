@@ -86,10 +86,265 @@ test_iperf3() {
 	pane_wait "${__pane}"
 }
 
+test_one_line() {
+	__line="${1}"
+
+	# Strip comments
+	__line="${__line%%#*}"
+
+	if [ -n "${TEST_ONE_in_def}" ]; then
+		[ "${__line}" = "endef" ] && TEST_ONE_in_def= && return
+		# Append $__line to variable TEST_ONE_DEF_<definition name>
+		__ifs="${IFS}"
+		IFS=
+		eval TEST_ONE_DEF_$TEST_ONE_in_def=\"\$\(printf \"%s\\n%s\" \"\$TEST_ONE_DEF_$TEST_ONE_in_def\" \"$__line\"\)\"
+		IFS="${__ifs}"
+		return
+	fi
+
+	# tab-split command and arguments, apply variable substitutions
+	__cmd="${__line%%$(printf '\t')*}"
+	__arg="${__line#*$(printf '\t')*}"
+	__arg="$(subs_apply "${TEST_ONE_subs}" "${__arg}")"
+
+	[ ${TEST_ONE_nok} -eq 1 ] && [ "${__cmd}" != "test" ] && continue
+	case ${__cmd} in
+	"def")
+		TEST_ONE_in_def="${__arg}"
+		# Clear variable TEST_ONE_DEF_<definition name>
+		__ifs="${IFS}"
+		IFS= eval TEST_ONE_DEF_$TEST_ONE_in_def=
+		IFS="${__ifs}"
+		;;
+	"tempdir")
+		__tmpdir="$(mktemp -d)"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__arg}__" "${__tmpdir}")"
+		TEST_ONE_dirclean="$(list_add "${TEST_ONE_dirclean}" "${__tmpdir}")"
+		;;
+	"temp")
+		__tmpfile="$(mktemp)"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__arg}__" "${__tmpfile}")"
+		TEST_ONE_dirclean="$(list_add "${TEST_ONE_dirclean}" "${__tmpfile}")"
+		;;
+	"test")
+		[ ${TEST_ONE_perf_nok} -eq 0 ] || TEST_ONE_nok=1
+		[ ${TEST_ONE_nok} -eq 1 ] && status_test_fail
+		[ ${TEST_ONE_nok} -eq 0 ] && status_test_ok
+
+		status_test_start "${__arg}"
+		TEST_ONE_nok=0
+		TEST_ONE_perf_nok=0
+		;;
+	"host")
+		pane_run HOST "${__arg}"
+		pane_wait HOST
+		;;
+	"hostb")
+		pane_run HOST "${__arg}"
+		;;
+	"hostw")
+		pane_wait HOST
+		;;
+	"hint")
+		tmux send-keys -t ${PANE_HOST} "C-c"
+		;;
+	"htools")
+		pane_run HOST 'which '"${__arg}"' >/dev/null || echo skip'
+		pane_wait HOST
+		[ "$(pane_parse HOST)" = "skip" ] && TEST_ONE_skip=1
+		;;
+	"passt")
+		pane_run PASST "${__arg}"
+		pane_wait PASST
+		;;
+	"passtb")
+		pane_run PASST "${__arg}"
+		;;
+	"passtw")
+		pane_wait PASST
+		;;
+	"pout")
+		__varname="${__arg%% *}"
+		pane_run PASST "${__arg#* }"
+		pane_wait PASST
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse PASST)")"
+		;;
+	"guest")
+		pane_run GUEST "${__arg}"
+		pane_wait GUEST
+		;;
+	"guestb")
+		pane_run GUEST "${__arg}"
+		;;
+	"guestw")
+		pane_wait GUEST
+		;;
+	"guest1")
+		pane_run GUEST_1 "${__arg}"
+		pane_wait GUEST_1
+		;;
+	"guest1b")
+		pane_run GUEST_1 "${__arg}"
+		;;
+	"guest1w")
+		pane_wait GUEST_1
+		;;
+	"gtools")
+		pane_run GUEST 'which '"${__arg}"' >/dev/null || echo skip'
+		pane_wait GUEST
+		[ "$(pane_parse GUEST)" = "skip" ] && TEST_ONE_skip=1
+		;;
+	"g1tools")
+		pane_run GUEST_1 'which '"${__arg}"' >/dev/null || echo skip'
+		pane_wait GUEST_1
+		[ "$(pane_parse GUEST_1)" = "skip" ] && TEST_ONE_skip=1
+		;;
+	"g2tools")
+		pane_run GUEST_2 'which '"${__arg}"' >/dev/null || echo skip'
+		pane_wait GUEST_2
+		[ "$(pane_parse GUEST_2)" = "skip" ] && TEST_ONE_skip=1
+		;;
+	"guest2")
+		pane_run GUEST_2 "${__arg}"
+		pane_wait GUEST_2
+		;;
+	"guest2b")
+		pane_run GUEST_2 "${__arg}"
+		;;
+	"guest2w")
+		pane_wait GUEST_2
+		;;
+	"ns")
+		pane_run NS "${__arg}"
+		pane_wait NS
+		;;
+	"nsb")
+		pane_run NS "${__arg}"
+		;;
+	"nsw")
+		pane_wait NS
+		;;
+	"nstools")
+		pane_run NS 'which '"${__arg}"' >/dev/null || echo skip'
+		pane_wait NS
+		[ "$(pane_parse NS)" = "skip" ] && TEST_ONE_skip=1
+		;;
+	"gout")
+		__varname="${__arg%% *}"
+		pane_run GUEST "${__arg#* }"
+		pane_wait GUEST
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse GUEST)")"
+		;;
+	"g1out")
+		__varname="${__arg%% *}"
+		pane_run GUEST_1 "${__arg#* }"
+		pane_wait GUEST_1
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse GUEST_1)")"
+		;;
+	"g2out")
+		__varname="${__arg%% *}"
+		pane_run GUEST_2 "${__arg#* }"
+		pane_wait GUEST_2
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse GUEST_2)")"
+		;;
+	"hout")
+		__varname="${__arg%% *}"
+		pane_run HOST "${__arg#* }"
+		pane_wait HOST
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse HOST)")"
+		;;
+	"nsout")
+		__varname="${__arg%% *}"
+		pane_run NS "${__arg#* }"
+		pane_wait NS
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse NS)")"
+		;;
+	"check")
+		info_check "${__arg}"
+		__nok=0
+		eval "${__arg} || __nok=1"
+		if [ ${__nok} -eq 1 ]; then
+			TEST_ONE_nok=1
+			info_check_failed
+		else
+			info_check_passed
+		fi
+		;;
+	"sleep")
+		sleep "${__arg}"
+		;;
+	"info")
+		info "${__arg}"
+		;;
+	"report")
+		perf_report ${__arg}
+		;;
+	"th")
+		table_header ${__arg}
+		;;
+	"tr")
+		table_row "${__arg}"
+		;;
+	"tl")
+		table_line "${__arg}"
+		;;
+	"te")
+		table_end
+		;;
+	"bw")
+		table_value_throughput ${__arg} || TEST_ONE_perf_nok=1
+		;;
+	"lat")
+		table_value_latency ${__arg} || TEST_ONE_perf_nok=1
+		;;
+	"iperf3c")
+		test_iperf3 client ${__arg}
+		;;
+	"iperf3s")
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__arg%% *}__" "$(test_iperf3 server ${__arg#* })" )"
+		;;
+	"set")
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__arg%% *}__" "${__arg#* }")"
+		;;
+
+	# Demo commands
+	"say")
+		text_write "${__arg}"
+		;;
+	"em")
+		em_write "${__arg}"
+		;;
+	"nl")
+		info_nolog ""
+		;;
+	"hl")
+		pane_highlight "${__arg}"
+		;;
+	"bsp")
+		text_backspace "${__arg}"
+		;;
+	"killp")
+		pane_kill "${__arg}"
+		;;
+	*)
+		__def_body="$(eval printf \"\$TEST_ONE_DEF_$__cmd\")"
+		if [ -n "${__def_body}" ]; then
+			__ifs="${IFS}"
+			IFS='
+'
+			for __def_line in ${__def_body}; do
+				IFS= test_one_line "${__def_line}"
+			done
+			IFS="${__ifs}"
+		fi
+		;;
+	esac
+}
+
 # test_one() - Run a single test file evaluating directives
 # $1:	Name of test file, relative to test/ directory
 test_one() {
-	__dirclean=
+	TEST_ONE_dirclean=
 	__test_file="test/${1}"
 
 	__type="$(file -b --mime-type ${__test_file})"
@@ -104,242 +359,25 @@ test_one() {
 
 	[ ${CI} -eq 1 ] && video_link "${1}"
 
-	__subs=
-	__nok=-1
-	__perf_nok=0
-	__skip=0
+	TEST_ONE_subs=
+	TEST_ONE_nok=-1
+	TEST_ONE_perf_nok=0
+	TEST_ONE_skip=0
+	TEST_ONE_in_def=
 	while IFS= read -r __line; do
-		# Strip comments
-		__line="${__line%%#*}"
-
-		# tab-split command and arguments, apply variable substitutions
-		__cmd="${__line%%$(printf '\t')*}"
-		__arg="${__line#*$(printf '\t')*}"
-		__arg="$(subs_apply "${__subs}" "${__arg}")"
-
-		[ ${__nok} -eq 1 ] && [ "${__cmd}" != "test" ] && continue
-		case ${__cmd} in
-		"tempdir")
-			__tmpdir="$(mktemp -d)"
-			__subs="$(list_add_pair "${__subs}" "__${__arg}__" "${__tmpdir}")"
-			__dirclean="$(list_add "${__dirclean}" "${__tmpdir}")"
-			;;
-		"temp")
-			__tmpfile="$(mktemp)"
-			__subs="$(list_add_pair "${__subs}" "__${__arg}__" "${__tmpfile}")"
-			__dirclean="$(list_add "${__dirclean}" "${__tmpfile}")"
-			;;
-		"test")
-			[ ${__perf_nok} -eq 0 ] || __nok=1
-			[ ${__nok} -eq 1 ] && status_test_fail
-			[ ${__nok} -eq 0 ] && status_test_ok
-
-			status_test_start "${__arg}"
-			__nok=0
-			__perf_nok=0
-			;;
-		"host")
-			pane_run HOST "${__arg}"
-			pane_wait HOST
-			;;
-		"hostb")
-			pane_run HOST "${__arg}"
-			;;
-		"hostw")
-			pane_wait HOST
-			;;
-		"htools")
-			pane_run HOST 'which '"${__arg}"' >/dev/null || echo skip'
-			pane_wait HOST
-			[ "$(pane_parse HOST)" = "skip" ] && { __skip=1; break; }
-			;;
-		"passt")
-			pane_run PASST "${__arg}"
-			pane_wait PASST
-			;;
-		"passtb")
-			pane_run PASST "${__arg}"
-			;;
-		"passtw")
-			pane_wait PASST
-			;;
-		"pout")
-			__varname="${__arg%% *}"
-			pane_run PASST "${__arg#* }"
-			pane_wait PASST
-			__subs="$(list_add_pair "${__subs}" "__${__varname}__" "$(pane_parse PASST)")"
-			;;
-		"guest")
-			pane_run GUEST "${__arg}"
-			pane_wait GUEST
-			;;
-		"guestb")
-			pane_run GUEST "${__arg}"
-			;;
-		"guestw")
-			pane_wait GUEST
-			;;
-		"guest1")
-			pane_run GUEST_1 "${__arg}"
-			pane_wait GUEST_1
-			;;
-		"guest1b")
-			pane_run GUEST_1 "${__arg}"
-			;;
-		"guest1w")
-			pane_wait GUEST_1
-			;;
-		"gtools")
-			pane_run GUEST 'which '"${__arg}"' >/dev/null || echo skip'
-			pane_wait GUEST
-			[ "$(pane_parse GUEST)" = "skip" ] && { __skip=1; break; }
-			;;
-		"g1tools")
-			pane_run GUEST_1 'which '"${__arg}"' >/dev/null || echo skip'
-			pane_wait GUEST_1
-			[ "$(pane_parse GUEST_1)" = "skip" ] && { __skip=1; break; }
-			;;
-		"g2tools")
-			pane_run GUEST_2 'which '"${__arg}"' >/dev/null || echo skip'
-			pane_wait GUEST_2
-			[ "$(pane_parse GUEST_2)" = "skip" ] && { __skip=1; break; }
-			;;
-		"guest2")
-			pane_run GUEST_2 "${__arg}"
-			pane_wait GUEST_2
-			;;
-		"guest2b")
-			pane_run GUEST_2 "${__arg}"
-			;;
-		"guest2w")
-			pane_wait GUEST_2
-			;;
-		"ns")
-			pane_run NS "${__arg}"
-			pane_wait NS
-			;;
-		"nsb")
-			pane_run NS "${__arg}"
-			;;
-		"nsw")
-			pane_wait NS
-			;;
-		"nstools")
-			pane_run NS 'which '"${__arg}"' >/dev/null || echo skip'
-			pane_wait NS
-			[ "$(pane_parse NS)" = "skip" ] && { __skip=1; break; }
-			;;
-		"gout")
-			__varname="${__arg%% *}"
-			pane_run GUEST "${__arg#* }"
-			pane_wait GUEST
-			__subs="$(list_add_pair "${__subs}" "__${__varname}__" "$(pane_parse GUEST)")"
-			;;
-		"g1out")
-			__varname="${__arg%% *}"
-			pane_run GUEST_1 "${__arg#* }"
-			pane_wait GUEST_1
-			__subs="$(list_add_pair "${__subs}" "__${__varname}__" "$(pane_parse GUEST_1)")"
-			;;
-		"g2out")
-			__varname="${__arg%% *}"
-			pane_run GUEST_2 "${__arg#* }"
-			pane_wait GUEST_2
-			__subs="$(list_add_pair "${__subs}" "__${__varname}__" "$(pane_parse GUEST_2)")"
-			;;
-		"hout")
-			__varname="${__arg%% *}"
-			pane_run HOST "${__arg#* }"
-			pane_wait HOST
-			__subs="$(list_add_pair "${__subs}" "__${__varname}__" "$(pane_parse HOST)")"
-			;;
-		"nsout")
-			__varname="${__arg%% *}"
-			pane_run NS "${__arg#* }"
-			pane_wait NS
-			__subs="$(list_add_pair "${__subs}" "__${__varname}__" "$(pane_parse NS)")"
-			;;
-		"check")
-			info_check "${__arg}"
-			eval "${__arg} || __nok=1"
-			if [ ${__nok} -eq 1 ]; then
-				info_check_failed
-			else
-				info_check_passed
-			fi
-			;;
-		"sleep")
-			sleep "${__arg}"
-			;;
-		"info")
-			info "${__arg}"
-			;;
-		"report")
-			perf_report ${__arg}
-			;;
-		"th")
-			table_header ${__arg}
-			;;
-		"tr")
-			table_row "${__arg}"
-			;;
-		"tl")
-			table_line "${__arg}"
-			;;
-		"te")
-			table_end
-			;;
-		"bw")
-			table_value_throughput ${__arg} || __perf_nok=1
-			;;
-		"lat")
-			table_value_latency ${__arg} || __perf_nok=1
-			;;
-		"iperf3c")
-			set -x
-			test_iperf3 client ${__arg}
-			set +x
-			;;
-		"iperf3s")
-			set -x
-			__subs="$(list_add_pair "${__subs}" "__${__arg%% *}__" "$(test_iperf3 server ${__arg#* })" )"
-			set +x
-			;;
-		"set")
-			__subs="$(list_add_pair "${__subs}" "__${__arg%% *}__" "${__arg#* }")"
-			;;
-
-		# Demo commands
-		"say")
-			text_write "${__arg}"
-			;;
-		"em")
-			em_write "${__arg}"
-			;;
-		"nl")
-			info_nolog ""
-			;;
-		"hl")
-			pane_highlight "${__arg}"
-			;;
-		"bsp")
-			text_backspace "${__arg}"
-			;;
-		"killp")
-			pane_kill "${__arg}"
-			;;
-		esac
+		test_one_line "${__line}"
+		[ ${TEST_ONE_skip} -eq 1 ] && break
 	done < "${__test_file}"
 
-	for __d in ${__dirclean}; do
+	for __d in ${TEST_ONE_dirclean}; do
 		rm -rf ${__d}
 	done
 
 	[ ${DEMO} -eq 1 ] && return
 
-	[ ${__skip} -eq 1 ] && status_test_skip && return
-	[ ${__perf_nok} -eq 0 ] || __nok=1
-	[ ${__nok} -eq 0 ] && status_test_ok || status_test_fail
+	[ ${TEST_ONE_skip} -eq 1 ] && status_test_skip && return
+	[ ${TEST_ONE_perf_nok} -eq 0 ] || TEST_ONE_nok=1
+	[ ${TEST_ONE_nok} -eq 0 ] && status_test_ok || status_test_fail
 }
 
 # test() - Build list of tests to run, in order, then issue test_one()
