@@ -193,13 +193,16 @@ pane_run() {
 # pane_wait() - Wait for command to be done in given pane name
 # $1:	Pane name
 pane_wait() {
-	__pane_lc="$(echo "${1}" | tr [A-Z] [a-z])"
+	__lc="$(echo "${1}" | tr [A-Z] [a-z])"
 
-	while [ "$(tail -n1 ${LOGDIR}/pane_${__pane_lc}.log)" != '$ ' ] && \
-	      [ "$(tail -n1 ${LOGDIR}/pane_${__pane_lc}.log)" != '# ' ] && \
-	      [ "$(tail -n1 ${LOGDIR}/pane_${__pane_lc}.log)" != '# # ' ]; do
-		sleep 0.1 || sleep 1
-	done
+	__done=0
+	while
+		__l="$(tail -1 ${LOGDIR}/pane_${__lc}.log | tr -d [:cntrl:])"
+		case ${__l} in
+		'$ ' | '# ' | '# # ' | *"$ " | *"# ") return ;;
+		*" #[m " | *" #[m [K" | *"]# ["*) return ;;
+		esac
+	do sleep 0.1 || sleep 1; done
 }
 
 # pane_parse() - Print last line, @EMPTY@ if command had no output
