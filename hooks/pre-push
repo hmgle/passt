@@ -21,15 +21,15 @@ BASE="/var/www/passt"
 BUILDS="${BASE}/builds"
 LATEST="${BUILDS}/latest"
 TEMP="${BUILDS}/temp"
+AWAY="${BUILDS}/away"
 
-WEB="${LATEST}/web"
-TEST="${LATEST}/test"
+WEB="${TEMP}/web"
+TEST="${TEMP}/test"
 
 ARCH="$(uname -m)"
-BIN="${LATEST}/${ARCH}"
+BIN="${TEMP}/${ARCH}"
 
 ssh "${USER_HOST}" 				"mkdir -p ${WEB} ${TEST} ${BIN}"
-ssh "${USER_HOST}"				"cp -a ${LATEST} ${TEMP}"
 
 cd test
 
@@ -50,7 +50,7 @@ ssh "${USER_HOST}" 				"rm -f ${BIN}/*.deb"
 ssh "${USER_HOST}"				"rm -f ${BIN}/*.rpm"
 scp *.deb *.rpm					"${USER_HOST}:${BIN}/"
 
-CFLAGS="-static" make avx2
+CFLAGS="-static -DGLIBC_NO_STATIC_NSS" make avx2
 ssh "${USER_HOST}"				"mkdir -p ${BIN}/avx2"
 scp passt pasta qrap passt.1 pasta.1 qrap.1	"${USER_HOST}:${BIN}/avx2/"
 
@@ -59,6 +59,10 @@ ssh "${USER_HOST}"				"rm -f ${BIN}/avx2/*.deb"
 ssh "${USER_HOST}"				"rm -f ${BIN}/avx2/*.rpm"
 scp *.deb *.rpm					"${USER_HOST}:${BIN}/avx2/"
 
+ssh "${USER_HOST}"				"mv ${LATEST} ${AWAY}"
+ssh "${USER_HOST}"				"mv ${TEMP} ${LATEST}"
+ssh "${USER_HOST}"				"rm -rf ${AWAY}"
+
 # Legacy, for KubeVirt tests
-CFLAGS="-DPASST_LEGACY_NO_OPTIONS -static" make avx2
-scp passt qrap					"${USER_HOST}:${BUILDS}/static/"
+# CFLAGS="-DPASST_LEGACY_NO_OPTIONS -static" make avx2
+# scp passt qrap				"${USER_HOST}:${BUILDS}/static/"
