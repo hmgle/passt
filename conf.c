@@ -766,7 +766,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"debug",	no_argument,		NULL,		'd' },
 		{"quiet",	no_argument,		NULL,		'q' },
 		{"foreground",	no_argument,		NULL,		'f' },
-		{"stderr",	no_argument,		&c->stderr,	1 },
+		{"stderr",	no_argument,		NULL,		'e' },
 		{"help",	no_argument,		NULL,		'h' },
 		{"socket",	required_argument,	NULL,		's' },
 		{"ns-ifname",	required_argument,	NULL,		'I' },
@@ -888,6 +888,14 @@ void conf(struct ctx *c, int argc, char **argv)
 
 			c->debug = 1;
 			c->foreground = 1;
+			break;
+		case 'e':
+			if (c->stderr) {
+				err("Multiple --stderr options given");
+				usage(argv[0]);
+			}
+
+			c->stderr = 1;
 			break;
 		case 'q':
 			if (c->quiet) {
