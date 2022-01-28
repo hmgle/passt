@@ -211,7 +211,7 @@ speeding up local connections, and usually requiring NAT. _pasta_:
     * ❌ Selective Acknowledgment (RFC 2018)
 * ✅ [UDP](/passt/tree/udp.c)
 * ✅ ICMP/ICMPv6 Echo
-* ⌚ [IGMP/MLD](https://bugs.passt.top/show_bug.cgi?id=1) proxy
+* ⌚ [IGMP/MLD](https://bugs.passt.top/show_bug.cgi?id=2) proxy
 * ⌚ [SCTP](https://bugs.passt.top/show_bug.cgi?id=3)
 
 ### Portability
