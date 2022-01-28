@@ -1,0 +1,462 @@
+From e1b250fc0b5e377285db5d90476fdd2d63501191 Mon Sep 17 00:00:00 2001
+From: Stefano Brivio <sbrivio@redhat.com>
+Date: Fri, 28 Jan 2022 01:09:23 +0100
+Subject: [PATCH] virtcontainers, agent: Add passt networking model and
+ endpoint
+
+This implements a draft support for user-mode networking using
+passt (https://passt.top), the corresponding networking model
+can be enabled via:
+
+	internetworking_model=passt
+
+in the [runtime] section of the TOML configuration file.
+
+The networking endpoint does essentially nothing, other than
+starting and stopping passt as needed: no interfaces are configured,
+qemu connects to passt via UNIX domain socket, the corresponding
+command line option is appended if this networking model is
+selected.
+
+The passt instance started by the endpoint take cares of forwarding
+traffic back and forth, translating between the L2 frames qemu-side
+and native L4 sockets on the host.
+
+This network setup doesn't need elevated privileges or any kind of
+capability. However, this patch doesn't implement privileges drop
+as the containerd interface allows only runtimes running as the
+same user to connect to its own UNIX domain socket interface,
+typically root (at least in the case of CRI-O), and root privileges
+might anyway be needed for other purposes (block devices, etc.)
+
+Signed-off-by: Stefano Brivio <sbrivio@redhat.com>
+---
+SPDX-FileCopyrightText: 2021-2022 Red Hat GmbH <sbrivio@redhat.com>
+SPDX-License-Identifier: Apache-2.0
+
+ src/agent/src/netlink.rs                      |   3 +-
+ .../kata-containers/govmm/qemu/qemu.go        |  23 ++-
+ src/runtime/virtcontainers/endpoint.go        |   7 +
+ src/runtime/virtcontainers/network.go         |  24 +++
+ src/runtime/virtcontainers/passt_endpoint.go  | 156 ++++++++++++++++++
+ .../virtcontainers/persist/api/network.go     |   5 +
+ src/runtime/virtcontainers/qemu_arch_base.go  |  11 ++
+ 7 files changed, 226 insertions(+), 3 deletions(-)
+ create mode 100644 src/runtime/virtcontainers/passt_endpoint.go
+
+diff --git a/src/agent/src/netlink.rs b/src/agent/src/netlink.rs
+index ed071b60..34c6df96 100644
+--- a/src/agent/src/netlink.rs
++++ b/src/agent/src/netlink.rs
+@@ -312,7 +312,8 @@ impl Handle {
+         let list = a.iter().chain(&b);
+ 
+         for route in list {
+-            let link = self.find_link(LinkFilter::Name(&route.device)).await?;
++            // TODO: "eth0" hardcoded for passt networking model
++            let link = self.find_link(LinkFilter::Name("eth0")).await?;
+ 
+             const MAIN_TABLE: u8 = packet::constants::RT_TABLE_MAIN;
+             const UNICAST: u8 = packet::constants::RTN_UNICAST;
+diff --git a/src/runtime/vendor/github.com/kata-containers/govmm/qemu/qemu.go b/src/runtime/vendor/github.com/kata-containers/govmm/qemu/qemu.go
+index e57a4b26..1756bdfd 100644
+--- a/src/runtime/vendor/github.com/kata-containers/govmm/qemu/qemu.go
++++ b/src/runtime/vendor/github.com/kata-containers/govmm/qemu/qemu.go
+@@ -682,6 +682,8 @@ const (
+ 
+ 	// VHOSTUSER is a vhost-user port (socket)
+ 	VHOSTUSER NetDeviceType = "vhostuser"
++
++	PASST NetDeviceType = "passt"
+ )
+ 
+ // QemuNetdevParam converts to the QEMU -netdev parameter notation
+@@ -709,6 +711,8 @@ func (n NetDeviceType) QemuNetdevParam(netdev *NetDevice, config *Config) string
+ 			log.Fatal("vhost-user devices are not supported on IBM Z")
+ 		}
+ 		return "vhost-user" // -netdev type=vhost-user (no device)
++	case PASST:
++		return "socket" // -netdev type=socket,connect=...
+ 	default:
+ 		return ""
+ 
+@@ -742,6 +746,8 @@ func (n NetDeviceType) QemuDeviceParam(netdev *NetDevice, config *Config) Device
+ 			log.Fatal("vhost-user devices are not supported on IBM Z")
+ 		}
+ 		return "" // -netdev type=vhost-user (no device)
++	case PASST:
++		device = "virtio-net"
+ 	default:
+ 		return ""
+ 	}
+@@ -806,6 +812,8 @@ type NetDevice struct {
+ 
+ 	// Transport is the virtio transport for this device.
+ 	Transport VirtioTransport
++
++	SocketPath string
+ }
+ 
+ // VirtioNetTransport is a map of the virtio-net device name that corresponds
+@@ -818,6 +826,10 @@ var VirtioNetTransport = map[VirtioTransport]string{
+ 
+ // Valid returns true if the NetDevice structure is valid and complete.
+ func (netdev NetDevice) Valid() bool {
++	if netdev.Type == PASST {
++		return true
++	}
++
+ 	if netdev.ID == "" || netdev.IFName == "" {
+ 		return false
+ 	}
+@@ -867,7 +879,9 @@ func (netdev NetDevice) QemuDeviceParams(config *Config) []string {
+ 
+ 	deviceParams = append(deviceParams, fmt.Sprintf("driver=%s", driver))
+ 	deviceParams = append(deviceParams, fmt.Sprintf("netdev=%s", netdev.ID))
+-	deviceParams = append(deviceParams, fmt.Sprintf("mac=%s", netdev.MACAddress))
++	if netdev.MACAddress != "" {
++		deviceParams = append(deviceParams, fmt.Sprintf("mac=%s", netdev.MACAddress))
++	}
+ 
+ 	if netdev.Bus != "" {
+ 		deviceParams = append(deviceParams, fmt.Sprintf("bus=%s", netdev.Bus))
+@@ -937,7 +951,12 @@ func (netdev NetDevice) QemuNetdevParams(config *Config) []string {
+ 		netdevParams = append(netdevParams, fmt.Sprintf("fds=%s", strings.Join(fdParams, ":")))
+ 
+ 	} else {
+-		netdevParams = append(netdevParams, fmt.Sprintf("ifname=%s", netdev.IFName))
++		if netdev.IFName != "" {
++			netdevParams = append(netdevParams, fmt.Sprintf("ifname=%s", netdev.IFName))
++		}
++		if netdev.SocketPath != "" {
++			netdevParams = append(netdevParams, fmt.Sprintf("connect=%s", netdev.SocketPath))
++		}
+ 		if netdev.DownScript != "" {
+ 			netdevParams = append(netdevParams, fmt.Sprintf("downscript=%s", netdev.DownScript))
+ 		}
+diff --git a/src/runtime/virtcontainers/endpoint.go b/src/runtime/virtcontainers/endpoint.go
+index 7786bb3e..e167304a 100644
+--- a/src/runtime/virtcontainers/endpoint.go
++++ b/src/runtime/virtcontainers/endpoint.go
+@@ -65,6 +65,8 @@ const (
+ 
+ 	// IPVlanEndpointType is ipvlan network interface.
+ 	IPVlanEndpointType EndpointType = "ipvlan"
++
++	PasstEndpointType EndpointType = "passt"
+ )
+ 
+ // Set sets an endpoint type based on the input string.
+@@ -94,6 +96,9 @@ func (endpointType *EndpointType) Set(value string) error {
+ 	case "ipvlan":
+ 		*endpointType = IPVlanEndpointType
+ 		return nil
++	case "passt":
++		*endpointType = PasstEndpointType
++		return nil
+ 	default:
+ 		return fmt.Errorf("Unknown endpoint type %s", value)
+ 	}
+@@ -118,6 +123,8 @@ func (endpointType *EndpointType) String() string {
+ 		return string(TuntapEndpointType)
+ 	case IPVlanEndpointType:
+ 		return string(IPVlanEndpointType)
++	case PasstEndpointType:
++		return string(PasstEndpointType)
+ 	default:
+ 		return ""
+ 	}
+diff --git a/src/runtime/virtcontainers/network.go b/src/runtime/virtcontainers/network.go
+index e6c681da..2de692fe 100644
+--- a/src/runtime/virtcontainers/network.go
++++ b/src/runtime/virtcontainers/network.go
+@@ -57,6 +57,9 @@ const (
+ 	// NetXConnectNoneModel can be used when the VM is in the host network namespace
+ 	NetXConnectNoneModel
+ 
++	// passt in namespace connecting hypervisor via host sockets
++	NetXConnectPasstModel
++
+ 	// NetXConnectInvalidModel is the last item to Check valid values by IsValid()
+ 	NetXConnectInvalidModel
+ )
+@@ -73,6 +76,8 @@ const (
+ 
+ 	tcFilterNetModelStr = "tcfilter"
+ 
++	passtNetModelStr = "passt"
++
+ 	noneNetModelStr = "none"
+ )
+ 
+@@ -85,6 +90,8 @@ func (n *NetInterworkingModel) GetModel() string {
+ 		return macvtapNetModelStr
+ 	case NetXConnectTCFilterModel:
+ 		return tcFilterNetModelStr
++	case NetXConnectPasstModel:
++		return passtNetModelStr
+ 	case NetXConnectNoneModel:
+ 		return noneNetModelStr
+ 	}
+@@ -103,6 +110,9 @@ func (n *NetInterworkingModel) SetModel(modelName string) error {
+ 	case tcFilterNetModelStr:
+ 		*n = NetXConnectTCFilterModel
+ 		return nil
++	case passtNetModelStr:
++		*n = NetXConnectPasstModel
++		return nil
+ 	case noneNetModelStr:
+ 		*n = NetXConnectNoneModel
+ 		return nil
+@@ -254,6 +264,8 @@ func getLinkForEndpoint(endpoint Endpoint, netHandle *netlink.Handle) (netlink.L
+ 		link = &netlink.IPVlan{}
+ 	case *TuntapEndpoint:
+ 		link = &netlink.Tuntap{}
++	case *PasstEndpoint:
++		return nil, nil
+ 	default:
+ 		return nil, fmt.Errorf("Unexpected endpointType %s", ep.Type())
+ 	}
+@@ -302,6 +314,11 @@ func xConnectVMNetwork(ctx context.Context, endpoint Endpoint, h Hypervisor) err
+ 	span, ctx := networkTrace(ctx, "xConnectVMNetwork", endpoint)
+ 	defer closeSpan(span, err)
+ 
++	if endpoint.Type() == PasstEndpointType {
++		networkLogger().Info("VM network via passt user-mode networking")
++		return nil
++	}
++
+ 	netPair := endpoint.NetworkPair()
+ 
+ 	queues := 0
+@@ -347,6 +364,7 @@ func xDisconnectVMNetwork(ctx context.Context, endpoint Endpoint) error {
+ 		err = untapNetworkPair(ctx, endpoint)
+ 	case NetXConnectTCFilterModel:
+ 		err = removeTCFiltering(ctx, endpoint)
++	case NetXConnectPasstModel:
+ 	default:
+ 		err = fmt.Errorf("Invalid internetworking model")
+ 	}
+@@ -1095,6 +1113,12 @@ func createEndpoint(netInfo NetworkInfo, idx int, model NetInterworkingModel, li
+ 	// an appropriate EndPoint based on interface type
+ 	// This should be a switch
+ 
++	if model == NetXConnectPasstModel {
++		networkLogger().Info("creating passt endpoint")
++		endpoint, err := createPasstNetworkEndpoint(idx)
++		return endpoint, err
++	}
++
+ 	// Check if interface is a physical interface. Do not create
+ 	// tap interface/bridge if it is.
+ 	isPhysical, err := isPhysicalIface(netInfo.Iface.Name)
+diff --git a/src/runtime/virtcontainers/passt_endpoint.go b/src/runtime/virtcontainers/passt_endpoint.go
+new file mode 100644
+index 00000000..7f40135a
+--- /dev/null
++++ b/src/runtime/virtcontainers/passt_endpoint.go
+@@ -0,0 +1,156 @@
++// SPDX-License-Identifier: Apache-2.0
++//
++// passt_endpoint.go - passt endpoint for Kata Containers: start and stop passt
++//
++// Copyright (c) 2021-2022 Red Hat GmbH
++// Author: Stefano Brivio <sbrivio@redhat.com>
++
++package virtcontainers
++
++import (
++	"context"
++	"fmt"
++	"os"
++	"os/exec"
++	"syscall"
++
++	persistapi "github.com/kata-containers/kata-containers/src/runtime/virtcontainers/persist/api"
++	vcTypes "github.com/kata-containers/kata-containers/src/runtime/virtcontainers/types"
++)
++
++type PasstEndpoint struct {
++	EndpointType       EndpointType
++	EndpointProperties NetworkInfo
++	PCIPath            vcTypes.PciPath
++	PasstPID           int
++}
++
++func createPasstNetworkEndpoint(idx int) (*PasstEndpoint, error) {
++	if idx < 0 {
++		return &PasstEndpoint{}, fmt.Errorf("invalid network endpoint index: %d", idx)
++	}
++
++	cmd := exec.Command("passt",
++						"-P", fmt.Sprintf("/tmp/kata-passt-%d.pid", idx),
++						"-s", fmt.Sprintf("/tmp/kata-passt-%d.socket", idx))
++	err := cmd.Run()
++	if err != nil {
++		return &PasstEndpoint{}, fmt.Errorf("passt failed to start: %v", err)
++	}
++
++	in, err := os.Open(fmt.Sprintf("/tmp/kata-passt-%d.pid", idx))
++	if err != nil {
++		return &PasstEndpoint{}, fmt.Errorf("Failed to read passt PID: %v", err)
++	}
++	defer in.Close()
++
++	var pid int
++	_, err = fmt.Fscanf(in, "%d", &pid)
++	if err != nil {
++		return &PasstEndpoint{}, fmt.Errorf("Failed to read passt pid: %v", err)
++	}
++
++	endpoint := &PasstEndpoint{
++		EndpointType: PasstEndpointType,
++		PasstPID:     pid,
++	}
++
++	return endpoint, nil
++}
++
++func (endpoint *PasstEndpoint) Properties() NetworkInfo {
++	return endpoint.EndpointProperties
++}
++
++func (endpoint *PasstEndpoint) Type() EndpointType {
++	return endpoint.EndpointType
++}
++
++// unsupported
++func (endpoint *PasstEndpoint) HardwareAddr() string {
++	return "00:11:22:33:44:55"
++}
++
++// unsupported
++func (endpoint *PasstEndpoint) Name() string {
++	return ""
++}
++
++// unsupported
++func (endpoint *PasstEndpoint) NetworkPair() *NetworkInterfacePair {
++	return nil
++}
++
++// PciPath returns the PCI path of the endpoint.
++func (endpoint *PasstEndpoint) PciPath() vcTypes.PciPath {
++	return endpoint.PCIPath
++}
++
++// useless
++func (endpoint *PasstEndpoint) SetPciPath(pciPath vcTypes.PciPath) {
++	endpoint.PCIPath = pciPath
++}
++
++func (endpoint *PasstEndpoint) SetProperties(properties NetworkInfo) {
++	endpoint.EndpointProperties = properties
++}
++
++func (endpoint *PasstEndpoint) Attach(ctx context.Context, s *Sandbox) error {
++	h := s.hypervisor
++	if err := xConnectVMNetwork(ctx, endpoint, h); err != nil {
++		networkLogger().WithError(err).Error("Error attaching passt endpoint")
++		return err
++	}
++
++	return h.AddDevice(ctx, endpoint, NetDev)
++}
++
++func (endpoint *PasstEndpoint) Detach(ctx context.Context, netNsCreated bool, netNsPath string) error {
++	syscall.Kill(endpoint.PasstPID, syscall.SIGQUIT)
++
++	return nil
++}
++
++func (endpoint *PasstEndpoint) HotAttach(ctx context.Context, h Hypervisor) error {
++	return fmt.Errorf("HotAttach not supported by PasstEndpoint")
++}
++
++func (endpoint *PasstEndpoint) HotDetach(ctx context.Context, h Hypervisor, netNsCreated bool, netNsPath string) error {
++	return fmt.Errorf("HotDetatch not supported by PasstEndpoint")
++}
++
++func (endpoint *PasstEndpoint) save() persistapi.NetworkEndpoint {
++	return persistapi.NetworkEndpoint{
++		Type: string(endpoint.Type()),
++
++		Passt: &persistapi.PasstEndpoint{
++			PasstPID:       endpoint.PasstPID,
++		},
++	}
++}
++
++func (endpoint *PasstEndpoint) load(s persistapi.NetworkEndpoint) {
++	endpoint.EndpointType = PasstEndpointType
++
++	if s.Passt != nil {
++		endpoint.PasstPID = s.Passt.PasstPID
++	}
++}
++
++// unsupported
++func (endpoint *PasstEndpoint) GetRxRateLimiter() bool {
++	return false
++}
++
++func (endpoint *PasstEndpoint) SetRxRateLimiter() error {
++	return fmt.Errorf("rx rate limiter is unsupported for physical endpoint")
++}
++
++// unsupported
++func (endpoint *PasstEndpoint) GetTxRateLimiter() bool {
++	return false
++}
++
++func (endpoint *PasstEndpoint) SetTxRateLimiter() error {
++	return fmt.Errorf("tx rate limiter is unsupported for physical endpoint")
++}
+diff --git a/src/runtime/virtcontainers/persist/api/network.go b/src/runtime/virtcontainers/persist/api/network.go
+index 51c3aac6..79d77cd9 100644
+--- a/src/runtime/virtcontainers/persist/api/network.go
++++ b/src/runtime/virtcontainers/persist/api/network.go
+@@ -79,6 +79,10 @@ type VhostUserEndpoint struct {
+ 	PCIPath   vcTypes.PciPath
+ }
+ 
++type PasstEndpoint struct {
++	PasstPID       int
++}
++
+ // NetworkEndpoint contains network interface information
+ type NetworkEndpoint struct {
+ 	// One and only one of these below are not nil according to Type.
+@@ -90,6 +94,7 @@ type NetworkEndpoint struct {
+ 	Tap       *TapEndpoint       `json:",omitempty"`
+ 	IPVlan    *IPVlanEndpoint    `json:",omitempty"`
+ 	Tuntap    *TuntapEndpoint    `json:",omitempty"`
++	Passt     *PasstEndpoint     `json:",omitempty"`
+ 
+ 	Type string
+ }
+diff --git a/src/runtime/virtcontainers/qemu_arch_base.go b/src/runtime/virtcontainers/qemu_arch_base.go
+index 97cd6eb8..9ace0ace 100644
+--- a/src/runtime/virtcontainers/qemu_arch_base.go
++++ b/src/runtime/virtcontainers/qemu_arch_base.go
+@@ -615,6 +615,17 @@ func genericNetwork(endpoint Endpoint, vhost, nestedRun bool, index int) (govmmQ
+ 			FDs:           netPair.VMFds,
+ 			VhostFDs:      netPair.VhostFds,
+ 		}
++	case *PasstEndpoint:
++		d = govmmQemu.NetDevice{
++			Type:          govmmQemu.PASST,
++			Driver:        govmmQemu.VirtioNet,
++			ID:            fmt.Sprintf("network-%d", index),
++			// TODO: Drop hardcoded MAC address, passt endpoint
++			// doesn't need to know it
++			MACAddress:    "00:11:22:33:44:55",
++			DisableModern: nestedRun,
++			SocketPath:    fmt.Sprintf("/tmp/kata-passt-%d.socket", index),
++		}
+ 	default:
+ 		return govmmQemu.NetDevice{}, fmt.Errorf("Unknown type for endpoint")
+ 	}
+-- 
+2.28.0
+
