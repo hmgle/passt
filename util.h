@@ -144,9 +144,9 @@ enum {
 		.daddr		= IN6ADDR_ANY_INIT,			\
 	}
 
-#define RCVBUF_BIG		(2 * 1024 * 1024)
-#define SNDBUF_BIG		(4 * 1024 * 1024)
-#define SNDBUF_SMALL		(128 * 1024)
+#define RCVBUF_BIG		(2UL * 1024 * 1024)
+#define SNDBUF_BIG		(4UL * 1024 * 1024)
+#define SNDBUF_SMALL		(128UL * 1024)
 
 #include <net/if.h>
 #include <limits.h>

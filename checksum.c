@@ -108,9 +108,12 @@ uint16_t csum_unaligned(const void *buf, size_t len, uint32_t init)
  */
 void csum_tcp4(struct iphdr *iph)
 {
-	struct tcphdr *th = (struct tcphdr *)((char *)iph + iph->ihl * 4);
-	uint16_t tlen = ntohs(iph->tot_len) - iph->ihl * 4, *p = (uint16_t *)th;
+	uint16_t tlen = ntohs(iph->tot_len) - iph->ihl * 4, *p;
+	struct tcphdr *th;
 	uint32_t sum = 0;
+
+	th = (struct tcphdr *)((char *)iph + (intptr_t)(iph->ihl * 4));
+	p = (uint16_t *)th;
 
 	sum += (iph->saddr >> 16) & 0xffff;
 	sum += iph->saddr & 0xffff;

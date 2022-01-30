@@ -131,7 +131,7 @@ void tap_ip_send(struct ctx *c, struct in6_addr *src, uint8_t proto,
 		memcpy(&iph->saddr, &src->s6_addr[12], 4);
 
 		iph->check = 0;
-		iph->check = csum_unaligned(iph, iph->ihl * 4, 0);
+		iph->check = csum_unaligned(iph, (size_t)iph->ihl * 4, 0);
 
 		memcpy(data, in, len);
 
@@ -337,9 +337,9 @@ resume:
 			continue;
 
 		iph = (struct iphdr *)(eh + 1);
-		if ((iph->ihl * 4) + sizeof(*eh) > len)
+		if ((size_t)iph->ihl * 4 + sizeof(*eh) > len)
 			continue;
-		if (iph->ihl * 4 < (int)sizeof(*iph))
+		if ((size_t)iph->ihl * 4 < (int)sizeof(*iph))
 			continue;
 
 		if (iph->saddr && c->addr4_seen != iph->saddr) {
@@ -347,7 +347,7 @@ resume:
 			proto_update_l2_buf(NULL, NULL, &c->addr4_seen);
 		}
 
-		l4h = (char *)iph + iph->ihl * 4;
+		l4h = (char *)iph + (size_t)iph->ihl * 4;
 		l4_len = len - ((intptr_t)l4h - (intptr_t)eh);
 
 		if (iph->protocol == IPPROTO_ICMP) {

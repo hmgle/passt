@@ -271,10 +271,10 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	if (len < sizeof(*eh) + sizeof(*iph))
 		return 0;
 
-	if (len < sizeof(*eh) + iph->ihl * 4 + sizeof(*uh))
+	if (len < sizeof(*eh) + (long)iph->ihl * 4 + sizeof(*uh))
 		return 0;
 
-	uh = (struct udphdr *)((char *)iph + iph->ihl * 4);
+	uh = (struct udphdr *)((char *)iph + (long)(iph->ihl * 4));
 	m = (struct msg *)(uh + 1);
 
 	if (uh->dest != htons(67))
@@ -283,7 +283,7 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	if (c->no_dhcp)
 		return 1;
 
-	mlen = len - sizeof(*eh) - iph->ihl * 4 - sizeof(*uh);
+	mlen = len - sizeof(*eh) - (long)iph->ihl * 4 - sizeof(*uh);
 	if (mlen != ntohs(uh->len) - sizeof(*uh) ||
 	    mlen < offsetof(struct msg, o) ||
 	    m->op != BOOTREQUEST)
@@ -349,7 +349,7 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	iph->daddr = c->addr4;
 	iph->saddr = c->gw4;
 	iph->check = 0;
-	iph->check = csum_unaligned(iph, iph->ihl * 4, 0);
+	iph->check = csum_unaligned(iph, (intptr_t)(iph->ihl * 4), 0);
 
 	len += sizeof(*eh);
 	memcpy(eh->h_dest, eh->h_source, ETH_ALEN);

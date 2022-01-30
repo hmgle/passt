@@ -867,7 +867,7 @@ void conf(struct ctx *c, int argc, char **argv)
 
 			for (i = 0; i < ETH_ALEN; i++) {
 				errno = 0;
-				b = strtol(optarg + i * 3, NULL, 16);
+				b = strtol(optarg + (intptr_t)i * 3, NULL, 16);
 				if (b < 0 || b > UCHAR_MAX || errno) {
 					err("Invalid MAC address: %s", optarg);
 					usage(argv[0]);
@@ -1032,7 +1032,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		case 'M':
 			for (i = 0; i < ETH_ALEN; i++) {
 				errno = 0;
-				b = strtol(optarg + i * 3, NULL, 16);
+				b = strtol(optarg + (intptr_t)i * 3, NULL, 16);
 				if (b < 0 || b > UCHAR_MAX || errno) {
 					err("Invalid MAC address: %s", optarg);
 					usage(argv[0]);

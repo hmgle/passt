@@ -167,6 +167,23 @@ pkgs:
 #
 # - bugprone-suspicious-string-compare
 #	Return value of memcmp(), not really suspicious
+#
+# - altera-unroll-loops
+# - altera-id-dependent-backward-branch
+#	TODO: check paths where it might make sense to improve performance
+#
+# - bugprone-easily-swappable-parameters
+#	Not much can be done about them other than being careful
+#
+# - readability-function-cognitive-complexity
+#	TODO: split reported functions
+#
+# - altera-struct-pack-align
+#	"Poor" alignment needed for structs reflecting message formats/headers
+#
+# - concurrency-mt-unsafe
+#	TODO: check again if multithreading is implemented
+
 clang-tidy: $(wildcard *.c) $(wildcard *.h)
 	clang-tidy -checks=*,-modernize-*,\
 	-clang-analyzer-valist.Uninitialized,\
@@ -187,7 +204,12 @@ clang-tidy: $(wildcard *.c) $(wildcard *.h)
 	-bugprone-narrowing-conversions,\
 	-cppcoreguidelines-narrowing-conversions,\
 	-cppcoreguidelines-avoid-non-const-global-variables,\
-	-bugprone-suspicious-string-compare \
+	-bugprone-suspicious-string-compare,\
+	-altera-unroll-loops,-altera-id-dependent-backward-branch,\
+	-bugprone-easily-swappable-parameters,\
+	-readability-function-cognitive-complexity,\
+	-altera-struct-pack-align,\
+	-concurrency-mt-unsafe \
 	--warnings-as-errors=* $(wildcard *.c) -- $(CFLAGS)
 
 ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"),1)

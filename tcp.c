@@ -345,7 +345,7 @@
 
 #define TCP_TAP_FRAMES			256
 
-#define MAX_PIPE_SIZE			(2 * 1024 * 1024)
+#define MAX_PIPE_SIZE			(2UL * 1024 * 1024)
 
 #define TCP_HASH_TABLE_LOAD		70		/* % */
 #define TCP_HASH_TABLE_SIZE		(MAX_TAP_CONNS * 100 /		\
@@ -1040,8 +1040,8 @@ static int tcp_opt_get(struct tcphdr *th, size_t len, uint8_t type_search,
 	uint8_t type, optlen;
 	char *p;
 
-	if (len > (unsigned)th->doff * 4)
-		len = th->doff * 4;
+	if (len > (size_t)th->doff * 4)
+		len = (size_t)th->doff * 4;
 
 	len -= sizeof(*th);
 	p = (char *)(th + 1);
@@ -1568,7 +1568,7 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_tap_conn *conn,
 #else
 	if (conn->state > ESTABLISHED || (flags & (DUP_ACK | FORCE_ACK)) ||
 	    conn->local || tcp_rtt_dst_low(conn) ||
-	    conn->snd_buf < SNDBUF_SMALL) {
+	    (unsigned long)conn->snd_buf < SNDBUF_SMALL) {
 		conn->seq_ack_to_tap = conn->seq_from_tap;
 	} else if (conn->seq_ack_to_tap != conn->seq_from_tap) {
 		if (!tinfo) {
@@ -2393,7 +2393,7 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 			return;
 		}
 
-		off = th->doff * 4;
+		off = (size_t)th->doff * 4;
 		if (off < sizeof(*th) || off > len) {
 			tcp_rst(c, conn);
 			return;

@@ -51,7 +51,7 @@ void name(const char *format, ...) {					\
 		clock_gettime(CLOCK_REALTIME, &tp);			\
 		fprintf(stderr, "%li.%04li: ",				\
 			tp.tv_sec - log_debug_start,			\
-			tp.tv_nsec / (100 * 1000));			\
+			tp.tv_nsec / (100L * 1000));			\
 	} else {							\
 		va_start(args, format);					\
 		passt_vsyslog(level, format, args);			\
@@ -305,12 +305,14 @@ void sock_probe_mem(struct ctx *c)
 
 	sl = sizeof(v);
 	if (setsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v))	||
-	    getsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, &sl) || v < SNDBUF_BIG)
+	    getsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, &sl) ||
+	    (size_t)v < SNDBUF_BIG)
 		c->low_wmem = 1;
 
 	v = INT_MAX / 2;
 	if (setsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v))	||
-	    getsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, &sl) || v < RCVBUF_BIG)
+	    getsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, &sl) ||
+	    (size_t)v < RCVBUF_BIG)
 		c->low_rmem = 1;
 
 	close(s);
