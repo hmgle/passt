@@ -154,7 +154,9 @@ host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 host	./qrap 5 qemu-system-ppc64 -m 1024 -M pseries -nographic -nodefaults -serial stdio -no-reboot -nographic -vga none -hda __IMG__ -net socket,fd=5 -net nic,model=virtio
 host	PS1='$ '
 host	dhclient
-host	apt-get update
+# Skip apt-get update here: some updates to xenial-updates around 2022-01-30
+# broke dependencies for libc6 and gcc-5 -- note that powerpc is not officially
+# supported on this version
 host	apt-get -y install make gcc netcat-openbsd
 
 host	make clean
