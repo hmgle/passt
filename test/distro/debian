@@ -26,6 +26,7 @@ sleep	2
 host	echo "from_ns" | nc -q0 ::1 10000
 sleep	2
 host	echo
+sleep	1
 hout	NS_MSG cat /tmp/ns_msg
 check	[ __NS_MSG__ = "from_init" ]
 hostb	exit
