@@ -366,13 +366,13 @@ void bitmap_clear(uint8_t *map, int bit)
  * @map:	Pointer to bitmap
  * @bit:	Bit number to check
  *
- * Return: non-zero if given bit is set, zero if it's not
+ * Return: one if given bit is set, zero if it's not
  */
 int bitmap_isset(const uint8_t *map, int bit)
 {
 	unsigned long *word = (unsigned long *)map + BITMAP_WORD(bit);
 
-	return *word & BITMAP_BIT(bit);
+	return !!(*word & BITMAP_BIT(bit));
 }
 
 /**
