@@ -17,7 +17,10 @@
 
 PASTA_PID="$(mktemp)"
 PASTA_OPTS="-q --ipv4-only -a 10.0.2.0 -n 24 -g 10.0.2.2 -m 1500 --no-ndp --no-dhcpv6 --no-dhcp -P ${PASTA_PID}"
+PASTA="$(command -v ./pasta || command -v pasta || :)"
+
 USAGE_RET=1
+NOTFOUND_RET=127
 
 # add() - Add single option to $PASTA_OPTS
 # $1:	Option name, with or without argument
@@ -161,6 +164,8 @@ no_map_gw=0
 EFD=0
 RFD=0
 
+[ -z "${PASTA}" ] && echo "pasta command not found" && exit ${NOTFOUND_RET}
+
 while getopts ce:r:m:6a:hv-: OPT 2>/dev/null; do
 	if [ "${OPT}" = "-" ]; then
 		OPT="${OPTARG%%[= ]*}"
@@ -198,7 +203,7 @@ if [ ${v6} -eq 1 ]; then
 	add "-a $(gen_addr6) -g fd00::2 -D fd00::3"
 fi
 
-./pasta ${PASTA_OPTS} ${ns_spec} 2>/dev/null && \
+${PASTA} ${PASTA_OPTS} ${ns_spec} && \
 	[ ${RFD} -ne 0 ] && echo "1" >&${RFD}
 
 trap "kill $(cat ${PASTA_PID}); rm ${PASTA_PID}" INT TERM
