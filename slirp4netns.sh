@@ -206,7 +206,7 @@ fi
 ${PASTA} ${PASTA_OPTS} ${ns_spec} && \
 	[ ${RFD} -ne 0 ] && echo "1" >&${RFD}
 
-trap "kill $(cat ${PASTA_PID}); rm ${PASTA_PID}" INT TERM
+trap "kill $(cat ${PASTA_PID}); rm ${PASTA_PID}" INT TERM EXIT
 
 cat << EOF
 sent tapfd=5 for ${ifname}
