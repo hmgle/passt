@@ -11,7 +11,6 @@
  * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
  *
- * #syscalls recvfrom sendto
  */
 
 #include <sched.h>
@@ -769,12 +768,10 @@ restart:
 }
 
 /**
- * tap_sock_init_unix() - Create and bind AF_UNIX socket, listen for connection
+ * tap_sock_unix_init() - Create and bind AF_UNIX socket, listen for connection
  * @c:		Execution context
- *
- * #syscalls:passt unlink|unlinkat
  */
-static void tap_sock_init_unix(struct ctx *c)
+static void tap_sock_unix_init(struct ctx *c)
 {
 	int fd = socket(AF_UNIX, SOCK_STREAM, 0), ex;
 	struct epoll_event ev = { 0 };
@@ -782,11 +779,6 @@ static void tap_sock_init_unix(struct ctx *c)
 		.sun_family = AF_UNIX,
 	};
 	int i, ret;
-
-	if (c->fd_tap_listen != -1) {
-		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_tap_listen, &ev);
-		close(c->fd_tap_listen);
-	}
 
 	if (fd < 0) {
 		perror("UNIX socket");
@@ -834,8 +826,6 @@ static void tap_sock_init_unix(struct ctx *c)
 	      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 #endif
 
-	pcap_init(c, i);
-
 	listen(fd, 0);
 
 	ev.data.fd = c->fd_tap_listen = fd;
@@ -852,19 +842,26 @@ static void tap_sock_init_unix(struct ctx *c)
 }
 
 /**
- * tap_sock_accept_unix() - Accept connection on listening socket
+ * tap_sock_unix_new() - Handle new connection on listening socket
  * @c:		Execution context
  */
-static void tap_sock_accept_unix(struct ctx *c)
+static void tap_sock_unix_new(struct ctx *c)
 {
 	struct epoll_event ev = { 0 };
 	int v = INT_MAX / 2;
 
-	c->fd_tap = accept(c->fd_tap_listen, NULL, NULL);
+	/* Another client is already connected: accept and close right away. */
+	if (c->fd_tap != -1) {
+		int discard = accept4(c->fd_tap_listen, NULL, NULL,
+				      SOCK_NONBLOCK);
 
-	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_tap_listen, &ev);
-	close(c->fd_tap_listen);
-	c->fd_tap_listen = -1;
+		if (discard != -1)
+			close(discard);
+
+		return;
+	}
+
+	c->fd_tap = accept4(c->fd_tap_listen, NULL, NULL, 0);
 
 	if (!c->low_rmem)
 		setsockopt(c->fd_tap, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v));
@@ -884,8 +881,6 @@ static int tun_ns_fd = -1;
  * @c:		Execution context
  *
  * Return: 0
- *
- * #syscalls:pasta ioctl
  */
 static int tap_ns_tun(void *arg)
 {
@@ -907,7 +902,7 @@ static int tap_ns_tun(void *arg)
  * tap_sock_init_tun() - Set up tuntap file descriptor
  * @c:		Execution context
  */
-static void tap_sock_init_tun(struct ctx *c)
+static void tap_sock_tun_init(struct ctx *c)
 {
 	struct epoll_event ev = { 0 };
 
@@ -918,8 +913,6 @@ static void tap_sock_init_tun(struct ctx *c)
 	}
 
 	pasta_ns_conf(c);
-
-	pcap_init(c, c->pasta_netns_fd);
 
 	c->fd_tap = tun_ns_fd;
 
@@ -937,12 +930,15 @@ void tap_sock_init(struct ctx *c)
 	if (c->fd_tap != -1) {
 		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_tap, NULL);
 		close(c->fd_tap);
+		c->fd_tap = -1;
 	}
 
-	if (c->mode == MODE_PASST)
-		tap_sock_init_unix(c);
-	else
-		tap_sock_init_tun(c);
+	if (c->mode == MODE_PASST) {
+		if (c->fd_tap_listen == -1)
+			tap_sock_unix_init(c);
+	} else {
+		tap_sock_tun_init(c);
+	}
 }
 
 /**
@@ -955,18 +951,18 @@ void tap_sock_init(struct ctx *c)
 void tap_handler(struct ctx *c, int fd, uint32_t events, struct timespec *now)
 {
 	if (fd == c->fd_tap_listen && events == EPOLLIN) {
-		tap_sock_accept_unix(c);
+		tap_sock_unix_new(c);
 		return;
 	}
 
 	if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
-		goto fail;
+		goto reinit;
 
 	if ((c->mode == MODE_PASST && tap_handler_passt(c, now)) ||
 	    (c->mode == MODE_PASTA && tap_handler_pasta(c, now)))
-		goto fail;
+		goto reinit;
 
 	return;
-fail:
+reinit:
 	tap_sock_init(c);
 }

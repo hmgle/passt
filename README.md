@@ -232,9 +232,10 @@ speeding up local connections, and usually requiring NAT. _pasta_:
   `seccomp`](/passt/tree/seccomp.sh))
 * ✅ root operation not allowed outside user namespaces
 * ✅ all capabilities dropped, other than `CAP_NET_BIND_SERVICE` (if granted)
+* ✅ with default options, user, mount, IPC, UTS, PID namespaces are detached
 * ✅ no external dependencies (other than a standard C library)
-* ✅ restrictive seccomp profiles (50 syscalls allowed for _passt_, 62 for
-  _pasta_)
+* ✅ restrictive seccomp profiles (22 syscalls allowed for _passt_, 34 for
+  _pasta_ on x86_64)
 * ✅ static checkers in continuous integration (clang-tidy, cppcheck)
 * 🛠️ rework of TCP state machine (flags instead of states), TCP timers, and code
   de-duplication

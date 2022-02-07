@@ -115,13 +115,14 @@ setup_passt_in_ns() {
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_with_passt.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 
-	pane_run PASST "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013"
+	__pid_file="$(mktemp)"
+	pane_run PASST "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P ${__pid_file}"
 	sleep 1
 	pane_run PASST ''
 	pane_wait PASST
-	pane_run PASST 'echo $$'
-	pane_wait PASST
-	__ns_pid="$(pane_parse PASST)"
+	__pasta_pid="$(cat "${__pid_file}")"
+	__ns_pid="$(cat /proc/${__pasta_pid}/task/${__pasta_pid}/children | cut -f1 -d' ')"
+	rm "${__pid_file}"
 
 	pane_run GUEST "nsenter -t ${__ns_pid} -U -n --preserve-credentials"
 	pane_run NS "nsenter -t ${__ns_pid} -U -n --preserve-credentials"
@@ -172,15 +173,18 @@ setup_two_guests() {
 	#  10004            | as server |  to init  |  to guest  |  to ns #2
 	#  10005            |           |           |  as server |  to ns #2
 
+	__pid1_file="$(mktemp)"
+	__pid2_file="$(mktemp)"
+
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
-	pane_run PASST_1 "./pasta ${__opts} -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004"
+	pane_run PASST_1 "./pasta ${__opts} -P ${__pid1_file} -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004"
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
-	pane_run PASST_2 "./pasta ${__opts} -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001"
+	pane_run PASST_2 "./pasta ${__opts} -P ${__pid2_file} -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001"
 
 	sleep 1
 	pane_run PASST_1 ''
@@ -188,12 +192,12 @@ setup_two_guests() {
 
 	pane_wait PASST_1
 	pane_wait PASST_2
-	pane_run PASST_1 'echo $$'
-	pane_run PASST_2 'echo $$'
-	pane_wait PASST_1
-	pane_wait PASST_2
-	__ns1_pid="$(pane_parse PASST_1)"
-	__ns2_pid="$(pane_parse PASST_2)"
+	__pasta1_pid="$(cat "${__pid1_file}")"
+	__ns1_pid="$(cat /proc/${__pasta1_pid}/task/${__pasta1_pid}/children | cut -f1 -d' ')"
+	rm "${__pid1_file}"
+	__pasta2_pid="$(cat "${__pid2_file}")"
+	__ns2_pid="$(cat /proc/${__pasta2_pid}/task/${__pasta2_pid}/children | cut -f1 -d' ')"
+	rm "${__pid2_file}"
 
 	pane_run GUEST_1 "nsenter -t ${__ns1_pid} -U -n --preserve-credentials"
 	pane_run GUEST_2 "nsenter -t ${__ns2_pid} -U -n --preserve-credentials"

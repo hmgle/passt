@@ -99,8 +99,10 @@ enum passt_modes {
  * @pcap:		Path for packet capture file
  * @pid_file:		Path to PID file, empty string if not configured
  * @pasta_netns_fd:	File descriptor for network namespace in pasta mode
- * @pasta_userns_fd:	File descriptor for user namespace in pasta mode
+ * @pasta_userns_fd:	Descriptor for user namespace to join, -1 once joined
  * @netns_only:		In pasta mode, don't join or create a user namespace
+ * @proc_net_tcp:	Stored handles for /proc/net/tcp{,6} in init and ns
+ * @proc_net_udp:	Stored handles for /proc/net/udp{,6} in init and ns
  * @epollfd:		File descriptor for epoll instance
  * @fd_tap_listen:	File descriptor for listening AF_UNIX socket, if any
  * @fd_tap:		File descriptor for AF_UNIX socket or tuntap device
@@ -154,6 +156,9 @@ struct ctx {
 	int pasta_netns_fd;
 	int pasta_userns_fd;
 	int netns_only;
+
+	int proc_net_tcp[IP_VERSIONS][2];
+	int proc_net_udp[IP_VERSIONS][2];
 
 	int epollfd;
 	int fd_tap_listen;

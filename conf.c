@@ -10,8 +10,6 @@
  *
  * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
- *
- * #syscalls stat|statx
  */
 
 #include <arpa/inet.h>
@@ -46,31 +44,31 @@
  */
 void get_bound_ports(struct ctx *c, int ns, uint8_t proto)
 {
-	uint8_t *udp_map, *udp_exclude, *tcp_map, *tcp_exclude;
+	uint8_t *udp_map, *udp_excl, *tcp_map, *tcp_excl;
 
 	if (ns) {
 		udp_map = c->udp.port_to_tap;
-		udp_exclude = c->udp.port_to_init;
+		udp_excl = c->udp.port_to_init;
 		tcp_map = c->tcp.port_to_tap;
-		tcp_exclude = c->tcp.port_to_init;
+		tcp_excl = c->tcp.port_to_init;
 	} else {
 		udp_map = c->udp.port_to_init;
-		udp_exclude = c->udp.port_to_tap;
+		udp_excl = c->udp.port_to_tap;
 		tcp_map = c->tcp.port_to_init;
-		tcp_exclude = c->tcp.port_to_tap;
+		tcp_excl = c->tcp.port_to_tap;
 	}
 
 	if (proto == IPPROTO_UDP) {
 		memset(udp_map, 0, USHRT_MAX / 8);
-		procfs_scan_listen("udp",  udp_map, udp_exclude);
-		procfs_scan_listen("udp6", udp_map, udp_exclude);
+		procfs_scan_listen(c, IPPROTO_UDP, V4, ns, udp_map, udp_excl);
+		procfs_scan_listen(c, IPPROTO_UDP, V6, ns, udp_map, udp_excl);
 
-		procfs_scan_listen("tcp",  udp_map, udp_exclude);
-		procfs_scan_listen("tcp6", udp_map, udp_exclude);
+		procfs_scan_listen(c, IPPROTO_TCP, V4, ns, udp_map, udp_excl);
+		procfs_scan_listen(c, IPPROTO_TCP, V6, ns, udp_map, udp_excl);
 	} else if (proto == IPPROTO_TCP) {
 		memset(tcp_map, 0, USHRT_MAX / 8);
-		procfs_scan_listen("tcp",  tcp_map, tcp_exclude);
-		procfs_scan_listen("tcp6", tcp_map, tcp_exclude);
+		procfs_scan_listen(c, IPPROTO_TCP, V4, ns, tcp_map, tcp_excl);
+		procfs_scan_listen(c, IPPROTO_TCP, V6, ns, tcp_map, tcp_excl);
 	}
 }
 
@@ -367,7 +365,7 @@ static int conf_ns_check(void *arg)
 static int conf_ns_opt(struct ctx *c,
 		       char *nsdir, char *conf_userns, const char *optarg)
 {
-	int ufd = 0, nfd = 0, try, ret, netns_only_reset = c->netns_only;
+	int ufd = -1, nfd = -1, try, ret, netns_only_reset = c->netns_only;
 	char userns[PATH_MAX] = { 0 }, netns[PATH_MAX];
 	char *endptr;
 	pid_t pid;
@@ -416,7 +414,7 @@ static int conf_ns_opt(struct ctx *c,
 
 		nfd = open(netns, O_RDONLY);
 
-		if (nfd >= 0 && ufd >= 0) {
+		if (nfd >= 0 && (ufd >= 0 || c->netns_only)) {
 			c->pasta_netns_fd = nfd;
 			c->pasta_userns_fd = ufd;
 
@@ -425,10 +423,10 @@ static int conf_ns_opt(struct ctx *c,
 				return 0;
 		}
 
-		if (nfd > 0)
+		if (nfd >= 0)
 			close(nfd);
 
-		if (ufd > 0)
+		if (ufd >= 0)
 			close(ufd);
 	}
 
@@ -565,9 +563,9 @@ static void usage(const char *name)
 	info(   "    if FILE is not given, log to:");
 
 	if (strstr(name, "pasta") || strstr(name, "passt4netns"))
-		info("      /tmp/pasta_ISO8601-TIMESTAMP_INSTANCE-NUMBER.pcap");
+		info("      /tmp/pasta_ISO8601-TIMESTAMP_PID.pcap");
 	else
-		info("      /tmp/passt_ISO8601-TIMESTAMP_INSTANCE-NUMBER.pcap");
+		info("      /tmp/passt_ISO8601-TIMESTAMP_PID.pcap");
 
 	info(   "  -P, --pid FILE	Write own PID to the given file");
 	info(   "  -m, --mtu MTU	Assign MTU via DHCP/NDP");
@@ -664,7 +662,7 @@ pasta_opts:
 	info(   "    SPEC is as described above");
 	info(   "    default: auto");
 	info(   "  --userns NSPATH 	Target user namespace to join");
-	info(   "  --netns-only		Don't join or create user namespace");
+	info(   "  --netns-only		Don't join existing user namespace");
 	info(   "    implied if PATH or NAME are given without --userns");
 	info(   "  --nsrun-dir		Directory for nsfs mountpoints");
 	info(   "    default: " NETNS_RUN_DIR);
@@ -1170,7 +1168,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		usage(argv[0]);
 	}
 
-	if (c->mode == MODE_PASTA && c->pasta_netns_fd <= 0)
+	if (c->mode == MODE_PASTA && c->pasta_netns_fd == -1)
 		pasta_start_ns(c);
 
 	if (nl_sock_init(c)) {
@@ -1216,6 +1214,11 @@ void conf(struct ctx *c, int argc, char **argv)
 	c->tcp.init_detect_ports = c->udp.init_detect_ports = 0;
 
 	if (c->mode == MODE_PASTA) {
+		c->proc_net_tcp[V4][0] = c->proc_net_tcp[V4][1] = -1;
+		c->proc_net_tcp[V6][0] = c->proc_net_tcp[V6][1] = -1;
+		c->proc_net_udp[V4][0] = c->proc_net_udp[V4][1] = -1;
+		c->proc_net_udp[V6][0] = c->proc_net_udp[V6][1] = -1;
+
 		if (!tcp_tap || tcp_tap == PORT_AUTO) {
 			c->tcp.ns_detect_ports = 1;
 			ns_ports_arg.proto = IPPROTO_TCP;

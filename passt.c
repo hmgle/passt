@@ -30,7 +30,9 @@
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/uio.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
+#include <sys/mount.h>
 #include <netinet/ip.h>
 #include <net/ethernet.h>
 #include <stdlib.h>
@@ -53,7 +55,6 @@
 #include <linux/seccomp.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
-#include <linux/capability.h>
 #include <linux/icmpv6.h>
 
 #include "util.h"
@@ -228,42 +229,61 @@ static void check_root(void)
 }
 
 /**
- * drop_caps() - Drop capabilities we might have except for CAP_NET_BIND_SERVICE
+ * sandbox() - Unshare IPC, mount, PID, UTS, and user namespaces, "unmount" root
+ *
+ * Return: negative error code on failure, zero on success
  */
-static void drop_caps(void)
+static int sandbox(struct ctx *c)
 {
-	int i;
+	int flags = CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
 
-	for (i = 0; i < 64; i++) {
-		if (i == CAP_NET_BIND_SERVICE)
-			continue;
+	errno = 0;
 
-		prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
+	if (!c->netns_only) {
+		if (c->pasta_userns_fd == -1)
+			flags |= CLONE_NEWUSER;
+		else
+			setns(c->pasta_userns_fd, CLONE_NEWUSER);
 	}
+
+	c->pasta_userns_fd = -1;
+
+	/* If we run in foreground, we have no chance to actually move to a new
+	 * PID namespace. For passt, use CLONE_NEWPID anyway, in case somebody
+	 * ever gets around seccomp profiles -- there's no harm in passing it.
+	 */
+	if (!c->foreground || c->mode == MODE_PASST)
+		flags |= CLONE_NEWPID;
+
+	unshare(flags);
+
+	mount("", "/", "", MS_UNBINDABLE | MS_REC, NULL);
+	mount("", TMPDIR, "tmpfs", MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_RDONLY,
+	      "nr_inodes=2,nr_blocks=0");
+	chdir(TMPDIR);
+	syscall(SYS_pivot_root, ".", ".");
+	umount2(".", MNT_DETACH | UMOUNT_NOFOLLOW);
+
+	if (errno)
+		return -errno;
+
+	drop_caps();	/* Relative to the new user namespace this time. */
+
+	return 0;
 }
 
 /**
- * pid_file() - Write own PID to file, if configured
- * @c:		Execution context
+ * exit_handler() - Signal handler for SIGQUIT and SIGTERM
+ * @unused:	Unused, handler deals with SIGQUIT and SIGTERM only
+ *
+ * TODO: After unsharing the PID namespace and forking, SIG_DFL for SIGTERM and
+ * SIGQUIT unexpectedly doesn't cause the process to terminate, figure out why.
  */
-static void pid_file(struct ctx *c) {
-	char pid_buf[12];
-	int pid_fd, n;
+void exit_handler(int signal)
+{
+	(void)signal;
 
-	if (!*c->pid_file)
-		return;
-
-	pid_fd = open(c->pid_file, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
-	if (pid_fd < 0)
-		return;
-
-	n = snprintf(pid_buf, sizeof(pid_buf), "%i\n", getpid());
-
-	if (write(pid_fd, pid_buf, n) < 0) {
-		perror("PID file write");
-		exit(EXIT_FAILURE);
-	}
-	close(pid_fd);
+	exit(EXIT_SUCCESS);
 }
 
 /**
@@ -273,36 +293,36 @@ static void pid_file(struct ctx *c) {
  *
  * Return: non-zero on failure
  *
- * #syscalls read write open|openat close fork|clone dup2|dup3 ioctl writev
- * #syscalls socket bind connect getsockopt setsockopt recvfrom sendto shutdown
- * #syscalls accept4 accept listen set_robust_list getrlimit setrlimit
- * #syscalls openat fcntl lseek clone setsid exit exit_group getpid chdir
- * #syscalls epoll_ctl epoll_create1 epoll_wait|epoll_pwait epoll_pwait
- * #syscalls prlimit64 clock_gettime fstat|newfstat newfstatat syslog
- * #syscalls ppc64le:_llseek ppc64le:recv ppc64le:send ppc64le:getuid
- * #syscalls ppc64:_llseek ppc64:recv ppc64:send ppc64:getuid ppc64:ugetrlimit
- * #syscalls s390x:socketcall s390x:sigreturn
- * #syscalls:pasta rt_sigreturn|sigreturn ppc64:sigreturn ppc64:fcntl64
+ * #syscalls read write writev
+ * #syscalls socket bind connect getsockopt setsockopt s390x:socketcall close
+ * #syscalls recvfrom sendto shutdown ppc64le:recv ppc64le:send
+ * #syscalls accept4|accept listen
+ * #syscalls epoll_ctl epoll_wait|epoll_pwait epoll_pwait clock_gettime
  */
 int main(int argc, char **argv)
 {
+	int nfds, i, devnull_fd = -1, pidfile_fd = -1;
 	struct epoll_event events[EPOLL_EVENTS];
 	struct ctx c = { 0 };
 	struct rlimit limit;
 	struct timespec now;
+	struct sigaction sa;
 	char *log_name;
-	int nfds, i;
 
 #ifndef PASST_LEGACY_NO_OPTIONS
 	check_root();
 #endif
 	drop_caps();
 
-	if (strstr(argv[0], "pasta") || strstr(argv[0], "passt4netns")) {
-		struct sigaction sa;
+	c.pasta_userns_fd = c.pasta_netns_fd = c.fd_tap = c.fd_tap_listen = -1;
 
-		sigemptyset(&sa.sa_mask);
-		sa.sa_flags = 0;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sa.sa_handler = exit_handler;
+	sigaction(SIGTERM, &sa, NULL);
+	sigaction(SIGQUIT, &sa, NULL);
+
+	if (strstr(argv[0], "pasta") || strstr(argv[0], "passt4netns")) {
 		sa.sa_handler = pasta_child_handler;
 		sigaction(SIGCHLD, &sa, NULL);
 		signal(SIGPIPE, SIG_IGN);
@@ -322,8 +342,6 @@ int main(int argc, char **argv)
 	__setlogmask(LOG_MASK(LOG_EMERG));
 
 	conf(&c, argc, argv);
-
-	seccomp(&c);
 
 	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
 		__openlog(log_name, LOG_PERROR, LOG_DAEMON);
@@ -369,12 +387,26 @@ int main(int argc, char **argv)
 	else
 		__setlogmask(LOG_UPTO(LOG_INFO));
 
-	if (!c.foreground && daemon(0, 0)) {
-		perror("daemon");
+	pcap_init(&c);
+
+	if (!c.foreground)
+		devnull_fd = open("/dev/null", O_RDWR);
+
+	if (*c.pid_file)
+		pidfile_fd = open(c.pid_file,
+				  O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+
+	if (sandbox(&c)) {
+		err("Failed to sandbox process, exiting\n");
 		exit(EXIT_FAILURE);
 	}
 
-	pid_file(&c);
+	if (!c.foreground)
+		__daemon(pidfile_fd, devnull_fd);
+	else
+		write_pidfile(pidfile_fd, getpid());
+
+	seccomp(&c);
 
 	timer_init(&c, &now);
 loop:

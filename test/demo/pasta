@@ -58,7 +58,8 @@ say	For convenience, let's enter this namespace
 nl
 say	  from another terminal.
 sleep	3
-pout	TARGET_PID echo $$
+ns	pstree -p | grep pasta
+nsout	TARGET_PID pstree -p | grep pasta | sed -n 's/.*(\([0-9].*\))$/\1/p'
 sleep	1
 
 ns	nsenter -t __TARGET_PID__ -U -n --preserve-credentials
@@ -172,7 +173,7 @@ sleep	2
 passtb	perf record -g ./pasta
 sleep	2
 
-pout	TARGET_PID echo $$
+nsout	TARGET_PID pstree -p | grep pasta | sed -n 's/.*(\([0-9].*\))$/\1/p'
 sleep	1
 ns	nsenter -t __TARGET_PID__ -U -n --preserve-credentials
 sleep	5

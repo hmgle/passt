@@ -10,7 +10,7 @@
 #
 # slirp4netns.sh - Compatibility wrapper for pasta, behaving like slirp4netns(1)
 #
-# WARNING: Draft quality, not really tested, --enable-sandbox not supported yet
+# WARNING: Draft quality, not really tested
 #
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>

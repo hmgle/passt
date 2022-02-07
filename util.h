@@ -54,6 +54,12 @@ void debug(const char *format, ...);
 #define STRINGIFY(x)	#x
 #define STR(x)		STRINGIFY(x)
 
+#ifdef P_tmpdir
+#define TMPDIR		P_tmpdir
+#else
+#define TMPDIR		"/tmp"
+#endif
+
 #define V4		0
 #define V6		1
 #define IP_VERSIONS	2
@@ -202,5 +208,9 @@ void bitmap_set(uint8_t *map, int bit);
 void bitmap_clear(uint8_t *map, int bit);
 int bitmap_isset(const uint8_t *map, int bit);
 char *line_read(char *buf, size_t len, int fd);
-void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude);
+void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
+			uint8_t *map, uint8_t *exclude);
+void drop_caps(void);
 int ns_enter(struct ctx *c);
+void write_pidfile(int fd, pid_t pid);
+int __daemon(int pidfile_fd, int devnull_fd);

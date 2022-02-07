@@ -11,9 +11,8 @@
  * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
  *
- * #syscalls:pasta clone unshare waitid kill execve exit_group rt_sigprocmask
- * #syscalls:pasta geteuid getdents64|getdents readlink|readlinkat setsid
- * #syscalls:pasta nanosleep clock_nanosleep
+ * #syscalls:pasta clone waitid exit exit_group rt_sigprocmask
+ * #syscalls:pasta rt_sigreturn|sigreturn ppc64:sigreturn s390x:sigreturn
  */
 
 #include <sched.h>
@@ -40,75 +39,8 @@
 #include "passt.h"
 #include "netlink.h"
 
-/* PID of child, in case we created a namespace, and its procfs link */
+/* PID of child, in case we created a namespace */
 static int pasta_child_pid;
-static char pasta_child_ns[PATH_MAX];
-
-/**
- * pasta_ns_cleanup() - Look for processes in namespace, terminate them
- */
-static void pasta_ns_cleanup(void)
-{
-	char proc_path[PATH_MAX], ns_link[PATH_MAX], buf[BUFSIZ];
-	int recheck = 0, found = 0, waited = 0;
-	int dir_fd, n;
-
-	if (!*pasta_child_ns)
-		return;
-
-loop:
-	if ((dir_fd = open("/proc", O_RDONLY | O_DIRECTORY)) < 0)
-		return;
-
-	while ((n = syscall(SYS_getdents64, dir_fd, buf, BUFSIZ)) > 0) {
-		struct dirent *dp = (struct dirent *)buf;
-		int pos = 0;
-
-		while (dp->d_reclen && pos < n) {
-			pid_t pid;
-
-			errno = 0;
-			pid = strtol(dp->d_name, NULL, 0);
-			if (!pid || errno)
-				goto next;
-
-			snprintf(proc_path, PATH_MAX, "/proc/%i/ns/net", pid);
-			if (readlink(proc_path, ns_link, PATH_MAX) < 0)
-				goto next;
-
-			if (!strncmp(ns_link, pasta_child_ns, PATH_MAX)) {
-				found = 1;
-				if (waited)
-					kill(pid, SIGKILL);
-				else
-					kill(pid, SIGQUIT);
-			}
-next:
-			dp = (struct dirent *)(buf + (pos += dp->d_reclen));
-		}
-	}
-
-	close(dir_fd);
-
-	if (!found)
-		return;
-
-	if (waited) {
-		if (recheck) {
-			info("Some processes in namespace didn't quit");
-		} else {
-			found = 0;
-			recheck = 1;
-			goto loop;
-		}
-		return;
-	}
-
-	info("Waiting for all processes in namespace to terminate");
-	sleep(1);
-	waited = 1;
-	goto loop;
-}
 
 /**
  * pasta_child_handler() - Exit once shell exits (if we started it), reap clones
@@ -120,12 +52,14 @@ void pasta_child_handler(int signal)
 
 	(void)signal;
 
+	if (signal != SIGCHLD)
+		return;
+
 	if (pasta_child_pid &&
 	    !waitid(P_PID, pasta_child_pid, &infop, WEXITED | WNOHANG)) {
-		if (infop.si_pid == pasta_child_pid) {
-			pasta_ns_cleanup();
+		if (infop.si_pid == pasta_child_pid)
 			exit(EXIT_SUCCESS);
-		}
+			/* Nothing to do, detached PID namespace going away */
 	}
 
 	waitid(P_ALL, 0, NULL, WEXITED | WNOHANG);
@@ -163,45 +97,31 @@ netns:
 }
 
 /**
- * pasta_start_ns() - Fork shell in new namespace if target ns is not given
+ * struct pasta_setup_ns_arg - Argument for pasta_setup_ns()
  * @c:		Execution context
+ * @euid:	Effective UID of caller
  */
-void pasta_start_ns(struct ctx *c)
+struct pasta_setup_ns_arg {
+	struct ctx *c;
+	int euid;
+};
+
+/**
+ * pasta_setup_ns() - Map credentials, enable access to ping sockets, run shell
+ * @arg:	See @pasta_setup_ns_arg
+ *
+ * Return: this function never returns
+ */
+static int pasta_setup_ns(void *arg)
 {
-	int euid = geteuid(), fd;
+	struct pasta_setup_ns_arg *a = (struct pasta_setup_ns_arg *)arg;
 	char *shell;
+	int fd;
 
-	c->foreground = 1;
-	if (!c->debug)
-		c->quiet = 1;
-
-	if ((pasta_child_pid = fork()) == -1) {
-		perror("fork");
-		exit(EXIT_FAILURE);
-	}
-
-	if (pasta_child_pid) {
-		char proc_path[PATH_MAX];
-
-		NS_CALL(pasta_wait_for_ns, c);
-
-		snprintf(proc_path, PATH_MAX, "/proc/%i/ns/net",
-			 pasta_child_pid);
-		if (readlink(proc_path, pasta_child_ns, PATH_MAX) < 0)
-			warn("Cannot read link to ns, won't clean up on exit");
-
-		return;
-	}
-
-	if (unshare(CLONE_NEWNET | (c->netns_only ? 0 : CLONE_NEWUSER))) {
-		perror("unshare");
-		exit(EXIT_FAILURE);
-	}
-
-	if (!c->netns_only) {
+	if (!a->c->netns_only) {
 		char buf[BUFSIZ];
 
-		snprintf(buf, BUFSIZ, "%i %i %i", 0, euid, 1);
+		snprintf(buf, BUFSIZ, "%i %i %i", 0, a->euid, 1);
 
 		fd = open("/proc/self/uid_map", O_WRONLY);
 		if (write(fd, buf, strlen(buf)) < 0)
@@ -232,6 +152,39 @@ void pasta_start_ns(struct ctx *c)
 
 	perror("execve");
 	exit(EXIT_FAILURE);
+}
+
+/**
+ * pasta_start_ns() - Fork shell in new namespace if target ns is not given
+ * @c:		Execution context
+ */
+void pasta_start_ns(struct ctx *c)
+{
+	struct pasta_setup_ns_arg arg = { .c = c, .euid = geteuid() };
+	char ns_fn_stack[NS_FN_STACK_SIZE];
+
+	c->foreground = 1;
+	if (!c->debug)
+		c->quiet = 1;
+
+	pasta_child_pid = clone(pasta_setup_ns,
+				ns_fn_stack + sizeof(ns_fn_stack) / 2,
+				(c->netns_only ? 0 : CLONE_NEWNET) |
+				CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWUSER |
+				CLONE_NEWUTS,
+				(void *)&arg);
+
+	if (pasta_child_pid == -1) {
+		perror("clone");
+		exit(EXIT_FAILURE);
+	}
+
+	drop_caps();
+
+	if (pasta_child_pid) {
+		NS_CALL(pasta_wait_for_ns, c);
+		return;
+	}
 }
 
 /**

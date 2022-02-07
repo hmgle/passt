@@ -167,9 +167,8 @@ fail:
 /**
  * pcap_init() - Initialise pcap file
  * @c:		Execution context
- * @index:	pcap name index: passt instance number or pasta netns socket
  */
-void pcap_init(struct ctx *c, int index)
+void pcap_init(struct ctx *c)
 {
 	struct timeval tv;
 
@@ -196,7 +195,7 @@ void pcap_init(struct ctx *c, int index)
 		snprintf(name + strlen(PCAP_PREFIX) + strlen(PCAP_ISO8601_STR),
 			 sizeof(name) - strlen(PCAP_PREFIX) -
 					strlen(PCAP_ISO8601_STR),
-			 "_%i.pcap", index);
+			 "_%i.pcap", getpid());
 
 		strncpy(c->pcap, name, PATH_MAX);
 	}

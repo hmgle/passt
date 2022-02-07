@@ -304,7 +304,7 @@
  * - SPLICE_FIN_TO:		FIN (EPOLLRDHUP) seen from connected socket
  * - SPLICE_FIN_BOTH:		FIN (EPOLLRDHUP) seen from both sides
  *
- * #syscalls pipe|pipe2 pipe2
+ * #syscalls:pasta pipe2|pipe fcntl ppc64:fcntl64
  */
 
 #include <sched.h>
@@ -3028,7 +3028,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
  * @ref:	epoll reference
  * @events:	epoll events bitmap
  *
- * #syscalls splice
+ * #syscalls:pasta splice
  */
 void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 			     uint32_t events)
@@ -3374,7 +3374,7 @@ static void tcp_set_pipe_size(struct ctx *c)
 
 smaller:
 	for (i = 0; i < TCP_SPLICE_PIPE_POOL_SIZE * 2; i++) {
-		if (pipe(probe_pipe[i])) {
+		if (pipe2(probe_pipe[i], 0)) {
 			i++;
 			break;
 		}
@@ -3493,7 +3493,7 @@ static void tcp_sock_init_one(struct ctx *c, int ns, in_port_t port)
  * tcp_sock_init_ns() - Bind sockets in namespace for inbound connections
  * @arg:	Execution context
  *
- * Return: 0 on success, -1 on failure
+ * Return: 0
  */
 static int tcp_sock_init_ns(void *arg)
 {
@@ -3560,8 +3560,7 @@ static int tcp_sock_refill(void *arg)
 	int i, *p4, *p6;
 
 	if (a->ns) {
-		if (ns_enter(a->c))
-			return 0;
+		ns_enter(a->c);
 		p4 = ns_sock_pool4;
 		p6 = ns_sock_pool6;
 	} else {
@@ -3594,8 +3593,6 @@ static int tcp_sock_refill(void *arg)
  * @c:		Execution context
  *
  * Return: 0 on success, -1 on failure
- *
- * #syscalls getrandom
  */
 int tcp_sock_init(struct ctx *c, struct timespec *now)
 {

@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <net/ethernet.h>
@@ -23,6 +24,7 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <sys/epoll.h>
+#include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -31,6 +33,8 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+
+#include <linux/capability.h>
 
 #include "util.h"
 #include "passt.h"
@@ -431,31 +435,51 @@ char *line_read(char *buf, size_t len, int fd)
 
 /**
  * procfs_scan_listen() - Set bits for listening TCP or UDP sockets from procfs
- * @name:	Corresponding name of file under /proc/net/
+ * @proto:	IPPROTO_TCP or IPPROTO_UDP
+ * @ip_version:	IP version, V4 or V6
+ * @ns:		Use saved file descriptors for namespace if set
  * @map:	Bitmap where numbers of ports in listening state will be set
  * @exclude:	Bitmap of ports to exclude from setting (and clear)
+ *
+ * #syscalls:pasta lseek ppc64le:_llseek ppc64:_llseek
  */
-void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
+void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
+			uint8_t *map, uint8_t *exclude)
 {
-	char line[BUFSIZ], path[PATH_MAX];
+	char line[BUFSIZ], *path;
 	unsigned long port;
 	unsigned int state;
-	int fd;
+	int *fd;
 
-	snprintf(path, PATH_MAX, "/proc/net/%s", name);
-	if ((fd = open(path, O_RDONLY)) < 0)
+	if (proto == IPPROTO_TCP) {
+		fd = &c->proc_net_tcp[ip_version][ns];
+		if (ip_version == V4)
+			path = "/proc/net/tcp";
+		else
+			path = "/proc/net/tcp6";
+	} else {
+		fd = &c->proc_net_udp[ip_version][ns];
+		if (ip_version == V4)
+			path = "/proc/net/udp";
+		else
+			path = "/proc/net/udp6";
+	}
+
+	if (*fd != -1)
+		lseek(*fd, 0, SEEK_SET);
+	else if ((*fd = open(path, O_RDONLY)) < 0)
 		return;
 
 	*line = 0;
-	line_read(line, sizeof(line), fd);
-	while (line_read(line, sizeof(line), fd)) {
+	line_read(line, sizeof(line), *fd);
+	while (line_read(line, sizeof(line), *fd)) {
 		/* NOLINTNEXTLINE(cert-err34-c): != 2 if conversion fails */
 		if (sscanf(line, "%*u: %*x:%lx %*x:%*x %x", &port, &state) != 2)
 			continue;
 
 		/* See enum in kernel's include/net/tcp_states.h */
-		if ((strstr(name, "tcp") && state != 0x0a) ||
-		    (strstr(name, "udp") && state != 0x07))
+		if ((proto == IPPROTO_TCP && state != 0x0a) ||
+		    (proto == IPPROTO_UDP && state != 0x07))
 			continue;
 
 		if (bitmap_isset(exclude, port))
@@ -463,25 +487,98 @@ void procfs_scan_listen(char *name, uint8_t *map, uint8_t *exclude)
 		else
 			bitmap_set(map, port);
 	}
-
-	close(fd);
 }
 
 /**
- * ns_enter() - Enter configured network and user namespaces
+ * drop_caps() - Drop capabilities we might have except for CAP_NET_BIND_SERVICE
+ */
+void drop_caps(void)
+{
+	int i;
+
+	for (i = 0; i < 64; i++) {
+		if (i == CAP_NET_BIND_SERVICE)
+			continue;
+
+		prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
+	}
+}
+
+/**
+ * ns_enter() - Enter configured user (unless already joined) and network ns
  * @c:		Execution context
  *
- * Return: 0 on success, -1 on failure
+ * Return: 0, won't return on failure
  *
  * #syscalls:pasta setns
  */
 int ns_enter(struct ctx *c)
 {
-	if (!c->netns_only && setns(c->pasta_userns_fd, CLONE_NEWUSER))
-		return -errno;
+	if (!c->netns_only &&
+	    c->pasta_userns_fd != -1 &&
+	    setns(c->pasta_userns_fd, CLONE_NEWUSER))
+		exit(EXIT_FAILURE);
 
 	if (setns(c->pasta_netns_fd, CLONE_NEWNET))
-		return -errno;
+		exit(EXIT_FAILURE);
+
+	return 0;
+}
+
+/**
+ * pid_file() - Write PID to file, if requested to do so, and close it
+ * @fd:		Open PID file descriptor, closed on exit, -1 to skip writing it
+ * @pid:	PID value to write
+ */
+void write_pidfile(int fd, pid_t pid) {
+	char pid_buf[12];
+	int n;
+
+	if (fd == -1)
+		return;
+
+	n = snprintf(pid_buf, sizeof(pid_buf), "%i\n", pid);
+
+	if (write(fd, pid_buf, n) < 0) {
+		perror("PID file write");
+		exit(EXIT_FAILURE);
+	}
+
+	close(fd);
+}
+
+/**
+ * __daemon() - daemon()-like function writing PID file before parent exits
+ * @pidfile_fd:	Open PID file descriptor
+ * @devnull_fd:	Open file descriptor for /dev/null
+ *
+ * Return: child PID on success, won't return on failure
+ */
+int __daemon(int pidfile_fd, int devnull_fd)
+{
+	pid_t pid = fork();
+
+	if (pid == -1) {
+		perror("fork");
+		exit(EXIT_FAILURE);
+	}
+
+	if (pid) {
+		write_pidfile(pidfile_fd, pid);
+		exit(EXIT_SUCCESS);
+	}
+
+	errno = 0;
+
+	setsid();
+
+	dup2(devnull_fd, STDIN_FILENO);
+	dup2(devnull_fd, STDOUT_FILENO);
+	dup2(devnull_fd, STDERR_FILENO);
+	close(devnull_fd);
+
+	if (errno)
+		exit(EXIT_FAILURE);
 
 	return 0;
 }

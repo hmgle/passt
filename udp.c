@@ -529,7 +529,9 @@ static int udp_splice_connect_ns(void *arg)
 
 	a = (struct udp_splice_connect_ns_arg *)arg;
 
-	ns_enter(a->c);
+	if (ns_enter(a->c))
+		return 0;
+
 	a->s = udp_splice_connect(a->c, a->v6, a->bound_sock, a->src, a->dst,
 				  UDP_BACK_TO_INIT);
 
@@ -1029,7 +1031,8 @@ int udp_sock_init_ns(void *arg)
 	struct ctx *c = (struct ctx *)arg;
 	int dst;
 
-	ns_enter(c);
+	if (ns_enter(c))
+		return 0;
 
 	for (dst = 0; dst < USHRT_MAX; dst++) {
 		if (!bitmap_isset(c->udp.port_to_init, dst))

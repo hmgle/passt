@@ -84,7 +84,8 @@ say	Now let's run 'passt' in the new namespace, and
 nl
 say	  enter this namespace from the guest terminal too.
 sleep	3
-pout	TARGET_PID echo $$
+guest	pstree -p | grep pasta
+gout	TARGET_PID pstree -p | grep pasta | sed -n 's/.*(\([0-9].*\))$/\1/p'
 sleep	1
 
 passtb	./passt -f -t 5201,5203

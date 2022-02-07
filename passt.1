@@ -80,7 +80,8 @@ Don't print informational messages.
 
 .TP
 .BR \-f ", " \-\-foreground
-Don't run in background.
+Don't run in background. This implies that the process is not moved to a
+detached PID namespace after starting, because the PID itself cannot change.
 Default is to fork into background.
 
 .TP
@@ -100,14 +101,13 @@ Capture tap-facing (that is, guest-side or namespace-side) network packets to
 
 If \fIfile\fR is not given, capture packets to
 
-	\fB/tmp/passt_\fIISO8601-timestamp\fR_\fIinstance-number\fB.pcap\fR
+	\fB/tmp/passt_\fIISO8601-timestamp\fR_\fIPID\fB.pcap\fR
 
 in \fBpasst\fR mode and to
 
-	\fB/tmp/pasta_\fIISO8601-timestamp\fR_\fIinstance-number\fB.pcap\fR
+	\fB/tmp/pasta_\fIISO8601-timestamp\fR_\fIPID\fB.pcap\fR
 
-in \fBpasta\fR mode, where \fIinstance-number\fR is a progressive count of
-other detected instances running on the same host.
+in \fBpasta\fR mode, where \fIPID\fR is the ID of the running process.
 
 .TP
 .BR \-P ", " \-\-pid " " \fIfile
@@ -379,8 +379,9 @@ This option requires PID, PATH or NAME to be specified.
 
 .TP
 .BR \-\-netns-only
-Join or create only the network namespace, not a user namespace. This is implied
-if PATH or NAME are given without \-\-userns.
+Join only a target network namespace, not a user namespace, and don't create one
+for sandboxing purposes either. This is implied if PATH or NAME are given
+without \-\-userns.
 
 .TP
 .BR \-\-nsrun-dir " " \fIpath
