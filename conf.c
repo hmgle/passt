@@ -532,7 +532,7 @@ static void conf_ip(struct ctx *c)
  */
 static void usage(const char *name)
 {
-	if (strstr(name, "pasta") || strstr(name, "passt4netns")) {
+	if (strstr(name, "pasta")) {
 		info("Usage: %s [OPTION]... [PID|PATH|NAME]", name);
 		info("");
 		info("Without PID|PATH|NAME, run the default shell in a new");
@@ -550,7 +550,7 @@ static void usage(const char *name)
 	info(   "    default: log to system logger only if started from a TTY");
 	info(   "  -h, --help		Display this help message and exit");
 
-	if (strstr(name, "pasta") || strstr(name, "passt4netns")) {
+	if (strstr(name, "pasta")) {
 		info(   "  -I, --ns-ifname NAME	namespace interface name");
 		info(   "    default: same interface name as external one");
 	} else {
@@ -562,7 +562,7 @@ static void usage(const char *name)
 	info(   "  -p, --pcap [FILE]	Log tap-facing traffic to pcap file");
 	info(   "    if FILE is not given, log to:");
 
-	if (strstr(name, "pasta") || strstr(name, "passt4netns"))
+	if (strstr(name, "pasta"))
 		info("      /tmp/pasta_ISO8601-TIMESTAMP_PID.pcap");
 	else
 		info("      /tmp/passt_ISO8601-TIMESTAMP_PID.pcap");
@@ -586,14 +586,14 @@ static void usage(const char *name)
 	info(   "  -D, --dns ADDR	Pass IPv4 or IPv6 address as DNS");
 	info(   "    can be specified multiple times");
 	info(   "    a single, empty option disables DNS information");
-	if (strstr(name, "pasta") || strstr(name, "passt4netns"))
+	if (strstr(name, "pasta"))
 		info(   "    default: don't send any addresses");
 	else
 		info(   "    default: use addresses from /etc/resolv.conf");
 
 	info(   "  -S, --search LIST	Space-separated list, search domains");
 	info(   "    a single, empty option disables the DNS search list");
-	if (strstr(name, "pasta") || strstr(name, "passt4netns"))
+	if (strstr(name, "pasta"))
 		info(   "    default: don't send any search list");
 	else
 		info(   "    default: use search list from /etc/resolv.conf");
@@ -609,7 +609,7 @@ static void usage(const char *name)
 	info(   "  -4, --ipv4-only	Enable IPv4 operation only");
 	info(   "  -6, --ipv6-only	Enable IPv6 operation only");
 
-	if (strstr(name, "pasta") || strstr(name, "passt4netns"))
+	if (strstr(name, "pasta"))
 		goto pasta_opts;
 
 	info(   "  -t, --tcp-ports SPEC	TCP port forwarding to guest");

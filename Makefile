@@ -62,7 +62,7 @@ endif
 
 prefix ?= /usr/local
 
-all: passt pasta passt4netns qrap
+all: passt pasta qrap
 
 avx2: CFLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
 avx2: clean all
@@ -81,16 +81,13 @@ pasta: passt
 	ln -s passt pasta
 	ln -s passt.1 pasta.1
 
-passt4netns: passt
-	ln -s passt passt4netns
-
 qrap: qrap.c passt.h
 	$(CC) $(CFLAGS) \
 		qrap.c -o qrap
 
 .PHONY: clean
 clean:
-	-${RM} passt *.o seccomp.h qrap pasta pasta.1 passt4netns \
+	-${RM} passt *.o seccomp.h qrap pasta pasta.1 \
 		passt.tar passt.tar.gz *.deb *.rpm
 
 install: passt pasta qrap

@@ -322,16 +322,21 @@ int main(int argc, char **argv)
 	sigaction(SIGTERM, &sa, NULL);
 	sigaction(SIGQUIT, &sa, NULL);
 
-	if (strstr(argv[0], "pasta") || strstr(argv[0], "passt4netns")) {
+	if (argc < 1)
+		exit(EXIT_FAILURE);
+
+	if (strstr(argv[0], "pasta")) {
 		sa.sa_handler = pasta_child_handler;
 		sigaction(SIGCHLD, &sa, NULL);
 		signal(SIGPIPE, SIG_IGN);
 
 		c.mode = MODE_PASTA;
 		log_name = "pasta";
-	} else {
+	} else if (strstr(argv[0], "passt")) {
 		c.mode = MODE_PASST;
 		log_name = "passt";
+	} else {
+		exit(EXIT_FAILURE);
 	}
 
 	if (madvise(pkt_buf, TAP_BUF_BYTES, MADV_HUGEPAGE))
