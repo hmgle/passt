@@ -406,6 +406,8 @@ int main(int argc, char **argv)
 	else
 		write_pidfile(pidfile_fd, getpid());
 
+	prctl(PR_SET_DUMPABLE, 0);
+
 	seccomp(&c);
 
 	timer_init(&c, &now);
