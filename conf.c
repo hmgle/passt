@@ -1239,5 +1239,6 @@ void conf(struct ctx *c, int argc, char **argv)
 		}
 	}
 
-	conf_print(c);
+	if (!c->quiet)
+		conf_print(c);
 }
