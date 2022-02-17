@@ -187,6 +187,7 @@ host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 host	./qrap 5 qemu-system-s390x -m 2048 -smp 2 -serial stdio -nodefaults -nographic __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-ccw
 
 host	service systemd-resolved stop
+host	export DEBIAN_FRONTEND=noninteractive
 host	apt-get -y remove needrestart snapd
 host	dhclient
 sleep	2
