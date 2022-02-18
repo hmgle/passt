@@ -468,17 +468,17 @@ static void conf_ip(struct ctx *c)
 
 			nl_addr(0, c->ifi, AF_INET, &c->addr4, &mask_len, NULL);
 			c->mask4 = htonl(0xffffffff << (32 - mask_len));
+		}
 
-			if (!c->mask4) {
-				if (IN_CLASSA(ntohl(c->addr4)))
-					c->mask4 = htonl(IN_CLASSA_NET);
-				else if (IN_CLASSB(ntohl(c->addr4)))
-					c->mask4 = htonl(IN_CLASSB_NET);
-				else if (IN_CLASSC(ntohl(c->addr4)))
-					c->mask4 = htonl(IN_CLASSC_NET);
-				else
-					c->mask4 = 0xffffffff;
-			}
+		if (!c->mask4) {
+			if (IN_CLASSA(ntohl(c->addr4)))
+				c->mask4 = htonl(IN_CLASSA_NET);
+			else if (IN_CLASSB(ntohl(c->addr4)))
+				c->mask4 = htonl(IN_CLASSB_NET);
+			else if (IN_CLASSC(ntohl(c->addr4)))
+				c->mask4 = htonl(IN_CLASSC_NET);
+			else
+				c->mask4 = 0xffffffff;
 		}
 
 		memcpy(&c->addr4_seen, &c->addr4, sizeof(c->addr4_seen));
