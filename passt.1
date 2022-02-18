@@ -427,6 +427,11 @@ for sandboxing purposes either. This is implied if PATH or NAME are given
 without \-\-userns.
 
 .TP
+.BR \-\-no-netns-quit
+If the target network namespace is bound to the filesystem (that is, if PATH or
+NAME are given as target), do not exit once the network namespace is deleted.
+
+.TP
 .BR \-\-nsrun-dir " " \fIpath
 Directory for nsfs mountpoints, used as path prefix for names of namespaces.
 

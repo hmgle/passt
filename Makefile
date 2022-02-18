@@ -153,6 +153,7 @@ pkgs:
 # - android-cloexec-pipe
 # - android-cloexec-pipe2
 # - android-cloexec-epoll-create1
+# - android-cloexec-inotify-init1
 #	TODO: check, fix except for the few cases where we need to share fds
 #
 # - bugprone-narrowing-conversions
@@ -197,7 +198,7 @@ clang-tidy: $(wildcard *.c) $(wildcard *.h)
 	-cppcoreguidelines-avoid-magic-numbers,\
 	-readability-isolate-declaration,\
 	-android-cloexec-open,-android-cloexec-pipe,-android-cloexec-pipe2,\
-	-android-cloexec-epoll-create1,\
+	-android-cloexec-epoll-create1,-android-cloexec-inotify-init1,\
 	-bugprone-narrowing-conversions,\
 	-cppcoreguidelines-narrowing-conversions,\
 	-cppcoreguidelines-avoid-non-const-global-variables,\

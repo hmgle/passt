@@ -101,6 +101,9 @@ enum passt_modes {
  * @pasta_netns_fd:	File descriptor for network namespace in pasta mode
  * @pasta_userns_fd:	Descriptor for user namespace to join, -1 once joined
  * @netns_only:		In pasta mode, don't join or create a user namespace
+ * @no_netns_quit:	In pasta mode, don't exit if fs-bound namespace is gone
+ * @netns_base:		Base name for fs-bound namespace, if any, in pasta mode
+ * @netns_dir:		Directory of fs-bound namespace, if any, in pasta mode
  * @proc_net_tcp:	Stored handles for /proc/net/tcp{,6} in init and ns
  * @proc_net_udp:	Stored handles for /proc/net/udp{,6} in init and ns
  * @epollfd:		File descriptor for epoll instance
@@ -160,6 +163,10 @@ struct ctx {
 	int pasta_netns_fd;
 	int pasta_userns_fd;
 	int netns_only;
+
+	int no_netns_quit;
+	char netns_base[PATH_MAX];
+	char netns_dir[PATH_MAX];
 
 	int proc_net_tcp[IP_VERSIONS][2];
 	int proc_net_udp[IP_VERSIONS][2];

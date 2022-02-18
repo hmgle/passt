@@ -20,6 +20,7 @@
 #include <sched.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <libgen.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -414,20 +415,34 @@ static int conf_ns_opt(struct ctx *c,
 
 		nfd = open(netns, O_RDONLY);
 
-		if (nfd >= 0 && (ufd >= 0 || c->netns_only)) {
-			c->pasta_netns_fd = nfd;
-			c->pasta_userns_fd = ufd;
+		if (nfd == -1 || (ufd == -1 && !c->netns_only)) {
+			if (nfd >= 0)
+				close(nfd);
 
-			NS_CALL(conf_ns_check, c);
-			if (c->pasta_netns_fd >= 0)
-				return 0;
+			if (ufd >= 0)
+				close(ufd);
+
+			continue;
 		}
 
-		if (nfd >= 0)
-			close(nfd);
+		c->pasta_netns_fd = nfd;
+		c->pasta_userns_fd = ufd;
 
-		if (ufd >= 0)
-			close(ufd);
+		NS_CALL(conf_ns_check, c);
+
+		if (c->pasta_netns_fd >= 0) {
+			char buf[PATH_MAX];
+
+			if (try == 0 || c->no_netns_quit)
+				return 0;
+
+			strncpy(buf, netns, PATH_MAX);
+			strncpy(c->netns_base, basename(buf), PATH_MAX - 1);
+			strncpy(buf, netns, PATH_MAX);
+			strncpy(c->netns_dir, dirname(buf), PATH_MAX - 1);
+
+			return 0;
+		}
 	}
 
 	c->netns_only = netns_only_reset;
@@ -813,6 +828,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"dhcp-search", no_argument,		NULL,		7 },
 		{"no-dhcp-search", no_argument,		NULL,		8 },
 		{"dns-forward",	required_argument,	NULL,		9 },
+		{"no-netns-quit", no_argument,		NULL,		10 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
@@ -936,6 +952,13 @@ void conf(struct ctx *c, int argc, char **argv)
 
 			err("Invalid DNS forwarding address: %s", optarg);
 			usage(argv[0]);
+			break;
+		case 10:
+			if (c->mode != MODE_PASTA) {
+				err("--no-netns-quit is for pasta mode only");
+				usage(argv[0]);
+			}
+			c->no_netns_quit = 1;
 			break;
 		case 'd':
 			if (c->debug) {

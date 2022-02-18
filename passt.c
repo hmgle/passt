@@ -301,7 +301,7 @@ void exit_handler(int signal)
  */
 int main(int argc, char **argv)
 {
-	int nfds, i, devnull_fd = -1, pidfile_fd = -1;
+	int nfds, i, devnull_fd = -1, pidfile_fd = -1, quit_fd;
 	struct epoll_event events[EPOLL_EVENTS];
 	struct ctx c = { 0 };
 	struct rlimit limit;
@@ -356,6 +356,8 @@ int main(int argc, char **argv)
 		perror("epoll_create1");
 		exit(EXIT_FAILURE);
 	}
+
+	quit_fd = pasta_netns_quit_init(&c);
 
 	if (getrlimit(RLIMIT_NOFILE, &limit)) {
 		perror("getrlimit");
@@ -416,6 +418,7 @@ int main(int argc, char **argv)
 	seccomp(&c);
 
 	timer_init(&c, &now);
+
 loop:
 	nfds = epoll_wait(c.epollfd, events, EPOLL_EVENTS, TIMER_INTERVAL);
 	if (nfds == -1 && errno != EINTR) {
@@ -431,6 +434,8 @@ loop:
 
 		if (fd == c.fd_tap || fd == c.fd_tap_listen)
 			tap_handler(&c, fd, events[i].events, &now);
+		else if (fd == quit_fd)
+			pasta_netns_quit_handler(&c, fd);
 		else
 			sock_handler(&c, ref, events[i].events, &now);
 	}

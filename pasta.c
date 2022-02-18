@@ -24,6 +24,8 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <syslog.h>
+#include <sys/epoll.h>
+#include <sys/inotify.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -218,4 +220,54 @@ void pasta_ns_conf(struct ctx *c)
 	}
 
 	proto_update_l2_buf(c->mac_guest, NULL, NULL);
+}
+
+/**
+ * pasta_netns_quit_init() - Watch network namespace to quit once it's gone
+ * @c:		Execution context
+ *
+ * Return: inotify file descriptor, -1 on failure or if not needed/applicable
+ */
+int pasta_netns_quit_init(struct ctx *c)
+{
+	struct epoll_event ev = { .events = EPOLLIN };
+	int inotify_fd;
+
+	if (c->mode != MODE_PASTA || c->no_netns_quit || !*c->netns_base)
+		return -1;
+
+	if ((inotify_fd = inotify_init1(O_NONBLOCK)) < 0) {
+		perror("inotify_init(): won't quit once netns is gone");
+		return -1;
+	}
+
+	if (inotify_add_watch(inotify_fd, c->netns_dir, IN_DELETE) < 0) {
+		perror("inotify_add_watch(): won't quit once netns is gone");
+		return -1;
+	}
+
+	ev.data.fd = inotify_fd;
+	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, inotify_fd, &ev);
+
+	return inotify_fd;
+}
+
+/**
+ * pasta_netns_quit_handler() - Handle ns directory events, exit if ns is gone
+ * @c:		Execution context
+ * @inotify_fd:	inotify file descriptor with watch on namespace directory
+ */
+void pasta_netns_quit_handler(struct ctx *c, int inotify_fd)
+{
+	char buf[sizeof(struct inotify_event) + NAME_MAX + 1];
+	struct inotify_event *in_ev = (struct inotify_event *)buf;
+
+	if (read(inotify_fd, buf, sizeof(buf)) < (ssize_t)sizeof(*in_ev))
+		return;
+
+	if (strncmp(in_ev->name, c->netns_base, sizeof(c->netns_base)))
+		return;
+
+	info("Namespace %s is gone, exiting", c->netns_base);
+	exit(EXIT_SUCCESS);
 }
