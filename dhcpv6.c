@@ -394,6 +394,9 @@ static size_t dhcpv6_dns_fill(struct ctx *c, char *buf, int offset)
 	char *p = NULL;
 	int i;
 
+	if (c->no_dhcp_dns)
+		goto search;
+
 	for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[i]); i++) {
 		if (!i) {
 			srv = (struct opt_dns_servers *)(buf + offset);
@@ -409,6 +412,10 @@ static size_t dhcpv6_dns_fill(struct ctx *c, char *buf, int offset)
 
 	if (srv)
 		srv->hdr.l = htons(srv->hdr.l);
+
+search:
+	if (c->no_dhcp_dns_search)
+		return offset;
 
 	for (i = 0; *c->dns_search[i].n; i++) {
 		if (!i) {

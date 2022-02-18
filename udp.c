@@ -718,6 +718,12 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 					udp_tap_map[V6][src].loopback = 0;
 
 				bitmap_set(udp_act[V6][UDP_ACT_TAP], src);
+			} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->dns6_fwd) &&
+				   !memcmp(&b->s_in6.sin6_addr, &c->dns6_fwd,
+					   sizeof(c->dns6_fwd)) &&
+				   ntohs(b->s_in6.sin6_port) == 53) {
+				b->ip6h.daddr = c->addr6_seen;
+				b->ip6h.saddr = c->dns6_fwd;
 			} else {
 				b->ip6h.daddr = c->addr6_seen;
 				b->ip6h.saddr = b->s_in6.sin6_addr;
@@ -797,6 +803,10 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 					udp_tap_map[V4][src].loopback = 1;
 
 				bitmap_set(udp_act[V4][UDP_ACT_TAP], src);
+			} else if (c->dns4_fwd &&
+				   s_addr == ntohl(c->dns4[0]) &&
+				   ntohs(b->s_in.sin_port) == 53) {
+				b->iph.saddr = c->dns4_fwd;
 			} else {
 				b->iph.saddr = b->s_in.sin_addr.s_addr;
 			}
@@ -958,6 +968,9 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 				s_in.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 			else
 				s_in.sin_addr.s_addr = c->addr4_seen;
+		} else if (s_in.sin_addr.s_addr == c->dns4_fwd &&
+			   ntohs(s_in.sin_port) == 53) {
+			s_in.sin_addr.s_addr = c->dns4[0];
 		}
 	} else {
 		s_in6 = (struct sockaddr_in6) {
@@ -976,6 +989,9 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 				s_in6.sin6_addr = in6addr_loopback;
 			else
 				s_in6.sin6_addr = c->addr6_seen;
+		} else if (!memcmp(addr, &c->dns6_fwd, sizeof(c->dns6_fwd)) &&
+			   ntohs(s_in6.sin6_port) == 53) {
+			s_in6.sin6_addr = c->dns6[0];
 		} else if (IN6_IS_ADDR_LINKLOCAL(&s_in6.sin6_addr)) {
 			bind_to = BIND_LL;
 		}

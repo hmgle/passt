@@ -333,12 +333,13 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 		opts[26].s[1] = c->mtu % 256;
 	}
 
-	for (i = 0, opts[6].slen = 0; c->dns4[i]; i++) {
+	for (i = 0, opts[6].slen = 0; !c->no_dhcp_dns && c->dns4[i]; i++) {
 		((uint32_t *)opts[6].s)[i] = c->dns4[i];
 		opts[6].slen += sizeof(uint32_t);
 	}
 
-	opt_set_dns_search(c, sizeof(m->o));
+	if (!c->no_dhcp_dns_search)
+		opt_set_dns_search(c, sizeof(m->o));
 
 	uh->len = htons(len = offsetof(struct msg, o) + fill(m) + sizeof(*uh));
 	uh->check = 0;

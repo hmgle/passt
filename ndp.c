@@ -127,6 +127,9 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 			p += 4;
 		}
 
+		if (c->no_dhcp_dns)
+			goto dns_done;
+
 		for (n = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[n]); n++);
 		if (n) {
 			*p++ = 25;			/* RDNSS */
@@ -144,7 +147,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 				dns_s_len += strlen(c->dns_search[n].n) + 2;
 		}
 
-		if (dns_s_len) {
+		if (!c->no_dhcp_dns_search && dns_s_len) {
 			*p++ = 31;			/* DNSSL */
 			*p++ = (len + 8 - 1) / 8 + 1;	/* length */
 			p += 2;				/* reserved */
@@ -171,6 +174,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 			p += 8 - dns_s_len % 8;
 		}
 
+dns_done:
 		*p++ = 1;			/* source ll */
 		*p++ = 1;			/* length */
 		memcpy(p, c->mac, ETH_ALEN);

@@ -279,7 +279,7 @@ static void get_dns(struct ctx *c)
 	dns4_set = !c->v4  || !!*dns4;
 	dns6_set = !c->v6  || !IN6_IS_ADDR_UNSPECIFIED(dns6);
 	dnss_set = !!*s->n || c->no_dns_search;
-	dns_set = dns4_set || dns6_set || c->no_dns;
+	dns_set = (dns4_set && dns6_set) || c->no_dns;
 
 	if (dns_set && dnss_set)
 		return;
@@ -583,20 +583,34 @@ static void usage(const char *name)
 	info(   "    default: gateway from interface with default route");
 	info(   "  -i, --interface NAME	Interface for addresses and routes");
 	info(   "    default: interface with first default route");
-	info(   "  -D, --dns ADDR	Pass IPv4 or IPv6 address as DNS");
+	info(   "  -D, --dns ADDR	Use IPv4 or IPv6 address as DNS");
 	info(   "    can be specified multiple times");
 	info(   "    a single, empty option disables DNS information");
 	if (strstr(name, "pasta"))
-		info(   "    default: don't send any addresses");
+		info(   "    default: don't use any addresses");
 	else
 		info(   "    default: use addresses from /etc/resolv.conf");
 
 	info(   "  -S, --search LIST	Space-separated list, search domains");
 	info(   "    a single, empty option disables the DNS search list");
 	if (strstr(name, "pasta"))
-		info(   "    default: don't send any search list");
+		info(   "    default: don't use any search list");
 	else
 		info(   "    default: use search list from /etc/resolv.conf");
+
+	if (strstr(name, "pasta"))
+		info("  --dhcp-dns:	\tPass DNS list via DHCP/DHCPv6/NDP");
+	else
+		info("  --no-dhcp-dns:	No DNS list in DHCP/DHCPv6/NDP");
+
+	if (strstr(name, "pasta"))
+		info("  --dhcp-search:	Pass list via DHCP/DHCPv6/NDP");
+	else
+		info("  --no-dhcp-search:	No list in DHCP/DHCPv6/NDP");
+
+	info(   "  --dns-forward ADDR	Forward DNS queries sent to ADDR");
+	info(   "    can be specified zero to two times (for IPv4 and IPv6)");
+	info(   "    default: don't forward DNS queries");
 
 	info(   "  --no-tcp		Disable TCP protocol handler");
 	info(   "  --no-udp		Disable UDP protocol handler");
@@ -699,22 +713,18 @@ void conf_print(struct ctx *c)
 			info("    router: %s",
 			     inet_ntop(AF_INET, &c->gw4,   buf4, sizeof(buf4)));
 		}
-	}
 
-	if (!c->no_dns && !(c->no_dhcp && c->no_ndp && c->no_dhcpv6)) {
 		for (i = 0; c->dns4[i]; i++) {
 			if (!i)
-				info("    DNS:");
+				info("DNS:");
 			inet_ntop(AF_INET, &c->dns4[i], buf4, sizeof(buf4));
-			info("        %s", buf4);
+			info("    %s", buf4);
 		}
-	}
 
-	if (!c->no_dns_search && !(c->no_dhcp && c->no_ndp && c->no_dhcpv6)) {
 		for (i = 0; *c->dns_search[i].n; i++) {
 			if (!i)
-				info("        search:");
-			info("            %s", c->dns_search[i].n);
+				info("DNS search list:");
+			info("    %s", c->dns_search[i].n);
 		}
 	}
 
@@ -728,7 +738,7 @@ void conf_print(struct ctx *c)
 		else if (!c->no_dhcpv6)
 			info("NDP:");
 		else
-			return;
+			goto dns6;
 
 		info("    assign: %s",
 		     inet_ntop(AF_INET6, &c->addr6, buf6, sizeof(buf6)));
@@ -737,17 +747,18 @@ void conf_print(struct ctx *c)
 		info("    our link-local: %s",
 		     inet_ntop(AF_INET6, &c->addr6_ll, buf6, sizeof(buf6)));
 
+dns6:
 		for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[i]); i++) {
 			if (!i)
-				info("    DNS:");
+				info("DNS:");
 			inet_ntop(AF_INET6, &c->dns6[i], buf6, sizeof(buf6));
-			info("        %s", buf6);
+			info("    %s", buf6);
 		}
 
 		for (i = 0; *c->dns_search[i].n; i++) {
 			if (!i)
-				info("        search:");
-			info("            %s", c->dns_search[i].n);
+				info("DNS search list:");
+			info("    %s", c->dns_search[i].n);
 		}
 	}
 }
@@ -797,6 +808,11 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"nsrun-dir",	required_argument,	NULL,		3 },
 		{"config-net",	no_argument,		&c->pasta_conf_ns, 1 },
 		{"ns-mac-addr",	required_argument,	NULL,		4 },
+		{"dhcp-dns",	no_argument,		NULL,		5 },
+		{"no-dhcp-dns",	no_argument,		NULL,		6 },
+		{"dhcp-search", no_argument,		NULL,		7 },
+		{"no-dhcp-search", no_argument,		NULL,		8 },
+		{"dns-forward",	required_argument,	NULL,		9 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
@@ -807,6 +823,9 @@ void conf(struct ctx *c, int argc, char **argv)
 	struct in6_addr *dns6 = c->dns6;
 	int name, ret, mask, b, i;
 	uint32_t *dns4 = c->dns4;
+
+	if (c->mode == MODE_PASTA)
+		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
 
 	do {
 		enum conf_port_type *set = NULL;
@@ -872,6 +891,51 @@ void conf(struct ctx *c, int argc, char **argv)
 				}
 				c->mac_guest[i] = b;
 			}
+			break;
+		case 5:
+			if (c->mode != MODE_PASTA) {
+				err("--dhcp-dns is for pasta mode only");
+				usage(argv[0]);
+			}
+			c->no_dhcp_dns = 0;
+			break;
+		case 6:
+			if (c->mode != MODE_PASST) {
+				err("--no-dhcp-dns is for passt mode only");
+				usage(argv[0]);
+			}
+			c->no_dhcp_dns = 1;
+			break;
+		case 7:
+			if (c->mode != MODE_PASTA) {
+				err("--dhcp-search is for pasta mode only");
+				usage(argv[0]);
+			}
+			c->no_dhcp_dns_search = 0;
+			break;
+		case 8:
+			if (c->mode != MODE_PASST) {
+				err("--no-dhcp-search is for passt mode only");
+				usage(argv[0]);
+			}
+			c->no_dhcp_dns_search = 1;
+			break;
+		case 9:
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->dns6_fwd)	&&
+			    inet_pton(AF_INET6, optarg, &c->dns6_fwd)	&&
+			    !IN6_IS_ADDR_UNSPECIFIED(&c->dns6_fwd)	&&
+			    !IN6_IS_ADDR_LOOPBACK(&c->dns6_fwd))
+				break;
+
+			if (c->dns4_fwd == INADDR_ANY			&&
+			    inet_pton(AF_INET, optarg, &c->dns4_fwd)	&&
+			    c->dns4_fwd != INADDR_ANY			&&
+			    c->dns4_fwd != INADDR_BROADCAST		&&
+			    c->dns4_fwd != INADDR_LOOPBACK)
+				break;
+
+			err("Invalid DNS forwarding address: %s", optarg);
+			usage(argv[0]);
 			break;
 		case 'd':
 			if (c->debug) {
@@ -1189,10 +1253,6 @@ void conf(struct ctx *c, int argc, char **argv)
 	if (!c->mtu)
 		c->mtu = ROUND_DOWN(ETH_MAX_MTU - ETH_HLEN, sizeof(uint32_t));
 
-	if (c->mode == MODE_PASTA && dns4 == c->dns4 && dns6 == c->dns6)
-		c->no_dns = 1;
-	if (c->mode == MODE_PASTA && dnss == c->dns_search)
-		c->no_dns_search = 1;
 	get_dns(c);
 
 	if (!*c->pasta_ifn)

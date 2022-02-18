@@ -114,6 +114,7 @@ enum passt_modes {
  * @mask4:		IPv4 netmask, network order
  * @gw4:		Default IPv4 gateway, network order
  * @dns4:		IPv4 DNS addresses, zero-terminated, network order
+ * @dns4_fwd:		Address forwarded (UDP) to first IPv4 DNS, network order
  * @dns_search:		DNS search list
  * @v6:			Enable IPv6 transport
  * @addr6:		IPv6 address for external, routable interface
@@ -121,7 +122,8 @@ enum passt_modes {
  * @addr6_seen:		Latest IPv6 global/site address seen as source from tap
  * @addr6_ll_seen:	Latest IPv6 link-local address seen as source from tap
  * @gw6:		Default IPv6 gateway
- * @dns4:		IPv4 DNS addresses, zero-terminated
+ * @dns6:		IPv6 DNS addresses, zero-terminated
+ * @dns6_fwd:		Address forwarded (UDP) to first IPv6 DNS, network order
  * @ifi:		Index of routable interface
  * @pasta_ifn:		Name of namespace interface for pasta
  * @pasta_ifn:		Index of namespace interface for pasta
@@ -133,8 +135,10 @@ enum passt_modes {
  * @no_icmp:		Disable ICMP operation
  * @icmp:		Context for ICMP protocol handler
  * @mtu:		MTU passed via DHCP/NDP
- * @no_dns:		Do not assign any DNS server via DHCP/DHCPv6/NDP
- * @no_dns_search:	Do not assign any DNS domain search via DHCP/DHCPv6/NDP
+ * @no_dns:		Do not source/use DNS servers for any purpose
+ * @no_dns_search:	Do not source/use domain search lists for any purpose
+ * @no_dhcp_dns:	Do not assign any DNS server via DHCP/DHCPv6/NDP
+ * @no_dhcp_dns_search:	Do not assign any DNS domain search via DHCP/DHCPv6/NDP
  * @no_dhcp:		Disable DHCP server
  * @no_dhcpv6:		Disable DHCPv6 server
  * @no_ndp:		Disable NDP handler altogether
@@ -172,6 +176,7 @@ struct ctx {
 	uint32_t mask4;
 	uint32_t gw4;
 	uint32_t dns4[MAXNS + 1];
+	uint32_t dns4_fwd;
 
 	struct fqdn dns_search[MAXDNSRCH];
 
@@ -182,6 +187,7 @@ struct ctx {
 	struct in6_addr addr6_ll_seen;
 	struct in6_addr gw6;
 	struct in6_addr dns6[MAXNS + 1];
+	struct in6_addr dns6_fwd;
 
 	unsigned int ifi;
 	char pasta_ifn[IF_NAMESIZE];
@@ -198,6 +204,8 @@ struct ctx {
 	int mtu;
 	int no_dns;
 	int no_dns_search;
+	int no_dhcp_dns;
+	int no_dhcp_dns_search;
 	int no_dhcp;
 	int no_dhcpv6;
 	int no_ndp;

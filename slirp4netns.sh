@@ -16,7 +16,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 PASTA_PID="$(mktemp)"
-PASTA_OPTS="-q --ipv4-only -a 10.0.2.0 -n 24 -g 10.0.2.2 -m 1500 --no-ndp --no-dhcpv6 --no-dhcp -P ${PASTA_PID}"
+PASTA_OPTS="-q --ipv4-only -a 10.0.2.0 -n 24 -g 10.0.2.2 --dns-forward 10.0.2.3 -m 1500 --no-ndp --no-dhcpv6 --no-dhcp -P ${PASTA_PID}"
 PASTA="$(command -v ./pasta || command -v pasta || :)"
 
 API_SOCKET=

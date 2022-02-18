@@ -165,19 +165,62 @@ Default is to use the interface with the first default route.
 
 .TP
 .BR \-D ", " \-\-dns " " \fIaddr
-Assign IPv4 \fIaddr\fR via DHCP (option 23) or IPv6 \fIaddr\fR via NDP Router
-Advertisement (option type 25) and DHCPv6 (option 23) as DNS resolver.
+Use \fIaddr\fR (IPv4 or IPv6) for DHCP, DHCPv6, NDP or DNS forwarding, as
+configured (see options \fB--no-dhcp-dns\fR, \fB--dhcp-dns\fR,
+\fB--dns-forward\fR) instead of reading addresses from \fI/etc/resolv.conf\fR.
 This option can be specified multiple times, and a single, empty option disables
-DNS options altogether.
-In \fBpasst\fR mode, default is to use addresses from \fI/etc/resolv.conf\fR,
-and, in \fBpasta\fR mode, no addresses are sent by default.
+usage of DNS addresses altogether.
+
+.TP
+.BR \-D ", " \-\-dns " " \fIaddr
+Use \fIaddr\fR (IPv4 or IPv6) for DHCP, DHCPv6, NDP or DNS forwarding, as
+configured (see options \fB--no-dhcp-dns\fR, \fB--dhcp-dns\fR,
+\fB--dns-forward\fR) instead of reading addresses from \fI/etc/resolv.conf\fR.
+This option can be specified multiple times, and a single, empty option disables
+usage of DNS addresses altogether.
+
+.TP
+.BR \-\-dns-forward " " \fIaddr
+Map \fIaddr\fR (IPv4 or IPv6) as seen from guest or namespace to the first
+configured DNS resolver (with corresponding IP version). Mapping is limited to
+UDP traffic directed to port 53, and DNS answers are translated back with a
+reverse mapping.
+This option can be specified zero to two times (once for IPv4, once for IPv6).
+
 .TP
 .BR \-S ", " \-\-search " " \fIlist
-Assign space-separated \fIlist\fR via DHCP (option 119), via NDP Router
-Advertisement (option type 31) and DHCPv6 (option 24) as DNS domain search list.
-A single, empty option disables sending the DNS domain search list.
-In \fBpasst\fR mode, default is to use the search list from
-\fI/etc/resolv.conf\fR, and, in \fBpasta\fR mode, no list is sent by default.
+Use space-separated \fIlist\fR for DHCP, DHCPv6, and NDP purposes, instead of
+reading entries from \fI/etc/resolv.conf\fR. See options \fB--no-dhcp-search\fR
+and \fB--dhcp-search\fR. A single, empty option disables the DNS domain search
+list altogether.
+
+.TP
+.BR \-\-no-dhcp-dns " " \fIaddr
+In \fIpasst\fR mode, do not assign IPv4 addresses via DHCP (option 23) or IPv6
+addresses via NDP Router Advertisement (option type 25) and DHCPv6 (option 23)
+as DNS resolvers.
+By default, all the configured addresses are passed.
+
+.TP
+.BR \-\-dhcp-dns " " \fIaddr
+In \fIpasta\fR mode, assign IPv4 addresses via DHCP (option 23) or IPv6
+addresses via NDP Router Advertisement (option type 25) and DHCPv6 (option 23)
+as DNS resolvers.
+By default, configured addresses, if any, are not passed.
+
+.TP
+.BR \-\-no-dhcp-search " " \fIaddr
+In \fIpasst\fR mode, do not send the DNS domain search list addresses via DHCP
+(option 119), via NDP Router Advertisement (option type 31) and DHCPv6 (option
+24).
+By default, the DNS domain search list resulting from configuration is passed.
+
+.TP
+.BR \-\-dhcp-search " " \fIaddr
+In \fIpasta\fR mode, send the DNS domain search list addresses via DHCP (option
+119), via NDP Router Advertisement (option type 31) and DHCPv6 (option 24).
+By default, the DNS domain search list resulting from configuration is not
+passed.
 
 .TP
 .BR \-\-no-tcp
