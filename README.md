@@ -128,6 +128,8 @@ for TCP and UDP, respectively.
 - [Contribute](#contribute)
 - [Security and Vulnerability Reports](#security-and-vulnerability-reports)
 
+See also the [man page](/builds/latest/web/passt.1.html).
+
 ## Motivation
 
 ### passt

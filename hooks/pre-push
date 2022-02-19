@@ -45,6 +45,9 @@ cd ..
 make static
 scp passt pasta qrap passt.1 pasta.1 qrap.1	"${USER_HOST}:${BIN}"
 
+man2html -M "/" passt.1 > passt.1.html
+scp passt.1.html				"${USER_HOST}:${WEB}/"
+
 make pkgs
 ssh "${USER_HOST}" 				"rm -f ${BIN}/*.deb"
 ssh "${USER_HOST}"				"rm -f ${BIN}/*.rpm"
