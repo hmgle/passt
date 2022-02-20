@@ -343,7 +343,9 @@
 #define MAX_TAP_CONNS			(128 * 1024)
 #define MAX_SPLICE_CONNS		(128 * 1024)
 
-#define TCP_TAP_FRAMES			256
+#define TCP_TAP_FRAMES_MEM		256
+#define TCP_TAP_FRAMES							\
+	(c->mode == MODE_PASST ? TCP_TAP_FRAMES_MEM : 1)
 
 #define MAX_PIPE_SIZE			(2UL * 1024 * 1024)
 
@@ -609,7 +611,7 @@ static struct tcp4_l2_buf_t {
 #else
 } __attribute__ ((packed, aligned(__alignof__(unsigned int))))
 #endif
-tcp4_l2_buf[TCP_TAP_FRAMES];
+tcp4_l2_buf[TCP_TAP_FRAMES_MEM];
 
 static unsigned int tcp4_l2_buf_used;
 static size_t tcp4_l2_buf_bytes;
@@ -640,21 +642,21 @@ struct tcp6_l2_buf_t {
 #else
 } __attribute__ ((packed, aligned(__alignof__(unsigned int))))
 #endif
-tcp6_l2_buf[TCP_TAP_FRAMES];
+tcp6_l2_buf[TCP_TAP_FRAMES_MEM];
 
 static unsigned int tcp6_l2_buf_used;
 static size_t tcp6_l2_buf_bytes;
 
 /* recvmsg()/sendmsg() data for tap */
 static char 		tcp_buf_discard		[MAX_WINDOW];
-static struct iovec	iov_sock		[TCP_TAP_FRAMES + 1];
+static struct iovec	iov_sock		[TCP_TAP_FRAMES_MEM + 1];
 
-static struct iovec	tcp4_l2_iov_tap		[TCP_TAP_FRAMES];
-static struct iovec	tcp6_l2_iov_tap		[TCP_TAP_FRAMES];
-static struct iovec	tcp4_l2_flags_iov_tap	[TCP_TAP_FRAMES];
-static struct iovec	tcp6_l2_flags_iov_tap	[TCP_TAP_FRAMES];
+static struct iovec	tcp4_l2_iov_tap		[TCP_TAP_FRAMES_MEM];
+static struct iovec	tcp6_l2_iov_tap		[TCP_TAP_FRAMES_MEM];
+static struct iovec	tcp4_l2_flags_iov_tap	[TCP_TAP_FRAMES_MEM];
+static struct iovec	tcp6_l2_flags_iov_tap	[TCP_TAP_FRAMES_MEM];
 
-static struct mmsghdr	tcp_l2_mh_tap		[TCP_TAP_FRAMES];
+static struct mmsghdr	tcp_l2_mh_tap		[TCP_TAP_FRAMES_MEM];
 
 /* sendmsg() to socket */
 static struct iovec	tcp_tap_iov		[UIO_MAXIOV];
@@ -688,7 +690,7 @@ static struct tcp4_l2_flags_buf_t {
 #else
 } __attribute__ ((packed, aligned(__alignof__(unsigned int))))
 #endif
-tcp4_l2_flags_buf[TCP_TAP_FRAMES];
+tcp4_l2_flags_buf[TCP_TAP_FRAMES_MEM];
 
 static int tcp4_l2_flags_buf_used;
 
@@ -717,7 +719,7 @@ static struct tcp6_l2_flags_buf_t {
 #else
 } __attribute__ ((packed, aligned(__alignof__(unsigned int))))
 #endif
-tcp6_l2_flags_buf[TCP_TAP_FRAMES];
+tcp6_l2_flags_buf[TCP_TAP_FRAMES_MEM];
 
 static int tcp6_l2_flags_buf_used;
 
@@ -916,7 +918,7 @@ void tcp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 {
 	int i;
 
-	for (i = 0; i < TCP_TAP_FRAMES; i++) {
+	for (i = 0; i < TCP_TAP_FRAMES_MEM; i++) {
 		struct tcp4_l2_flags_buf_t *b4f = &tcp4_l2_flags_buf[i];
 		struct tcp6_l2_flags_buf_t *b6f = &tcp6_l2_flags_buf[i];
 		struct tcp4_l2_buf_t *b4 = &tcp4_l2_buf[i];
@@ -982,12 +984,13 @@ static void tcp_sock4_iov_init(void)
 		};
 	}
 
-	for (i = 0, iov = tcp4_l2_iov_tap; i < TCP_TAP_FRAMES; i++, iov++) {
+	for (i = 0, iov = tcp4_l2_iov_tap; i < TCP_TAP_FRAMES_MEM; i++, iov++) {
 		iov->iov_base = &tcp4_l2_buf[i].vnet_len;
 		iov->iov_len = MSS_DEFAULT;
 	}
 
-	for (i = 0, iov = tcp4_l2_flags_iov_tap; i < TCP_TAP_FRAMES; i++, iov++)
+	for (i = 0, iov = tcp4_l2_flags_iov_tap; i < TCP_TAP_FRAMES_MEM;
+	     i++, iov++)
 		iov->iov_base = &tcp4_l2_flags_buf[i].vnet_len;
 }
 
@@ -1015,12 +1018,13 @@ static void tcp_sock6_iov_init(void)
 		};
 	}
 
-	for (i = 0, iov = tcp6_l2_iov_tap; i < TCP_TAP_FRAMES; i++, iov++) {
+	for (i = 0, iov = tcp6_l2_iov_tap; i < TCP_TAP_FRAMES_MEM; i++, iov++) {
 		iov->iov_base = &tcp6_l2_buf[i].vnet_len;
 		iov->iov_len = MSS_DEFAULT;
 	}
 
-	for (i = 0, iov = tcp6_l2_flags_iov_tap; i < TCP_TAP_FRAMES; i++, iov++)
+	for (i = 0, iov = tcp6_l2_flags_iov_tap; i < TCP_TAP_FRAMES_MEM;
+	     i++, iov++)
 		iov->iov_base = &tcp6_l2_flags_buf[i].vnet_len;
 }
 
