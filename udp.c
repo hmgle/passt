@@ -125,13 +125,15 @@
  * @sock:	Socket bound to source port used as index
  * @ts:		Activity timestamp from tap, used for socket aging
  * @ts_local:	Timestamp of tap packet to gateway address, aging for local bind
- * @loopback:	Whether local bind should use loopback address as source
+ * @loopback:	Whether local bind maps to loopback address as source
+ * @gua:	Whether local bind maps to configured unicast address as source
  */
 struct udp_tap_port {
 	int sock;
 	time_t ts;
 	time_t ts_local;
 	int loopback;
+	int gua;
 };
 
 /**
@@ -701,10 +703,13 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 				b->ip6h.saddr = b->s_in6.sin6_addr;
 			} else if (IN6_IS_ADDR_LOOPBACK(&b->s_in6.sin6_addr) ||
 				   !memcmp(&b->s_in6.sin6_addr, &c->addr6_seen,
+					   sizeof(c->addr6)) ||
+				   !memcmp(&b->s_in6.sin6_addr, &c->addr6,
 					   sizeof(c->addr6))) {
 				in_port_t src = htons(b->s_in6.sin6_port);
 
 				b->ip6h.daddr = c->addr6_ll_seen;
+
 				if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
 					b->ip6h.saddr = c->gw6;
 				else
@@ -716,6 +721,12 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 					udp_tap_map[V6][src].loopback = 1;
 				else
 					udp_tap_map[V6][src].loopback = 0;
+
+				if (!memcmp(&b->s_in6.sin6_addr, &c->addr6,
+						 sizeof(c->addr6)))
+					udp_tap_map[V6][src].gua = 1;
+				else
+					udp_tap_map[V6][src].gua = 0;
 
 				bitmap_set(udp_act[V6][UDP_ACT_TAP], src);
 			} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->dns6_fwd) &&
@@ -987,6 +998,8 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 			if (!udp_tap_map[V6][dst].ts_local ||
 			    udp_tap_map[V6][dst].loopback)
 				s_in6.sin6_addr = in6addr_loopback;
+			else if (udp_tap_map[V6][dst].gua)
+				s_in6.sin6_addr = c->addr6;
 			else
 				s_in6.sin6_addr = c->addr6_seen;
 		} else if (!memcmp(addr, &c->dns6_fwd, sizeof(c->dns6_fwd)) &&
@@ -1212,8 +1225,11 @@ static void udp_timer_one(struct ctx *c, int v6, enum udp_act_type type,
 		if (ts->tv_sec - tp->ts > UDP_CONN_TIMEOUT)
 			s = tp->sock;
 
-		if (ts->tv_sec - tp->ts_local > UDP_CONN_TIMEOUT)
+		if (ts->tv_sec - tp->ts_local > UDP_CONN_TIMEOUT) {
 			tp->ts_local = 0;
+			tp->loopback = 0;
+			tp->gua = 0;
+		}
 
 		break;
 	case UDP_ACT_INIT_CONN:
