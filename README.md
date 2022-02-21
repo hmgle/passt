@@ -398,9 +398,14 @@ is fully configurable with command line options.
 
 ### pasta
 
-<p><video id="demo_pasta_video" style="width: 70%; height: auto; max-height: 90%" controls>
- <source src="/builds/latest/web/demo_pasta.webm" type="video/webm">
-</video></p>
+<div style="display: grid; grid-template-columns: 1fr 1fr;">
+  <div><video id="demo_pasta_video" style="width: 100%; height: auto;" controls>
+    <source src="/builds/latest/web/demo_pasta.webm" type="video/webm">
+  </video>use pasta to create and connect a namespace</div>
+  <div><video id="demo_podman_video" style="width: 100%; height: auto;" controls>
+    <source src="/builds/latest/web/demo_podman.webm" type="video/webm">
+  </video>use Podman with pasta</div>
+</div>
 
 ### passt
 

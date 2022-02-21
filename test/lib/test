@@ -218,11 +218,31 @@ test_one_line() {
 		pane_run NS "${__arg}"
 		pane_wait NS
 		;;
+	"ns1")
+		pane_run NS1 "${__arg}"
+		pane_wait NS1
+		;;
+	"ns2")
+		pane_run NS2 "${__arg}"
+		pane_wait NS2
+		;;
 	"nsb")
 		pane_run NS "${__arg}"
 		;;
+	"ns1b")
+		pane_run NS1 "${__arg}"
+		;;
+	"ns2b")
+		pane_run NS2 "${__arg}"
+		;;
 	"nsw")
 		pane_wait NS
+		;;
+	"ns1w")
+		pane_wait NS1
+		;;
+	"ns2w")
+		pane_wait NS2
 		;;
 	"nstools")
 		pane_run NS 'which '"${__arg}"' >/dev/null || echo skip'
@@ -258,6 +278,18 @@ test_one_line() {
 		pane_run NS "${__arg#* }"
 		pane_wait NS
 		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse NS)")"
+		;;
+	"ns1out")
+		__varname="${__arg%% *}"
+		pane_run NS1 "${__arg#* }"
+		pane_wait NS1
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse NS1)")"
+		;;
+	"ns2out")
+		__varname="${__arg%% *}"
+		pane_run NS2 "${__arg#* }"
+		pane_wait NS2
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse NS2)")"
 		;;
 	"check")
 		info_check "${__arg}"
@@ -325,6 +357,9 @@ test_one_line() {
 		;;
 	"killp")
 		pane_kill "${__arg}"
+		;;
+	"resize")
+		pane_resize ${__arg}
 		;;
 	*)
 		__def_body="$(eval printf \"\$TEST_ONE_DEF_$__cmd\")"

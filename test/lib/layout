@@ -207,7 +207,6 @@ layout_two_guests() {
 layout_demo_pasta() {
 	sleep 3
 
-	tmux kill-pane -a -t 0
 	cmd_write 0 cd ${BASEPATH}
 	cmd_write 0 clear
 	sleep 1
@@ -244,7 +243,6 @@ layout_demo_pasta() {
 layout_demo_passt() {
 	sleep 3
 
-	tmux kill-pane -a -t 0
 	cmd_write 0 cd ${BASEPATH}
 	cmd_write 0 clear
 	sleep 1
@@ -273,6 +271,42 @@ layout_demo_passt() {
 
 	tmux pipe-pane -O -t ${PANE_PASST} "cat >> ${LOGDIR}/pane_passt.log"
 	tmux select-pane -t ${PANE_PASST} -T "passt in pasta (namespace)"
+
+	sleep 1
+}
+
+# layout_demo_podman() - Four panes for pasta demo with Podman
+layout_demo_podman() {
+	sleep 3
+
+	cmd_write 0 cd ${BASEPATH}
+	cmd_write 0 clear
+	sleep 1
+	cmd_write 0 clear
+
+	tmux split-window -v -l '65%' -t passt_test
+	tmux split-window -h -t passt_test
+	tmux split-window -h -l '42%' -t passt_test:1.0
+
+	PANE_HOST=0
+	PANE_INFO=1
+	PANE_NS1=2
+	PANE_NS2=3
+
+	get_info_cols
+
+	tmux pipe-pane -O -t ${PANE_NS1} "cat >> ${LOGDIR}/pane_ns1.log"
+	tmux select-pane -t ${PANE_NS1} -T "Podman with slirp4netns"
+
+	tmux pipe-pane -O -t ${PANE_NS2} "cat >> ${LOGDIR}/pane_ns2.log"
+	tmux select-pane -t ${PANE_NS2} -T "Podman with pasta"
+
+	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
+	tmux send-keys -t ${PANE_INFO} -N 100 C-m
+	tmux select-pane -t ${PANE_INFO} -T ""
+
+	tmux pipe-pane -O -t ${PANE_HOST} "cat >> ${LOGDIR}/pane_host.log"
+	tmux select-pane -t ${PANE_HOST} -T "host"
 
 	sleep 1
 }

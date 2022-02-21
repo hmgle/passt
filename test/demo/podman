@@ -1,0 +1,842 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/demo/podman - Show pasta operation with Podman
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+onlyfor	podman
+
+set	OPTS -Z -w 4M -l 1M -P 2 -t5 --pacing-timer 10000
+set	OPTS_10s -Z -w 4M -l 1M -P 2 -t10 --pacing-timer 10000
+
+say	This is an overview of 
+em	Podman
+say	 using 
+em	pasta
+say	.
+nl
+nl
+sleep	3
+
+say	Let's fetch Podman
+sleep	1
+tempdir	TEMPDIR
+host	git -C __TEMPDIR__ clone https://github.com/containers/podman.git
+sleep	1
+
+say	, patch it
+sleep	1
+host	cp ../contrib/podman/0001-libpod-Add-pasta-networking-mode.patch __TEMPDIR__/podman
+host	cd __TEMPDIR__/podman
+host	patch -p1 < 0001-libpod-Add-pasta-networking-mode.patch
+sleep	1
+
+say	, and build it.
+host	make
+sleep	1
+
+nl
+nl
+say	By default, for 
+em	rootless
+say	 mode, Podman will pick
+nl
+em	slirp4netns
+say	 to operate the network.
+nl
+nl
+say	Let's start a container with it
+sleep	1
+
+ns1	cd __TEMPDIR__/podman
+ns1b	./bin/podman run --rm -ti alpine sh
+sleep	2
+
+say	,
+nl
+say	and one with 
+em	pasta
+say	 instead.
+
+ns2	cd __TEMPDIR__/podman
+ns2b	./bin/podman run --net=pasta --rm -ti alpine sh
+sleep	2
+
+nl
+nl
+say	We can observe some practical differences:
+nl
+
+ns1b	ip ad sh
+sleep	3
+say	- slirp4netns uses a predefined IPv4 address
+hl	NS1
+sleep	2
+
+ns2b	ip ad sh
+sleep	3
+say	,
+nl
+say	  pasta copies addresses from the host
+hl	NS2
+sleep	2
+
+nl
+say	- pasta enables IPv6 by default
+hl	NS2
+sleep	2
+
+nl
+say	- slirp4netns uses 
+em	tap0
+say	 as interface name
+hl	NS1
+sleep	2
+
+say	, pasta
+nl
+say	  takes an interface name from the host
+hl	NS2
+sleep	2
+
+nl
+say	- same for routes:
+
+ns1b	ip ro sh
+sleep	3
+say	 slirp4netns defines its own
+nl
+say	  gateway address
+hl	NS1
+sleep	2
+
+say	, pasta copies it from the host
+ns2b	ip ro sh
+ns2b	ip -6 ro sh
+sleep	5
+
+nl
+nl
+say	Let's check connectivity...
+sleep	2
+ns1b	wget risotto.milane.se
+ns2b	wget myfinge.rs
+sleep	2
+say	 fine.
+sleep	5
+nl
+nl
+
+say	Let's run a service in the container. We didn't
+nl
+say	configure port forwarding. With default options,
+nl
+say	pasta detects services bound inside and outside
+nl
+say	the container and forwards ports accordingly, so
+nl
+say	we don't need to restart it. Let's restart the
+nl
+say	container running with slirp4netns...
+sleep	5
+
+ns1b	exit
+sleep	2
+ns1b	podman run --rm -p 8080:8080/tcp -ti alpine sh
+sleep	5
+
+nl
+nl
+say	and now actually start the service
+ns1b	apk add thttpd
+ns2b	apk add thttpd
+ns1b	>index.html cat << EOF
+ns1b	<!doctype html><body>Hello via slirp4netns</body>
+ns1b	EOF
+ns2b	>index.html cat << EOF
+ns2b	<!doctype html><body>Hello via pasta</body>
+ns2b	EOF
+ns1b	thttpd -p 8080
+ns2b	thttpd -p 8081
+
+sleep	3
+say	, then check
+nl
+say	that it's accessible.
+sleep	3
+
+hostb	lynx http://127.0.0.1:8080/
+sleep	5
+hostb	q
+hostb	lynx http://[::1]:8081/
+sleep	5
+hostb	q
+sleep	2
+
+nl
+nl
+say	What about performance, you might ask.
+nl
+say	For simplicity, we'll measure between init
+nl
+say	namespace (the "host") and container. To do
+nl
+say	that, we need to allow the container direct
+nl
+say	access to the host, which needs an extra option
+nl
+say	in slirp4netns. Let's restart that container,
+nl
+say	while also mapping ports for iperf3 and neper,
+nl
+say	and enabling IPv6 for slirp4netns (experimental)
+nl
+say	too.
+sleep	3
+
+ns1	exit
+
+ns1b	podman run --rm --net=slirp4netns:allow_host_loopback=true,enable_ipv6=true -p 5201-5202:5201-5202/tcp -p 5201-5202:5201-5202/udp -ti alpine sh
+sleep	5
+nl
+nl
+say	pasta allows that by default, so we wouldn't need
+nl
+say	to touch the container using pasta, but let's
+nl
+say	take the chance to look at passing extra options
+nl
+say	there as well.
+nl
+nl
+ns2	exit
+
+say	Options after '--net-pasta:' are the same as
+nl
+say	documented for the command line of pasta(1).
+nl
+say	For example, we can enable packet captures
+sleep	3
+ns2b	./bin/podman run --net=pasta:--pcap,demo.pcap --rm -ti alpine sh
+sleep	5
+
+say	,
+nl
+say	and generate some traffic we can look at.
+nl
+sleep	2
+ns2b	wget -O - lameexcu.se
+sleep	2
+hostb	tshark -r demo.pcap tcp
+sleep	5
+
+nl
+say	But back to performance now. By the way,
+nl
+say	pasta doesn't detect bound UDP ports
+nl
+say	periodically (only when it starts), so we
+nl
+say	have to pass the ones we need explicitly.
+nl
+sleep	2
+ns2b	exit
+sleep	1
+ns2b	./bin/podman run --net=pasta:-U,5214 -p 5204:5204/udp --rm -ti alpine sh
+sleep	5
+
+nl
+say	In slirp4netns mode, Podman enables by
+nl
+say	default the port forwarder from 'rootlesskit'
+nl
+say	for better performance.
+nl
+say	However, it can't be used for non-local
+nl
+say	mappings (traffic without loopback source 
+nl
+em	and
+say	 destination) because it doesn't preserve
+nl
+say	the correct source address as it forwards
+nl
+say	packets to the container.
+sleep	3
+nl
+nl
+say	We'll check non-loopback mappings first for
+nl
+say	both pasta and slirp4netns, then restart the
+nl
+say	slirp4netns container with rootlesskit and
+nl
+say	switch to loopback mappings. pasta doesn't
+nl
+say	have this limitation.
+nl
+nl
+say	One last note: slirp4netns doesn't support
+nl
+say	forwarding of IPv6 ports (to the container):
+nl
+say	github.com/rootless-containers/slirp4netns/issues/253
+nl
+say	so we'll skip IPv6 tests for slirp4netns as
+nl
+say	port forwarder (on the path to the container).
+
+sleep	5
+ns1	exit
+ns1b	podman run --rm --net=slirp4netns:allow_host_loopback=true,enable_ipv6=true,port_handler=slirp4netns -p 5201-5202:5201-5202/tcp -p 5201-5202:5201-5202/udp -ti alpine sh
+sleep	3
+
+nl
+nl
+say	We'll use iperf3(1) for throughput
+sleep	2
+ns1b	apk add iperf3 jq bc
+ns2b	apk add iperf3 jq bc
+sleep	2
+say	 and static
+nl
+say	builds of neper (github.com/google/neper) for
+nl
+say	latency.
+ns1	wget lameexcu.se/tcp_rr; chmod 755 tcp_rr
+ns2	wget lameexcu.se/tcp_rr; chmod 755 tcp_rr
+ns1	wget lameexcu.se/tcp_crr; chmod 755 tcp_crr
+ns2	wget lameexcu.se/tcp_crr; chmod 755 tcp_crr
+ns1	wget lameexcu.se/udp_rr; chmod 755 udp_rr
+ns2	wget lameexcu.se/udp_rr; chmod 755 udp_rr
+sleep	5
+
+nl
+nl
+say	Everything is set now, let's start
+sleep	2
+hout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+hout	ADDR4 ip -j -4 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global").local'
+hout	ADDR6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global").local'
+hout	GW4 ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+hout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+
+nl
+nl
+resize	INFO D 15
+info	Throughput in Gbps, latency in µs
+info	  non-loopback (tap) connections
+th	mode slirp4netns pasta
+
+tr	TCP/IPv6 to ns
+#ns1b	(iperf3 -s1J -p 5201 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+#ns1b	iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second" >t2
+#hostb	iperf3 -c __ADDR6__ -p 5201 __OPTS_10s__ & iperf3 -c __ADDR6__ -p 5202 __OPTS_10s__
+#sleep	15
+#ns1b	
+#ns1out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+#bw	__BW__ 0.0 0.0
+bw	-
+ns2b	(iperf3 -s1J -p 5203 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+ns2b	iperf3 -s1J -p 5204 | jq -rM ".end.sum_received.bits_per_second" >t2
+hostb	iperf3 -c __ADDR6__ -p 5203 -t5 -l 1M -Z & iperf3 -c __ADDR6__ -p 5204 -t5 -l 1M -Z
+sleep	10
+ns2b	
+ns2out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+hostb	
+
+tl	  RR latency
+#ns1b	./tcp_rr -6 --nolog -C 5201 -P 5202
+#sleep	2
+#hout	LAT tcp_rr --nolog -c -H __ADDR6__ -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+#lat	__LAT__ 100000 100000
+lat	-
+ns2b	./tcp_rr -6 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT tcp_rr --nolog -c -H __ADDR6__ -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	  CRR latency
+#ns1b	./tcp_crr -6 --nolog -C 5201 -P 5202
+#sleep	2
+#hout	LAT tcp_crr --nolog -c -H __ADDR6__ -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+#lat	__LAT__ 100000 100000
+lat	-
+ns2b	./tcp_crr -6 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT tcp_crr --nolog -c -H __ADDR6__ -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	TCP/IPv4 to ns
+ns1b	(iperf3 -s1J -p 5201 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+ns1b	iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second" >t2
+hostb	iperf3 -c __ADDR4__ -p 5201 __OPTS__ & iperf3 -c __ADDR4__ -p 5202 __OPTS__
+sleep	10
+ns1b	
+ns1out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+ns2b	(iperf3 -s1J -p 5203 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+ns2b	iperf3 -s1J -p 5204 | jq -rM ".end.sum_received.bits_per_second" >t2
+hostb	iperf3 -c __ADDR4__ -p 5203 __OPTS__ & iperf3 -c __ADDR4__ -p 5204 __OPTS__
+sleep	10
+ns2b	
+ns2out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+hostb	
+
+tl	  RR latency
+ns1b	./tcp_rr -4 --nolog -C 5201 -P 5202
+sleep	2
+hout	LAT tcp_rr --nolog -c -H __ADDR4__ -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+ns2b	./tcp_rr -4 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT tcp_rr --nolog -c -H __ADDR4__ -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	  CRR latency
+ns1b	./tcp_crr -4 --nolog -C 5201 -P 5202
+sleep	2
+hout	LAT tcp_crr --nolog -c -H __ADDR4__ -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+ns2b	./tcp_crr -4 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT tcp_crr --nolog -c -H __ADDR4__ -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tr	TCP/IPv6 to host
+hostb	(iperf3 -s1J -p 5211 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+hostb	iperf3 -s1J -p 5212 | jq -rM ".end.sum_received.bits_per_second" >t2
+ns1b	iperf3 -c fd00::2 -p 5211 __OPTS__ & iperf3 -c fd00::2 -p 5212 __OPTS__
+sleep	10
+hostb	
+hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+hostb	(iperf3 -s1J -p 5213 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+hostb	iperf3 -s1J -p 5214 | jq -rM ".end.sum_received.bits_per_second" >t2
+ns2b	iperf3 -c __GW6__%__IFNAME__ -p 5213 __OPTS__ & iperf3 -c __GW6__%__IFNAME__ -p 5214 __OPTS__
+sleep	10
+hostb	
+hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+ns1b	
+ns2b	
+
+tl	  RR latency
+hostb	tcp_rr -6 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./tcp_rr --nolog -c -H fd00::2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	tcp_rr -6 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./tcp_rr --nolog -c -H __GW6__%__IFNAME__ -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	  CRR latency
+hostb	tcp_crr -6 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./tcp_crr --nolog -c -H fd00::2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	tcp_crr -6 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./tcp_crr --nolog -c -H __GW6__%__IFNAME__ -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	TCP/IPv4 to host
+hostb	(iperf3 -s1J -p 5211 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+hostb	iperf3 -s1J -p 5212 | jq -rM ".end.sum_received.bits_per_second" >t2
+ns1b	iperf3 -c 10.0.2.2 -p 5211 __OPTS__ & iperf3 -c 10.0.2.2 -p 5212 __OPTS__
+sleep	10
+hostb	
+hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+hostb	(iperf3 -s1J -p 5213 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+hostb	iperf3 -s1J -p 5214 | jq -rM ".end.sum_received.bits_per_second" >t2
+ns2b	iperf3 -c __GW4__ -p 5213 __OPTS__ & iperf3 -c __GW4__ -p 5214 __OPTS__
+sleep	10
+hostb	
+hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+ns1b	
+ns2b	
+
+tl	  RR latency
+hostb	tcp_rr -4 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./tcp_rr --nolog -c -H 10.0.2.2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	tcp_rr -4 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./tcp_rr --nolog -c -H __GW4__ -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	  CRR latency
+hostb	tcp_crr -4 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./tcp_crr --nolog -c -H 10.0.2.2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	tcp_crr -4 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./tcp_crr --nolog -c -H __GW4__ -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+sleep	5
+
+
+tr	UDP/IPv6 to ns
+#ns1b	iperf3 -s1J -p 5201 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+#hostb	iperf3 -u -c __ADDR6__ -p 5201 -t5 -b 35G
+#sleep	10
+#ns1out	BW cat t1
+#bw	__BW__ 0.0 0.0
+bw	-
+ns2b	iperf3 -s1J -p 5204 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+hostb	iperf3 -u -c __ADDR6__ -p 5204 -t5 -b 35G
+sleep	10
+ns2out	BW cat t1
+bw	__BW__ 0.0 0.0
+
+tl	  RR latency
+#ns1b	./udp_rr -6 --nolog -C 5201 -P 5202
+#sleep	2
+#hout	LAT udp_rr --nolog -c -H __ADDR6__ -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+#lat	__LAT__ 100000 100000
+lat	-
+ns2b	./udp_rr -6 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT udp_rr --nolog -c -H __ADDR6__ -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	UDP/IPv4 to ns
+ns1b	iperf3 -s1J -p 5201 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+hostb	iperf3 -u -c __ADDR4__ -p 5201 -t5 -b 35G
+sleep	10
+ns1out	BW cat t1
+bw	__BW__ 0.0 0.0
+ns2b	iperf3 -s1J -p 5204 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+hostb	iperf3 -u -c __ADDR4__ -p 5204 -t5 -b 35G
+sleep	10
+ns2out	BW cat t1
+bw	__BW__ 0.0 0.0
+
+tl	  RR latency
+ns1b	./udp_rr -6 --nolog -C 5201 -P 5202
+sleep	2
+hout	LAT udp_rr --nolog -c -H __ADDR4__ -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+ns2b	./udp_rr -6 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT udp_rr --nolog -c -H __ADDR4__ -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tr	UDP/IPv6 to host
+hostb	iperf3 -s1J -p 5211 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+ns1b	iperf3 -u -c fd00::2 -p 5211 -t5 -b 35G
+sleep	10
+hout	BW cat t1
+bw	__BW__ 0.0 0.0
+hostb	iperf3 -s1J -p 5214 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+ns2b	iperf3 -u -c __GW6__%__IFNAME__ -p 5214 -t5 -b 35G
+sleep	10
+hout	BW cat t1
+bw	__BW__ 0.0 0.0
+
+tl	  RR latency
+hostb	udp_rr -6 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./udp_rr --nolog -c -H fd00::2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	udp_rr -6 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./udp_rr --nolog -c -H __GW6__%__IFNAME__ -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	UDP/IPv4 to host
+hostb	iperf3 -s1J -p 5211 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+ns1b	iperf3 -u -c 10.0.2.2 -p 5211 -t5 -b 35G
+sleep	10
+hout	BW cat t1
+bw	__BW__ 0.0 0.0
+hostb	iperf3 -s1J -p 5214 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+ns2b	iperf3 -u -c __GW4__ -p 5214 -t5 -b 35G
+sleep	10
+hout	BW cat t1
+bw	__BW__ 0.0 0.0
+
+tl	  RR latency
+hostb	udp_rr -6 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./udp_rr --nolog -c -H 10.0.2.2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	udp_rr -6 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./udp_rr --nolog -c -H __GW4__ -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+
+ns1	exit
+ns1	podman run --rm --net=slirp4netns:allow_host_loopback=true,enable_ipv6=true -p 5201-5202:5201-5202/tcp -p 5201-5202:5201-5202/udp -ti alpine sh
+ns1	apk add iperf3 jq bc
+ns1	wget lameexcu.se/tcp_rr; chmod 755 tcp_rr
+ns1	wget lameexcu.se/tcp_crr; chmod 755 tcp_crr
+ns1	wget lameexcu.se/udp_rr; chmod 755 udp_rr
+info	
+info	
+info	  loopback (lo) connections
+th	mode rootlesskit pasta
+
+
+tr	TCP/IPv6 to ns
+ns1b	(iperf3 -s1J -p 5201 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+ns1b	iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second" >t2
+hostb	iperf3 -c ::1 -p 5201 -t5 -l 1M -Z & iperf3 -c ::1 -p 5202 -t5 -l 1M -Z
+sleep	10
+ns1b	
+ns1out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+ns2b	(iperf3 -s1J -p 5203 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+ns2b	iperf3 -s1J -p 5204 | jq -rM ".end.sum_received.bits_per_second" >t2
+hostb	iperf3 -c ::1 -p 5203 -t5 -l 1M -Z & iperf3 -c ::1 -p 5204 -t5 -l 1M -Z
+sleep	10
+ns2b	
+ns2out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+hostb	
+
+tl	  RR latency
+ns1b	./tcp_rr -6 --nolog -C 5201 -P 5202
+sleep	2
+hout	LAT tcp_rr --nolog -c -H ::1 -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+ns2b	./tcp_rr -6 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT tcp_rr --nolog -c -H ::1 -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	  CRR latency
+ns1b	./tcp_crr -6 --nolog -C 5201 -P 5202
+sleep	2
+hout	LAT tcp_crr --nolog -c -H ::1 -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+ns2b	./tcp_crr -6 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT tcp_crr --nolog -c -H ::1 -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	TCP/IPv4 to ns
+ns1b	(iperf3 -s1J -p 5201 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+ns1b	iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second" >t2
+hostb	iperf3 -c 127.0.0.1 -p 5201 __OPTS__ & iperf3 -c 127.0.0.1 -p 5202 __OPTS__
+sleep	10
+ns1b	
+ns1out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+ns2b	(iperf3 -s1J -p 5203 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+ns2b	iperf3 -s1J -p 5204 | jq -rM ".end.sum_received.bits_per_second" >t2
+hostb	iperf3 -c 127.0.0.1 -p 5203 __OPTS__ & iperf3 -c 127.0.0.1 -p 5204 __OPTS__
+sleep	10
+ns2b	
+ns2out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+hostb	
+
+tl	  RR latency
+ns1b	./tcp_rr -4 --nolog -C 5201 -P 5202
+sleep	2
+hout	LAT tcp_rr --nolog -c -H 127.0.0.1 -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+ns2b	./tcp_rr -4 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT tcp_rr --nolog -c -H 127.0.0.1 -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	  CRR latency
+ns1b	./tcp_crr -4 --nolog -C 5201 -P 5202
+sleep	2
+hout	LAT tcp_crr --nolog -c -H 127.0.0.1 -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+ns2b	./tcp_crr -4 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT tcp_crr --nolog -c -H 127.0.0.1 -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tr	TCP/IPv6 to host
+hostb	(iperf3 -s1J -p 5211 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+hostb	iperf3 -s1J -p 5212 | jq -rM ".end.sum_received.bits_per_second" >t2
+ns1b	iperf3 -c fd00::2 -p 5211 __OPTS__ & iperf3 -c fd00::2 -p 5212 __OPTS__
+sleep	10
+hostb	
+hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+hostb	(iperf3 -s1J -p 5213 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+hostb	iperf3 -s1J -p 5214 | jq -rM ".end.sum_received.bits_per_second" >t2
+ns2b	iperf3 -c ::1 -p 5213 __OPTS__ & iperf3 -c ::1 -p 5214 __OPTS__
+sleep	10
+hostb	
+hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+ns1b	
+ns2b	
+
+tl	  RR latency
+hostb	tcp_rr -6 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./tcp_rr --nolog -c -H fd00::2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	tcp_rr -6 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./tcp_rr --nolog -c -H ::1 -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	  CRR latency
+hostb	tcp_crr -6 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./tcp_crr --nolog -c -H fd00::2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	tcp_crr -6 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./tcp_crr --nolog -c -H ::1 -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	TCP/IPv4 to host
+hostb	(iperf3 -s1J -p 5211 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+hostb	iperf3 -s1J -p 5212 | jq -rM ".end.sum_received.bits_per_second" >t2
+ns1b	iperf3 -c 10.0.2.2 -p 5211 __OPTS__ & iperf3 -c 10.0.2.2 -p 5212 __OPTS__
+sleep	10
+hostb	
+hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+hostb	(iperf3 -s1J -p 5213 | jq -rM ".end.sum_received.bits_per_second" >t1) &
+hostb	iperf3 -s1J -p 5214 | jq -rM ".end.sum_received.bits_per_second" >t2
+ns2b	iperf3 -c 127.0.0.1 -p 5213 __OPTS__ & iperf3 -c 127.0.0.1 -p 5214 __OPTS__
+sleep	10
+hostb	
+hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+bw	__BW__ 0.0 0.0
+ns1b	
+ns2b	
+
+tl	  RR latency
+hostb	tcp_rr -4 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./tcp_rr --nolog -c -H 10.0.2.2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	tcp_rr -4 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./tcp_rr --nolog -c -H 127.0.0.1 -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	  CRR latency
+hostb	tcp_crr -4 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./tcp_crr --nolog -c -H 10.0.2.2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	tcp_crr -4 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./tcp_crr --nolog -c -H 127.0.0.1 -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+sleep	5
+
+
+tr	UDP/IPv6 to ns
+ns1b	iperf3 -s1J -p 5201 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+hostb	iperf3 -u -c ::1 -p 5201 -t5 -b 35G
+sleep	10
+ns1out	BW cat t1
+bw	__BW__ 0.0 0.0
+ns2b	iperf3 -s1J -p 5204 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+hostb	iperf3 -u -c ::1 -p 5204 -t5 -b 35G
+sleep	10
+ns2out	BW cat t1
+bw	__BW__ 0.0 0.0
+
+tl	  RR latency
+ns1b	./udp_rr -6 --nolog -C 5201 -P 5202
+sleep	2
+hout	LAT udp_rr --nolog -c -H ::1 -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+ns2b	./udp_rr -6 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT udp_rr --nolog -c -H ::1 -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	UDP/IPv4 to ns
+ns1b	iperf3 -s1J -p 5201 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+hostb	iperf3 -u -c 127.0.0.1 -p 5201 -t5 -b 35G
+sleep	10
+ns1out	BW cat t1
+bw	__BW__ 0.0 0.0
+ns2b	iperf3 -s1J -p 5204 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+hostb	iperf3 -u -c 127.0.0.1 -p 5204 -t5 -b 35G
+sleep	10
+ns2out	BW cat t1
+bw	__BW__ 0.0 0.0
+
+tl	  RR latency
+ns1b	./udp_rr -6 --nolog -C 5201 -P 5202
+sleep	2
+hout	LAT udp_rr --nolog -c -H 127.0.0.1 -C 5201 -P 5202 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+ns2b	./udp_rr -6 --nolog -C 5203 -P 5204
+sleep	2
+hout	LAT udp_rr --nolog -c -H 127.0.0.1 -C 5203 -P 5204 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tr	UDP/IPv6 to host
+hostb	iperf3 -s1J -p 5211 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+ns1b	iperf3 -u -c fd00::2 -p 5211 -t5 -b 35G
+sleep	10
+hout	BW cat t1
+bw	__BW__ 0.0 0.0
+hostb	iperf3 -s1J -p 5214 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+ns2b	iperf3 -u -c ::1 -p 5214 -t5 -b 35G
+sleep	10
+hout	BW cat t1
+bw	__BW__ 0.0 0.0
+
+tl	  RR latency
+hostb	udp_rr -6 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./udp_rr --nolog -c -H fd00::2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	udp_rr -6 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./udp_rr --nolog -c -H ::1 -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+tl	UDP/IPv4 to host
+hostb	iperf3 -s1J -p 5211 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+ns1b	iperf3 -u -c 10.0.2.2 -p 5211 -t5 -b 35G
+sleep	10
+hout	BW cat t1
+bw	__BW__ 0.0 0.0
+hostb	iperf3 -s1J -p 5214 | jq -rM ".intervals[0].sum.bits_per_second" >t1
+ns2b	iperf3 -u -c 127.0.0.1 -p 5214 -t5 -b 35G
+sleep	10
+hout	BW cat t1
+bw	__BW__ 0.0 0.0
+
+tl	  RR latency
+hostb	udp_rr -6 --nolog -C 5211 -P 5212
+sleep	2
+ns1out	LAT ./udp_rr --nolog -c -H 10.0.2.2 -C 5211 -P 5212 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+hostb	udp_rr -6 --nolog -C 5213 -P 5214
+sleep	2
+ns2out	LAT ./udp_rr --nolog -c -H 127.0.0.1 -C 5213 -P 5214 -l 5 | sed -n 's/^throughput=\(.*\)/\1/p'
+lat	__LAT__ 100000 100000
+
+
+nl
+nl
+say	Thanks for watching!
+sleep	15

@@ -128,6 +128,14 @@ demo() {
 	MODE=pasta
 	test demo
 	video_stop 0
+	teardown demo_pasta
+
+	layout_demo_podman
+	video_grab demo_podman
+	MODE=podman
+	test demo
+	video_stop 0
+	teardown_demo_podman
 
 	return 0
 }

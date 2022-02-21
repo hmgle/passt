@@ -327,12 +327,31 @@ teardown_demo_passt() {
 	pane_wait GUEST
 	pane_wait HOST
 	pane_wait PASST
+
+	tmux kill-pane -a -t 0
+	tmux send-keys -t 0 "C-c"
 }
 
-# teardown_demo_pasta() - Exit namespace from remaining pane
+# teardown_demo_pasta() - Exit perf and namespace from remaining pane
 teardown_demo_pasta() {
+	tmux send-keys -t ${PANE_NS} "q"
+	pane_wait NS
 	tmux send-keys -t ${PANE_NS} "C-d"
 	pane_wait NS
+
+	tmux kill-pane -a -t 0
+	tmux send-keys -t 0 "C-c"
+}
+
+# teardown_demo_podman() - Exit namespaces
+teardown_demo_podman() {
+	tmux send-keys -t ${PANE_NS1} "C-d"
+	tmux send-keys -t ${PANE_NS2} "C-d"
+	pane_wait NS1
+	pane_wait NS2
+
+	tmux kill-pane -a -t 0
+	tmux send-keys -t 0 "C-c"
 }
 
 # setup() - Run setup_*() functions

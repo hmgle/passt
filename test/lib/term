@@ -176,6 +176,15 @@ pane_highlight() {
 	sleep 3
 }
 
+# pane_resize() - Resize a pane given its name
+# $1:	Pane name
+# $2:	Direction: U, D, L, or R
+# $3:	Adjustment in lines or columns
+pane_resize() {
+	__pane_number=$(eval echo \$PANE_${1})
+	tmux resize-pane -${2} -t ${__pane_number} ${3}
+}
+
 # pane_run() - Issue a command in given pane name
 # $1:	Pane name
 # $@:	Command to issue
@@ -201,6 +210,7 @@ pane_wait() {
 		case ${__l} in
 		'$ ' | '# ' | '# # ' | *"$ " | *"# ") return ;;
 		*" #[m " | *" #[m [K" | *"]# ["*) return ;;
+		*' $ [6n' | *' # [6n' ) return ;;
 		esac
 	do sleep 0.1 || sleep 1; done
 }
