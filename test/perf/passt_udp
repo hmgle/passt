@@ -77,7 +77,7 @@ tr	UDP throughput over IPv4: guest to host
 guest	ip link set dev __IFNAME__ mtu 256
 iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 500M
 iperf3s	BW ns 100${i}2 __THREADS__
-bw	__BW__ 0.1 0.2
+bw	__BW__ 0.0 0.0
 guest	ip link set dev __IFNAME__ mtu 576
 iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 1G
 iperf3s	BW ns 100${i}2 __THREADS__
@@ -146,7 +146,7 @@ tr	UDP throughput over IPv4: host to guest
 ns	ip link set dev lo mtu 256
 iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 1G
 iperf3s	BW guest 100${i}1 __THREADS__
-bw	__BW__ 0.1 0.2
+bw	__BW__ 0.0 0.0
 ns	ip link set dev lo mtu 576
 iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 1G
 iperf3s	BW guest 100${i}1 __THREADS__
