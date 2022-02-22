@@ -49,21 +49,13 @@ as needed, so there's no need to actually install it.
 
 ### Special requirements for continuous integration and demo modes
 
-Running the test suite as continuous integration or demo modes will record a
-video of the steps being executed, and create binary packages. The demo mode
-uses _cool-retro-term_ as terminal, whereas the continuous integration mode uses
-_MATE Terminal_ by default.
+Running the test suite as continuous integration or demo modes will record the
+terminal with the steps being executed, using asciinema(1), and create binary
+packages.
 
-The following additional packages are commonly needed as well:
+The following additional packages are commonly needed:
 
-    dbus-x11 xdotool x11-utils xvfb ffmpeg mate-terminal cool-retro-term xauth
-    dconf-cli alien linux-perf tshark sqlite3`
-
-For convenience, suitable profiles for _MATE Terminal_ and _cool-retro-term_ are
-provided under the `env` directory. To source them:
-
-    dconf load /org/mate/terminal/profiles/ < env/mate-terminal.profile
-    cp env/cool_retro_term.sqlite ~/.local/share/cool-retro-term/QML/OfflineStorage/Databases/*.sqlite
+    alien linux-perf tshark
 
 ## Regular test
 
@@ -79,9 +71,9 @@ Issuing:
 
     ./ci
 
-will run the whole test suite while recording a video of the execution, and it
-will also build JavaScript fragments used on http://passt.top/ for performance
-data tables and links to specific video offsets.
+will run the whole test suite while recording the execution, and it will also
+build JavaScript fragments used on http://passt.top/ for performance data tables
+and links to specific offsets in the captures.
 
 ## Demo mode
 
@@ -89,7 +81,7 @@ Issuing:
 
     ./demo
 
-will run the demo cases under `demo`, recording videos as well.
+will run the demo cases under `demo`, with terminal captures as well.
 
 # Framework
 

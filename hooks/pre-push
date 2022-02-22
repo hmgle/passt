@@ -34,11 +34,12 @@ ssh "${USER_HOST}" 				"mkdir -p ${WEB} ${TEST} ${BIN}"
 cd test
 
 ./ci
-scp ci.webm perf.js ci.js ../doc/*.png		"${USER_HOST}:${WEB}/"
+scp ci.cast perf.js ci.js ../doc/*.png		"${USER_HOST}:${WEB}/"
 scp test_logs/* 				"${USER_HOST}:${TEST}/"
 
 ./run_demo
-scp demo_passt.webm demo_pasta.webm		"${USER_HOST}:${WEB}/"
+scp demo_pasta.cast demo_podman.cast 		"${USER_HOST}:${WEB}/"
+scp demo_passt.cast		 		"${USER_HOST}:${WEB}/"
 
 cd ..
 

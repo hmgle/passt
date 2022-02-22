@@ -60,7 +60,7 @@ run() {
 
 	term
 	perf_init
-	[ ${CI} -eq 1 ]   && video_grab ci
+	[ ${CI} -eq 1 ]   && video_start ci
 
 	setup build
 	test build
@@ -94,7 +94,7 @@ run() {
 	teardown two_guests
 
 	perf_finish
-	[ ${CI} -eq 1 ] && video_stop ${STATUS_FAIL}
+	[ ${CI} -eq 1 ] && video_stop
 
 	log "PASS: ${STATUS_PASS}, FAIL: ${STATUS_FAIL}"
 
@@ -117,24 +117,24 @@ demo() {
 	term_demo
 
 	layout_demo_passt
-	video_grab demo_passt
+	video_start demo_passt
 	MODE=passt
 	test demo
-	video_stop 0
+	video_stop
 	teardown demo_passt
 
 	layout_demo_pasta
-	video_grab demo_pasta
+	video_start demo_pasta
 	MODE=pasta
 	test demo
-	video_stop 0
+	video_stop
 	teardown demo_pasta
 
 	layout_demo_podman
-	video_grab demo_podman
+	video_start demo_podman
 	MODE=podman
 	test demo
-	video_stop 0
+	video_stop
 	teardown_demo_podman
 
 	return 0

@@ -398,28 +398,52 @@ is fully configurable with command line options.
 
 ### pasta
 
+<link rel="stylesheet" type="text/css" href="/static/asciinema-player.css" />
+<script src="/static/asciinema-player.min.js"></script>
+
 <div style="display: grid; grid-template-columns: 1fr 1fr;">
-  <div><video id="demo_pasta_video" style="width: 100%; height: auto;" controls>
-    <source src="/builds/latest/web/demo_pasta.webm" type="video/webm">
-  </video>use pasta to create and connect a namespace</div>
-  <div><video id="demo_podman_video" style="width: 100%; height: auto;" controls>
-    <source src="/builds/latest/web/demo_podman.webm" type="video/webm">
-  </video>use Podman with pasta</div>
+  <div>
+    <div id="demo_pasta" style="width: 100%; height: auto;"></div>
+    <div>use pasta to create and connect a namespace</div>
+  </div>
 </div>
+<div style="display: grid; grid-template-columns: 1fr 1fr;">
+  <div>
+    <div id="demo_podman" style="width: 100%; height: auto;"></div>
+    <div>use Podman with pasta</div>
+</div>
+<script>
+demo_pasta_player = AsciinemaPlayer.create('/builds/latest/web/demo_pasta.cast',
+					   document.getElementById('demo_pasta'),
+					   { cols: 130, rows: 40, preload: true }
+					   );
+
+demo_podman_player = AsciinemaPlayer.create('/builds/latest/web/demo_podman.cast',
+					    document.getElementById('demo_podman'),
+					   { cols: 130, rows: 40, preload: true }
+					   );
+</script>
 
 ### passt
 
-<p><video id="demo_passt_video" style="width: 70%; height: auto; max-height: 90%" controls>
- <source src="/builds/latest/web/demo_passt.webm" type="video/webm">
-</video></p>
+<div id="demo_passt" style="width: 70%; height: auto; max-height: 90%"></div>
+<script>
+demo_passt_player = AsciinemaPlayer.create('/builds/latest/web/demo_passt.cast',
+					   document.getElementById('demo_passt'),
+					   { cols: 130, rows: 40, preload: true }
+					  );
+</script>
 
 ## Continuous Integration
 
-<p><video id="ci_video" style="width: 90%; height: auto; max-height: 90%" controls>
- <source src="/builds/latest/web/ci.webm" type="video/webm">
-</video></p>
-
-<script src="/builds/latest/web/ci.js"></script>
+<div id="ci" style="width: 90%; height: auto; max-height: 90%"></div>
+<script>
+ci_player = AsciinemaPlayer.create('/builds/latest/web/ci.cast',
+				   document.getElementById('ci'),
+				   { cols: 240, rows: 50, preload: true }
+				  );
+</script>
+<div><script src="/builds/latest/web/ci.js"></script></div>
 
 Test logs [here](/builds/latest/test/).
 
