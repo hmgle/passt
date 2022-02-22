@@ -400,28 +400,33 @@ is fully configurable with command line options.
 
 <link rel="stylesheet" type="text/css" href="/static/asciinema-player.css" />
 <script src="/static/asciinema-player.min.js"></script>
+<style scoped>
+.small_video {
+}
+@media (min-width: 1500px) {
+  .small_video {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+</style>
 
-<div style="display: grid; grid-template-columns: 1fr 1fr;">
-  <div>
-    <div id="demo_pasta" style="width: 100%; height: auto;"></div>
-    <div>use pasta to create and connect a namespace</div>
-  </div>
-</div>
-<div style="display: grid; grid-template-columns: 1fr 1fr;">
-  <div>
-    <div id="demo_podman" style="width: 100%; height: auto;"></div>
-    <div>use Podman with pasta</div>
+<div class="small_video">
+  <div id="demo_pasta" style="width: 99%;"></div>
+  <div id="demo_podman" style="width: 99%;"></div>
 </div>
 <script>
 demo_pasta_player = AsciinemaPlayer.create('/builds/latest/web/demo_pasta.cast',
 					   document.getElementById('demo_pasta'),
-					   { cols: 130, rows: 40, preload: true }
-					   );
+					   { cols: 130, rows: 41,
+					     preload: true, poster: 'npt:0:4'
+					   });
 
 demo_podman_player = AsciinemaPlayer.create('/builds/latest/web/demo_podman.cast',
 					    document.getElementById('demo_podman'),
-					   { cols: 130, rows: 40, preload: true }
-					   );
+					   { cols: 130, rows: 41,
+					     preload: true, poster: 'npt:0:4'
+					   });
 </script>
 
 ### passt
@@ -430,8 +435,9 @@ demo_podman_player = AsciinemaPlayer.create('/builds/latest/web/demo_podman.cast
 <script>
 demo_passt_player = AsciinemaPlayer.create('/builds/latest/web/demo_passt.cast',
 					   document.getElementById('demo_passt'),
-					   { cols: 130, rows: 40, preload: true }
-					  );
+					   { cols: 130, rows: 41,
+					     preload: true, poster: 'npt:0:4'
+					   });
 </script>
 
 ## Continuous Integration
@@ -440,7 +446,7 @@ demo_passt_player = AsciinemaPlayer.create('/builds/latest/web/demo_passt.cast',
 <script>
 ci_player = AsciinemaPlayer.create('/builds/latest/web/ci.cast',
 				   document.getElementById('ci'),
-				   { cols: 240, rows: 50, preload: true }
+				   { cols: 240, rows: 51, preload: true }
 				  );
 </script>
 <div><script src="/builds/latest/web/ci.js"></script></div>
