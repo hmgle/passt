@@ -1281,18 +1281,6 @@ void conf(struct ctx *c, int argc, char **argv)
 	if (!*c->pasta_ifn)
 		if_indextoname(c->ifi, c->pasta_ifn);
 
-#ifdef PASST_LEGACY_NO_OPTIONS
-	if (c->mode == MODE_PASST) {
-		c->foreground = 1;
-		c->stderr = 1;
-
-		if (!tcp_tap) {
-			memset(c->tcp.port_to_tap, 0xff,
-			       PORT_EPHEMERAL_MIN / 8);
-		}
-	}
-#endif
-
 	c->tcp.ns_detect_ports   = c->udp.ns_detect_ports   = 0;
 	c->tcp.init_detect_ports = c->udp.init_detect_ports = 0;
 

@@ -66,7 +66,3 @@ scp *.deb *.rpm					"${USER_HOST}:${BIN}/avx2/"
 ssh "${USER_HOST}"				"mv ${LATEST} ${AWAY}"
 ssh "${USER_HOST}"				"mv ${TEMP} ${LATEST}"
 ssh "${USER_HOST}"				"rm -rf ${AWAY}"
-
-# Legacy, for KubeVirt tests
-# CFLAGS="-DPASST_LEGACY_NO_OPTIONS -static" make avx2
-# scp passt qrap				"${USER_HOST}:${BUILDS}/static/"

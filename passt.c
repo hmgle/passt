@@ -309,9 +309,7 @@ int main(int argc, char **argv)
 	struct sigaction sa;
 	char *log_name;
 
-#ifndef PASST_LEGACY_NO_OPTIONS
 	check_root();
-#endif
 	drop_caps();
 
 	c.pasta_userns_fd = c.pasta_netns_fd = c.fd_tap = c.fd_tap_listen = -1;

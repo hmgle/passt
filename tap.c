@@ -818,13 +818,6 @@ static void tap_sock_unix_init(struct ctx *c)
 	}
 
 	info("UNIX domain socket bound at %s\n", addr.sun_path);
-#ifdef PASST_LEGACY_NO_OPTIONS
-	/*
-	 * syscalls:passt chmod
-	 */
-	chmod(addr.sun_path,
-	      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-#endif
 
 	listen(fd, 0);
 
