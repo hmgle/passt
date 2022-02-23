@@ -479,13 +479,16 @@ next:
 void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 {
 	int change = !MAC_IS_ZERO(mac) || up || mtu;
-	struct {
+	struct req_t {
 		struct nlmsghdr nlh;
 		struct ifinfomsg ifm;
 		struct rtattr rta;
 		union {
 			unsigned char mac[ETH_ALEN];
-			unsigned int mtu;
+			struct {
+				unsigned int mtu;
+				uint8_t end;
+			} mtu;
 		} set;
 	} req = {
 		.nlh.nlmsg_type   = change ? RTM_NEWLINK : RTM_GETLINK,
@@ -513,8 +516,8 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 	}
 
 	if (mtu) {
-		req.nlh.nlmsg_len = sizeof(req);
-		req.set.mtu = mtu;
+		req.nlh.nlmsg_len = offsetof(struct req_t, set.mtu.end);
+		req.set.mtu.mtu = mtu;
 		req.rta.rta_type = IFLA_MTU;
 		req.rta.rta_len = RTA_LENGTH(sizeof(unsigned int));
 		nl_req(ns, buf, &req, req.nlh.nlmsg_len);
