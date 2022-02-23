@@ -172,14 +172,6 @@ This option can be specified multiple times, and a single, empty option disables
 usage of DNS addresses altogether.
 
 .TP
-.BR \-D ", " \-\-dns " " \fIaddr
-Use \fIaddr\fR (IPv4 or IPv6) for DHCP, DHCPv6, NDP or DNS forwarding, as
-configured (see options \fB--no-dhcp-dns\fR, \fB--dhcp-dns\fR,
-\fB--dns-forward\fR) instead of reading addresses from \fI/etc/resolv.conf\fR.
-This option can be specified multiple times, and a single, empty option disables
-usage of DNS addresses altogether.
-
-.TP
 .BR \-\-dns-forward " " \fIaddr
 Map \fIaddr\fR (IPv4 or IPv6) as seen from guest or namespace to the first
 configured DNS resolver (with corresponding IP version). Mapping is limited to
@@ -440,9 +432,7 @@ The default path is shown with --help.
 .TP
 .BR \-\-config-net
 Configure networking in the namespace: set up addresses and routes as configured
-or sourced from the host, and bring up the tap interface. This option implies
-\fB--no-ra\fR: the static configuration of the IPv6 address will not allow the
-kernel to set up the default route using SLAAC.
+or sourced from the host, and bring up the tap interface.
 
 .TP
 .BR \-\-ns-mac-addr " " \fIaddr
