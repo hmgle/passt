@@ -1255,6 +1255,9 @@ void conf(struct ctx *c, int argc, char **argv)
 		usage(argv[0]);
 	}
 
+	if (c->pasta_conf_ns)
+		c->no_ra = 1;
+
 	if (c->mode == MODE_PASTA && c->pasta_netns_fd == -1)
 		pasta_start_ns(c);
 

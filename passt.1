@@ -440,7 +440,9 @@ The default path is shown with --help.
 .TP
 .BR \-\-config-net
 Configure networking in the namespace: set up addresses and routes as configured
-or sourced from the host, and bring up the tap interface.
+or sourced from the host, and bring up the tap interface. This option implies
+\fB--no-ra\fR: the static configuration of the IPv6 address will not allow the
+kernel to set up the default route using SLAAC.
 
 .TP
 .BR \-\-ns-mac-addr " " \fIaddr
