@@ -34,12 +34,15 @@ ssh "${USER_HOST}" 				"mkdir -p ${WEB} ${TEST} ${BIN}"
 cd test
 
 ./ci
-scp ci.cast perf.js ci.js ../doc/*.png		"${USER_HOST}:${WEB}/"
+scp perf.js ci.js ../doc/*.png			"${USER_HOST}:${WEB}/"
 scp test_logs/* 				"${USER_HOST}:${TEST}/"
 
 ./run_demo
-scp demo_pasta.cast demo_podman.cast 		"${USER_HOST}:${WEB}/"
-scp demo_passt.cast		 		"${USER_HOST}:${WEB}/"
+
+for cast in ci demo_pasta demo_podman demo_passt; do
+	gzip -9 "${cast}.cast"
+	scp "${cast}.cast"{,.gz}	 	"${USER_HOST}:${WEB}/"
+done
 
 cd ..
 
