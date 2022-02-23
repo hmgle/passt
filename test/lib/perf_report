@@ -114,11 +114,10 @@ for (var i = 0; i < perf_links.length; i++) {
 		}
 
 		event.preventDefault();
-		ci_video_player.dispose();
-		ci_video_player = AsciinemaPlayer.create(
-			"/builds/latest/web/ci.cast",
-			ci_video,
-			{ startAt: seek, autoplay: true });
+		ci_player.dispose();
+		ci_player = AsciinemaPlayer.create("/builds/latest/web/ci.cast",
+						   ci_video,
+						   { startAt: seek, autoplay: true });
 
 		window.scrollTo({ top: top, behavior: "smooth" })
 	}, false);
