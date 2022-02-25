@@ -260,7 +260,9 @@ static int sandbox(struct ctx *c)
 	mount("", "/", "", MS_UNBINDABLE | MS_REC, NULL);
 	mount("", TMPDIR, "tmpfs", MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_RDONLY,
 	      "nr_inodes=2,nr_blocks=0");
-	chdir(TMPDIR);
+	if (chdir(TMPDIR))
+		return -errno;
+
 	syscall(SYS_pivot_root, ".", ".");
 	umount2(".", MNT_DETACH | UMOUNT_NOFOLLOW);
 
