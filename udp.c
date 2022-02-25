@@ -640,6 +640,7 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 			.sin6_family = AF_INET6,
 			.sin6_addr = IN6ADDR_LOOPBACK_INIT,
 			.sin6_port = htons(send_dst),
+			.sin6_scope_id = 0,
 		});
 	} else {
 		*((struct sockaddr_in *)&udp_splice_namebuf) =
@@ -647,6 +648,7 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 			.sin_family = AF_INET,
 			.sin_addr = { .s_addr = htonl(INADDR_LOOPBACK) },
 			.sin_port = htons(send_dst),
+			.sin_zero = { 0 },
 		});
 	}
 
