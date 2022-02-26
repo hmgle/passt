@@ -15,6 +15,7 @@ RLIMIT_STACK_VAL := 1024
 endif
 
 AUDIT_ARCH := $(shell uname -m | tr [a-z] [A-Z])
+AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/^ARM.*/ARM/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
