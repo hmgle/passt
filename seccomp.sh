@@ -109,6 +109,9 @@ syscall_nr() {
 	__in="$(printf "#include <asm-generic/unistd.h>\n#include <sys/syscall.h>\n__NR_%s" ${1})"
 	__out="$(echo "${__in}" | cc -E -xc - -o - | tail -1)"
 	[ "${__out}" = "__NR_$1" ] && return 1
+
+	# Output might be in the form "(x + y)" (seen on armv6l, armv7l)
+	__out="$(eval echo $((${__out})))"
 	echo "${__out}"
 }
 
