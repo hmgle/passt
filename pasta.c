@@ -12,7 +12,8 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  *
  * #syscalls:pasta clone waitid exit exit_group rt_sigprocmask
- * #syscalls:pasta rt_sigreturn|sigreturn ppc64:sigreturn s390x:sigreturn
+ * #syscalls:pasta rt_sigreturn|sigreturn armv6l:sigreturn armv7l:sigreturn
+ * #syscalls:pasta ppc64:sigreturn s390x:sigreturn
  */
 
 #include <sched.h>

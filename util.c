@@ -441,7 +441,8 @@ char *line_read(char *buf, size_t len, int fd)
  * @map:	Bitmap where numbers of ports in listening state will be set
  * @exclude:	Bitmap of ports to exclude from setting (and clear)
  *
- * #syscalls:pasta lseek ppc64le:_llseek ppc64:_llseek
+ * #syscalls:pasta lseek
+ * #syscalls:pasta ppc64le:_llseek ppc64:_llseek armv6l:_llseek armv7l:_llseek
  */
 void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
 			uint8_t *map, uint8_t *exclude)
