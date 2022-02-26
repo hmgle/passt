@@ -339,8 +339,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	if (madvise(pkt_buf, TAP_BUF_BYTES, MADV_HUGEPAGE))
-		perror("madvise");
+	madvise(pkt_buf, TAP_BUF_BYTES, MADV_HUGEPAGE);
 
 	__openlog(log_name, 0, LOG_DAEMON);
 
