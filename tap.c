@@ -658,7 +658,7 @@ redo:
 		/* Complete the partial read above before discarding a malformed
 		 * frame, otherwise the stream will be inconsistent.
 		 */
-		if (len < (ssize_t)sizeof(*eh) || len > ETH_MAX_MTU)
+		if (len < (ssize_t)sizeof(*eh) || len > (ssize_t)ETH_MAX_MTU)
 			goto next;
 
 		pcap(p, len);
@@ -718,7 +718,7 @@ restart:
 	while ((len = read(c->fd_tap, pkt_buf + n, TAP_BUF_BYTES - n)) > 0) {
 		struct ethhdr *eh = (struct ethhdr *)(pkt_buf + n);
 
-		if (len < (ssize_t)sizeof(*eh) || len > ETH_MAX_MTU) {
+		if (len < (ssize_t)sizeof(*eh) || len > (ssize_t)ETH_MAX_MTU) {
 			n += len;
 			continue;
 		}
