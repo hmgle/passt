@@ -304,7 +304,7 @@
  * - SPLICE_FIN_TO:		FIN (EPOLLRDHUP) seen from connected socket
  * - SPLICE_FIN_BOTH:		FIN (EPOLLRDHUP) seen from both sides
  *
- * #syscalls:pasta pipe2|pipe fcntl ppc64:fcntl64
+ * #syscalls:pasta pipe2|pipe fcntl armv6l:fcntl64 armv7l:fcntl64 ppc64:fcntl64
  */
 
 #include <sched.h>
