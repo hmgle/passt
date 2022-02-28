@@ -40,8 +40,9 @@ scp test_logs/* 				"${USER_HOST}:${TEST}/"
 ./run_demo
 
 for cast in ci demo_pasta demo_podman demo_passt; do
-	gzip -9 "${cast}.cast"
-	scp "${cast}.cast"{,.gz}	 	"${USER_HOST}:${WEB}/"
+	gzip -fk9 "${cast}.cast"
+	scp "${cast}.cast"		 	"${USER_HOST}:${WEB}/"
+	scp "${cast}.cast.gz"		 	"${USER_HOST}:${WEB}/"
 done
 
 cd ..
