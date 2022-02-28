@@ -167,6 +167,7 @@ say	Let's have a (quick!) look at performance
 nl
 say	  more in the "Performance" section below.
 sleep	3
+ns	exit
 passt	exit
 passt	CFLAGS="-g" make avx2
 sleep	2
