@@ -152,6 +152,35 @@ hint
 sleep	1
 
 
+test	OpenSUSE Tumbleweed armv7l
+
+temp	IMG
+temp	ZIMAGE
+temp	INITRD
+host	wget http://download.opensuse.org/ports/armv7hl/tumbleweed/appliances/openSUSE-Tumbleweed-ARM-JeOS-efi.armv7l.raw.xz -O - | xz -d > __IMG__
+host	guestfish -a __IMG__ -i download /boot/zImage __ZIMAGE__
+host	guestfish -a __IMG__ -i download /boot/initrd __INITRD__
+host	virt-edit -a __IMG__ -m /dev/sda3 /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 %I $TERM/g'
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	./qrap 5 qemu-system-arm -M virt -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -kernel __ZIMAGE__ -initrd __INITRD__ -append 'root=/dev/sda3' -drive if=none,file=__IMG__,format=raw,id=hd,media=disk -device virtio-scsi-device -device scsi-hd,drive=hd -netdev socket,fd=5,id=passt -device virtio-net-device,netdev=passt
+host	PS1='$ '
+host	ip link set eth0 up
+sleep	10
+host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
+sleep	10
+host	zypper install -y gcc make netcat-openbsd; echo
+
+host	make clean
+hout	RET CFLAGS="-Werror" make; echo $?
+check	[ __RET__ -eq 0 ]
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
 test	OpenSUSE Tumbleweed
 
 temp	IMG
