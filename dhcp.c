@@ -40,9 +40,9 @@
 struct opt {
 	int sent;
 	int slen;
-	unsigned char s[255];
+	uint8_t s[255];
 	int clen;
-	unsigned char c[255];
+	uint8_t c[255];
 };
 
 static struct opt opts[255];
@@ -312,9 +312,9 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	     m->chaddr[3], m->chaddr[4], m->chaddr[5]);
 
 	m->yiaddr = c->addr4;
-	*(unsigned long *)opts[1].s =  c->mask4;
-	*(unsigned long *)opts[3].s =  c->gw4;
-	*(unsigned long *)opts[54].s = c->gw4;
+	memcpy(opts[1].s,  &c->mask4, sizeof(c->mask4));
+	memcpy(opts[3].s,  &c->gw4,   sizeof(c->gw4));
+	memcpy(opts[54].s, &c->gw4,   sizeof(c->gw4));
 
 	/* If the gateway is not on the assigned subnet, send an option 121
 	 * (Classless Static Routing) adding a dummy route to it.
@@ -323,8 +323,8 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 		/* a.b.c.d/32:0.0.0.0, 0:a.b.c.d */
 		opts[121].slen = 14;
 		opts[121].s[0] = 32;
-		*(unsigned long *)&opts[121].s[1] = c->gw4;
-		*(unsigned long *)&opts[121].s[10] = c->gw4;
+		memcpy(opts[121].s + 1,  &c->gw4, sizeof(c->gw4));
+		memcpy(opts[121].s + 10, &c->gw4, sizeof(c->gw4));
 	}
 
 	if (c->mtu != -1) {

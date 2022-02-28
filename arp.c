@@ -58,7 +58,8 @@ int arp(struct ctx *c, struct ethhdr *eh, size_t len)
 	/* Discard announcements (but not 0.0.0.0 "probes"): we might have the
 	 * same IP address, hide that.
 	 */
-	if (*((uint32_t *)&am->sip) && !memcmp(am->sip, am->tip, 4))
+	if (memcmp(am->sip, (unsigned char[4]){ 0, 0, 0, 0 }, 4) &&
+	    !memcmp(am->sip, am->tip, 4))
 		return 1;
 
 	/* Don't resolve our own address, either. */
