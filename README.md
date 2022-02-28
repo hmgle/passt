@@ -220,7 +220,7 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * Linux
     * ✅ starting from 4.18 kernel version
     * ✅ starting from 3.13 kernel version
-* 🛠 build-time selection of AVX2 instructions (as much as possible)
+* ✅ run-time selection of AVX2 build
 * ⌚ [_musl_](https://bugs.passt.top/show_bug.cgi?id=4) and
   [_uClibc-ng_](https://bugs.passt.top/show_bug.cgi?id=5)
 * ⌚ [FreeBSD](https://bugs.passt.top/show_bug.cgi?id=6),
@@ -467,15 +467,12 @@ Test logs [here](/builds/latest/test/).
         cd passt
         make
 
-    * alternatively, static builds for x86_64, with or without AVX2 instructions,
-      as of the latest commit are also available for convenience
-      [here](/builds/latest/x86_64/avx2/) and
-      [here](/builds/latest/x86_64/). Convenience, non-official
-      packages for Debian (and derivatives) and RPM-based distributions are also
-      available there. These binaries and packages are simply built with:
+    * alternatively, static builds for x86_64 as of the latest commit are also
+      available for convenience [here](/builds/latest/x86_64/). Convenience,
+      non-official packages for Debian (and derivatives) and RPM-based
+      distributions are also available there. These binaries and packages are
+      simply built with:
 
-            CFLAGS="-static" make avx2
-            make pkgs
             make static
             make pkgs
 
@@ -530,15 +527,12 @@ Test logs [here](/builds/latest/test/).
         cd passt
         make
 
-    * alternatively, static builds for x86_64, with or without AVX2 instructions,
-      as of the latest commit are also available for convenience
-      [here](/builds/latest/x86_64/avx2/) and
-      [here](/builds/latest/x86_64/). Convenience, non-official
-      packages for Debian (and derivatives) and RPM-based distributions are also
-      available there. These binaries and packages are simply built with:
+    * alternatively, static builds for x86_64 as of the latest commit are also
+      available for convenience [here](/builds/latest/x86_64/). Convenience,
+      non-official packages for Debian (and derivatives) and RPM-based
+      distributions are also available there. These binaries and packages are
+      simply built with:
 
-            CFLAGS="-static" make avx2
-            make pkgs
             make static
             make pkgs
 

@@ -69,6 +69,7 @@
 #include "tap.h"
 #include "conf.h"
 #include "pasta.h"
+#include "arch.h"
 
 #define EPOLL_EVENTS		8
 
@@ -312,6 +313,8 @@ int main(int argc, char **argv)
 	struct timespec now;
 	struct sigaction sa;
 	char *log_name;
+
+	arch_avx2_exec(argv);
 
 	check_root();
 	drop_caps();

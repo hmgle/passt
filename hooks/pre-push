@@ -58,15 +58,6 @@ ssh "${USER_HOST}" 				"rm -f ${BIN}/*.deb"
 ssh "${USER_HOST}"				"rm -f ${BIN}/*.rpm"
 scp *.deb *.rpm					"${USER_HOST}:${BIN}/"
 
-CFLAGS="-static -DGLIBC_NO_STATIC_NSS" make avx2
-ssh "${USER_HOST}"				"mkdir -p ${BIN}/avx2"
-scp passt pasta qrap passt.1 pasta.1 qrap.1	"${USER_HOST}:${BIN}/avx2/"
-
-make pkgs
-ssh "${USER_HOST}"				"rm -f ${BIN}/avx2/*.deb"
-ssh "${USER_HOST}"				"rm -f ${BIN}/avx2/*.rpm"
-scp *.deb *.rpm					"${USER_HOST}:${BIN}/avx2/"
-
 ssh "${USER_HOST}"				"mv ${LATEST} ${AWAY}"
 ssh "${USER_HOST}"				"mv ${TEMP} ${LATEST}"
 ssh "${USER_HOST}"				"rm -rf ${AWAY}"

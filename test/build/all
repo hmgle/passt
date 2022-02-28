@@ -40,13 +40,3 @@ host	CFLAGS="-Werror" make
 check	[ -f passt ]
 check	[ -h pasta ]
 check	[ -f qrap ]
-
-test	Build AVX2
-host	make clean
-check	! [ -e passt ]
-check	! [ -e pasta ]
-check	! [ -e qrap ]
-host	CFLAGS="-Werror" make avx2
-check	[ -f passt ]
-check	[ -h pasta ]
-check	[ -f qrap ]

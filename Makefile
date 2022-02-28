@@ -14,8 +14,11 @@ ifeq ($(RLIMIT_STACK_VAL),unlimited)
 RLIMIT_STACK_VAL := 1024
 endif
 
-AUDIT_ARCH := $(shell uname -m | tr [a-z] [A-Z])
-AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/^ARM.*/ARM/')
+# Get 'uname -m'-like architecture description for target
+TARGET_ARCH := $(shell $(CC) -dumpmachine | cut -f1 -d- | tr [a-z] [A-Z])
+TARGET_ARCH := $(shell echo $(TARGET_ARCH) | sed 's/POWERPC/PPC/')
+
+AUDIT_ARCH := $(shell echo $(TARGET_ARCH) | sed 's/^ARM.*/ARM/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
@@ -25,7 +28,7 @@ CFLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)
 CFLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
 CFLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
 CFLAGS += -DRLIMIT_STACK_VAL=$(RLIMIT_STACK_VAL)
-CFLAGS += -DARCH=\"$(shell uname -m)\"
+CFLAGS += -DARCH=\"$(TARGET_ARCH)\"
 
 # On gcc 11.2, with -O2 and -flto, tcp_hash() and siphash_20b(), if inlined,
 # seem to be hitting something similar to:
@@ -63,10 +66,13 @@ endif
 
 prefix ?= /usr/local
 
+ifeq ($(TARGET_ARCH),X86_64)
+all: passt passt.avx2 pasta pasta.avx2 qrap
+BIN := passt passt.avx2 pasta pasta.avx2 qrap
+else
 all: passt pasta qrap
-
-avx2: CFLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
-avx2: clean all
+BIN := passt pasta qrap
+endif
 
 static: CFLAGS += -static -DGLIBC_NO_STATIC_NSS
 static: clean all
@@ -78,6 +84,16 @@ passt: $(filter-out qrap.c,$(wildcard *.c)) \
 	$(filter-out qrap.h,$(wildcard *.h)) seccomp.h
 	$(CC) $(CFLAGS) $(filter-out qrap.c,$(wildcard *.c)) -o passt
 
+passt.avx2: CFLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
+passt.avx2: $(filter-out qrap.c,$(wildcard *.c)) \
+	$(filter-out qrap.h,$(wildcard *.h)) seccomp.h
+	$(CC) $(CFLAGS) $(filter-out qrap.c,$(wildcard *.c)) -o passt.avx2
+
+passt.avx2: passt
+
+pasta.avx2: passt.avx2
+	ln -s passt.avx2 pasta.avx2
+
 pasta: passt
 	ln -s passt pasta
 	ln -s passt.1 pasta.1
@@ -88,24 +104,26 @@ qrap: qrap.c passt.h
 
 .PHONY: clean
 clean:
-	-${RM} passt *.o seccomp.h qrap pasta pasta.1 \
+	-${RM} passt passt.avx2 *.o seccomp.h qrap pasta pasta.avx2 pasta.1 \
 		passt.tar passt.tar.gz *.deb *.rpm
 
-install: passt pasta qrap
+install: $(BIN)
 	mkdir -p $(DESTDIR)$(prefix)/bin $(DESTDIR)$(prefix)/share/man/man1
-	cp -d passt pasta qrap $(DESTDIR)$(prefix)/bin
+	cp -d $(BIN) $(DESTDIR)$(prefix)/bin
 	cp -d passt.1 pasta.1 qrap.1 $(DESTDIR)$(prefix)/share/man/man1
 
 uninstall:
 	-${RM} $(DESTDIR)$(prefix)/bin/passt
+	-${RM} $(DESTDIR)$(prefix)/bin/passt.avx2
 	-${RM} $(DESTDIR)$(prefix)/bin/pasta
+	-${RM} $(DESTDIR)$(prefix)/bin/pasta.avx2
 	-${RM} $(DESTDIR)$(prefix)/bin/qrap
 	-${RM} $(DESTDIR)$(prefix)/share/man/man1/passt.1
 	-${RM} $(DESTDIR)$(prefix)/share/man/man1/pasta.1
 	-${RM} $(DESTDIR)$(prefix)/share/man/man1/qrap.1
 
 pkgs:
-	tar cf passt.tar -P --xform 's//\/usr\/bin\//' passt pasta qrap
+	tar cf passt.tar -P --xform 's//\/usr\/bin\//' $(BIN)
 	tar rf passt.tar -P --xform 's//\/usr\/share\/man\/man1\//' \
 		passt.1 pasta.1 qrap.1
 	gzip passt.tar

@@ -29,7 +29,7 @@ sleep	1
 say	 and build it.
 sleep	1
 host	cd passt
-host	make avx2
+host	make
 sleep	1
 
 nl
