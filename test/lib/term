@@ -554,7 +554,7 @@ run_term() {
 		asciinema rec --overwrite demo.uncut -c 'tmux new-session -s passt_test ./run_demo from_term'
 		video_postprocess demo.uncut
 	else
-		tmux new-session -s passt_test ./run_demo from_term
+		tmux new-session -s passt_test ./run from_term
 	fi
 }
 
