@@ -553,7 +553,7 @@ Test logs [here](/builds/latest/test/).
         dhclient -6
 
 * and that's it, you should now have TCP connections, UDP, and ICMP/ICMPv6
-  echo working from/to the guest for IPv4 and IPv6
+  echo working from/to the namespace for IPv4 and IPv6
 
 * to connect to a service inside the namespace, just connect to the same port
   using the loopback address.
