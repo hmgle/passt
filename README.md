@@ -446,7 +446,7 @@ demo_passt_player = AsciinemaPlayer.create('/builds/latest/web/demo_passt.cast',
 <script>
 ci_player = AsciinemaPlayer.create('/builds/latest/web/ci.cast',
 				   document.getElementById('ci'),
-				   { cols: 240, rows: 51, preload: true }
+				   { cols: 240, rows: 51, poster: 'npt:999:0' }
 				  );
 </script>
 <div><script src="/builds/latest/web/ci.js"></script></div>
