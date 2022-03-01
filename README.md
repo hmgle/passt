@@ -473,7 +473,6 @@ Test logs [here](/builds/latest/test/).
       distributions are also available there. These binaries and packages are
       simply built with:
 
-            make static
             make pkgs
 
 * have a look at the _man_ page for synopsis and options:
@@ -533,7 +532,6 @@ Test logs [here](/builds/latest/test/).
       distributions are also available there. These binaries and packages are
       simply built with:
 
-            make static
             make pkgs
 
 * have a look at the _man_ page for synopsis and options:

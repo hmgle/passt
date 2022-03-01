@@ -122,7 +122,7 @@ uninstall:
 	-${RM} $(DESTDIR)$(prefix)/share/man/man1/pasta.1
 	-${RM} $(DESTDIR)$(prefix)/share/man/man1/qrap.1
 
-pkgs:
+pkgs: static
 	tar cf passt.tar -P --xform 's//\/usr\/bin\//' $(BIN)
 	tar rf passt.tar -P --xform 's//\/usr\/share\/man\/man1\//' \
 		passt.1 pasta.1 qrap.1

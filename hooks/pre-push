@@ -47,16 +47,16 @@ done
 
 cd ..
 
-make static
-scp passt pasta qrap passt.1 pasta.1 qrap.1	"${USER_HOST}:${BIN}"
-
-man2html -M "/" passt.1 > passt.1.html
-scp passt.1.html				"${USER_HOST}:${WEB}/"
-
 make pkgs
+scp passt passt.avx2 passt.1 qrap qrap.1	"${USER_HOST}:${BIN}"
+scp pasta pasta.avx2 pasta.1			"${USER_HOST}:${BIN}"
+
 ssh "${USER_HOST}" 				"rm -f ${BIN}/*.deb"
 ssh "${USER_HOST}"				"rm -f ${BIN}/*.rpm"
 scp *.deb *.rpm					"${USER_HOST}:${BIN}/"
+
+man2html -M "/" passt.1 > passt.1.html
+scp passt.1.html				"${USER_HOST}:${WEB}/"
 
 ssh "${USER_HOST}"				"mv ${LATEST} ${AWAY}"
 ssh "${USER_HOST}"				"mv ${TEMP} ${LATEST}"
