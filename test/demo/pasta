@@ -169,6 +169,7 @@ say	  more in the "Performance" section below.
 sleep	3
 ns	exit
 passt	exit
+passt	make clean
 passt	CFLAGS="-g" make
 sleep	2
 passtb	perf record -g ./pasta
