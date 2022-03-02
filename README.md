@@ -13,7 +13,11 @@ native Layer-4 sockets (TCP, UDP, ICMP/ICMPv6 echo) on a host. It doesn't
 require any capabilities or privileges, and it can be used as a simple
 replacement for Slirp.
 
-<img src="/builds/latest/web/passt_overview.png" usemap="#image-map" class="bright" style="z-index: 20; position: relative;">
+<picture>
+  <source type="image/webp" srcset="/builds/latest/web/passt_overview.webp">
+  <source type="image/png" srcset="/builds/latest/web/passt_overview.png">
+  <img src="/builds/latest/web/passt_overview.png" usemap="#image-map" class="bright" style="z-index: 20; position: relative;" alt="Overview diagram of passt">
+</picture>
 <map name="image-map" id="map_overview">
     <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/tcp.7.html" coords="229,275,246,320,306,294,287,249" shape="poly">
     <area class="map_area" target="_blank" href="https://lwn.net/Articles/420799/" coords="230,201,243,246,297,232,289,186" shape="poly">
@@ -112,7 +116,11 @@ destination address are moved directly between Layer-4 sockets, avoiding Layer-2
 translations, using the _splice_(2) and _recvmmsg_(2)/_sendmmsg_(2) system calls
 for TCP and UDP, respectively.
 
-<img src="/builds/latest/web/pasta_overview.png" class="bright" style="z-index: 20; position: relative;">
+<picture>
+  <source type="image/webp" srcset="/builds/latest/web/pasta_overview.webp">
+  <source type="image/png" srcset="/builds/latest/web/pasta_overview.png">
+  <img src="/builds/latest/web/passt_overview.png" class="bright" style="z-index: 20; position: relative;" alt="Overview diagram of pasta">
+</picture>
 
 - [Motivation](#motivation)
 - [Features](#features)

@@ -34,9 +34,9 @@ ssh "${USER_HOST}" 				"mkdir -p ${WEB} ${TEST} ${BIN}"
 cd test
 
 ./ci
-scp perf.js ci.js ../doc/*.png			"${USER_HOST}:${WEB}/"
+gzip -fk9 perf.js ci.js
+scp perf.js perf.js.gz ci.js ci.js.gz		"${USER_HOST}:${WEB}/"
 scp test_logs/* 				"${USER_HOST}:${TEST}/"
-
 ./run_demo
 
 for cast in ci demo_pasta demo_podman demo_passt; do
@@ -57,6 +57,11 @@ scp *.deb *.rpm					"${USER_HOST}:${BIN}/"
 
 man2html -M "/" passt.1 > passt.1.html
 scp passt.1.html				"${USER_HOST}:${WEB}/"
+
+for pic in passt_overview pasta_overview; do
+	cwebp -preset drawing -q 10 "doc/${pic}.png" -o "doc/${pic}.webp"
+	scp "doc/${pic}.png" "doc/${pic}.png"	"${USER_HOST}:${WEB}/"
+done
 
 ssh "${USER_HOST}"				"mv ${LATEST} ${AWAY}"
 ssh "${USER_HOST}"				"mv ${TEMP} ${LATEST}"
