@@ -69,12 +69,16 @@ setup_pasta() {
 
 	layout_pasta
 
-	pane_run NS "unshare -rUn /bin/sh "
-	pane_wait NS
-
 	pane_run NS 'echo $$'
 	pane_wait NS
-	__pasta_pid="$(pane_parse NS)"
+	__tty_pid="$(pane_parse NS)"
+
+	pane_run NS "unshare -rUnpf /bin/sh"
+	pane_wait NS
+
+	pane_run PASST "pstree -p ${__tty_pid} | sed -n 's/.*(\([0-9].*\))$/\1/p'"
+	pane_wait PASST
+	__target_pid="$(pane_parse PASST)"
 
 	# Ports:
 	#
@@ -87,7 +91,7 @@ setup_pasta() {
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 
-	pane_run PASST "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 ${__pasta_pid}"
+	pane_run PASST "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 ${__target_pid}"
 	sleep 1
 }
 
