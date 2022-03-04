@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>demo: Overview of pasta functionality</title>
+<link rel="stylesheet" type="text/css" href="/static/asciinema-player.css" />
+<script src="/static/asciinema-player.min.js"></script>
+</head>
+<body style="margin: 0">
+<div id="demo_pasta" style="height: 100vh; width: 100vw"></div>
+<script>
+AsciinemaPlayer.create('/builds/latest/web/demo_pasta.cast',
+		       document.getElementById('demo_pasta'),
+		       { cols: 130, rows: 41, fit: "both",
+		         preload: true, poster: 'npt:0:4'
+		       });
+</script>
+</body>
+</html>

@@ -6,6 +6,45 @@ Author: Stefano Brivio <sbrivio@redhat.com>
 
 <span style="font-weight: bold; color: red;">While functional and tested to some extent, this project is still in early development phase: don't use in production or critical environments yet.</span>
 
+<style scoped>
+.mobile_hide {
+  visibility: hidden;
+  display: none;
+}
+img {
+  visibility: hidden;
+  display: none;
+}
+li {
+  margin: 10px;
+}
+
+@media only screen and (min-width: 768px) {
+  .mobile_hide {
+    visibility: visible;
+    display: inherit;
+  }
+  img {
+    visibility: visible;
+    display: inherit;
+  }
+  li {
+    margin: 0px;
+  }
+}
+
+.mobile_show {
+  visibility: visible;
+  display: inherit;
+}
+@media only screen and (min-width: 768px) {
+  .mobile_show {
+    visibility: hidden;
+    display: none;
+  }
+}
+</style>
+
 # passt: Plug A Simple Socket Transport
 
 _passt_ implements a translation layer between a Layer-2 network interface and
@@ -13,12 +52,13 @@ native Layer-4 sockets (TCP, UDP, ICMP/ICMPv6 echo) on a host. It doesn't
 require any capabilities or privileges, and it can be used as a simple
 replacement for Slirp.
 
+<div class="mobile_hide">
 <picture>
   <source type="image/webp" srcset="/builds/latest/web/passt_overview.webp">
   <source type="image/png" srcset="/builds/latest/web/passt_overview.png">
   <img src="/builds/latest/web/passt_overview.png" usemap="#image-map" class="bright" style="z-index: 20; position: relative;" alt="Overview diagram of passt">
 </picture>
-<map name="image-map" id="map_overview">
+<map name="image-map" id="map_overview" class="mobile_hide">
     <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/tcp.7.html" coords="229,275,246,320,306,294,287,249" shape="poly">
     <area class="map_area" target="_blank" href="https://lwn.net/Articles/420799/" coords="230,201,243,246,297,232,289,186" shape="poly">
     <area class="map_area" target="_blank" href="https://man7.org/linux/man-pages/man7/udp.7.html" coords="234,129,236,175,297,169,293,126" shape="poly">
@@ -50,6 +90,7 @@ replacement for Slirp.
     <area class="map_area" target="_blank" href="/passt/tree/conf.c" coords="989,294,1040,264,1089,280,986,344" shape="poly">
 </map>
 <canvas id="map_highlight" style="border: 0px; z-index: 10; position: fixed; pointer-events: none"></canvas>
+</div>
 <script>
 function canvas_position(el) {
 	var rect = el.getBoundingClientRect();
@@ -116,11 +157,13 @@ destination address are moved directly between Layer-4 sockets, avoiding Layer-2
 translations, using the _splice_(2) and _recvmmsg_(2)/_sendmmsg_(2) system calls
 for TCP and UDP, respectively.
 
+<div class="mobile_hide">
 <picture>
   <source type="image/webp" srcset="/builds/latest/web/pasta_overview.webp">
   <source type="image/png" srcset="/builds/latest/web/pasta_overview.png">
   <img src="/builds/latest/web/passt_overview.png" class="bright" style="z-index: 20; position: relative;" alt="Overview diagram of pasta">
 </picture>
+</div>
 
 - [Motivation](#motivation)
 - [Features](#features)
@@ -408,56 +451,62 @@ is fully configurable with command line options.
 
 <link rel="stylesheet" type="text/css" href="/static/asciinema-player.css" />
 <script src="/static/asciinema-player.min.js"></script>
-<style scoped>
-.small_video {
-}
-@media (min-width: 1500px) {
-  .small_video {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-}
-</style>
 
-<div class="small_video">
+<div class="mobile_hide" id="demo_pasta_div" style="display: grid; grid-template-columns: 1fr 1fr;">
   <div id="demo_pasta" style="width: 99%;"></div>
   <div id="demo_podman" style="width: 99%;"></div>
 </div>
 <script>
-demo_pasta_player = AsciinemaPlayer.create('/builds/latest/web/demo_pasta.cast',
-					   document.getElementById('demo_pasta'),
-					   { cols: 130, rows: 41,
-					     preload: true, poster: 'npt:0:4'
-					   });
+if (getComputedStyle(document.getElementById('demo_pasta_div'))['visibility'] == "visible") {
+	demo_pasta_player = AsciinemaPlayer.create('/builds/latest/web/demo_pasta.cast',
+						   document.getElementById('demo_pasta'),
+						   { cols: 130, rows: 41,
+						     preload: true, poster: 'npt:0:4'
+						   });
 
-demo_podman_player = AsciinemaPlayer.create('/builds/latest/web/demo_podman.cast',
-					    document.getElementById('demo_podman'),
-					   { cols: 130, rows: 41,
-					     preload: true, poster: 'npt:0:4'
-					   });
+	demo_podman_player = AsciinemaPlayer.create('/builds/latest/web/demo_podman.cast',
+						    document.getElementById('demo_podman'),
+						   { cols: 130, rows: 41,
+						     preload: true, poster: 'npt:0:4'
+						   });
+}
 </script>
+<div class="mobile_show">
+  <p><a href="/builds/latest/web/demo_pasta.html">Overview of pasta functionality</a></p>
+  <p><a href="/builds/latest/web/demo_podman.html">Overview of Podman operation with pasta</a></p>
+</div>
 
 ### passt
 
-<div id="demo_passt" style="width: 70%; height: auto; max-height: 90%"></div>
+<div class="mobile_hide" id="demo_passt" style="width: 70%; height: auto; max-height: 90%"></div>
 <script>
-demo_passt_player = AsciinemaPlayer.create('/builds/latest/web/demo_passt.cast',
-					   document.getElementById('demo_passt'),
-					   { cols: 130, rows: 41,
-					     preload: true, poster: 'npt:0:4'
-					   });
+if (getComputedStyle(document.getElementById('demo_passt'))['visibility'] == "visible") {
+	demo_passt_player = AsciinemaPlayer.create('/builds/latest/web/demo_passt.cast',
+						   document.getElementById('demo_passt'),
+						   { cols: 130, rows: 41,
+						     preload: true, poster: 'npt:0:4'
+						   });
+}
 </script>
+<div class="mobile_show">
+  <p><a href="/builds/latest/web/demo_passt.html">Overview of passt functionality</a></p>
+</div>
 
 ## Continuous Integration
 
-<div id="ci" style="width: 90%; height: auto; max-height: 90%"></div>
+<div class="mobile_hide" id="ci" style="width: 90%; height: auto; max-height: 90%"></div>
 <script>
-ci_player = AsciinemaPlayer.create('/builds/latest/web/ci.cast',
-				   document.getElementById('ci'),
-				   { cols: 240, rows: 51, poster: 'npt:999:0' }
-				  );
+if (getComputedStyle(document.getElementById('ci'))['visibility'] == "visible") {
+	ci_player = AsciinemaPlayer.create('/builds/latest/web/ci.cast',
+					   document.getElementById('ci'),
+					   { cols: 240, rows: 51, poster: 'npt:999:0' }
+					  );
+}
 </script>
-<div><script src="/builds/latest/web/ci.js"></script></div>
+<div class="mobile_hide"><script src="/builds/latest/web/ci.js"></script></div>
+<div class="mobile_show">
+  <p><a href="/builds/latest/web/ci.html">Continuous integration test run</a></p>
+</div>
 
 Test logs [here](/builds/latest/test/).
 

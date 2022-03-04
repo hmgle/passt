@@ -62,6 +62,7 @@ for pic in passt_overview pasta_overview; do
 	cwebp -preset drawing -q 10 "doc/${pic}.png" -o "doc/${pic}.webp"
 	scp "doc/${pic}.png" "doc/${pic}.png"	"${USER_HOST}:${WEB}/"
 done
+scp doc/*.html					"${USER_HOST}:${WEB}/"
 
 ssh "${USER_HOST}"				"mv ${LATEST} ${AWAY}"
 ssh "${USER_HOST}"				"mv ${TEMP} ${LATEST}"

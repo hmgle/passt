@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Continuous integration test run</title>
+<link rel="stylesheet" type="text/css" href="/static/asciinema-player.css" />
+<script src="/static/asciinema-player.min.js"></script>
+</head>
+<body style="margin: 0">
+<div id="ci" style="height: 100vh; width: 100vw"></div>
+<script>
+AsciinemaPlayer.create('/builds/latest/web/ci.cast',
+		       document.getElementById('ci'),
+		       { cols: 240, rows: 51, fit: "both",
+			 preload: true, poster: 'npt:0:4'
+		       });
+</script>
+</body>
+</html>
