@@ -558,6 +558,7 @@ static void usage(const char *name)
 	info("");
 
 	info(   "  -d, --debug		Be verbose, don't run in background");
+	info(   "      --trace		Be extra verbose, implies --debug");
 	info(   "  -q, --quiet		Don't print informational messages");
 	info(   "  -f, --foreground	Don't run in background");
 	info(   "    default: run in background if started from a TTY");
@@ -829,6 +830,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"no-dhcp-search", no_argument,		NULL,		8 },
 		{"dns-forward",	required_argument,	NULL,		9 },
 		{"no-netns-quit", no_argument,		NULL,		10 },
+		{"trace",	no_argument,		NULL,		11 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
@@ -959,6 +961,19 @@ void conf(struct ctx *c, int argc, char **argv)
 				usage(argv[0]);
 			}
 			c->no_netns_quit = 1;
+			break;
+		case 11:
+			if (c->trace) {
+				err("Multiple --trace options given");
+				usage(argv[0]);
+			}
+
+			if (c->quiet) {
+				err("Either --trace or --quiet");
+				usage(argv[0]);
+			}
+
+			c->trace = c->debug = c->foreground = 1;
 			break;
 		case 'd':
 			if (c->debug) {

@@ -63,7 +63,11 @@ Just issue:
 
     ./run
 
-from the `test` directory. Elevated privileges are not needed.
+from the `test` directory. Elevated privileges are not needed. Environment
+variable settings: DEBUG=1 enables debugging messages, TRACE=1 enables tracing
+(further debugging messages), PCAP=1 enables packet captures. Example:
+
+    PCAP=1 TRACE=1 ./run
 
 ## Continuous integration
 

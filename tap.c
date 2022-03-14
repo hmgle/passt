@@ -283,14 +283,14 @@ static void tap_packet_debug(struct iphdr *iph, struct ipv6hdr *ip6h,
 	}
 
 	if (proto == IPPROTO_TCP || proto == IPPROTO_UDP) {
-		debug("protocol %i from tap: %s:%i -> %s:%i (%i packet%s)",
+		trace("protocol %i from tap: %s:%i -> %s:%i (%i packet%s)",
 		      proto, seq4 ? buf4s : buf6s,
 		      ntohs(seq4 ? seq4->source : seq6->source),
 		      seq4 ? buf4d : buf6d,
 		      ntohs(seq4 ? seq4->dest : seq6->dest),
 		      count, count == 1 ? "" : "s");
 	} else {
-		debug("protocol %i from tap: %s -> %s (%i packet%s)",
+		trace("protocol %i from tap: %s -> %s (%i packet%s)",
 		      proto, iph ? buf4s : buf6s, iph ? buf4d : buf6d,
 		      count, count == 1 ? "" : "s");
 	}

@@ -92,6 +92,7 @@ enum passt_modes {
  * struct ctx - Execution context
  * @mode:		Operation mode, qemu/UNIX domain socket or namespace/tap
  * @debug:		Enable debug mode
+ * @trace:		Enable tracing (extra debug) mode
  * @quiet:		Don't print informational messages
  * @foreground:		Run in foreground, don't log to stderr by default
  * @stderr:		Force logging to stderr
@@ -153,6 +154,7 @@ enum passt_modes {
 struct ctx {
 	enum passt_modes mode;
 	int debug;
+	int trace;
 	int quiet;
 	int foreground;
 	int stderr;

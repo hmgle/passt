@@ -96,7 +96,7 @@ char *ip_proto_str[IPPROTO_SCTP + 1] = {
 static void sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			 struct timespec *now)
 {
-	debug("%s: %s packet from socket %i (events: 0x%08x)",
+	trace("%s: %s packet from socket %i (events: 0x%08x)",
 	      c->mode == MODE_PASST ? "passt" : "pasta",
 	      IP_PROTO_STR(ref.r.proto), ref.r.s, events);
 
@@ -351,6 +351,7 @@ int main(int argc, char **argv)
 	__setlogmask(LOG_MASK(LOG_EMERG));
 
 	conf(&c, argc, argv);
+	trace_init(c.trace);
 
 	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
 		__openlog(log_name, LOG_PERROR, LOG_DAEMON);

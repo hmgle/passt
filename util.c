@@ -45,6 +45,7 @@ static int	log_sock = -1;
 static char	log_ident[BUFSIZ];
 static int	log_opt;
 static time_t	log_debug_start;
+int		log_trace;
 
 #define logfn(name, level)						\
 void name(const char *format, ...) {					\
@@ -76,6 +77,11 @@ logfn(err,   LOG_ERR)
 logfn(warn,  LOG_WARNING)
 logfn(info,  LOG_INFO)
 logfn(debug, LOG_DEBUG)
+
+void trace_init(int enable)
+{
+	log_trace = enable;
+}
 
 /**
  * __openlog() - Non-optional openlog() wrapper, to allow custom vsyslog()

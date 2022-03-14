@@ -49,6 +49,8 @@ setup_passt() {
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
+
 	pane_run PASST "./passt ${__opts} -f -t 10001 -u 10001"
 	sleep 1
 
@@ -90,6 +92,7 @@ setup_pasta() {
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
 	pane_run PASST "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 ${__target_pid}"
 	sleep 1
@@ -118,6 +121,7 @@ setup_passt_in_ns() {
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_with_passt.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
 	__pid_file="$(mktemp)"
 	pane_run PASST "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P ${__pid_file}"
@@ -145,6 +149,7 @@ setup_passt_in_ns() {
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_in_pasta.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
 	#pane_run PASST "valgrind --max-stackframe=3000000 ./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031"
 	pane_run PASST "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031"
@@ -183,11 +188,13 @@ setup_two_guests() {
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 	pane_run PASST_1 "./pasta ${__opts} -P ${__pid1_file} -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004"
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 	pane_run PASST_2 "./pasta ${__opts} -P ${__pid2_file} -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001"
 
 	sleep 1
@@ -223,12 +230,15 @@ setup_two_guests() {
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
+
 	pane_run PASST_1 "./passt -f ${__opts} -t 10001 -u 10001"
 	sleep 1
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
+	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 	pane_run PASST_2 "./passt -f ${__opts} -t 10004 -u 10004"
 
 	pane_run GUEST_2 'cp mbuto.img mbuto_2.img'

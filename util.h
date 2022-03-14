@@ -8,6 +8,14 @@ void warn(const char *format, ...);
 void info(const char *format, ...);
 void debug(const char *format, ...);
 
+extern int log_trace;
+void trace_init(int enable);
+#define trace(format, ...)						\
+	do {								\
+		if (log_trace)						\
+			debug(format, ##__VA_ARGS__);			\
+	} while (0)
+
 #ifndef SECCOMP_RET_KILL_PROCESS
 #define SECCOMP_RET_KILL_PROCESS	SECCOMP_RET_KILL
 #endif
