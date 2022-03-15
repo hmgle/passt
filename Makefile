@@ -24,6 +24,7 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 
 CFLAGS += -Wall -Wextra -pedantic -std=c99 -D_XOPEN_SOURCE=700 -D_GNU_SOURCE
+CFLAGS += -D_FORTIFY_SOURCE=2 -O2 -pie -fPIE
 CFLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)
 CFLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
 CFLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
@@ -64,6 +65,10 @@ ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
 	CFLAGS += -DHAS_GETRANDOM
 endif
 
+ifeq ($(shell :|$(CC) -fstack-protector-strong -S -xc - >/dev/null 2>&1; echo $$?),0)
+	CFLAGS += -fstack-protector-strong
+endif
+
 prefix ?= /usr/local
 
 ifeq ($(TARGET_ARCH),X86_64)
@@ -87,7 +92,8 @@ passt: $(filter-out qrap.c,$(wildcard *.c)) \
 passt.avx2: CFLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
 passt.avx2: $(filter-out qrap.c,$(wildcard *.c)) \
 	$(filter-out qrap.h,$(wildcard *.h)) seccomp.h
-	$(CC) $(CFLAGS) $(filter-out qrap.c,$(wildcard *.c)) -o passt.avx2
+	$(CC) $(filter-out -O2,$(CFLAGS)) $(filter-out qrap.c,$(wildcard *.c)) \
+		-o passt.avx2
 
 passt.avx2: passt
 
@@ -227,7 +233,7 @@ clang-tidy: $(wildcard *.c) $(wildcard *.h)
 	-readability-function-cognitive-complexity,\
 	-altera-struct-pack-align,\
 	-concurrency-mt-unsafe \
-	--warnings-as-errors=* $(wildcard *.c) -- $(CFLAGS)
+	--warnings-as-errors=* $(wildcard *.c) -- $(filter-out -pie,$(CFLAGS))
 
 ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"),1)
 TARGET := $(shell ${CC} -v 2>&1 | sed -n 's/Target: \(.*\)/\1/p')
