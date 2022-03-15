@@ -207,7 +207,7 @@ void pcap_init(struct ctx *c)
 		return;
 	}
 
-	info("Saving packet capture at %s", c->pcap);
+	info("Saving packet capture to %s", c->pcap);
 
 	if (write(pcap_fd, &pcap_hdr, sizeof(pcap_hdr)) < 0)
 		warn("Cannot write PCAP header: %s", strerror(errno));
