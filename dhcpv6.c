@@ -354,7 +354,7 @@ ia_ta:
 
 			req_addr = (struct in6_addr *)(ia_addr + 1);
 
-			if (memcmp(addr, req_addr, sizeof(*addr))) {
+			if (!IN6_ARE_ADDR_EQUAL(addr, req_addr)) {
 				info("DHCPv6: requested address %s not on link",
 				     inet_ntop(AF_INET6, req_addr,
 					       buf, sizeof(buf)));

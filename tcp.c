@@ -853,7 +853,7 @@ static int tcp_rtt_dst_low(struct tcp_conn *conn)
 	int i;
 
 	for (i = 0; i < LOW_RTT_TABLE_SIZE; i++)
-		if (!memcmp(&conn->a.a6, low_rtt_dst + i, sizeof(conn->a.a6)))
+		if (IN6_ARE_ADDR_EQUAL(&conn->a.a6, low_rtt_dst + i))
 			return 1;
 
 	return 0;
@@ -874,7 +874,7 @@ static void tcp_rtt_dst_check(struct tcp_conn *conn, struct tcp_info *tinfo)
 		return;
 
 	for (i = 0; i < LOW_RTT_TABLE_SIZE; i++) {
-		if (!memcmp(&conn->a.a6, low_rtt_dst + i, sizeof(conn->a.a6)))
+		if (IN6_ARE_ADDR_EQUAL(&conn->a.a6, low_rtt_dst + i))
 			return;
 		if (hole == -1 && IN6_IS_ADDR_UNSPECIFIED(low_rtt_dst + i))
 			hole = i;
@@ -1181,7 +1181,7 @@ static int tcp_hash_match(struct tcp_conn *conn, int af, void *addr,
 		return 1;
 
 	if (af == AF_INET6					&&
-	    !memcmp(&conn->a.a6, addr, sizeof(conn->a.a6))	&&
+	    IN6_ARE_ADDR_EQUAL(&conn->a.a6, addr)		&&
 	    conn->tap_port == tap_port && conn->sock_port == sock_port)
 		return 1;
 
@@ -2047,7 +2047,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	if (!c->no_map_gw) {
 		if (af == AF_INET && addr4.sin_addr.s_addr == c->gw4)
 			addr4.sin_addr.s_addr	= htonl(INADDR_LOOPBACK);
-		if (af == AF_INET6 && !memcmp(addr, &c->gw6, sizeof(c->gw6)))
+		if (af == AF_INET6 && IN6_ARE_ADDR_EQUAL(addr, &c->gw6))
 			addr6.sin6_addr		= in6addr_loopback;
 	}
 
@@ -2699,8 +2699,8 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		memcpy(&sa6, &sa, sizeof(sa6));
 
 		if (IN6_IS_ADDR_LOOPBACK(&sa6.sin6_addr) ||
-		    !memcmp(&sa6.sin6_addr, &c->addr6_seen, sizeof(c->gw6)) ||
-		    !memcmp(&sa6.sin6_addr, &c->addr6, sizeof(c->gw6))) {
+		    IN6_ARE_ADDR_EQUAL(&sa6.sin6_addr, &c->addr6_seen) ||
+		    IN6_ARE_ADDR_EQUAL(&sa6.sin6_addr, &c->addr6)) {
 			struct in6_addr *src;
 
 			if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))

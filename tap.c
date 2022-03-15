@@ -542,8 +542,8 @@ resume:
 #define L4_MATCH(ip6h, proto, uh, seq)					\
 	(seq->protocol == proto         &&				\
 	 seq->source   == uh->source    && seq->dest  == uh->dest &&	\
-	 !memcmp(&seq->saddr, &ip6h->saddr, sizeof(seq->saddr))   &&	\
-	 !memcmp(&seq->daddr, &ip6h->daddr, sizeof(seq->daddr)))
+	 IN6_ARE_ADDR_EQUAL(&seq->saddr, &ip6h->saddr)		  &&	\
+	 IN6_ARE_ADDR_EQUAL(&seq->daddr, &ip6h->daddr))
 
 #define L4_SET(ip6h, proto, uh, seq)					\
 	do {								\
