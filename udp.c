@@ -254,14 +254,14 @@ static struct mmsghdr	udp4_l2_mh_tap		[UDP_TAP_FRAMES_MEM];
 static struct mmsghdr	udp6_l2_mh_tap		[UDP_TAP_FRAMES_MEM];
 
 /* recvmmsg()/sendmmsg() data for "spliced" connections */
-static struct iovec	udp_splice_iov_recv	[UDP_SPLICE_FRAMES];
-static struct mmsghdr	udp_splice_mmh_recv	[UDP_SPLICE_FRAMES];
+static struct iovec	udp_iov_recv		[UDP_SPLICE_FRAMES];
+static struct mmsghdr	udp_mmh_recv		[UDP_SPLICE_FRAMES];
 
-static struct iovec	udp_splice_iov_send	[UDP_SPLICE_FRAMES];
-static struct mmsghdr	udp_splice_mmh_send	[UDP_SPLICE_FRAMES];
+static struct iovec	udp_iov_send		[UDP_SPLICE_FRAMES];
+static struct mmsghdr	udp_mmh_send		[UDP_SPLICE_FRAMES];
 
-static struct iovec	udp_splice_iov_sendto	[UDP_SPLICE_FRAMES];
-static struct mmsghdr	udp_splice_mmh_sendto	[UDP_SPLICE_FRAMES];
+static struct iovec	udp_iov_sendto		[UDP_SPLICE_FRAMES];
+static struct mmsghdr	udp_mmh_sendto		[UDP_SPLICE_FRAMES];
 
 /**
  * udp_remap_to_tap() - Set delta for port translation to/from guest/tap
@@ -552,14 +552,14 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 				    uint32_t events, struct timespec *now)
 {
 	in_port_t src, dst = ref.r.p.udp.udp.port, send_dst = 0;
-	struct msghdr *mh = &udp_splice_mmh_recv[0].msg_hdr;
+	struct msghdr *mh = &udp_mmh_recv[0].msg_hdr;
 	struct sockaddr_storage *sa_s = mh->msg_name;
 	int s, v6 = ref.r.p.udp.udp.v6, n, i;
 
 	if (!(events & EPOLLIN))
 		return;
 
-	n = recvmmsg(ref.r.s, udp_splice_mmh_recv, UDP_SPLICE_FRAMES, 0, NULL);
+	n = recvmmsg(ref.r.s, udp_mmh_recv, UDP_SPLICE_FRAMES, 0, NULL);
 
 	if (n <= 0)
 		return;
@@ -619,19 +619,19 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 	if (ref.r.p.udp.udp.splice == UDP_TO_NS ||
 	    ref.r.p.udp.udp.splice == UDP_TO_INIT) {
 		for (i = 0; i < n; i++) {
-			struct msghdr *mh_s = &udp_splice_mmh_send[i].msg_hdr;
+			struct msghdr *mh_s = &udp_mmh_send[i].msg_hdr;
 
-			mh_s->msg_iov->iov_len = udp_splice_mmh_recv[i].msg_len;
+			mh_s->msg_iov->iov_len = udp_mmh_recv[i].msg_len;
 		}
 
-		sendmmsg(s, udp_splice_mmh_send, n, MSG_NOSIGNAL);
+		sendmmsg(s, udp_mmh_send, n, MSG_NOSIGNAL);
 		return;
 	}
 
 	for (i = 0; i < n; i++) {
-		struct msghdr *mh_s = &udp_splice_mmh_sendto[i].msg_hdr;
+		struct msghdr *mh_s = &udp_mmh_sendto[i].msg_hdr;
 
-		mh_s->msg_iov->iov_len = udp_splice_mmh_recv[i].msg_len;
+		mh_s->msg_iov->iov_len = udp_mmh_recv[i].msg_len;
 	}
 
 	if (v6) {
@@ -652,7 +652,7 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 		});
 	}
 
-	sendmmsg(s, udp_splice_mmh_sendto, n, MSG_NOSIGNAL);
+	sendmmsg(s, udp_mmh_sendto, n, MSG_NOSIGNAL);
 }
 
 /**
@@ -1097,7 +1097,7 @@ static void udp_splice_iov_init(void)
 	struct iovec *iov;
 	int i;
 
-	for (i = 0, h = udp_splice_mmh_recv; i < UDP_SPLICE_FRAMES; i++, h++) {
+	for (i = 0, h = udp_mmh_recv; i < UDP_SPLICE_FRAMES; i++, h++) {
 		struct msghdr *mh = &h->msg_hdr;
 
 		if (!i) {
@@ -1105,40 +1105,34 @@ static void udp_splice_iov_init(void)
 			mh->msg_namelen = sizeof(udp_splice_namebuf);
 		}
 
-		mh->msg_iov = &udp_splice_iov_recv[i];
+		mh->msg_iov = &udp_iov_recv[i];
 		mh->msg_iovlen = 1;
 	}
-	for (i = 0, iov = udp_splice_iov_recv; i < UDP_SPLICE_FRAMES;
-	     i++, iov++) {
+	for (i = 0, iov = udp_iov_recv; i < UDP_SPLICE_FRAMES; i++, iov++) {
 		iov->iov_base = udp_splice_buf[i];
 		iov->iov_len = sizeof(udp_splice_buf[i]);
 	}
 
-	for (i = 0, h = udp_splice_mmh_send; i < UDP_SPLICE_FRAMES; i++, h++) {
+	for (i = 0, h = udp_mmh_send; i < UDP_SPLICE_FRAMES; i++, h++) {
 		struct msghdr *mh = &h->msg_hdr;
 
-		mh->msg_iov = &udp_splice_iov_send[i];
+		mh->msg_iov = &udp_iov_send[i];
 		mh->msg_iovlen = 1;
 	}
-	for (i = 0, iov = udp_splice_iov_send; i < UDP_SPLICE_FRAMES;
-	     i++, iov++) {
+	for (i = 0, iov = udp_iov_send; i < UDP_SPLICE_FRAMES; i++, iov++)
 		iov->iov_base = udp_splice_buf[i];
-	}
 
-	for (i = 0, h = udp_splice_mmh_sendto; i < UDP_SPLICE_FRAMES;
-	     i++, h++) {
+	for (i = 0, h = udp_mmh_sendto; i < UDP_SPLICE_FRAMES; i++, h++) {
 		struct msghdr *mh = &h->msg_hdr;
 
 		mh->msg_name = &udp_splice_namebuf;
 		mh->msg_namelen = sizeof(udp_splice_namebuf);
 
-		mh->msg_iov = &udp_splice_iov_sendto[i];
+		mh->msg_iov = &udp_iov_sendto[i];
 		mh->msg_iovlen = 1;
 	}
-	for (i = 0, iov = udp_splice_iov_sendto; i < UDP_SPLICE_FRAMES;
-	     i++, iov++) {
+	for (i = 0, iov = udp_iov_sendto; i < UDP_SPLICE_FRAMES; i++, iov++)
 		iov->iov_base = udp_splice_buf[i];
-	}
 }
 
 /**
