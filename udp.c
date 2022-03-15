@@ -656,6 +656,177 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 }
 
 /**
+ * udp_sock_fill_data_v4() - Fill and queue one buffer. In pasta mode, write it
+ * @c:		Execution context
+ * @n:		Index of buffer in udp4_l2_buf pool
+ * @ref:	epoll reference from socket
+ * @msg_idx:	Index within message being prepared (spans multiple buffers)
+ * @msg_len:	Length of current message being prepared for sending
+ * @now:	Current timestamp
+ */
+static void udp_sock_fill_data_v4(struct ctx *c, int n, union epoll_ref ref,
+				  int *msg_idx, int *msg_bufs, ssize_t *msg_len,
+				  struct timespec *now)
+{
+	struct msghdr *mh = &udp6_l2_mh_tap[*msg_idx].msg_hdr;
+	struct udp4_l2_buf_t *b = &udp4_l2_buf[n];
+	size_t ip_len, buf_len;
+	in_port_t src_port;
+	in_addr_t src;
+
+	ip_len = udp4_l2_mh_sock[n].msg_len + sizeof(b->iph) + sizeof(b->uh);
+
+	b->iph.tot_len = htons(ip_len);
+
+	src = ntohl(b->s_in.sin_addr.s_addr);
+	src_port = htons(b->s_in.sin_port);
+
+	if (src >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
+	    src == INADDR_ANY || src == ntohl(c->addr4_seen)) {
+		b->iph.saddr = c->gw4;
+		udp_tap_map[V4][src_port].ts_local = now->tv_sec;
+
+		if (b->s_in.sin_addr.s_addr == c->addr4_seen)
+			udp_tap_map[V4][src_port].loopback = 0;
+		else
+			udp_tap_map[V4][src_port].loopback = 1;
+
+		bitmap_set(udp_act[V4][UDP_ACT_TAP], src_port);
+	} else if (c->dns4_fwd &&
+		   src == ntohl(c->dns4[0]) && ntohs(src_port) == 53) {
+		b->iph.saddr = c->dns4_fwd;
+	} else {
+		b->iph.saddr = b->s_in.sin_addr.s_addr;
+	}
+
+	udp_update_check4(b);
+	b->uh.source = b->s_in.sin_port;
+	b->uh.dest = htons(ref.r.p.udp.udp.port);
+	b->uh.len = htons(udp4_l2_mh_sock[n].msg_len + sizeof(b->uh));
+
+	if (c->mode == MODE_PASTA) {
+		if (write(c->fd_tap, &b->eh, sizeof(b->eh) + ip_len) < 0)
+			debug("tap write: %s", strerror(errno));
+		pcap((char *)&b->eh, sizeof(b->eh) + ip_len);
+
+		return;
+	}
+
+	b->vnet_len = htonl(ip_len + sizeof(struct ethhdr));
+	buf_len = sizeof(uint32_t) + sizeof(struct ethhdr) + ip_len;
+	udp4_l2_iov_tap[n].iov_len = buf_len;
+
+	/* With bigger messages, qemu closes the connection. */
+	if (*msg_bufs && *msg_len + buf_len > SHRT_MAX) {
+		mh->msg_iovlen = *msg_bufs;
+
+		(*msg_idx)++;
+		udp4_l2_mh_tap[*msg_idx].msg_hdr.msg_iov = &udp4_l2_iov_tap[n];
+		*msg_len = *msg_bufs = 0;
+	}
+
+	*msg_len += buf_len;
+	(*msg_bufs)++;
+}
+
+/**
+ * udp_sock_fill_data_v4() - Fill and queue one buffer. In pasta mode, write it
+ * @c:		Execution context
+ * @n:		Index of buffer in udp4_l2_buf pool
+ * @ref:	epoll reference from socket
+ * @msg_idx:	Index within message being prepared (spans multiple buffers)
+ * @msg_len:	Length of current message being prepared for sending
+ * @now:	Current timestamp
+ */
+static void udp_sock_fill_data_v6(struct ctx *c, int n, union epoll_ref ref,
+				  int *msg_idx, int *msg_bufs, ssize_t *msg_len,
+				  struct timespec *now)
+{
+	struct msghdr *mh = &udp6_l2_mh_tap[*msg_idx].msg_hdr;
+	struct udp6_l2_buf_t *b = &udp6_l2_buf[n];
+	size_t ip_len, buf_len;
+	struct in6_addr *src;
+	in_port_t src_port;
+
+	src = &b->s_in6.sin6_addr;
+	src_port = ntohs(b->s_in6.sin6_port);
+
+	ip_len = udp6_l2_mh_sock[n].msg_len + sizeof(b->ip6h) + sizeof(b->uh);
+
+	b->ip6h.payload_len = htons(udp6_l2_mh_sock[n].msg_len + sizeof(b->uh));
+
+	if (IN6_IS_ADDR_LINKLOCAL(src)) {
+		b->ip6h.daddr = c->addr6_ll_seen;
+		b->ip6h.saddr = b->s_in6.sin6_addr;
+	} else if (IN6_IS_ADDR_LOOPBACK(src)			||
+		   IN6_ARE_ADDR_EQUAL(src, &c->addr6_seen)	||
+		   IN6_ARE_ADDR_EQUAL(src, &c->addr6)) {
+		b->ip6h.daddr = c->addr6_ll_seen;
+
+		if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
+			b->ip6h.saddr = c->gw6;
+		else
+			b->ip6h.saddr = c->addr6_ll;
+
+		udp_tap_map[V6][src_port].ts_local = now->tv_sec;
+
+		if (IN6_IS_ADDR_LOOPBACK(src))
+			udp_tap_map[V6][src_port].loopback = 1;
+		else
+			udp_tap_map[V6][src_port].loopback = 0;
+
+		if (IN6_ARE_ADDR_EQUAL(src, &c->addr6))
+			udp_tap_map[V6][src_port].gua = 1;
+		else
+			udp_tap_map[V6][src_port].gua = 0;
+
+		bitmap_set(udp_act[V6][UDP_ACT_TAP], src_port);
+	} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->dns6_fwd) &&
+		   IN6_ARE_ADDR_EQUAL(src, &c->dns6_fwd) && src_port == 53) {
+		b->ip6h.daddr = c->addr6_seen;
+		b->ip6h.saddr = c->dns6_fwd;
+	} else {
+		b->ip6h.daddr = c->addr6_seen;
+		b->ip6h.saddr = b->s_in6.sin6_addr;
+	}
+
+	b->uh.source = b->s_in6.sin6_port;
+	b->uh.dest = htons(ref.r.p.udp.udp.port);
+	b->uh.len = b->ip6h.payload_len;
+
+	b->ip6h.hop_limit = IPPROTO_UDP;
+	b->ip6h.version = b->ip6h.nexthdr = b->uh.check = 0;
+	b->uh.check = csum(&b->ip6h, ip_len, 0);
+	b->ip6h.version = 6;
+	b->ip6h.nexthdr = IPPROTO_UDP;
+	b->ip6h.hop_limit = 255;
+
+	if (c->mode == MODE_PASTA) {
+		if (write(c->fd_tap, &b->eh, sizeof(b->eh) + ip_len) < 0)
+			debug("tap write: %s", strerror(errno));
+		pcap((char *)&b->eh, sizeof(b->eh) + ip_len);
+
+		return;
+	}
+
+	b->vnet_len = htonl(ip_len + sizeof(struct ethhdr));
+	buf_len = sizeof(uint32_t) + sizeof(struct ethhdr) + ip_len;
+	udp6_l2_iov_tap[n].iov_len = buf_len;
+
+	/* With bigger messages, qemu closes the connection. */
+	if (*msg_bufs && *msg_len + buf_len > SHRT_MAX) {
+		mh->msg_iovlen = *msg_bufs;
+
+		(*msg_idx)++;
+		udp6_l2_mh_tap[*msg_idx].msg_hdr.msg_iov = &udp6_l2_iov_tap[n];
+		*msg_len = *msg_bufs = 0;
+	}
+
+	*msg_len += buf_len;
+	(*msg_bufs)++;
+}
+
+/**
  * udp_sock_handler() - Handle new data from socket
  * @c:		Execution context
  * @ref:	epoll reference
@@ -668,10 +839,10 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		      struct timespec *now)
 {
-	int iov_in_msg, msg_i = 0, ret;
-	ssize_t n, msglen, missing = 0;
+	ssize_t n, msg_len = 0, missing = 0;
+	int msg_bufs = 0, msg_i = 0, ret;
 	struct mmsghdr *tap_mmh;
-	struct msghdr *cur_mh;
+	struct msghdr *last_mh;
 	unsigned int i;
 
 	if (events == EPOLLERR)
@@ -687,183 +858,34 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		if (n <= 0)
 			return;
 
-		cur_mh = &udp6_l2_mh_tap[msg_i].msg_hdr;
-		cur_mh->msg_iov = &udp6_l2_iov_tap[0];
-		msg_i = msglen = iov_in_msg = 0;
+		udp6_l2_mh_tap[0].msg_hdr.msg_iov = &udp6_l2_iov_tap[0];
 
 		for (i = 0; i < (unsigned)n; i++) {
-			struct udp6_l2_buf_t *b = &udp6_l2_buf[i];
-			size_t ip_len, iov_len;
-
-			ip_len = udp6_l2_mh_sock[i].msg_len +
-				 sizeof(b->ip6h) + sizeof(b->uh);
-
-			b->ip6h.payload_len = htons(udp6_l2_mh_sock[i].msg_len +
-						    sizeof(b->uh));
-
-			if (IN6_IS_ADDR_LINKLOCAL(&b->s_in6.sin6_addr)) {
-				b->ip6h.daddr = c->addr6_ll_seen;
-				b->ip6h.saddr = b->s_in6.sin6_addr;
-			} else if (IN6_IS_ADDR_LOOPBACK(&b->s_in6.sin6_addr) ||
-				   !memcmp(&b->s_in6.sin6_addr, &c->addr6_seen,
-					   sizeof(c->addr6)) ||
-				   !memcmp(&b->s_in6.sin6_addr, &c->addr6,
-					   sizeof(c->addr6))) {
-				in_port_t src = htons(b->s_in6.sin6_port);
-
-				b->ip6h.daddr = c->addr6_ll_seen;
-
-				if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
-					b->ip6h.saddr = c->gw6;
-				else
-					b->ip6h.saddr = c->addr6_ll;
-
-				udp_tap_map[V6][src].ts_local = now->tv_sec;
-
-				if (IN6_IS_ADDR_LOOPBACK(&b->s_in6.sin6_addr))
-					udp_tap_map[V6][src].loopback = 1;
-				else
-					udp_tap_map[V6][src].loopback = 0;
-
-				if (!memcmp(&b->s_in6.sin6_addr, &c->addr6,
-						 sizeof(c->addr6)))
-					udp_tap_map[V6][src].gua = 1;
-				else
-					udp_tap_map[V6][src].gua = 0;
-
-				bitmap_set(udp_act[V6][UDP_ACT_TAP], src);
-			} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->dns6_fwd) &&
-				   !memcmp(&b->s_in6.sin6_addr, &c->dns6_fwd,
-					   sizeof(c->dns6_fwd)) &&
-				   ntohs(b->s_in6.sin6_port) == 53) {
-				b->ip6h.daddr = c->addr6_seen;
-				b->ip6h.saddr = c->dns6_fwd;
-			} else {
-				b->ip6h.daddr = c->addr6_seen;
-				b->ip6h.saddr = b->s_in6.sin6_addr;
-			}
-
-			b->uh.source = b->s_in6.sin6_port;
-			b->uh.dest = htons(ref.r.p.udp.udp.port);
-			b->uh.len = b->ip6h.payload_len;
-
-			b->ip6h.hop_limit = IPPROTO_UDP;
-			b->ip6h.version = 0;
-			b->ip6h.nexthdr = 0;
-			b->uh.check = 0;
-			b->uh.check = csum(&b->ip6h, ip_len, 0);
-			b->ip6h.version = 6;
-			b->ip6h.nexthdr = IPPROTO_UDP;
-			b->ip6h.hop_limit = 255;
-
-			if (c->mode == MODE_PASTA) {
-				ip_len += sizeof(struct ethhdr);
-				if (write(c->fd_tap, &b->eh, ip_len) < 0)
-					debug("tap write: %s", strerror(errno));
-				pcap((char *)&b->eh, ip_len);
-				continue;
-			}
-
-			b->vnet_len = htonl(ip_len + sizeof(struct ethhdr));
-			iov_len = sizeof(uint32_t) + sizeof(struct ethhdr) +
-				  ip_len;
-			udp6_l2_iov_tap[i].iov_len = iov_len;
-
-			/* With bigger messages, qemu closes the connection. */
-			if (iov_in_msg && msglen + iov_len > SHRT_MAX) {
-				cur_mh->msg_iovlen = iov_in_msg;
-
-				cur_mh = &udp6_l2_mh_tap[++msg_i].msg_hdr;
-				msglen = iov_in_msg = 0;
-				cur_mh->msg_iov = &udp6_l2_iov_tap[i];
-			}
-
-			msglen += iov_len;
-			iov_in_msg++;
+			udp_sock_fill_data_v6(c, i, ref,
+					      &msg_i, &msg_bufs, &msg_len, now);
 		}
 
+		udp6_l2_mh_tap[msg_i].msg_hdr.msg_iovlen = msg_bufs;
 		tap_mmh = udp6_l2_mh_tap;
 	} else {
 		n = recvmmsg(ref.r.s, udp4_l2_mh_sock, UDP_TAP_FRAMES, 0, NULL);
 		if (n <= 0)
 			return;
 
-		cur_mh = &udp4_l2_mh_tap[msg_i].msg_hdr;
-		cur_mh->msg_iov = &udp4_l2_iov_tap[0];
-		msg_i = msglen = iov_in_msg = 0;
+		udp6_l2_mh_tap[0].msg_hdr.msg_iov = &udp6_l2_iov_tap[0];
 
 		for (i = 0; i < (unsigned)n; i++) {
-			struct udp4_l2_buf_t *b = &udp4_l2_buf[i];
-			size_t ip_len, iov_len;
-			in_addr_t s_addr;
-
-			ip_len = udp4_l2_mh_sock[i].msg_len +
-				 sizeof(b->iph) + sizeof(b->uh);
-
-			b->iph.tot_len = htons(ip_len);
-
-			s_addr = ntohl(b->s_in.sin_addr.s_addr);
-			if (s_addr >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
-			    s_addr == INADDR_ANY ||
-			    s_addr == ntohl(c->addr4_seen)) {
-				in_port_t src = htons(b->s_in.sin_port);
-
-				b->iph.saddr = c->gw4;
-				udp_tap_map[V4][src].ts_local = now->tv_sec;
-
-				if (b->s_in.sin_addr.s_addr == c->addr4_seen)
-					udp_tap_map[V4][src].loopback = 0;
-				else
-					udp_tap_map[V4][src].loopback = 1;
-
-				bitmap_set(udp_act[V4][UDP_ACT_TAP], src);
-			} else if (c->dns4_fwd &&
-				   s_addr == ntohl(c->dns4[0]) &&
-				   ntohs(b->s_in.sin_port) == 53) {
-				b->iph.saddr = c->dns4_fwd;
-			} else {
-				b->iph.saddr = b->s_in.sin_addr.s_addr;
-			}
-
-			udp_update_check4(b);
-			b->uh.source = b->s_in.sin_port;
-			b->uh.dest = htons(ref.r.p.udp.udp.port);
-			b->uh.len = ntohs(udp4_l2_mh_sock[i].msg_len +
-					  sizeof(b->uh));
-
-			if (c->mode == MODE_PASTA) {
-				ip_len += sizeof(struct ethhdr);
-				if (write(c->fd_tap, &b->eh, ip_len) < 0)
-					debug("tap write: %s", strerror(errno));
-				pcap((char *)&b->eh, ip_len);
-				continue;
-			}
-
-			b->vnet_len = htonl(ip_len + sizeof(struct ethhdr));
-			iov_len = sizeof(uint32_t) + sizeof(struct ethhdr) +
-				  ip_len;
-			udp4_l2_iov_tap[i].iov_len = iov_len;
-
-			/* With bigger messages, qemu closes the connection. */
-			if (iov_in_msg && msglen + iov_len > SHRT_MAX) {
-				cur_mh->msg_iovlen = iov_in_msg;
-
-				cur_mh = &udp4_l2_mh_tap[++msg_i].msg_hdr;
-				msglen = iov_in_msg = 0;
-				cur_mh->msg_iov = &udp4_l2_iov_tap[i];
-			}
-
-			msglen += iov_len;
-			iov_in_msg++;
+			udp_sock_fill_data_v4(c, i, ref,
+					      &msg_i, &msg_bufs, &msg_len, now);
 		}
 
+		udp4_l2_mh_tap[msg_i].msg_hdr.msg_iovlen = msg_bufs;
 		tap_mmh = udp4_l2_mh_tap;
 	}
 
 	if (c->mode == MODE_PASTA)
 		return;
 
-	cur_mh->msg_iovlen = iov_in_msg;
 	ret = sendmmsg(c->fd_tap, tap_mmh, msg_i + 1,
 		       MSG_NOSIGNAL | MSG_DONTWAIT);
 	if (ret <= 0)
@@ -887,25 +909,25 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 	 *
 	 * re-send everything from here:		   ^--  -----   ------
 	 */
-	cur_mh = &tap_mmh[ret - 1].msg_hdr;
-	for (i = 0, msglen = 0; i < cur_mh->msg_iovlen; i++) {
+	last_mh = &tap_mmh[ret - 1].msg_hdr;
+	for (i = 0, msg_len = 0; i < last_mh->msg_iovlen; i++) {
 		if (missing <= 0) {
-			msglen += cur_mh->msg_iov[i].iov_len;
-			missing = msglen - tap_mmh[ret - 1].msg_len;
+			msg_len += last_mh->msg_iov[i].iov_len;
+			missing = msg_len - tap_mmh[ret - 1].msg_len;
 		}
 
 		if (missing > 0) {
 			uint8_t **iov_base;
 			int first_offset;
 
-			iov_base = (uint8_t **)&cur_mh->msg_iov[i].iov_base;
-			first_offset = cur_mh->msg_iov[i].iov_len - missing;
+			iov_base = (uint8_t **)&last_mh->msg_iov[i].iov_base;
+			first_offset = last_mh->msg_iov[i].iov_len - missing;
 			*iov_base += first_offset;
-			cur_mh->msg_iov[i].iov_len = missing;
+			last_mh->msg_iov[i].iov_len = missing;
 
-			cur_mh->msg_iov = &cur_mh->msg_iov[i];
+			last_mh->msg_iov = &last_mh->msg_iov[i];
 
-			sendmsg(c->fd_tap, cur_mh, MSG_NOSIGNAL);
+			sendmsg(c->fd_tap, last_mh, MSG_NOSIGNAL);
 
 			*iov_base -= first_offset;
 			break;
@@ -997,7 +1019,7 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 		sa = (struct sockaddr *)&s_in6;
 		sl = sizeof(s_in6);
 
-		if (!memcmp(addr, &c->gw6, sizeof(c->gw6)) && !c->no_map_gw) {
+		if (IN6_ARE_ADDR_EQUAL(addr, &c->gw6) && !c->no_map_gw) {
 			if (!udp_tap_map[V6][dst].ts_local ||
 			    udp_tap_map[V6][dst].loopback)
 				s_in6.sin6_addr = in6addr_loopback;
@@ -1005,7 +1027,7 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 				s_in6.sin6_addr = c->addr6;
 			else
 				s_in6.sin6_addr = c->addr6_seen;
-		} else if (!memcmp(addr, &c->dns6_fwd, sizeof(c->dns6_fwd)) &&
+		} else if (IN6_ARE_ADDR_EQUAL(addr, &c->dns6_fwd) &&
 			   ntohs(s_in6.sin6_port) == 53) {
 			s_in6.sin6_addr = c->dns6[0];
 		} else if (IN6_IS_ADDR_LINKLOCAL(&s_in6.sin6_addr)) {
