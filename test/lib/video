@@ -141,7 +141,7 @@ video_time_now() {
 video_link() {
 	[ ${VIDEO_LINKS_COUNT} -eq 0 ] && __sep="" || __sep=" |"
 	__id="video_link_${VIDEO_LINKS_COUNT}"
-	video_append_links "${__sep} <a id=\"${__id}\">${1}</a>"
+	video_append_links "${__sep} <a id=\"${__id}\" href=\"${1}\">${1}</a>"
 	video_append_links_js "[ '${__id}', $(($(video_time_now) - 1)) ],"
 
 	VIDEO_LINKS_COUNT=$((VIDEO_LINKS_COUNT + 1))
