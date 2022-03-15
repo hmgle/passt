@@ -55,7 +55,7 @@ packages.
 
 The following additional packages are commonly needed:
 
-    alien linux-perf tshark
+    alien asciinema linux-perf tshark
 
 ## Regular test
 
