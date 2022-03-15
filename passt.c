@@ -119,12 +119,12 @@ static void post_handler(struct ctx *c, struct timespec *now)
 #define CALL_PROTO_HANDLER(c, now, lc, uc)				\
 	do {								\
 		extern void						\
-		lc ## _defer_handler (struct ctx *c)			\
+		lc ## _defer_handler (struct ctx *, struct timespec *)	\
 		__attribute__ ((weak));					\
 									\
 		if (!c->no_ ## lc) {					\
 			if (lc ## _defer_handler)			\
-				lc ## _defer_handler(c);		\
+				lc ## _defer_handler(c, now);		\
 									\
 			if (timespec_diff_ms((now), &c->lc.timer_run)	\
 			    >= uc ## _TIMER_INTERVAL) {			\

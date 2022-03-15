@@ -589,3 +589,22 @@ int __daemon(int pidfile_fd, int devnull_fd)
 
 	return 0;
 }
+
+/**
+ * fls() - Find last (most significant) bit set in word
+ * @x:		Word
+ *
+ * Return: position of most significant bit set, starting from 0, -1 if none
+ */
+int fls(unsigned long x)
+{
+	int y = 0;
+
+	if (!x)
+		return -1;
+
+	while (x >>= 1)
+		y++;
+
+	return y;
+}

@@ -11,6 +11,8 @@
 #define TCP_MAX_CONNS			(128 * 1024)
 #define TCP_MAX_SOCKS			(TCP_MAX_CONNS + USHRT_MAX * 2)
 
+#define TCP_SOCK_POOL_SIZE		32
+
 struct ctx;
 
 void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
@@ -19,7 +21,9 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		    struct tap_l4_msg *msg, int count, struct timespec *now);
 int tcp_sock_init(struct ctx *c, struct timespec *now);
 void tcp_timer(struct ctx *c, struct timespec *now);
-void tcp_defer_handler(struct ctx *c);
+void tcp_defer_handler(struct ctx *c, struct timespec *now);
+
+void tcp_sock_set_bufsize(struct ctx *c, int s);
 void tcp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 		       const uint32_t *ip_da);
 void tcp_remap_to_tap(in_port_t port, in_port_t delta);
@@ -46,7 +50,7 @@ union tcp_epoll_ref {
 /**
  * struct tcp_ctx - Execution context for TCP routines
  * @hash_secret:	128-bit secret for hash functions, ISN and hash table
- * @tap_conn_count:	Count of tap connections in connection table
+ * @conn_count:		Count of connections (not spliced) in connection table
  * @splice_conn_count:	Count of spliced connections in connection table
  * @port_to_tap:	Ports bound host-side, packets to tap or spliced
  * @init_detect_ports:	If set, periodically detect ports bound in init
@@ -60,7 +64,7 @@ union tcp_epoll_ref {
  */
 struct tcp_ctx {
 	uint64_t hash_secret[2];
-	int tap_conn_count;
+	int conn_count;
 	int splice_conn_count;
 	uint8_t port_to_tap	[USHRT_MAX / 8];
 	int init_detect_ports;
