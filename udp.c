@@ -125,16 +125,16 @@
  * struct udp_tap_port - Port tracking based on tap-facing source port
  * @sock:	Socket bound to source port used as index
  * @ts:		Activity timestamp from tap, used for socket aging
- * @ts_local:	Timestamp of tap packet to gateway address, aging for local bind
- * @loopback:	Whether local bind maps to loopback address as source
- * @gua:	Whether local bind maps to configured unicast address as source
+ * @flags:	Flags for local bind, loopback address/unicast address as source
  */
 struct udp_tap_port {
 	int sock;
 	time_t ts;
-	time_t ts_local;
-	int loopback;
-	int gua;
+
+	uint8_t flags;
+#define PORT_LOCAL	BIT(0)
+#define PORT_LOOPBACK	BIT(1)
+#define PORT_GUA	BIT(2)
 };
 
 /**
@@ -684,12 +684,13 @@ static void udp_sock_fill_data_v4(struct ctx *c, int n, union epoll_ref ref,
 	if (src >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
 	    src == INADDR_ANY || src == ntohl(c->addr4_seen)) {
 		b->iph.saddr = c->gw4;
-		udp_tap_map[V4][src_port].ts_local = now->tv_sec;
+		udp_tap_map[V4][src_port].ts = now->tv_sec;
+		udp_tap_map[V4][src_port].flags |= PORT_LOCAL;
 
 		if (b->s_in.sin_addr.s_addr == c->addr4_seen)
-			udp_tap_map[V4][src_port].loopback = 0;
+			udp_tap_map[V4][src_port].flags &= ~PORT_LOOPBACK;
 		else
-			udp_tap_map[V4][src_port].loopback = 1;
+			udp_tap_map[V4][src_port].flags |= PORT_LOOPBACK;
 
 		bitmap_set(udp_act[V4][UDP_ACT_TAP], src_port);
 	} else if (c->dns4_fwd &&
@@ -768,17 +769,18 @@ static void udp_sock_fill_data_v6(struct ctx *c, int n, union epoll_ref ref,
 		else
 			b->ip6h.saddr = c->addr6_ll;
 
-		udp_tap_map[V6][src_port].ts_local = now->tv_sec;
+		udp_tap_map[V6][src_port].ts = now->tv_sec;
+		udp_tap_map[V6][src_port].flags |= PORT_LOCAL;
 
 		if (IN6_IS_ADDR_LOOPBACK(src))
-			udp_tap_map[V6][src_port].loopback = 1;
+			udp_tap_map[V6][src_port].flags |= PORT_LOOPBACK;
 		else
-			udp_tap_map[V6][src_port].loopback = 0;
+			udp_tap_map[V6][src_port].flags &= ~PORT_LOOPBACK;
 
 		if (IN6_ARE_ADDR_EQUAL(src, &c->addr6))
-			udp_tap_map[V6][src_port].gua = 1;
+			udp_tap_map[V6][src_port].flags |= PORT_GUA;
 		else
-			udp_tap_map[V6][src_port].gua = 0;
+			udp_tap_map[V6][src_port].flags &= ~PORT_GUA;
 
 		bitmap_set(udp_act[V6][UDP_ACT_TAP], src_port);
 	} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->dns6_fwd) &&
@@ -999,8 +1001,8 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 		udp_tap_map[V4][src].ts = now->tv_sec;
 
 		if (s_in.sin_addr.s_addr == c->gw4 && !c->no_map_gw) {
-			if (!udp_tap_map[V4][dst].ts_local ||
-			    udp_tap_map[V4][dst].loopback)
+			if (!(udp_tap_map[V4][dst].flags & PORT_LOCAL) ||
+			    (udp_tap_map[V4][dst].flags & PORT_LOOPBACK))
 				s_in.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 			else
 				s_in.sin_addr.s_addr = c->addr4_seen;
@@ -1020,10 +1022,10 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 		sl = sizeof(s_in6);
 
 		if (IN6_ARE_ADDR_EQUAL(addr, &c->gw6) && !c->no_map_gw) {
-			if (!udp_tap_map[V6][dst].ts_local ||
-			    udp_tap_map[V6][dst].loopback)
+			if (!(udp_tap_map[V6][dst].flags & PORT_LOCAL) ||
+			    (udp_tap_map[V6][dst].flags & PORT_LOOPBACK))
 				s_in6.sin6_addr = in6addr_loopback;
-			else if (udp_tap_map[V6][dst].gua)
+			else if (udp_tap_map[V6][dst].flags & PORT_GUA)
 				s_in6.sin6_addr = c->addr6;
 			else
 				s_in6.sin6_addr = c->addr6_seen;
@@ -1241,13 +1243,9 @@ static void udp_timer_one(struct ctx *c, int v6, enum udp_act_type type,
 	case UDP_ACT_TAP:
 		tp = &udp_tap_map[v6 ? V6 : V4][port];
 
-		if (ts->tv_sec - tp->ts > UDP_CONN_TIMEOUT)
+		if (ts->tv_sec - tp->ts > UDP_CONN_TIMEOUT) {
 			s = tp->sock;
-
-		if (ts->tv_sec - tp->ts_local > UDP_CONN_TIMEOUT) {
-			tp->ts_local = 0;
-			tp->loopback = 0;
-			tp->gua = 0;
+			tp->flags = 0;
 		}
 
 		break;
