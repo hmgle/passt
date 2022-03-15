@@ -164,7 +164,7 @@ struct ctx;
 struct ipv6hdr {
 #pragma GCC diagnostic ignored "-Wpedantic"
 #if __BYTE_ORDER == __BIG_ENDIAN
-	__u8			version:4,
+	uint8_t			version:4,
 				priority:4;
 #else
 	uint8_t			priority:4,
@@ -173,17 +173,17 @@ struct ipv6hdr {
 #pragma GCC diagnostic pop
 	uint8_t			flow_lbl[3];
 
-	__be16			payload_len;
-	__u8			nexthdr;
-	__u8			hop_limit;
+	uint16_t		payload_len;
+	uint8_t			nexthdr;
+	uint8_t			hop_limit;
 
 	struct in6_addr		saddr;
 	struct in6_addr		daddr;
 };
 
 struct ipv6_opt_hdr {
-	__u8			nexthdr;
-	__u8			hdrlen;
+	uint8_t			nexthdr;
+	uint8_t			hdrlen;
 	/*
 	 * TLV encoded option data follows.
 	 */
