@@ -1971,6 +1971,11 @@ static int tcp_conn_new_sock(struct ctx *c, sa_family_t af)
 	if (s < 0)
 		s = socket(af, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
 
+	if (s > SOCKET_MAX) {
+		close(s);
+		return -EIO;
+	}
+
 	if (s < 0)
 		return -errno;
 
@@ -2982,6 +2987,12 @@ static int tcp_sock_refill(void *arg)
 			break;
 		}
 		*p4 = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
+		if (*p4 > SOCKET_MAX) {
+			close(*p4);
+			*p4 = -1;
+			return -EIO;
+		}
+
 		tcp_sock_set_bufsize(a->c, *p4);
 	}
 
@@ -2991,6 +3002,12 @@ static int tcp_sock_refill(void *arg)
 		}
 		*p6 = socket(AF_INET6, SOCK_STREAM | SOCK_NONBLOCK,
 			     IPPROTO_TCP);
+		if (*p6 > SOCKET_MAX) {
+			close(*p6);
+			*p6 = -1;
+			return -EIO;
+		}
+
 		tcp_sock_set_bufsize(a->c, *p6);
 	}
 

@@ -443,8 +443,15 @@ int udp_splice_connect(struct ctx *c, int v6, int bound_sock,
 
 	s = socket(v6 ? AF_INET6 : AF_INET, SOCK_DGRAM | SOCK_NONBLOCK,
 		   IPPROTO_UDP);
+
+	if (s > SOCKET_MAX) {
+		close(s);
+		return -EIO;
+	}
+
 	if (s < 0)
 		return s;
+
 	ref.r.s = s;
 
 	if (v6) {

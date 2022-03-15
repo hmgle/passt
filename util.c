@@ -235,10 +235,17 @@ int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
 		fd = socket(af, SOCK_STREAM | SOCK_NONBLOCK, proto);
 	else
 		fd = socket(af, SOCK_DGRAM | SOCK_NONBLOCK, proto);
+
 	if (fd < 0) {
 		perror("L4 socket");
 		return -1;
 	}
+
+	if (fd > SOCKET_MAX) {
+		close(fd);
+		return -EIO;
+	}
+
 	ref.r.s = fd;
 
 	if (af == AF_INET) {

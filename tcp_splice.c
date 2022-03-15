@@ -418,6 +418,14 @@ static int tcp_splice_connect(struct ctx *c, struct tcp_splice_conn *conn,
 	const struct sockaddr *sa;
 	socklen_t sl;
 
+	if (sock_conn < 0)
+		return -errno;
+
+	if (sock_conn > SOCKET_MAX) {
+		close(sock_conn);
+		return -EIO;
+	}
+
 	conn->b = sock_conn;
 
 	if (s < 0)

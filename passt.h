@@ -45,7 +45,9 @@ union epoll_ref;
 union epoll_ref {
 	struct {
 		int32_t		proto:8,
-				s:24;
+#define SOCKET_REF_BITS		24
+#define SOCKET_MAX		(1 << SOCKET_REF_BITS)
+				s:SOCKET_REF_BITS;
 		union {
 			union tcp_epoll_ref tcp;
 			union udp_epoll_ref udp;
