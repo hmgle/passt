@@ -83,7 +83,7 @@ static: CFLAGS += -static -DGLIBC_NO_STATIC_NSS
 static: clean all
 
 seccomp.h: *.c $(filter-out seccomp.h,$(wildcard *.h))
-	@ ./seccomp.sh
+	@ EXTRA_SYSCALLS=$(EXTRA_SYSCALLS) ./seccomp.sh
 
 passt: $(filter-out qrap.c,$(wildcard *.c)) \
 	$(filter-out qrap.h,$(wildcard *.h)) seccomp.h
@@ -107,6 +107,12 @@ pasta: passt
 qrap: qrap.c passt.h
 	$(CC) $(CFLAGS) \
 		qrap.c -o qrap
+
+valgrind: EXTRA_SYSCALLS="rt_sigprocmask rt_sigtimedwait rt_sigaction \
+			  getpid gettid kill clock_gettime mmap munmap open \
+			  unlink exit_group gettimeofday"
+valgrind: CFLAGS:=-g -O0 $(filter-out -O%,$(CFLAGS))
+valgrind: all
 
 .PHONY: clean
 clean:

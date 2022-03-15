@@ -51,8 +51,12 @@ setup_passt() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	pane_run PASST "./passt ${__opts} -f -t 10001 -u 10001"
-	sleep 1
+	pane_run PASST "make clean"
+	pane_wait PASST
+	pane_run PASST "make valgrind"
+	pane_wait PASST
+	pane_run PASST "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt ${__opts} -f -t 10001 -u 10001 -P passt.pid"
+	sleep 5
 
 	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS} \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
@@ -133,7 +137,7 @@ setup_passt_in_ns() {
 	rm "${__pid_file}"
 
 	pane_run GUEST "nsenter -t ${__ns_pid} -U -n --preserve-credentials"
-	pane_run NS "nsenter -t ${__ns_pid} -U -n --preserve-credentials"
+	pane_run NS "nsenter -t ${__ns_pid} -U -n -p --preserve-credentials"
 	pane_wait GUEST
 	pane_wait NS
 
@@ -151,9 +155,20 @@ setup_passt_in_ns() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	#pane_run PASST "valgrind --max-stackframe=3000000 ./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031"
-	pane_run PASST "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031"
-	sleep 1
+	if [ ${VALGRIND} -eq 1 ]; then
+		pane_run PASST "make clean"
+		pane_wait PASST
+		pane_run PASST "make valgrind"
+		pane_wait PASST
+		pane_run PASST "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P passt.pid"
+	else
+		pane_run PASST "make clean"
+		pane_wait PASST
+		pane_run PASST "make"
+		pane_wait PASST
+		pane_run PASST "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P passt.pid"
+	fi
+	sleep 5
 
 	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS} \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
@@ -264,12 +279,11 @@ setup_two_guests() {
 	pane_wait GUEST_2
 }
 
-# teardown_passt() - Kill qemu and passt
+# teardown_passt() - Kill qemu, remove passt PID file
 teardown_passt() {
-	tmux send-keys -t ${PANE_PASST} "C-c"
-	pane_wait PASST
 	tmux send-keys -t ${PANE_GUEST} "C-c"
 	pane_wait GUEST
+	rm passt.pid
 }
 
 # teardown_passt() - Exit namespace, kill pasta process
@@ -280,14 +294,14 @@ teardown_pasta() {
 	pane_wait NS
 }
 
-# teardown_passt_in_ns() - Exit namespace, kill qemu, passt and pasta
+# teardown_passt_in_ns() - Exit namespace, kill qemu and pasta, remove pid file
 teardown_passt_in_ns() {
 	tmux send-keys -t ${PANE_GUEST} "C-c"
 	pane_wait GUEST
 	tmux send-keys -t ${PANE_GUEST} "C-d"
 
-	tmux send-keys -t ${PANE_PASST} "C-c"
-	pane_wait PASST
+	[ ${VALGRIND} -eq 0 ] && tmux send-keys -t ${PANE_PASST} "C-c"
+	[ ${VALGRIND} -eq 0 ] && pane_wait GUEST
 	tmux send-keys -t ${PANE_PASST} "C-d"
 
 	tmux send-keys -t ${PANE_NS} "C-d"
@@ -295,6 +309,8 @@ teardown_passt_in_ns() {
 	pane_wait GUEST
 	pane_wait NS
 	pane_wait PASST
+
+	rm passt.pid
 }
 
 # teardown_two_guests() - Exit namespaces, kill qemu processes, passt and pasta

@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/valgrind/passt_in_ns - Terminate passt and check valgrind exit code
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+onlyfor	passt_in_ns
+test	valgrind: exit code
+
+nsout	PASST_PID cat passt.pid
+ns	kill __PASST_PID__
+sleep	1
+
+pout	VALGRIND_EXIT echo $?
+check	[ "__VALGRIND_EXIT__" = "0" ]

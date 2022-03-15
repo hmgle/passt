@@ -78,14 +78,23 @@ run() {
 	test dhcp
 	test tcp
 	test udp
+	test valgrind
 	teardown passt
 
+	VALGRIND=1
 	setup passt_in_ns
 	test ndp
 	test dhcp
 	test icmp
 	test tcp
 	test udp
+	test valgrind
+	teardown passt_in_ns
+
+	VALGRIND=0
+	setup passt_in_ns
+	test ndp
+	test dhcp
 	test perf
 	teardown passt_in_ns
 

@@ -31,7 +31,7 @@ Example for Debian, and possibly most Debian-based distributions:
     build-essential git jq strace iperf3 qemu-system-x86 tmux sipcalc bc
     clang-tidy cppcheck isc-dhcp-common udhcpc psmisc linux-cpupower
     netcat-openbsd fakeroot lz4 lm-sensors qemu-system-arm qemu-system-ppc
-    qemu-system-misc qemu-system-x86`
+    qemu-system-misc qemu-system-x86 valgrind
 
 ### Other tools
 

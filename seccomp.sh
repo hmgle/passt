@@ -234,6 +234,7 @@ printf '%s\n' "${HEADER}" > "${OUT}"
 __profiles="$(sed -n 's/[\t ]*\*[\t ]*#syscalls:\([^ ]*\).*/\1/p' *.[ch] | sort -u)"
 for __p in ${__profiles}; do
 	__calls="$(sed -n 's/[\t ]*\*[\t ]*#syscalls\(:'"${__p}"'\|\)[\t ]\{1,\}\(.*\)/\2/p' *.[ch])"
+	__calls="${__calls} ${EXTRA_SYSCALLS:-}"
 	__calls="$(filter ${__calls})"
 	echo "seccomp profile ${__p} allows: ${__calls}" | tr '\n' ' ' | fmt -t
 
