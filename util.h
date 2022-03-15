@@ -26,20 +26,6 @@ void trace_init(int enable);
 #define ETH_MIN_MTU			68
 #endif
 
-#define CHECK_SET_MIN_MAX(basename, fd)					\
-	do {								\
-		if ((fd) < basename##min)				\
-			basename##min = (fd);				\
-		if ((fd) > basename##max)				\
-			basename##max = (fd);				\
-	} while (0)
-
-#define CHECK_SET_MIN_MAX_PROTO_FD(proto, ipproto, proto_ctx, fd)	\
-	do {								\
-		if ((proto) == (ipproto))				\
-			CHECK_SET_MIN_MAX(c->proto_ctx.fd_, (fd));	\
-	} while (0)
-
 #ifndef MIN
 #define MIN(x, y)		(((x) < (y)) ? (x) : (y))
 #endif
