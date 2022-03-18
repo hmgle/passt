@@ -6,7 +6,9 @@
 #ifndef TCP_H
 #define TCP_H
 
-#define TCP_TIMER_INTERVAL		20 /* ms */
+#define REFILL_INTERVAL			1000 /* ms */
+#define PORT_DETECT_INTERVAL		1000
+#define TCP_TIMER_INTERVAL	MIN(REFILL_INTERVAL, PORT_DETECT_INTERVAL)
 
 #define TCP_MAX_CONNS			(128 * 1024)
 #define TCP_MAX_SOCKS			(TCP_MAX_CONNS + USHRT_MAX * 2)
@@ -21,7 +23,7 @@ int tcp_tap_handler(struct ctx *c, int af, void *addr,
 		    struct tap_l4_msg *msg, int count, struct timespec *now);
 int tcp_sock_init(struct ctx *c, struct timespec *now);
 void tcp_timer(struct ctx *c, struct timespec *now);
-void tcp_defer_handler(struct ctx *c, struct timespec *now);
+void tcp_defer_handler(struct ctx *c);
 
 void tcp_sock_set_bufsize(struct ctx *c, int s);
 void tcp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
@@ -34,6 +36,7 @@ void tcp_remap_to_init(in_port_t port, in_port_t delta);
  * @listen:		Set if this file descriptor is a listening socket
  * @splice:		Set if descriptor is associated to a spliced connection
  * @v6:			Set for IPv6 sockets or connections
+ * @timer:		Reference is a timerfd descriptor for connection
  * @index:		Index of connection in table, or port for bound sockets
  * @u32:		Opaque u32 value of reference
  */
@@ -42,6 +45,7 @@ union tcp_epoll_ref {
 		uint32_t	listen:1,
 				splice:1,
 				v6:1,
+				timer:1,
 				index:20;
 	} tcp;
 	uint32_t u32;

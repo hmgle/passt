@@ -939,7 +939,7 @@ void tap_sock_init(struct ctx *c)
  * @c:		Execution context
  * @fd:		File descriptor where event occurred
  * @events:	epoll events
- * @now:	Current timestamp
+ * @now:	Current timestamp, can be NULL on EPOLLERR
  */
 void tap_handler(struct ctx *c, int fd, uint32_t events, struct timespec *now)
 {

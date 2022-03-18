@@ -119,12 +119,12 @@ static void post_handler(struct ctx *c, struct timespec *now)
 #define CALL_PROTO_HANDLER(c, now, lc, uc)				\
 	do {								\
 		extern void						\
-		lc ## _defer_handler (struct ctx *, struct timespec *)	\
+		lc ## _defer_handler (struct ctx *c)			\
 		__attribute__ ((weak));					\
 									\
 		if (!c->no_ ## lc) {					\
 			if (lc ## _defer_handler)			\
-				lc ## _defer_handler(c, now);		\
+				lc ## _defer_handler(c);		\
 									\
 			if (timespec_diff_ms((now), &c->lc.timer_run)	\
 			    >= uc ## _TIMER_INTERVAL) {			\
@@ -134,8 +134,11 @@ static void post_handler(struct ctx *c, struct timespec *now)
 		} 							\
 	} while (0)
 
+	/* NOLINTNEXTLINE(bugprone-branch-clone): intervals can be the same */
 	CALL_PROTO_HANDLER(c, now, tcp, TCP);
+	/* NOLINTNEXTLINE(bugprone-branch-clone): intervals can be the same */
 	CALL_PROTO_HANDLER(c, now, udp, UDP);
+	/* NOLINTNEXTLINE(bugprone-branch-clone): intervals can be the same */
 	CALL_PROTO_HANDLER(c, now, icmp, ICMP);
 
 #undef CALL_PROTO_HANDLER
@@ -380,8 +383,8 @@ int main(int argc, char **argv)
 
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	if ((!c.no_udp && udp_sock_init(&c, &now)) ||
-	    (!c.no_tcp && tcp_sock_init(&c, &now)))
+	if ((!c.no_udp && udp_sock_init(&c)) ||
+	    (!c.no_tcp && tcp_sock_init(&c)))
 		exit(EXIT_FAILURE);
 
 	proto_update_l2_buf(c.mac_guest, c.mac, &c.addr4);
@@ -425,6 +428,7 @@ int main(int argc, char **argv)
 	timer_init(&c, &now);
 
 loop:
+	/* NOLINTNEXTLINE(bugprone-branch-clone): intervals can be the same */
 	nfds = epoll_wait(c.epollfd, events, EPOLL_EVENTS, TIMER_INTERVAL);
 	if (nfds == -1 && errno != EINTR) {
 		perror("epoll_wait");
