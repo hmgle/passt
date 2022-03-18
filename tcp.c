@@ -1560,6 +1560,7 @@ void tcp_defer_handler(struct ctx *c)
 {
 	tcp_l2_flags_buf_flush(c);
 	tcp_l2_data_buf_flush(c);
+	tcp_splice_defer_handler(c);
 }
 
 /**

@@ -371,7 +371,7 @@ int main(int argc, char **argv)
 		perror("getrlimit");
 		exit(EXIT_FAILURE);
 	}
-	limit.rlim_cur = limit.rlim_max;
+	c.nofile = limit.rlim_cur = limit.rlim_max;
 	if (setrlimit(RLIMIT_NOFILE, &limit)) {
 		perror("setrlimit");
 		exit(EXIT_FAILURE);

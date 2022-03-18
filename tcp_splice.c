@@ -52,6 +52,7 @@
 #define TCP_SPLICE_MAX_CONNS		(128 * 1024)
 #define TCP_SPLICE_PIPE_POOL_SIZE	16
 #define REFILL_INTERVAL			1000	/* ms, refill pool of pipes */
+#define TCP_SPLICE_FILE_PRESSURE	30	/* % of c->nofile */
 
 /* From tcp.c */
 extern int init_sock_pool4		[TCP_SOCK_POOL_SIZE];
@@ -152,6 +153,7 @@ static void tcp_splice_conn_epoll_events(uint16_t events,
 	*b |= (events & SPLICE_B_OUT_WAIT) ? EPOLLOUT : 0;
 }
 
+static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn);
 static int tcp_splice_epoll_ctl(struct ctx *c, struct tcp_splice_conn *conn);
 
 /**
@@ -832,13 +834,9 @@ void tcp_splice_init(struct ctx *c)
  */
 void tcp_splice_timer(struct ctx *c, struct timespec *now)
 {
-	int i;
+	struct tcp_splice_conn *conn;
 
-	for (i = c->tcp.splice_conn_count - 1; i >= 0; i--) {
-		struct tcp_splice_conn *conn;
-
-		conn = CONN(i);
-
+	for (conn = CONN(c->tcp.splice_conn_count - 1); conn >= tc; conn--) {
 		if (conn->flags & SPLICE_CLOSING) {
 			tcp_splice_destroy(c, conn);
 			continue;
@@ -864,4 +862,22 @@ void tcp_splice_timer(struct ctx *c, struct timespec *now)
 
 	if (timespec_diff_ms(now, &c->tcp.refill_ts) > REFILL_INTERVAL)
 		tcp_splice_pipe_refill(c);
+}
+
+/**
+ * tcp_splice_defer_handler() - Close connections without timer on file pressure
+ * @c:		Execution context
+ */
+void tcp_splice_defer_handler(struct ctx *c)
+{
+	int max_files = c->nofile / 100 * TCP_SPLICE_FILE_PRESSURE;
+	struct tcp_splice_conn *conn;
+
+	if (c->tcp.splice_conn_count * 6 < max_files)
+		return;
+
+	for (conn = CONN(c->tcp.splice_conn_count - 1); conn >= tc; conn--) {
+		if (conn->flags & SPLICE_CLOSING)
+			tcp_splice_destroy(c, conn);
+	}
 }
