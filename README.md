@@ -221,8 +221,9 @@ is needed as _passt_ runs without the `CAP_NET_RAW` capability: it can't create
 raw IP sockets on the pod, and therefore needs to map packets at Layer-2 to
 Layer-4 sockets offered by the host kernel.
 
-The problem and this approach are illustrated in more detail, with diagrams,
-[here](https://gitlab.com/abologna/kubevirt-and-kvm/-/blob/master/Networking.md).
+See also a
+[detailed illustration](https://gitlab.com/abologna/kubevirt-and-kvm/-/blob/master/Networking.md)
+of the problem and what lead to this approach.
 
 ### pasta
 
@@ -294,8 +295,8 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * 🛠️ ~5 000 LoC target
 * ⌚ [fuzzing](https://bugs.passt.top/show_bug.cgi?id=9), _packetdrill_ tests
 * ⌚ stricter [synflood protection](https://bugs.passt.top/show_bug.cgi?id=10)
-* 💡 [your](https://lists.passt.top/) [ideas](https://bugs.passt.top/)
-  [here](https://chat.passt.top)
+* 💡 [add](https://lists.passt.top/) [your](https://bugs.passt.top/)
+  [ideas](https://chat.passt.top)
 
 ### Configurability
 * ✅ all addresses, ports, port ranges
@@ -304,8 +305,8 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ✅ _pasta_: auto-detection of bound ports
 * 🛠 run-time configuration of port ranges without autodetection
 * 🛠 configuration of port ranges for autodetection
-* 💡 [your](https://lists.passt.top/) [ideas](https://bugs.passt.top/)
-  [here](https://chat.passt.top)
+* 💡 [add](https://lists.passt.top/) [your](https://bugs.passt.top/)
+  [ideas](https://chat.passt.top)
 
 ### Performance
 * ✅ maximum two (cache hot) copies on every data path
@@ -416,9 +417,9 @@ destination address translated to the loopback address.
 ## Protocols
 
 _passt_ and _pasta_ support TCP, UDP and ICMP/ICMPv6 echo (requests and
-replies). More details about the TCP implementation are available
-[here](/passt/tree/tcp.c), and for the UDP
-implementation [here](/passt/tree/udp.c).
+replies). More details about the TCP implementation are described in the
+[theory of operation](/passt/tree/tcp.c), and similarly for
+[UDP](/passt/tree/udp.c).
 
 An IGMP/MLD proxy is currently work in progress.
 
@@ -506,7 +507,7 @@ if (getComputedStyle(document.getElementById('ci'))['visibility'] == "visible") 
   <p><a href="/builds/latest/web/ci.html">Continuous integration test run</a></p>
 </div>
 
-Test logs [here](/builds/latest/test/).
+See also the [test logs](/builds/latest/test/).
 
 ## Performance
 
@@ -522,11 +523,10 @@ Test logs [here](/builds/latest/test/).
         cd passt
         make
 
-    * alternatively, static builds for x86_64 as of the latest commit are also
-      available for convenience [here](/builds/latest/x86_64/). Convenience,
-      non-official packages for Debian (and derivatives) and RPM-based
-      distributions are also available there. These binaries and packages are
-      simply built with:
+    * alternatively, [static builds]((/builds/latest/x86_64/) for x86_64 as of
+      the latest commit are also available for convenience. Non-official
+      packages for Debian (and derivatives) and RPM-based distributions are also
+      available there. These binaries and packages are simply built with:
 
             make pkgs
 
@@ -581,11 +581,10 @@ Test logs [here](/builds/latest/test/).
         cd passt
         make
 
-    * alternatively, static builds for x86_64 as of the latest commit are also
-      available for convenience [here](/builds/latest/x86_64/). Convenience,
-      non-official packages for Debian (and derivatives) and RPM-based
-      distributions are also available there. These binaries and packages are
-      simply built with:
+    * alternatively, [static builds]((/builds/latest/x86_64/) for x86_64 as of
+      the latest commit are also available for convenience. Non-official
+      packages for Debian (and derivatives) and RPM-based distributions are also
+      available there. These binaries and packages are simply built with:
 
             make pkgs
 
