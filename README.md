@@ -325,19 +325,24 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 
 ### Interfaces
 * ✅ qemu, libvirt support with [`qrap` wrapper](/passt/tree/qrap.c)
-* ✅ out-of-tree patches for [qemu](/passt/tree/qemu) and
-  [libvirt](/passt/tree/libvirt) available
-* 🛠 bug-to-bug compatible
+* ✅ out-of-tree patches for [qemu](/passt/tree/contrib/qemu) and
+  [libvirt](/passt/tree/contrib/libvirt) available
+* ✅ bug-to-bug compatible
   [_slirp4netns_ replacement](/passt/tree/slirp4netns.sh) (rootless Podman,
   RootlessKit)
+* ✅ out-of-tree patch for [Podman](/passt/tree/contrib/podman) available
+* ✅ out-of-tree patch for
+  [Kata Containers](/passt/tree/contrib/kata-containers) available
 * 🛠 native [qemu](https://bugs.passt.top/show_bug.cgi?id=11),
   [libvirt](https://bugs.passt.top/show_bug.cgi?id=12) support
+* 🛠 native Podman integration
 * ⌚ drop-in replacement for VPNKit (rootless Docker)
 
 ### Availability
 * ✅ convenience unofficial packages for Debian, RPM-based distributions on
   x86_64 (static builds)
-* ✅ testing on non-x86 architectures
+* ✅ testing on non-x86_64 architectures (aarch64, armv7l, i386, ppc64, ppc64le,
+  s390x)
 * 🛠 official
   [OpenSUSE packages](https://build.opensuse.org/package/show/home:mnhauke/passt)
 * ⌚ packages for Debian, Fedora, etc.
