@@ -66,7 +66,7 @@
  * ------
  *
  * To avoid the need for dynamic memory allocation, a maximum, reasonable amount
- * of connections is defined by MAX_TAP_CONNS below (currently 128k).
+ * of connections is defined by TCP_MAX_CONNS (currently 128k).
  *
  * Data needs to linger on sockets as long as it's not acknowledged by the
  * guest, and is read using MSG_PEEK into preallocated static buffers sized
@@ -216,8 +216,8 @@
  * @seq_init_from_tap:	initial sequence number from tap/guest
  * @seq_init_to_tap:	initial sequence number from tap/guest
  *
- * @wnd_from_tap:	last window size received from tap, scaled
- * @wnd_from_tap:	last window size advertised from tap, scaled
+ * @wnd_from_tap:	last window size received from tap, never scaled
+ * @wnd_from_tap:	last window size advertised from tap, never scaled
  *
  * - from socket to tap/guest:
  *   - on new data from socket:
@@ -299,23 +299,26 @@
 #include "conf.h"
 #include "tcp_splice.h"
 
-#define MAX_TAP_CONNS			(128 * 1024)
-
 #define TCP_FRAMES_MEM			256
 #define TCP_FRAMES							\
 	(c->mode == MODE_PASST ? TCP_FRAMES_MEM : 1)
 
+#define TCP_HASH_BUCKET_BITS		(TCP_CONN_INDEX_BITS + 1)
 #define TCP_HASH_TABLE_LOAD		70		/* % */
-#define TCP_HASH_TABLE_SIZE		(MAX_TAP_CONNS * 100 /		\
+#define TCP_HASH_TABLE_SIZE		(TCP_MAX_CONNS * 100 /		\
 					 TCP_HASH_TABLE_LOAD)
 
 #define MAX_WS				10
 #define MAX_WINDOW			(1 << (16 + (MAX_WS)))
+
+/* MSS rounding: see SET_MSS() */
 #define MSS_DEFAULT			536
-#define MSS4	(USHRT_MAX - sizeof(uint32_t) - sizeof(struct ethhdr) -	\
-		 sizeof(struct iphdr) - sizeof(struct tcphdr))
-#define MSS6	(USHRT_MAX - sizeof(uint32_t) - sizeof(struct ethhdr) -	\
-		 sizeof(struct ipv6hdr) - sizeof(struct tcphdr))
+#define MSS4	ROUND_DOWN(USHRT_MAX -					\
+			   sizeof(uint32_t) - sizeof(struct ethhdr) -	\
+			   sizeof(struct iphdr) - sizeof(struct tcphdr), 4)
+#define MSS6	ROUND_DOWN(USHRT_MAX -					\
+			   sizeof(uint32_t) - sizeof(struct ethhdr) -	\
+			   sizeof(struct ipv6hdr) - sizeof(struct tcphdr), 4)
 
 #define WINDOW_DEFAULT			14600		/* RFC 6928 */
 #ifdef HAS_SND_WND
@@ -363,64 +366,46 @@
 #define OPT_SACK	5
 #define OPT_TS		8
 
-struct tcp_conn;
-
 /**
  * struct tcp_conn - Descriptor for a TCP connection (not spliced)
- * @next:		Pointer to next item in hash chain, if any
+ * @next_index:		Connection index of next item in hash chain, -1 for none
+ * @tap_mss:		MSS advertised by tap/guest, rounded to 2 ^ TCP_MSS_BITS
  * @sock:		Socket descriptor number
+ * @events:		Connection events, implying connection states
+ * @timer:		timerfd descriptor for timeout events
+ * @flags:		Connection flags representing internal attributes
  * @hash_bucket:	Bucket index in connection lookup hash table
+ * @retrans:		Number of retransmissions occurred due to ACK_TIMEOUT
+ * @ws_from_tap:	Window scaling factor advertised from tap/guest
+ * @ws_to_tap:		Window scaling factor advertised to tap/guest
+ * @sndbuf:		Sending buffer in kernel, rounded to 2 ^ SNDBUF_BITS
+ * @seq_dup_ack_approx:	Last duplicate ACK number sent to tap
  * @a.a6:		IPv6 remote address, can be IPv4-mapped
  * @a.a4.zero:		Zero prefix for IPv4-mapped, see RFC 6890, Table 20
  * @a.a4.one:		Ones prefix for IPv4-mapped
  * @a.a4.a:		IPv4 address
  * @tap_port:		Guest-facing tap port
  * @sock_port:		Remote, socket-facing port
- * @events:		Connection events, implying connection states
- * @flags:		Connection flags representing internal attributes
- * @tap_mss:		Maximum segment size advertised by guest
+ * @wnd_from_tap:	Last window size from tap, unscaled (as received)
+ * @wnd_to_tap:		Sending window advertised to tap, unscaled (as sent)
  * @seq_to_tap:		Next sequence for packets to tap
  * @seq_ack_from_tap:	Last ACK number received from tap
  * @seq_from_tap:	Next sequence for packets from tap (not actually sent)
  * @seq_ack_to_tap:	Last ACK number sent to tap
- * @seq_dup_ack:	Last duplicate ACK number sent to tap
  * @seq_init_from_tap:	Initial sequence number from tap
- * @seq_init_from_tap:	Initial sequence number to tap
- * @ws_tap:		Window scaling factor from tap
- * @ws:			Window scaling factor
- * @wnd_from_tap:	Last window size received from tap, scaled
- * @wnd_to_tap:		Socket-side sending window, advertised to tap
- * @snd_buf:		Socket sending buffer reported by kernel, in bytes
- * @ts_sock_act:	Last activity timestamp from socket for timeout purposes
- * @ts_tap_act:		Last activity timestamp from tap for timeout purposes
- * @ts_ack_from_tap:	Last ACK segment timestamp from tap
- * @ts_ack_to_tap:	Last ACK segment timestamp to tap
- * @tap_data_noack:	Last unacked data to tap, set to { 0, 0 } on ACK
  */
 struct tcp_conn {
-	struct tcp_conn *next;
-	int32_t		sock:SOCKET_REF_BITS;
-#define TCP_RETRANS_BITS	3
-	unsigned int	retrans:TCP_RETRANS_BITS;
-#define TCP_MAX_RETRANS	((1U << TCP_RETRANS_BITS) - 1)
-	int timer;
-	int hash_bucket;
+	int	 	next_index	:TCP_CONN_INDEX_BITS + 1;
 
-	union {
-		struct in6_addr a6;
-		struct {
-			uint8_t zero[10];
-			uint8_t one[2];
-			struct in_addr a;
-		} a4;
-	} a;
-#define CONN_V4(conn)		IN6_IS_ADDR_V4MAPPED(&conn->a.a6)
-#define CONN_V6(conn)		(!CONN_V4(conn))
+#define TCP_MSS_BITS			14
+	unsigned int	tap_mss		:TCP_MSS_BITS;
+#define MSS_SET(conn, mss)	(conn->tap_mss = (mss >> (16 - TCP_MSS_BITS)))
+#define MSS_GET(conn)		(conn->tap_mss << (16 - TCP_MSS_BITS))
 
-	in_port_t tap_port;
-	in_port_t sock_port;
 
-	uint8_t events;
+	int		sock		:SOCKET_REF_BITS;
+
+	uint8_t		events;
 #define CLOSED			0
 #define SOCK_ACCEPTED		BIT(0)	/* implies SYN sent to tap */
 #define TAP_SYN_RCVD		BIT(1)	/* implies socket connecting */
@@ -435,7 +420,10 @@ struct tcp_conn {
 #define	CONN_STATE_BITS		/* Setting these clears other flags */	\
 	(SOCK_ACCEPTED | TAP_SYN_RCVD | ESTABLISHED)
 
-	uint8_t flags;
+
+	int		timer		:SOCKET_REF_BITS;
+
+	uint8_t		flags;
 #define STALLED			BIT(0)
 #define LOCAL			BIT(1)
 #define WND_CLAMPED		BIT(2)
@@ -444,23 +432,48 @@ struct tcp_conn {
 #define ACK_TO_TAP_DUE		BIT(5)
 #define ACK_FROM_TAP_DUE	BIT(6)
 
-	uint16_t tap_mss;
 
-	uint32_t seq_to_tap;
-	uint32_t seq_ack_from_tap;
-	uint32_t seq_from_tap;
-	uint32_t seq_ack_to_tap;
-	uint32_t seq_dup_ack;
-	uint32_t seq_init_from_tap;
-	uint32_t seq_init_to_tap;
+	unsigned int	hash_bucket	:TCP_HASH_BUCKET_BITS;
 
-	uint16_t ws_tap;
-	uint16_t ws;
+#define TCP_RETRANS_BITS		3
+	unsigned int	retrans		:TCP_RETRANS_BITS;
+#define TCP_MAX_RETRANS			((1U << TCP_RETRANS_BITS) - 1)
 
-	uint32_t wnd_from_tap;
-	uint32_t wnd_to_tap;
+#define TCP_WS_BITS			4	/* RFC 7323 */
+	unsigned int	ws_from_tap	:TCP_WS_BITS;
+	unsigned int	ws_to_tap	:TCP_WS_BITS;
 
-	int snd_buf;
+
+#define SNDBUF_BITS		24
+	unsigned int	sndbuf		:SNDBUF_BITS;
+#define SNDBUF_SET(conn, bytes)	(conn->sndbuf = ((bytes) >> (32 - SNDBUF_BITS)))
+#define SNDBUF_GET(conn)	(conn->sndbuf << (32 - SNDBUF_BITS))
+
+	uint8_t		seq_dup_ack_approx;
+
+
+	union {
+		struct in6_addr a6;
+		struct {
+			uint8_t zero[10];
+			uint8_t one[2];
+			struct in_addr a;
+		} a4;
+	} a;
+#define CONN_V4(conn)		IN6_IS_ADDR_V4MAPPED(&conn->a.a6)
+#define CONN_V6(conn)		(!CONN_V4(conn))
+
+	in_port_t	tap_port;
+	in_port_t	sock_port;
+
+	uint16_t	wnd_from_tap;
+	uint16_t	wnd_to_tap;
+
+	uint32_t	seq_to_tap;
+	uint32_t	seq_ack_from_tap;
+	uint32_t	seq_from_tap;
+	uint32_t	seq_ack_to_tap;
+	uint32_t	seq_init_from_tap;
 };
 
 #define CONN_IS_CLOSED(conn)	(conn->events == CLOSED)
@@ -470,6 +483,12 @@ struct tcp_conn {
 #define CONN_HAS(conn, set)	((conn->events & (set)) == (set))
 
 #define CONN(index)		(tc + (index))
+
+/* We probably don't want to use gcc statement expressions (for portability), so
+ * use this only after well-defined sequence points (no pre-/post-increments).
+ */
+#define CONN_OR_NULL(index)						\
+	(((int)(index) >= 0 && (index) < TCP_MAX_CONNS) ? (tc + (index)) : NULL)
 
 static const char *tcp_event_str[] __attribute((__unused__)) = {
 	"SOCK_ACCEPTED", "TAP_SYN_RCVD", "ESTABLISHED", "TAP_SYN_ACK_SENT",
@@ -652,7 +671,7 @@ static unsigned int tcp6_l2_flags_buf_used;
 static size_t tcp6_l2_flags_buf_bytes;
 
 /* TCP connections */
-static struct tcp_conn tc[MAX_TAP_CONNS];
+static struct tcp_conn tc[TCP_MAX_CONNS];
 
 /* Table for lookup from remote address, local port, remote port */
 static struct tcp_conn *tc_hash[TCP_HASH_TABLE_SIZE];
@@ -747,12 +766,14 @@ static void tcp_timer_ctl(struct ctx *c, struct tcp_conn *conn)
 					.r.p.tcp.tcp.index = conn - tc };
 		struct epoll_event ev = { .data.u64 = ref.u64,
 					  .events = EPOLLIN | EPOLLET };
+		int fd;
 
-		conn->timer = timerfd_create(CLOCK_MONOTONIC, 0);
-		if (conn->timer == -1) {
+		fd = timerfd_create(CLOCK_MONOTONIC, 0);
+		if (fd == -1 || fd > SOCKET_MAX) {
 			debug("TCP: failed to get timer: %s", strerror(errno));
 			return;
 		}
+		conn->timer = fd;
 
 		if (epoll_ctl(c->epollfd, EPOLL_CTL_ADD, conn->timer, &ev)) {
 			debug("TCP: failed to add timer: %s", strerror(errno));
@@ -957,7 +978,7 @@ static void tcp_get_sndbuf(struct tcp_conn *conn)
 
 	sl = sizeof(sndbuf);
 	if (getsockopt(s, SOL_SOCKET, SO_SNDBUF, &sndbuf, &sl)) {
-		conn->snd_buf = WINDOW_DEFAULT;
+		SNDBUF_SET(conn, WINDOW_DEFAULT);
 		return;
 	}
 
@@ -967,7 +988,7 @@ static void tcp_get_sndbuf(struct tcp_conn *conn)
 	else if (v > SNDBUF_SMALL)
 		v -= v * (v - SNDBUF_SMALL) / (SNDBUF_BIG - SNDBUF_SMALL) / 2;
 
-	conn->snd_buf = MIN(INT_MAX, v);
+	SNDBUF_SET(conn, MIN(INT_MAX, v));
 }
 
 /**
@@ -1299,12 +1320,12 @@ static void tcp_hash_insert(struct ctx *c, struct tcp_conn *conn,
 	int b;
 
 	b = tcp_hash(c, af, addr, conn->tap_port, conn->sock_port);
-	conn->next = tc_hash[b];
+	conn->next_index = tc_hash[b] ? tc_hash[b] - tc : -1;
 	tc_hash[b] = conn;
 	conn->hash_bucket = b;
 
 	debug("TCP: hash table insert: index %i, sock %i, bucket: %i, next: %p",
-	      conn - tc, conn->sock, b, conn->next);
+	      conn - tc, conn->sock, b, CONN_OR_NULL(conn->next_index));
 }
 
 /**
@@ -1316,18 +1337,20 @@ static void tcp_hash_remove(struct tcp_conn *conn)
 	struct tcp_conn *entry, *prev = NULL;
 	int b = conn->hash_bucket;
 
-	for (entry = tc_hash[b]; entry; prev = entry, entry = entry->next) {
+	for (entry = tc_hash[b]; entry;
+	     prev = entry, entry = CONN_OR_NULL(entry->next_index)) {
 		if (entry == conn) {
 			if (prev)
-				prev->next = conn->next;
+				prev->next_index = conn->next_index;
 			else
-				tc_hash[b] = conn->next;
+				tc_hash[b] = CONN_OR_NULL(conn->next_index);
 			break;
 		}
 	}
 
 	debug("TCP: hash table remove: index %i, sock %i, bucket: %i, new: %p",
-	      conn - tc, conn->sock, b, prev ? prev->next : tc_hash[b]);
+	      conn - tc, conn->sock, b,
+	      prev ? CONN_OR_NULL(prev->next_index) : tc_hash[b]);
 }
 
 /**
@@ -1340,10 +1363,11 @@ static void tcp_hash_update(struct tcp_conn *old, struct tcp_conn *new)
 	struct tcp_conn *entry, *prev = NULL;
 	int b = old->hash_bucket;
 
-	for (entry = tc_hash[b]; entry; prev = entry, entry = entry->next) {
+	for (entry = tc_hash[b]; entry;
+	     prev = entry, entry = CONN_OR_NULL(entry->next_index)) {
 		if (entry == old) {
 			if (prev)
-				prev->next = new;
+				prev->next_index = new - tc;
 			else
 				tc_hash[b] = new;
 			break;
@@ -1371,7 +1395,7 @@ static struct tcp_conn *tcp_hash_lookup(struct ctx *c, int af, void *addr,
 	int b = tcp_hash(c, af, addr, tap_port, sock_port);
 	struct tcp_conn *conn;
 
-	for (conn = tc_hash[b]; conn; conn = conn->next) {
+	for (conn = tc_hash[b]; conn; conn = CONN_OR_NULL(conn->next_index)) {
 		if (tcp_hash_match(conn, af, addr, tap_port, sock_port))
 			return conn;
 	}
@@ -1586,21 +1610,11 @@ static size_t tcp_l2_buf_fill_headers(struct ctx *c, struct tcp_conn *conn,
 		b->th.dest = htons(conn->tap_port);			\
 		b->th.seq = htonl(seq);					\
 		b->th.ack_seq = htonl(conn->seq_ack_to_tap);		\
-									\
-		/* First value sent by receiver is not scaled */	\
-		if (b->th.syn) {					\
-			b->th.window = htons(MIN(conn->wnd_to_tap,	\
-					     USHRT_MAX));		\
-		} else {						\
-			b->th.window = htons(MIN(conn->wnd_to_tap >>	\
-						 conn->ws,		\
-						 USHRT_MAX));		\
-		}							\
+		b->th.window = htons(MIN(conn->wnd_to_tap, USHRT_MAX));	\
 	} while (0)
 
 	if (CONN_V6(conn)) {
 		struct tcp6_l2_buf_t *b = (struct tcp6_l2_buf_t *)p;
-		uint32_t flow = conn->seq_init_to_tap;
 
 		ip_len = plen + sizeof(struct ipv6hdr) + sizeof(struct tcphdr);
 
@@ -1617,9 +1631,9 @@ static size_t tcp_l2_buf_fill_headers(struct ctx *c, struct tcp_conn *conn,
 
 		tcp_update_check_tcp6(b);
 
-		b->ip6h.flow_lbl[0] = (flow >> 16) & 0xf;
-		b->ip6h.flow_lbl[1] = (flow >> 8) & 0xff;
-		b->ip6h.flow_lbl[2] = (flow >> 0) & 0xff;
+		b->ip6h.flow_lbl[0] = (conn->sock >> 16) & 0xf;
+		b->ip6h.flow_lbl[1] = (conn->sock >> 8) & 0xff;
+		b->ip6h.flow_lbl[2] = (conn->sock >> 0) & 0xff;
 
 		eth_len = ip_len + sizeof(struct ethhdr);
 		if (c->mode == MODE_PASST)
@@ -1663,10 +1677,11 @@ static size_t tcp_l2_buf_fill_headers(struct ctx *c, struct tcp_conn *conn,
 static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_conn *conn,
 				 int force_seq, struct tcp_info *tinfo)
 {
+	uint32_t prev_wnd_to_tap = conn->wnd_to_tap << conn->ws_to_tap;
 	uint32_t prev_ack_to_tap = conn->seq_ack_to_tap;
-	uint32_t prev_wnd_to_tap = conn->wnd_to_tap;
 	socklen_t sl = sizeof(*tinfo);
 	struct tcp_info tinfo_new;
+	uint32_t new_wnd_to_tap = prev_wnd_to_tap;
 	int s = conn->sock;
 
 #ifndef HAS_BYTES_ACKED
@@ -1676,7 +1691,7 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_conn *conn,
 	if (SEQ_LT(conn->seq_ack_to_tap, prev_ack_to_tap))
 		conn->seq_ack_to_tap = prev_ack_to_tap;
 #else
-	if ((unsigned long)conn->snd_buf < SNDBUF_SMALL || tcp_rtt_dst_low(conn)
+	if ((unsigned)SNDBUF_GET(conn) < SNDBUF_SMALL || tcp_rtt_dst_low(conn)
 	    || CONN_IS_CLOSING(conn) || conn->flags & LOCAL || force_seq) {
 		conn->seq_ack_to_tap = conn->seq_from_tap;
 	} else if (conn->seq_ack_to_tap != conn->seq_from_tap) {
@@ -1696,12 +1711,13 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_conn *conn,
 
 	if (!KERNEL_REPORTS_SND_WND(c)) {
 		tcp_get_sndbuf(conn);
-		conn->wnd_to_tap = MIN(conn->snd_buf, MAX_WINDOW);
+		new_wnd_to_tap = MIN(SNDBUF_GET(conn), MAX_WINDOW);
+		conn->wnd_to_tap = new_wnd_to_tap >> conn->ws_to_tap;
 		goto out;
 	}
 
 	if (!tinfo) {
-		if (conn->wnd_to_tap > WINDOW_DEFAULT)
+		if (prev_wnd_to_tap > WINDOW_DEFAULT)
 			goto out;
 
 		tinfo = &tinfo_new;
@@ -1711,19 +1727,20 @@ static int tcp_update_seqack_wnd(struct ctx *c, struct tcp_conn *conn,
 
 #ifdef HAS_SND_WND
 	if ((conn->flags & LOCAL) || tcp_rtt_dst_low(conn)) {
-		conn->wnd_to_tap = tinfo->tcpi_snd_wnd;
+		new_wnd_to_tap = tinfo->tcpi_snd_wnd;
 	} else {
 		tcp_get_sndbuf(conn);
-		conn->wnd_to_tap = MIN((int)tinfo->tcpi_snd_wnd, conn->snd_buf);
+		new_wnd_to_tap = MIN((int)tinfo->tcpi_snd_wnd,
+				     SNDBUF_GET(conn));
 	}
 #endif
 
-	conn->wnd_to_tap = MIN(conn->wnd_to_tap, MAX_WINDOW);
+	conn->wnd_to_tap = MIN(new_wnd_to_tap, MAX_WINDOW) >> conn->ws_to_tap;
 
 	if (!conn->wnd_to_tap)
 		conn_flag(c, conn, ACK_TO_TAP_DUE);
 out:
-	return conn->wnd_to_tap     != prev_wnd_to_tap ||
+	return new_wnd_to_tap       != prev_wnd_to_tap ||
 	       conn->seq_ack_to_tap != prev_ack_to_tap;
 }
 
@@ -1813,16 +1830,14 @@ static int tcp_send_flag(struct ctx *c, struct tcp_conn *conn, int flags)
 			c->tcp.kernel_snd_wnd = 1;
 #endif
 
-		conn->ws = MIN(MAX_WS, tinfo.tcpi_snd_wscale);
+		conn->ws_to_tap = MIN(MAX_WS, tinfo.tcpi_snd_wscale);
 
 		*data++ = OPT_NOP;
 		*data++ = OPT_WS;
 		*data++ = OPT_WS_LEN;
-		*data++ = conn->ws;
+		*data++ = conn->ws_to_tap;
 
 		th->ack = !!(flags & ACK);
-
-		conn->wnd_to_tap = WINDOW_DEFAULT;
 	} else {
 		th->ack = !!(flags & (ACK | DUP_ACK)) ||
 			  conn->seq_ack_to_tap != prev_ack_to_tap ||
@@ -1838,6 +1853,10 @@ static int tcp_send_flag(struct ctx *c, struct tcp_conn *conn, int flags)
 	eth_len = tcp_l2_buf_fill_headers(c, conn, p, optlen,
 					  NULL, conn->seq_to_tap);
 	iov->iov_len = eth_len + sizeof(uint32_t);
+
+	/* First value is not scaled: scale now */
+	if (flags & SYN)
+		conn->wnd_to_tap >>= conn->ws_to_tap;
 
 	if (CONN_V4(conn))
 		tcp4_l2_flags_buf_bytes += iov->iov_len;
@@ -1908,7 +1927,7 @@ static void tcp_clamp_window(struct ctx *c, struct tcp_conn *conn,
 	if (init && th) {
 		int ws = tcp_opt_get(th, len, OPT_WS, NULL, NULL);
 
-		conn->ws_tap = ws;
+		conn->ws_from_tap = ws & 0xf;
 
 		/* RFC 7323, 2.2: first value is not scaled. Also, don't clamp
 		 * yet, to avoid getting a zero scale just because we set a
@@ -1916,30 +1935,34 @@ static void tcp_clamp_window(struct ctx *c, struct tcp_conn *conn,
 		 */
 		conn->wnd_from_tap = ntohs(th->window);
 	} else {
+		uint32_t prev_scaled = conn->wnd_from_tap << conn->ws_from_tap;
+
 		if (th)
-			window = ntohs(th->window) << conn->ws_tap;
+			window = ntohs(th->window) << conn->ws_from_tap;
 		else
-			window <<= conn->ws_tap;
+			window <<= conn->ws_from_tap;
 
 		window = MIN(MAX_WINDOW, window);
 
 		if (conn->flags & WND_CLAMPED) {
-			if (conn->wnd_from_tap == window)
+			if (prev_scaled == window)
 				return;
 
 			/* Discard +/- 1% updates to spare some syscalls. */
-			if ((window > conn->wnd_from_tap &&
-			     window * 99 / 100 < conn->wnd_from_tap) ||
-			    (window < conn->wnd_from_tap &&
-			     window * 101 / 100 > conn->wnd_from_tap)) {
-				conn->wnd_from_tap = window;
+			if ((window > prev_scaled &&
+			     window * 99 / 100 < prev_scaled) ||
+			    (window < prev_scaled &&
+			     window * 101 / 100 > prev_scaled)) {
+				conn->wnd_from_tap = window >>
+						     conn->ws_from_tap;
 				return;
 			}
 		}
 
-		conn->wnd_from_tap = window;
 		if (window < 256)
 			window = 256;
+
+		conn->wnd_from_tap = window >> conn->ws_from_tap;
 		setsockopt(conn->sock, SOL_TCP, TCP_WINDOW_CLAMP,
 			   &window, sizeof(window));
 		conn_flag(c, conn, WND_CLAMPED);
@@ -2090,7 +2113,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	const struct sockaddr *sa;
 	struct tcp_conn *conn;
 	socklen_t sl;
-	int s;
+	int s, mss;
 
 	if (c->tcp.conn_count >= TCP_MAX_CONNS)
 		return;
@@ -2120,14 +2143,14 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	conn = CONN(c->tcp.conn_count++);
 	conn->sock = s;
 	conn->timer = -1;
+	conn->ws_to_tap = conn->ws_from_tap = 0;
 	conn_event(c, conn, TAP_SYN_RCVD);
 
 	conn->wnd_to_tap = WINDOW_DEFAULT;
 
-	conn->tap_mss = tcp_conn_tap_mss(c, conn, th, len);
-
-	sl = sizeof(conn->tap_mss);
-	setsockopt(s, SOL_TCP, TCP_MAXSEG, &conn->tap_mss, sl);
+	mss = tcp_conn_tap_mss(c, conn, th, len);
+	setsockopt(s, SOL_TCP, TCP_MAXSEG, &mss, sizeof(mss));
+	MSS_SET(conn, mss);
 
 	tcp_clamp_window(c, conn, th, len, 0, 1);
 
@@ -2153,7 +2176,6 @@ static void tcp_conn_from_tap(struct ctx *c, int af, void *addr,
 	conn->seq_ack_to_tap = conn->seq_from_tap;
 
 	conn->seq_to_tap = tcp_seq_init(c, af, addr, th->dest, th->source, now);
-	conn->seq_init_to_tap = conn->seq_to_tap;
 	conn->seq_ack_from_tap = conn->seq_to_tap + 1;
 
 	tcp_hash_insert(c, conn, af, addr);
@@ -2256,10 +2278,12 @@ static void tcp_data_to_tap(struct ctx *c, struct tcp_conn *conn, ssize_t plen,
  */
 static int tcp_data_from_sock(struct ctx *c, struct tcp_conn *conn)
 {
+	uint32_t wnd_scaled = conn->wnd_from_tap << conn->ws_from_tap;
 	int fill_bufs, send_bufs = 0, last_len, iov_rem = 0;
 	int sendlen, len, plen, v4 = CONN_V4(conn);
 	int s = conn->sock, i, ret = 0;
 	struct msghdr mh_sock = { 0 };
+	uint16_t mss = MSS_GET(conn);
 	uint32_t already_sent;
 	struct iovec *iov;
 
@@ -2273,20 +2297,19 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_conn *conn)
 		already_sent = 0;
 	}
 
-	if (!conn->wnd_from_tap || already_sent >= conn->wnd_from_tap) {
+	if (!wnd_scaled || already_sent >= wnd_scaled) {
 		conn_flag(c, conn, STALLED);
 		conn_flag(c, conn, ACK_FROM_TAP_DUE);
 		return 0;
 	}
 
 	/* Set up buffer descriptors we'll fill completely and partially. */
-	fill_bufs = DIV_ROUND_UP(conn->wnd_from_tap - already_sent,
-				 conn->tap_mss);
+	fill_bufs = DIV_ROUND_UP(wnd_scaled - already_sent, mss);
 	if (fill_bufs > TCP_FRAMES) {
 		fill_bufs = TCP_FRAMES;
 		iov_rem = 0;
 	} else {
-		iov_rem = (conn->wnd_from_tap - already_sent) % conn->tap_mss;
+		iov_rem = (wnd_scaled - already_sent) % mss;
 	}
 
 	mh_sock.msg_iov = iov_sock;
@@ -2304,7 +2327,7 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_conn *conn)
 			iov->iov_base = &tcp4_l2_buf[tcp4_l2_buf_used + i].data;
 		else
 			iov->iov_base = &tcp6_l2_buf[tcp6_l2_buf_used + i].data;
-		iov->iov_len = conn->tap_mss;
+		iov->iov_len = mss;
 	}
 	if (iov_rem)
 		iov_sock[fill_bufs].iov_len = iov_rem;
@@ -2329,14 +2352,14 @@ recvmsg:
 
 	conn_flag(c, conn, ~STALLED);
 
-	send_bufs = DIV_ROUND_UP(sendlen, conn->tap_mss);
-	last_len = sendlen - (send_bufs - 1) * conn->tap_mss;
+	send_bufs = DIV_ROUND_UP(sendlen, mss);
+	last_len = sendlen - (send_bufs - 1) * mss;
 
 	/* Likely, some new data was acked too. */
 	tcp_update_seqack_wnd(c, conn, 0, NULL);
 
 	/* Finally, queue to tap */
-	plen = conn->tap_mss;
+	plen = mss;
 	for (i = 0; i < send_bufs; i++) {
 		int no_csum = i && i != send_bufs - 1 && tcp4_l2_buf_used;
 
@@ -2385,8 +2408,8 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_conn *conn,
 			      struct tap_l4_msg *msg, int count)
 {
 	int i, iov_i, ack = 0, fin = 0, retr = 0, keep = -1;
-	uint32_t max_ack_seq = conn->seq_ack_from_tap;
 	uint16_t max_ack_seq_wnd = conn->wnd_from_tap;
+	uint32_t max_ack_seq = conn->seq_ack_from_tap;
 	uint32_t seq_from_tap = conn->seq_from_tap;
 	struct msghdr mh = { .msg_iov = tcp_iov };
 	int partial_send = 0;
@@ -2545,8 +2568,12 @@ eintr:
 
 out:
 	if (keep != -1) {
-		if (conn->seq_dup_ack != conn->seq_from_tap) {
-			conn->seq_dup_ack = conn->seq_from_tap;
+		/* We use an 8-bit approximation here: the associated risk is
+		 * that we skip a duplicate ACK on 8-bit sequence number
+		 * collision. Fast retransmit is a SHOULD in RFC 5681, 3.2.
+		 */
+		if (conn->seq_dup_ack_approx != (conn->seq_from_tap & 0xff)) {
+			conn->seq_dup_ack_approx = conn->seq_from_tap & 0xff;
 			tcp_send_flag(c, conn, DUP_ACK);
 		}
 		return;
@@ -2576,7 +2603,7 @@ static void tcp_conn_from_sock_finish(struct ctx *c, struct tcp_conn *conn,
 				      struct tcphdr *th, size_t len)
 {
 	tcp_clamp_window(c, conn, th, len, 0, 1);
-	conn->tap_mss = tcp_conn_tap_mss(c, conn, th, len);
+	MSS_SET(conn, tcp_conn_tap_mss(c, conn, th, len));
 
 	conn->seq_init_from_tap = ntohl(th->seq) + 1;
 	conn->seq_from_tap = conn->seq_init_from_tap;
@@ -2746,6 +2773,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	conn = CONN(c->tcp.conn_count++);
 	conn->sock = s;
 	conn->timer = -1;
+	conn->ws_to_tap = conn->ws_from_tap = 0;
 	conn_event(c, conn, SOCK_ACCEPTED);
 
 	if (ref.r.p.tcp.tcp.v6) {
@@ -2775,7 +2803,6 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 						conn->sock_port,
 						conn->tap_port,
 						now);
-		conn->seq_init_to_tap = conn->seq_to_tap;
 
 		tcp_hash_insert(c, conn, AF_INET6, &sa6.sin6_addr);
 	} else {
@@ -2802,7 +2829,6 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 						conn->sock_port,
 						conn->tap_port,
 						now);
-		conn->seq_init_to_tap = conn->seq_to_tap;
 
 		tcp_hash_insert(c, conn, AF_INET, &s_addr);
 	}
@@ -2905,7 +2931,7 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		return;
 	}
 
-	if (!(conn = CONN(ref.r.p.tcp.tcp.index)))
+	if (!(conn = CONN_OR_NULL(ref.r.p.tcp.tcp.index)))
 		return;
 
 	if (events & EPOLLERR) {
@@ -3105,7 +3131,8 @@ static int tcp_sock_refill(void *arg)
 			return -EIO;
 		}
 
-		tcp_sock_set_bufsize(a->c, *p4);
+		if (*p4 >= 0)
+			tcp_sock_set_bufsize(a->c, *p4);
 	}
 
 	for (i = 0; a->c->v6 && i < TCP_SOCK_POOL_SIZE; i++, p6++) {
@@ -3120,7 +3147,8 @@ static int tcp_sock_refill(void *arg)
 			return -EIO;
 		}
 
-		tcp_sock_set_bufsize(a->c, *p6);
+		if (*p6 >= 0)
+			tcp_sock_set_bufsize(a->c, *p6);
 	}
 
 	return 0;
