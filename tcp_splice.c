@@ -501,18 +501,17 @@ static int tcp_splice_new(struct ctx *c, struct tcp_splice_conn *conn,
 			  in_port_t port)
 {
 	struct tcp_splice_connect_ns_arg ns_arg = { c, conn, port, 0 };
-	int *sock_pool_p, i, s = -1;
+	int *p, i, s = -1;
 
 	if (bitmap_isset(c->tcp.port_to_tap, port))
-		sock_pool_p = CONN_V6(conn) ? ns_sock_pool6 : ns_sock_pool4;
+		p = CONN_V6(conn) ? ns_sock_pool6 : ns_sock_pool4;
 	else
-		sock_pool_p = CONN_V6(conn) ? init_sock_pool6 : init_sock_pool4;
+		p = CONN_V6(conn) ? init_sock_pool6 : init_sock_pool4;
 
-	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++, sock_pool_p++) {
-		if ((s = *sock_pool_p) >= 0) {
-			*sock_pool_p = -1;
+	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++, p++) {
+		SWAP(s, *p);
+		if (s >= 0)
 			break;
-		}
 	}
 
 	if (s < 0 && bitmap_isset(c->tcp.port_to_tap, port)) {

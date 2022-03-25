@@ -2031,13 +2031,12 @@ static uint32_t tcp_seq_init(struct ctx *c, int af, void *addr,
  */
 static int tcp_conn_new_sock(struct ctx *c, sa_family_t af)
 {
-	int *pool = af == AF_INET6 ? init_sock_pool6 : init_sock_pool4, i, s;
+	int *p = af == AF_INET6 ? init_sock_pool6 : init_sock_pool4, i, s = -1;
 
-	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++, pool++) {
-		if ((s = *pool) >= 0) {
-			*pool = -1;
+	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++, p++) {
+		SWAP(s, *p);
+		if (s >= 0)
 			break;
-		}
 	}
 
 	if (s < 0)
