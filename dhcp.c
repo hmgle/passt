@@ -57,6 +57,8 @@ static struct opt opts[255];
 #define DHCPINFORM	8
 #define DHCPFORCERENEW	9
 
+#define OPT_MIN		60 /* RFC 951 */
+
 /**
  * dhcp_init() - Initialise DHCP options
  */
@@ -158,9 +160,9 @@ static int fill(struct msg *m)
 	m->o[offset++] = 255;
 	m->o[offset++] = 0;
 
-	if (offset < 62 /* RFC 951 */) {
-		memset(&m->o[offset], 0, 62 - offset);
-		offset = 62;
+	if (offset < OPT_MIN) {
+		memset(&m->o[offset], 0, OPT_MIN - offset);
+		offset = OPT_MIN;
 	}
 
 	return offset;
