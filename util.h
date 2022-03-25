@@ -153,6 +153,8 @@ enum {
 #include <limits.h>
 #include <stdarg.h>
 
+#include "packet.h"
+
 enum bind_type {
 	BIND_ANY = 0,
 	BIND_LOOPBACK,
@@ -194,7 +196,8 @@ __attribute__ ((weak)) int ffsl(long int i) { return __builtin_ffsl(i); }
 void __openlog(const char *ident, int option, int facility);
 void passt_vsyslog(int pri, const char *format, va_list ap);
 void __setlogmask(int mask);
-char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto);
+char *ipv6_l4hdr(struct pool *p, int index, size_t offset, uint8_t *proto,
+		 size_t *dlen);
 int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
 	    enum bind_type bind_addr, uint32_t data);
 void sock_probe_mem(struct ctx *c);

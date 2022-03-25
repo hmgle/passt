@@ -3,5 +3,6 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len);
+int dhcpv6(struct ctx *c, struct pool *p,
+	   struct in6_addr *saddr, struct in6_addr *daddr);
 void dhcpv6_init(struct ctx *c);

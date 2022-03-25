@@ -30,53 +30,56 @@
 #include "tap.h"
 
 /**
- * arp() - Check if this is an ARP message, reply as needed
+ * arp() - Check if this is a supported ARP message, reply as needed
  * @c:		Execution context
- * @len:	Total L2 packet length
- * @eh:		Packet buffer, Ethernet header
+ * @p:		Packet pool, single packet with Ethernet buffer
  *
- * Return: 0 if it's not an ARP message, 1 if handled, -1 on failure
+ * Return: 1 if handled, -1 on failure
  */
-int arp(struct ctx *c, struct ethhdr *eh, size_t len)
+int arp(struct ctx *c, struct pool *p)
 {
-	struct arphdr *ah = (struct arphdr *)(eh + 1);
-	struct arpmsg *am = (struct arpmsg *)(ah + 1);
 	unsigned char swap[4];
+	struct ethhdr *eh;
+	struct arphdr *ah;
+	struct arpmsg *am;
+	size_t len;
 
-	if (eh->h_proto != htons(ETH_P_ARP))
-		return 0;
+	eh = packet_get(p, 0, 0,			 sizeof(*eh), NULL);
+	ah = packet_get(p, 0, sizeof(*eh),		 sizeof(*ah), NULL);
+	am = packet_get(p, 0, sizeof(*eh) + sizeof(*ah), sizeof(*am), NULL);
 
-	if (len < sizeof(*eh) + sizeof(*ah) + sizeof(*am))
+	if (!eh || !ah || !am)
 		return -1;
 
-	if (ah->ar_hrd != htons(ARPHRD_ETHER) ||
-	    ah->ar_pro != htons(ETH_P_IP) ||
-	    ah->ar_hln != ETH_ALEN || ah->ar_pln != 4 ||
-	    ah->ar_op != htons(ARPOP_REQUEST))
+	if (ah->ar_hrd != htons(ARPHRD_ETHER)	||
+	    ah->ar_pro != htons(ETH_P_IP)	||
+	    ah->ar_hln != ETH_ALEN		||
+	    ah->ar_pln != 4			||
+	    ah->ar_op  != htons(ARPOP_REQUEST))
 		return 1;
 
 	/* Discard announcements (but not 0.0.0.0 "probes"): we might have the
 	 * same IP address, hide that.
 	 */
-	if (memcmp(am->sip, (unsigned char[4]){ 0, 0, 0, 0 }, 4) &&
-	    !memcmp(am->sip, am->tip, 4))
+	if (memcmp(am->sip, (unsigned char[4]){ 0 }, sizeof(am->tip)) &&
+	    !memcmp(am->sip, am->tip, sizeof(am->sip)))
 		return 1;
 
 	/* Don't resolve our own address, either. */
-	if (!memcmp(am->tip, &c->addr4, 4))
+	if (!memcmp(am->tip, &c->addr4, sizeof(am->tip)))
 		return 1;
 
 	ah->ar_op = htons(ARPOP_REPLY);
-	memcpy(am->tha, am->sha, ETH_ALEN);
-	memcpy(am->sha, c->mac, ETH_ALEN);
+	memcpy(am->tha,		am->sha,	sizeof(am->tha));
+	memcpy(am->sha,		c->mac,		sizeof(am->sha));
 
-	memcpy(swap, am->tip, 4);
-	memcpy(am->tip, am->sip, 4);
-	memcpy(am->sip, swap, 4);
+	memcpy(swap,		am->tip,	sizeof(am->tip));
+	memcpy(am->tip,		am->sip,	sizeof(am->tip));
+	memcpy(am->sip,		swap,		sizeof(am->sip));
 
 	len = sizeof(*eh) + sizeof(*ah) + sizeof(*am);
-	memcpy(eh->h_dest, eh->h_source, ETH_ALEN);
-	memcpy(eh->h_source, c->mac, ETH_ALEN);
+	memcpy(eh->h_dest,	eh->h_source,	sizeof(eh->h_dest));
+	memcpy(eh->h_source,	c->mac,		sizeof(eh->h_source));
 
 	if (tap_send(c, eh, len, 0) < 0)
 		perror("ARP: send");

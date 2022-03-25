@@ -39,28 +39,23 @@
 /**
  * ndp() - Check for NDP solicitations, reply as needed
  * @c:		Execution context
- * @len:	Total L2 packet length
- * @eh:		Packet buffer, Ethernet header
+ * @ih:		ICMPv6 header
+ * @eh_source:	Source Ethernet address
+ * @saddr	Source IPv6 address
  *
  * Return: 0 if not handled here, 1 if handled, -1 on failure
  */
-int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
+int ndp(struct ctx *c, struct icmp6hdr *ih, unsigned char *eh_source,
+	struct in6_addr *saddr)
 {
-	struct ethhdr *ehr;
-	struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1), *ip6hr;
-	struct icmp6hdr *ih, *ihr;
 	char buf[BUFSIZ] = { 0 };
-	uint8_t proto, *p;
+	struct ipv6hdr *ip6hr;
+	struct icmp6hdr *ihr;
+	struct ethhdr *ehr;
+	unsigned char *p;
+	size_t len;
 
-	if (len < sizeof(*ehr) + sizeof(*ip6h) + sizeof(*ih))
-		return 0;
-
-	ih = (struct icmp6hdr *)ipv6_l4hdr(ip6h, &proto);
-	if (!ih)
-		return -1;
-
-	if (proto != IPPROTO_ICMPV6 ||
-	    ih->icmp6_type < RS || ih->icmp6_type > NA)
+	if (ih->icmp6_type < RS || ih->icmp6_type > NA)
 		return 0;
 
 	if (c->no_ndp)
@@ -71,11 +66,7 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 	ihr = (struct icmp6hdr *)(ip6hr + 1);
 
 	if (ih->icmp6_type == NS) {
-		if (len < sizeof(*ehr) + sizeof(*ip6h) + sizeof(*ih) +
-			  sizeof(struct in6_addr))
-			return -1;
-
-		if (IN6_IS_ADDR_UNSPECIFIED(&ip6h->saddr))
+		if (IN6_IS_ADDR_UNSPECIFIED(saddr))
 			return 1;
 
 		info("NDP: received NS, sending NA");
@@ -132,10 +123,10 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 
 		for (n = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[n]); n++);
 		if (n) {
-			*p++ = 25;			/* RDNSS */
-			*p++ = 1 + 2 * n;		/* length */
-			p += 2;				/* reserved */
-			*(uint32_t *)p = htonl(60);	/* lifetime */
+			*p++ = 25;				/* RDNSS */
+			*p++ = 1 + 2 * n;			/* length */
+			p += 2;					/* reserved */
+			*(uint32_t *)p = htonl(60);		/* lifetime */
 			p += 4;
 
 			for (i = 0; i < n; i++) {
@@ -148,10 +139,10 @@ int ndp(struct ctx *c, struct ethhdr *eh, size_t len)
 		}
 
 		if (!c->no_dhcp_dns_search && dns_s_len) {
-			*p++ = 31;			/* DNSSL */
-			*p++ = (len + 8 - 1) / 8 + 1;	/* length */
-			p += 2;				/* reserved */
-			*(uint32_t *)p = htonl(60);	/* lifetime */
+			*p++ = 31;				/* DNSSL */
+			*p++ = (dns_s_len + 8 - 1) / 8 + 1;	/* length */
+			p += 2;					/* reserved */
+			*(uint32_t *)p = htonl(60);		/* lifetime */
 			p += 4;
 
 			for (i = 0; i < n; i++) {
@@ -185,12 +176,12 @@ dns_done:
 
 	len = (uintptr_t)p - (uintptr_t)ihr - sizeof(*ihr);
 
-	if (IN6_IS_ADDR_LINKLOCAL(&ip6h->saddr))
-		c->addr6_ll_seen = ip6h->saddr;
+	if (IN6_IS_ADDR_LINKLOCAL(saddr))
+		c->addr6_ll_seen = *saddr;
 	else
-		c->addr6_seen = ip6h->saddr;
+		c->addr6_seen = *saddr;
 
-	ip6hr->daddr = ip6h->saddr;
+	ip6hr->daddr = *saddr;
 	if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
 		ip6hr->saddr = c->gw6;
 	else
@@ -207,7 +198,7 @@ dns_done:
 	ip6hr->hop_limit = 255;
 
 	len += sizeof(*ehr) + sizeof(*ip6hr) + sizeof(*ihr);
-	memcpy(ehr->h_dest, eh->h_source, ETH_ALEN);
+	memcpy(ehr->h_dest, eh_source, ETH_ALEN);
 	memcpy(ehr->h_source, c->mac, ETH_ALEN);
 	ehr->h_proto = htons(ETH_P_IPV6);
 

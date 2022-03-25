@@ -12,8 +12,8 @@ struct ctx;
 
 void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		       struct timespec *now);
-int icmp_tap_handler(struct ctx *c, int af, void *addr,
-		     struct tap_l4_msg *msg, int count, struct timespec *now);
+int icmp_tap_handler(struct ctx *c, int af, void *addr, struct pool *p,
+		     struct timespec *now);
 void icmp_timer(struct ctx *c, struct timespec *ts);
 
 /**

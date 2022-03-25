@@ -28,6 +28,7 @@ struct tap_l4_msg {
 
 union epoll_ref;
 
+#include "packet.h"
 #include "icmp.h"
 #include "tcp.h"
 #include "udp.h"

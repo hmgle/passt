@@ -291,7 +291,7 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ✅ restrictive seccomp profiles (25 syscalls allowed for _passt_, 37 for
   _pasta_ on x86_64)
 * ✅ static checkers in continuous integration (clang-tidy, cppcheck)
-* 🛠️ clearly defined packet abstraction
+* ✅️ clearly defined boundary-checked packet abstraction
 * 🛠️ ~5 000 LoC target
 * ⌚ [fuzzing](https://bugs.passt.top/show_bug.cgi?id=9), _packetdrill_ tests
 * ⌚ stricter [synflood protection](https://bugs.passt.top/show_bug.cgi?id=10)

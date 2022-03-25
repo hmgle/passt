@@ -951,35 +951,35 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
  * @addr:	Destination address
- * @msg:	Input messages
- * @count:	Message count
+ * @p:		Pool of UDP packets, with UDP headers
  * @now:	Current timestamp
  *
  * Return: count of consumed packets
  *
  * #syscalls sendmmsg
  */
-int udp_tap_handler(struct ctx *c, int af, void *addr,
-		    struct tap_l4_msg *msg, int count, struct timespec *now)
+int udp_tap_handler(struct ctx *c, int af, void *addr, struct pool *p,
+		    struct timespec *now)
 {
-	/* The caller already checks that all the messages have the same source
-	 * and destination, so we can just take those from the first message.
-	 */
-	struct udphdr *uh = (struct udphdr *)(pkt_buf + msg[0].pkt_buf_offset);
 	struct mmsghdr mm[UIO_MAXIOV] = { 0 };
 	struct iovec m[UIO_MAXIOV];
 	struct sockaddr_in6 s_in6;
 	struct sockaddr_in s_in;
 	struct sockaddr *sa;
+	int i, s, count = 0;
 	in_port_t src, dst;
+	struct udphdr *uh;
 	socklen_t sl;
-	int i, s;
 
 	(void)c;
 
-	if (msg[0].l4_len < sizeof(*uh))
+	uh = packet_get(p, 0, 0, sizeof(*uh), NULL);
+	if (!uh)
 		return 1;
 
+	/* The caller already checks that all the messages have the same source
+	 * and destination, so we can just take those from the first message.
+	 */
 	src = ntohs(uh->source);
 	dst = ntohs(uh->dest);
 
@@ -998,8 +998,8 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 						     .udp.port = src };
 
 			s = sock_l4(c, AF_INET, IPPROTO_UDP, src, 0, uref.u32);
-			if (s <= 0)
-				return count;
+			if (s < 0)
+				return p->count;
 
 			udp_tap_map[V4][src].sock = s;
 			bitmap_set(udp_act[V4][UDP_ACT_TAP], src);
@@ -1050,8 +1050,8 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 
 			s = sock_l4(c, AF_INET6, IPPROTO_UDP, src, bind_to,
 				    uref.u32);
-			if (s <= 0)
-				return count;
+			if (s < 0)
+				return p->count;
 
 			udp_tap_map[V6][src].sock = s;
 			bitmap_set(udp_act[V6][UDP_ACT_TAP], src);
@@ -1060,18 +1060,26 @@ int udp_tap_handler(struct ctx *c, int af, void *addr,
 		udp_tap_map[V6][src].ts = now->tv_sec;
 	}
 
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < (int)p->count; i++) {
 		struct udphdr *uh_send;
+		size_t len;
 
-		uh_send = (struct udphdr *)(msg[i].pkt_buf_offset + pkt_buf);
+		uh_send = packet_get(p, i, 0, sizeof(*uh), &len);
+		if (!uh_send)
+			return p->count;
+		if (!len)
+			continue;
+
 		m[i].iov_base = (char *)(uh_send + 1);
-		m[i].iov_len = msg[i].l4_len - sizeof(*uh_send);
+		m[i].iov_len = len;
 
 		mm[i].msg_hdr.msg_name = sa;
 		mm[i].msg_hdr.msg_namelen = sl;
 
 		mm[i].msg_hdr.msg_iov = m + i;
 		mm[i].msg_hdr.msg_iovlen = 1;
+
+		count++;
 	}
 
 	count = sendmmsg(s, mm, count, MSG_NOSIGNAL);
@@ -1172,12 +1180,10 @@ static void udp_splice_iov_init(void)
  *
  * Return: 0 on success, -1 on failure
  */
-int udp_sock_init(struct ctx *c, struct timespec *now)
+int udp_sock_init(struct ctx *c)
 {
 	union udp_epoll_ref uref = { .udp.bound = 1 };
 	int dst, s;
-
-	(void)now;
 
 	for (dst = 0; dst < USHRT_MAX; dst++) {
 		if (!bitmap_isset(c->udp.port_to_tap, dst))

@@ -31,9 +31,11 @@
 
 #include <linux/icmpv6.h>
 
+#include "packet.h"
 #include "util.h"
 #include "passt.h"
 #include "tap.h"
+#include "packet.h"
 #include "icmp.h"
 
 #define ICMP_ECHO_TIMEOUT	60 /* s, timeout for ICMP socket activity */
@@ -134,17 +136,15 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  * icmp_tap_handler() - Handle packets from tap
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
- * @
- * @msg:	Input message
- * @count:	Message count (always 1 for ICMP)
+ * @p:		Packet pool, single packet with ICMP/ICMPv6 header
  * @now:	Current timestamp
  *
  * Return: count of consumed packets (always 1, even if malformed)
  */
-int icmp_tap_handler(struct ctx *c, int af, void *addr,
-		     struct tap_l4_msg *msg, int count, struct timespec *now)
+int icmp_tap_handler(struct ctx *c, int af, void *addr, struct pool *p,
+		     struct timespec *now)
 {
-	(void)count;
+	size_t plen;
 
 	if (af == AF_INET) {
 		union icmp_epoll_ref iref = { .icmp.v6 = 0 };
@@ -155,9 +155,8 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		struct icmphdr *ih;
 		int id, s;
 
-		ih = (struct icmphdr *)(pkt_buf + msg[0].pkt_buf_offset);
-
-		if (msg[0].l4_len < sizeof(*ih) || ih->type != ICMP_ECHO)
+		ih = packet_get(p, 0, 0, sizeof(*ih), &plen);
+		if (!ih)
 			return 1;
 
 		sa.sin_port = ih->un.echo.id;
@@ -175,7 +174,7 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		bitmap_set(icmp_act[V4], id);
 
 		sa.sin_addr = *(struct in_addr *)addr;
-		sendto(s, ih, msg[0].l4_len, MSG_NOSIGNAL,
+		sendto(s, ih, sizeof(*ih) + plen, MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
 	} else if (af == AF_INET6) {
 		union icmp_epoll_ref iref = { .icmp.v6 = 1 };
@@ -186,10 +185,11 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		struct icmp6hdr *ih;
 		int id, s;
 
-		ih = (struct icmp6hdr *)(pkt_buf + msg[0].pkt_buf_offset);
+		ih = packet_get(p, 0, 0, sizeof(struct icmp6hdr), &plen);
+		if (!ih)
+			return 1;
 
-		if (msg[0].l4_len < sizeof(*ih) ||
-		    (ih->icmp6_type != 128 && ih->icmp6_type != 129))
+		if (ih->icmp6_type != 128 && ih->icmp6_type != 129)
 			return 1;
 
 		sa.sin6_port = ih->icmp6_identifier;
@@ -207,7 +207,7 @@ int icmp_tap_handler(struct ctx *c, int af, void *addr,
 		bitmap_set(icmp_act[V6], id);
 
 		sa.sin6_addr = *(struct in6_addr *)addr;
-		sendto(s, ih, msg[0].l4_len, MSG_NOSIGNAL,
+		sendto(s, ih, sizeof(*ih) + plen, MSG_NOSIGNAL,
 		       (struct sockaddr *)&sa, sizeof(sa));
 	}
 

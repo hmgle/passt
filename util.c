@@ -38,6 +38,7 @@
 
 #include "util.h"
 #include "passt.h"
+#include "packet.h"
 
 /* For __openlog() and __setlogmask() wrappers, and passt_vsyslog() */
 static int	log_mask;
@@ -156,46 +157,59 @@ void passt_vsyslog(int pri, const char *format, va_list ap)
 	send(log_sock, buf, n, 0);
 }
 
+#define IPV6_NH_OPT(nh)							\
+	((nh) == 0   || (nh) == 43  || (nh) == 44  || (nh) == 50  ||	\
+	 (nh) == 51  || (nh) == 60  || (nh) == 135 || (nh) == 139 ||	\
+	 (nh) == 140 || (nh) == 253 || (nh) == 254)
+
 /**
  * ipv6_l4hdr() - Find pointer to L4 header in IPv6 packet and extract protocol
- * @ip6h:	IPv6 header
+ * @p:		Packet pool, packet number @index has IPv6 header at @offset
+ * @index:	Index of packet in pool
+ * @offset:	Pre-calculated IPv6 header offset
  * @proto:	Filled with L4 protocol number
+ * @dlen:	Data length (payload excluding header extensions), set on return
  *
  * Return: pointer to L4 header, NULL if not found
  */
-char *ipv6_l4hdr(struct ipv6hdr *ip6h, uint8_t *proto)
+char *ipv6_l4hdr(struct pool *p, int index, size_t offset, uint8_t *proto,
+		 size_t *dlen)
 {
-	int offset, len, hdrlen;
 	struct ipv6_opt_hdr *o;
+	struct ipv6hdr *ip6h;
+	char *base;
+	int hdrlen;
 	uint8_t nh;
 
-	len = ntohs(ip6h->payload_len);
-	offset = 0;
+	base = packet_get(p, index, 0, 0, NULL);
+	ip6h = packet_get(p, index, offset, sizeof(*ip6h), dlen);
+	if (!ip6h)
+		return NULL;
 
-	while (offset < len) {
-		if (!offset) {
-			nh = ip6h->nexthdr;
-			hdrlen = sizeof(struct ipv6hdr);
-		} else {
-			o = (struct ipv6_opt_hdr *)(((char *)ip6h) + offset);
-			nh = o->nexthdr;
-			hdrlen = (o->hdrlen + 1) * 8;
-		}
+	offset += sizeof(*ip6h);
 
-		if (nh == 59)
-			return NULL;
+	nh = ip6h->nexthdr;
+	if (!IPV6_NH_OPT(nh))
+		goto found;
 
-		if (nh == 0   || nh == 43  || nh == 44  || nh == 50  ||
-		    nh == 51  || nh == 60  || nh == 135 || nh == 139 ||
-		    nh == 140 || nh == 253 || nh == 254) {
+	while ((o = packet_get_try(p, index, offset, sizeof(*o), dlen))) {
+		nh = o->nexthdr;
+		hdrlen = (o->hdrlen + 1) * 8;
+
+		if (IPV6_NH_OPT(nh))
 			offset += hdrlen;
-		} else {
-			*proto = nh;
-			return (char *)(ip6h + 1) + offset;
-		}
+		else
+			goto found;
 	}
 
 	return NULL;
+
+found:
+	if (nh == 59)
+		return NULL;
+
+	*proto = nh;
+	return base + offset;
 }
 
 /**

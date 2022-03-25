@@ -24,7 +24,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <limits.h>
 
+#include "packet.h"
 #include "util.h"
 #include "passt.h"
 #include "tap.h"
@@ -69,6 +71,8 @@ struct opt_hdr {
 #endif
 #define OPT_SIZE(x)		OPT_SIZE_CONV(sizeof(struct opt_##x) -	\
 					      sizeof(struct opt_hdr))
+#define OPT_VSIZE(x)		(sizeof(struct opt_##x) - 		\
+				 sizeof(struct opt_hdr))
 
 /**
  * struct opt_client_id - DHCPv6 Client Identifier option
@@ -265,10 +269,10 @@ static const struct opt_status_code sc_not_on_link = {
 
 /**
  * struct resp_not_on_link_t - NotOnLink error (mandated by RFC 8415, 18.3.2.)
- * @uh:			UDP header
- * @hdr:		DHCP message header
- * @server_id:		Server Identifier option
- * @var:		Payload: IA_NA from client, status code, client ID
+ * @uh:		UDP header
+ * @hdr:	DHCP message header
+ * @server_id:	Server Identifier option
+ * @var:	Payload: IA_NA from client, status code, client ID
  */
 static struct resp_not_on_link_t {
 	struct udphdr  uh;
@@ -287,26 +291,30 @@ static struct resp_not_on_link_t {
 
 /**
  * dhcpv6_opt() - Get option from DHCPv6 message
- * @o:			First option header to check
- * @type:		Option type to look up, network order
- * @len:		Remaining length, host order, modified on return
+ * @p:		Packet pool, single packet with UDP header
+ * @offset:	Offset to look at, 0: end of header, set to option start
+ * @type:	Option type to look up, network order
  *
  * Return: pointer to option header, or NULL on malformed or missing option
  */
-static struct opt_hdr *dhcpv6_opt(struct opt_hdr *o, uint16_t type, size_t *len)
+static struct opt_hdr *dhcpv6_opt(struct pool *p, size_t *offset, uint16_t type)
 {
-	while (*len >= sizeof(struct opt_hdr)) {
-		unsigned int opt_len = ntohs(o->l) + sizeof(struct opt_hdr);
+	struct opt_hdr *o;
+	size_t left;
 
-		if (opt_len > *len)
+	if (!*offset)
+		*offset = sizeof(struct udphdr) + sizeof(struct msg_hdr);
+
+	while ((o = packet_get_try(p, 0, *offset, sizeof(*o), &left))) {
+		unsigned int opt_len = ntohs(o->l) + sizeof(*o);
+
+		if (ntohs(o->l) > left)
 			return NULL;
-
-		*len -= opt_len;
 
 		if (o->t == type)
 			return o;
 
-		o = (struct opt_hdr *)((uint8_t *)o + opt_len);
+		*offset += opt_len;
 	}
 
 	return NULL;
@@ -314,61 +322,45 @@ static struct opt_hdr *dhcpv6_opt(struct opt_hdr *o, uint16_t type, size_t *len)
 
 /**
  * dhcpv6_ia_notonlink() - Check if any IA contains non-appropriate addresses
- * @o:			First option header to check for IAs
- * @rem_len:		Remaining message length, host order
- * @addr:		Address we want to lease to the client
+ * @o:		First option header to check for IAs
+ * @rem_len:	Remaining message length, host order
+ * @addr:	Address we want to lease to the client
  *
  * Return: pointer to non-appropriate IA_NA or IA_TA, if any, NULL otherwise
  */
-static struct opt_hdr *dhcpv6_ia_notonlink(struct opt_hdr *o, size_t rem_len,
-					   struct in6_addr *addr)
+static struct opt_hdr *dhcpv6_ia_notonlink(struct pool *p, struct in6_addr *la)
 {
-	struct opt_hdr *ia, *ia_addr;
 	char buf[INET6_ADDRSTRLEN];
 	struct in6_addr *req_addr;
-	size_t len;
+	struct opt_hdr *ia, *h;
+	size_t offset;
 	int ia_type;
 
 	ia_type = OPT_IA_NA;
 ia_ta:
-	len = rem_len;
-	ia = o;
+	offset = 0;
+	while ((ia = dhcpv6_opt(p, &offset, ia_type))) {
+		if (ntohs(ia->l) < OPT_VSIZE(ia_na))
+			return NULL;
 
-	while ((ia = dhcpv6_opt(ia, ia_type, &len))) {
-		size_t ia_len = ntohs(ia->l);
+		offset += sizeof(struct opt_ia_na);
 
-		if (ia_type == OPT_IA_NA) {
-			struct opt_ia_na *subopt = (struct opt_ia_na *)ia + 1;
+		while ((h = dhcpv6_opt(p, &offset, OPT_IAAADR))) {
+			struct opt_ia_addr *opt_addr = (struct opt_ia_addr *)h;
 
-			ia_addr = (struct opt_hdr *)subopt;
-		} else if (ia_type == OPT_IA_TA) {
-			struct opt_ia_ta *subopt = (struct opt_ia_ta *)ia + 1;
+			if (ntohs(h->l) != OPT_VSIZE(ia_addr))
+				return NULL;
 
-			ia_addr = (struct opt_hdr *)subopt;
-		}
-
-		ia_len -= sizeof(struct opt_ia_na) - sizeof(struct opt_hdr);
-
-		while ((ia_addr = dhcpv6_opt(ia_addr, OPT_IAAADR, &ia_len))) {
-			struct opt_ia_addr *next;
-
-			req_addr = (struct in6_addr *)(ia_addr + 1);
-
-			if (!IN6_ARE_ADDR_EQUAL(addr, req_addr)) {
+			req_addr = &opt_addr->addr;
+			if (!IN6_ARE_ADDR_EQUAL(la, req_addr)) {
 				info("DHCPv6: requested address %s not on link",
 				     inet_ntop(AF_INET6, req_addr,
 					       buf, sizeof(buf)));
 				return ia;
 			}
 
-			next = (struct opt_ia_addr *)ia_addr + 1;
-			ia_addr = (struct opt_hdr *)next;
+			offset += sizeof(struct opt_ia_addr);
 		}
-
-		if (!ia_addr)
-			break;
-
-		ia = ia_addr;
 	}
 
 	if (ia_type == OPT_IA_NA) {
@@ -449,59 +441,58 @@ search:
 /**
  * dhcpv6() - Check if this is a DHCPv6 message, reply as needed
  * @c:		Execution context
- * @eh:		Packet buffer, Ethernet header
- * @len:	Total L2 packet length
+ * @p:		Packet pool, single packet starting from UDP header
+ * @saddr:	Source IPv6 address of original message
+ * @daddr:	Destination IPv6 address of original message
  *
  * Return: 0 if it's not a DHCPv6 message, 1 if handled, -1 on failure
  */
-int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
+int dhcpv6(struct ctx *c, struct pool *p,
+	   const struct in6_addr *saddr, const struct in6_addr *daddr)
 {
-	struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1);
 	struct opt_hdr *ia, *bad_ia, *client_id, *server_id;
 	struct in6_addr *src;
 	struct msg_hdr *mh;
 	struct udphdr *uh;
-	uint8_t proto;
-	size_t mlen;
-	size_t n;
+	size_t mlen, n;
 
-	uh = (struct udphdr *)ipv6_l4hdr(ip6h, &proto);
-	if (!uh || proto != IPPROTO_UDP || uh->dest != htons(547))
+	uh = packet_get(p, 0, 0, sizeof(*uh), &mlen);
+	if (!uh)
+		return -1;
+
+	if (uh->dest != htons(547))
 		return 0;
 
 	if (c->no_dhcpv6)
 		return 1;
 
-	if (!IN6_IS_ADDR_MULTICAST(&ip6h->daddr))
+	if (!IN6_IS_ADDR_MULTICAST(daddr))
 		return -1;
 
-	mlen = len - ((intptr_t)uh - (intptr_t)eh) - sizeof(*uh);
-
-	if (mlen != ntohs(uh->len) - sizeof(*uh) ||
-	    mlen < sizeof(struct msg_hdr))
+	if (mlen + sizeof(*uh) != ntohs(uh->len) || mlen < sizeof(*mh))
 		return -1;
 
-	c->addr6_ll_seen = ip6h->saddr;
+	c->addr6_ll_seen = *saddr;
 
 	if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
 		src = &c->gw6;
 	else
 		src = &c->addr6_ll;
 
-	mh = (struct msg_hdr *)(uh + 1);
-	mlen -= sizeof(struct msg_hdr);
-
-	n = mlen;
-	client_id = dhcpv6_opt((struct opt_hdr *)(mh + 1), OPT_CLIENTID, &n);
-	if (!client_id || ntohs(client_id->l) > ntohs(OPT_SIZE(client_id)))
+	mh = packet_get(p, 0, sizeof(*uh), sizeof(*mh), NULL);
+	if (!mh)
 		return -1;
 
-	n = mlen;
-	server_id = dhcpv6_opt((struct opt_hdr *)(mh + 1), OPT_SERVERID, &n);
+	client_id = dhcpv6_opt(p, &(size_t){ 0 }, OPT_CLIENTID);
+	if (!client_id || ntohs(client_id->l) > OPT_VSIZE(client_id))
+		return -1;
 
-	n = mlen;
-	ia = dhcpv6_opt((struct opt_hdr *)(mh + 1), OPT_IA_NA, &n);
-	if (ia && ntohs(ia->l) < ntohs(OPT_SIZE(ia_na)))
+	server_id = dhcpv6_opt(p, &(size_t){ 0 }, OPT_SERVERID);
+	if (server_id && ntohs(server_id->l) != OPT_VSIZE(server_id))
+		return -1;
+
+	ia =        dhcpv6_opt(p, &(size_t){ 0 }, OPT_IA_NA);
+	if (ia && ntohs(ia->l) < MIN(OPT_VSIZE(ia_na), OPT_VSIZE(ia_ta)))
 		return -1;
 
 	resp.hdr.type = TYPE_REPLY;
@@ -516,18 +507,17 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 		if (mh->type == TYPE_CONFIRM && server_id)
 			return -1;
 
-		if ((bad_ia = dhcpv6_ia_notonlink((struct opt_hdr *)(mh + 1),
-						  mlen, &c->addr6))) {
+		if ((bad_ia = dhcpv6_ia_notonlink(p, &c->addr6))) {
 			info("DHCPv6: received CONFIRM with inappropriate IA,"
 			     " sending NotOnLink status in REPLY");
 
-			n = ntohs(bad_ia->l) + sizeof(struct opt_hdr);
-			bad_ia->l = htons(n - sizeof(struct opt_hdr) +
+			bad_ia->l = htons(OPT_VSIZE(ia_na) +
 					  sizeof(sc_not_on_link));
+			n = sizeof(struct opt_ia_na);
 			memcpy(resp_not_on_link.var, bad_ia, n);
 
-			memcpy(resp_not_on_link.var + n, &sc_not_on_link,
-			       sizeof(sc_not_on_link));
+			memcpy(resp_not_on_link.var + n,
+			       &sc_not_on_link, sizeof(sc_not_on_link));
 			n += sizeof(sc_not_on_link);
 
 			memcpy(resp_not_on_link.var + n, client_id,
@@ -552,8 +542,7 @@ int dhcpv6(struct ctx *c, struct ethhdr *eh, size_t len)
 		    memcmp(&resp.server_id, server_id, sizeof(resp.server_id)))
 			return -1;
 
-		n = mlen;
-		if (ia || dhcpv6_opt((struct opt_hdr *)(mh + 1), OPT_IA_TA, &n))
+		if (ia || dhcpv6_opt(p, &(size_t){ 0 }, OPT_IA_TA))
 			return -1;
 
 		info("DHCPv6: received INFORMATION_REQUEST, sending REPLY");

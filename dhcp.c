@@ -22,9 +22,11 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
+#include <limits.h>
 
 #include "util.h"
 #include "checksum.h"
+#include "packet.h"
 #include "passt.h"
 #include "tap.h"
 #include "dhcp.h"
@@ -257,27 +259,32 @@ static void opt_set_dns_search(struct ctx *c, size_t max_len)
 /**
  * dhcp() - Check if this is a DHCP message, reply as needed
  * @c:		Execution context
- * @len:	Total L2 packet length
- * @eh:		Packet buffer, Ethernet header
+ * @p:		Packet pool, single packet with Ethernet buffer
  *
  * Return: 0 if it's not a DHCP message, 1 if handled, -1 on failure
  */
-int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
+int dhcp(struct ctx *c, struct pool *p)
 {
-	struct iphdr *iph = (struct iphdr *)(eh + 1);
-	size_t mlen, olen;
+	size_t mlen, len, offset = 0, opt_len, opt_off = 0;
+	struct ethhdr *eh;
+	struct iphdr *iph;
 	struct udphdr *uh;
 	unsigned int i;
 	struct msg *m;
 
-	if (len < sizeof(*eh) + sizeof(*iph))
-		return 0;
+	eh  = packet_get(p, 0, offset, sizeof(*eh),  NULL);
+	offset += sizeof(*eh);
 
-	if (len < sizeof(*eh) + (long)iph->ihl * 4 + sizeof(*uh))
-		return 0;
+	iph = packet_get(p, 0, offset, sizeof(*iph), NULL);
+	if (!eh || !iph)
+		return -1;
 
-	uh = (struct udphdr *)((char *)iph + (long)(iph->ihl * 4));
-	m = (struct msg *)(uh + 1);
+	offset += iph->ihl * 4UL;
+	uh  = packet_get(p, 0, offset, sizeof(*uh),  &mlen);
+	offset += sizeof(*uh);
+
+	if (!uh)
+		return -1;
 
 	if (uh->dest != htons(67))
 		return 0;
@@ -285,18 +292,29 @@ int dhcp(struct ctx *c, struct ethhdr *eh, size_t len)
 	if (c->no_dhcp)
 		return 1;
 
-	mlen = len - sizeof(*eh) - (long)iph->ihl * 4 - sizeof(*uh);
-	if (mlen != ntohs(uh->len) - sizeof(*uh) ||
-	    mlen < offsetof(struct msg, o) ||
+	m   = packet_get(p, 0, offset, offsetof(struct msg, o), &opt_len);
+	if (!m						||
+	    mlen  != ntohs(uh->len) - sizeof(*uh)	||
+	    mlen  <  offsetof(struct msg, o)		||
 	    m->op != BOOTREQUEST)
 		return -1;
 
-	olen = mlen - offsetof(struct msg, o);
-	for (i = 0; i + 2 < olen; i += m->o[i + 1] + 2) {
-		if (m->o[i + 1] + i + 2 >= olen)
+	offset += offsetof(struct msg, o);
+
+	while (opt_off + 2 < opt_len) {
+		uint8_t *olen, *type, *val;
+
+		type = packet_get(p, 0, offset + opt_off,	1,	NULL);
+		olen = packet_get(p, 0, offset + opt_off + 1,	1,	NULL);
+		if (!type || !olen)
 			return -1;
 
-		memcpy(&opts[m->o[i]].c, &m->o[i + 2], m->o[i + 1]);
+		val =  packet_get(p, 0, offset + opt_off + 2,	*olen,	NULL);
+		if (!val)
+			return -1;
+
+		memcpy(&opts[*type].c, val, *olen);
+		opt_off += *olen + 2;
 	}
 
 	if (opts[53].c[0] == DHCPDISCOVER) {

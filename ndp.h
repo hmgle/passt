@@ -3,4 +3,5 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-int ndp(struct ctx *c, struct ethhdr *eh, size_t len);
+int ndp(struct ctx *c, struct icmp6hdr *ih, unsigned char *eh_source,
+	struct in6_addr *saddr);

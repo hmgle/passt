@@ -6,9 +6,7 @@
 #ifndef TCP_H
 #define TCP_H
 
-#define REFILL_INTERVAL			1000	/* ms */
-#define PORT_DETECT_INTERVAL		1000
-#define TCP_TIMER_INTERVAL	MIN(REFILL_INTERVAL, PORT_DETECT_INTERVAL)
+#define TCP_TIMER_INTERVAL		1000	/* ms */
 
 #define TCP_CONN_INDEX_BITS		17	/* 128k */
 #define TCP_MAX_CONNS			(1 << TCP_CONN_INDEX_BITS)
@@ -20,10 +18,10 @@ struct ctx;
 
 void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		      struct timespec *now);
-int tcp_tap_handler(struct ctx *c, int af, void *addr,
-		    struct tap_l4_msg *msg, int count, struct timespec *now);
-int tcp_sock_init(struct ctx *c, struct timespec *now);
-void tcp_timer(struct ctx *c, struct timespec *now);
+int tcp_tap_handler(struct ctx *c, int af, void *addr, struct pool *p,
+		    struct timespec *now);
+int tcp_sock_init(struct ctx *c);
+void tcp_timer(struct ctx *c, struct timespec *ts);
 void tcp_defer_handler(struct ctx *c);
 
 void tcp_sock_set_bufsize(struct ctx *c, int s);
@@ -64,8 +62,6 @@ union tcp_epoll_ref {
  * @timer_run:		Timestamp of most recent timer run
  * @kernel_snd_wnd:	Kernel reports sending window (with commit 8f7baad7f035)
  * @pipe_size:		Size of pipes for spliced connections
- * @refill_ts:		Time of last refill operation for pools of sockets/pipes
- * @port_detect_ts:	Time of last TCP port detection/rebind, if enabled
  */
 struct tcp_ctx {
 	uint64_t hash_secret[2];
@@ -80,8 +76,6 @@ struct tcp_ctx {
 	int kernel_snd_wnd;
 #endif
 	size_t pipe_size;
-	struct timespec refill_ts;
-	struct timespec port_detect_ts;
 };
 
 #endif /* TCP_H */

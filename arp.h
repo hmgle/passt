@@ -17,4 +17,4 @@ struct arpmsg {
 	unsigned char tip[4];
 } __attribute__((__packed__));
 
-int arp(struct ctx *c, struct ethhdr *eh, size_t len);
+int arp(struct ctx *c, struct pool *p);

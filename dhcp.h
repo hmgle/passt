@@ -3,5 +3,5 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
-int dhcp(struct ctx *c, struct ethhdr *eh, size_t len);
+int dhcp(struct ctx *c, struct pool *p);
 void dhcp_init(void);
