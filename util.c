@@ -544,7 +544,8 @@ int ns_enter(struct ctx *c)
  * @fd:		Open PID file descriptor, closed on exit, -1 to skip writing it
  * @pid:	PID value to write
  */
-void write_pidfile(int fd, pid_t pid) {
+void write_pidfile(int fd, pid_t pid)
+{
 	char pid_buf[12];
 	int n;
 
