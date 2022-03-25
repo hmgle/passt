@@ -3,6 +3,11 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#ifndef DHCPV6_H
+#define DHCPV6_H
+
 int dhcpv6(struct ctx *c, struct pool *p,
 	   struct in6_addr *saddr, struct in6_addr *daddr);
 void dhcpv6_init(struct ctx *c);
+
+#endif /* DHCPV6_H */

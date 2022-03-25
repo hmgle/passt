@@ -3,5 +3,10 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#ifndef DHCP_H
+#define DHCP_H
+
 int dhcp(struct ctx *c, struct pool *p);
 void dhcp_init(void);
+
+#endif /* DHCP_H */

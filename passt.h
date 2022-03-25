@@ -3,6 +3,9 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#ifndef PASST_H
+#define PASST_H
+
 #define UNIX_SOCK_MAX		100
 #define UNIX_SOCK_PATH		"/tmp/passt_%i.socket"
 
@@ -232,3 +235,5 @@ struct ctx {
 
 void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
 			 uint32_t *ip_da);
+
+#endif /* PASST_H */

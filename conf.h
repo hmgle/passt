@@ -3,5 +3,10 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#ifndef CONF_H
+#define CONF_H
+
 void conf(struct ctx *c, int argc, char **argv);
 void get_bound_ports(struct ctx *c, int ns, uint8_t proto);
+
+#endif /* CONF_H */

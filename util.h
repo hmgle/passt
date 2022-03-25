@@ -3,6 +3,9 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#ifndef UTIL_H
+#define UTIL_H
+
 void err(const char *format, ...);
 void warn(const char *format, ...);
 void info(const char *format, ...);
@@ -213,3 +216,5 @@ int ns_enter(struct ctx *c);
 void write_pidfile(int fd, pid_t pid);
 int __daemon(int pidfile_fd, int devnull_fd);
 int fls(unsigned long x);
+
+#endif /* UTIL_H */

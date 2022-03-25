@@ -3,5 +3,10 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#ifndef NDP_H
+#define NDP_H
+
 int ndp(struct ctx *c, struct icmp6hdr *ih, unsigned char *eh_source,
 	struct in6_addr *saddr);
+
+#endif /* NDP_H */

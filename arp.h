@@ -3,6 +3,9 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#ifndef ARP_H
+#define ARP_H
+
 /**
  * struct arpmsg - 802.2 ARP IPv4 payload
  * @sha:	Sender hardware address
@@ -18,3 +21,5 @@ struct arpmsg {
 } __attribute__((__packed__));
 
 int arp(struct ctx *c, struct pool *p);
+
+#endif /* ARP_H */

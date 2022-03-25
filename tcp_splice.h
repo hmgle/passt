@@ -3,6 +3,9 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  */
 
+#ifndef TCP_SPLICE_H
+#define TCP_SPLICE_H
+
 #define TCP_SPLICE_MAX_CONNS			(128 * 1024)
 
 struct tcp_splice_conn;
@@ -13,3 +16,5 @@ void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn);
 void tcp_splice_init(struct ctx *c);
 void tcp_splice_timer(struct ctx *c);
 void tcp_splice_defer_handler(struct ctx *c);
+
+#endif /* TCP_SPLICE_H */
