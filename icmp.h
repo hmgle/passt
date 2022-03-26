@@ -10,11 +10,11 @@
 
 struct ctx;
 
-void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
-		       struct timespec *now);
-int icmp_tap_handler(struct ctx *c, int af, void *addr, struct pool *p,
-		     struct timespec *now);
-void icmp_timer(struct ctx *c, struct timespec *ts);
+void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
+		       uint32_t events, const struct timespec *now);
+int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
+		     const struct pool *p, const struct timespec *now);
+void icmp_timer(const struct ctx *c, const struct timespec *ts);
 
 /**
  * union icmp_epoll_ref - epoll reference portion for ICMP tracking

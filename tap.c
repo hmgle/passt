@@ -66,7 +66,7 @@ static PACKET_POOL_NOINIT(pool_tap6, TAP_MSGS, pkt_buf);
  *
  * Return: return code from send() or write()
  */
-int tap_send(struct ctx *c, void *data, size_t len, int vnet_pre)
+int tap_send(const struct ctx *c, const void *data, size_t len, int vnet_pre)
 {
 	if (vnet_pre)
 		pcap((char *)data + 4, len);
@@ -100,8 +100,8 @@ int tap_send(struct ctx *c, void *data, size_t len, int vnet_pre)
  * @len:	L4 payload length
  * @flow:	Flow label for TCP over IPv6
  */
-void tap_ip_send(struct ctx *c, struct in6_addr *src, uint8_t proto,
-		 char *in, size_t len, uint32_t flow)
+void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
+		 const char *in, size_t len, uint32_t flow)
 {
 	char buf[USHRT_MAX];
 	char *pkt = buf + 4;
@@ -258,9 +258,10 @@ static struct tap6_l4_t {
  * @seq6:	Pointer to @struct tap_l4_seq6, can be NULL
  * @count:	Count of packets in this sequence
  */
-static void tap_packet_debug(struct iphdr *iph, struct ipv6hdr *ip6h,
-			     struct tap4_l4_t *seq4, uint8_t proto6,
-			     struct tap6_l4_t *seq6, int count)
+static void tap_packet_debug(const struct iphdr *iph,
+			     const struct ipv6hdr *ip6h,
+			     const struct tap4_l4_t *seq4, uint8_t proto6,
+			     const struct tap6_l4_t *seq6, int count)
 {
 	char buf6s[INET6_ADDRSTRLEN], buf6d[INET6_ADDRSTRLEN];
 	char buf4s[INET_ADDRSTRLEN], buf4d[INET_ADDRSTRLEN];
@@ -306,7 +307,8 @@ static void tap_packet_debug(struct iphdr *iph, struct ipv6hdr *ip6h,
  *
  * Return: count of packets consumed by handlers
  */
-static int tap4_handler(struct ctx *c, struct pool *in, struct timespec *now)
+static int tap4_handler(struct ctx *c, const struct pool *in,
+			const struct timespec *now)
 {
 	unsigned int i, j, seq_count;
 	struct tap4_l4_t *seq;
@@ -458,7 +460,8 @@ append:
  *
  * Return: count of packets consumed by handlers
  */
-static int tap6_handler(struct ctx *c, struct pool *in, struct timespec *now)
+static int tap6_handler(struct ctx *c, const struct pool *in,
+			const struct timespec *now)
 {
 	unsigned int i, j, seq_count = 0;
 	struct tap6_l4_t *seq;
@@ -618,7 +621,7 @@ append:
  *
  * Return: -ECONNRESET on receive error, 0 otherwise
  */
-static int tap_handler_passt(struct ctx *c, struct timespec *now)
+static int tap_handler_passt(struct ctx *c, const struct timespec *now)
 {
 	struct ethhdr *eh;
 	ssize_t n, rem;
@@ -706,7 +709,7 @@ next:
  *
  * Return: -ECONNRESET on receive error, 0 otherwise
  */
-static int tap_handler_pasta(struct ctx *c, struct timespec *now)
+static int tap_handler_pasta(struct ctx *c, const struct timespec *now)
 {
 	ssize_t n = 0, len;
 	int ret;
@@ -946,7 +949,8 @@ void tap_sock_init(struct ctx *c)
  * @events:	epoll events
  * @now:	Current timestamp, can be NULL on EPOLLERR
  */
-void tap_handler(struct ctx *c, int fd, uint32_t events, struct timespec *now)
+void tap_handler(struct ctx *c, int fd, uint32_t events,
+		 const struct timespec *now)
 {
 	if (fd == c->fd_tap_listen && events == EPOLLIN) {
 		tap_sock_unix_new(c);

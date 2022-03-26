@@ -364,7 +364,7 @@ static int conf_ns_check(void *arg)
  * Return: 0 on success, negative error code otherwise
  */
 static int conf_ns_opt(struct ctx *c,
-		       char *nsdir, char *conf_userns, const char *optarg)
+		       char *nsdir, const char *conf_userns, const char *optarg)
 {
 	int ufd = -1, nfd = -1, try, ret, netns_only_reset = c->netns_only;
 	char userns[PATH_MAX] = { 0 }, netns[PATH_MAX];
@@ -702,7 +702,11 @@ pasta_opts:
 	exit(EXIT_FAILURE);
 }
 
-void conf_print(struct ctx *c)
+/**
+ * conf_print() - Print fundamental configuration parameters
+ * @c:		Execution context
+ */
+static void conf_print(const struct ctx *c)
 {
 	char buf4[INET_ADDRSTRLEN], ifn[IFNAMSIZ];
 	int i;

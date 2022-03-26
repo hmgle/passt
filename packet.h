@@ -33,9 +33,10 @@ struct pool {
 };
 
 void packet_add_do(struct pool *p, size_t len, const char *start,
-		   const char *func, const int line);
-void *packet_get_do(struct pool *p, size_t index, size_t offset, size_t len,
-		    size_t *left, const char *func, const int line);
+		   const char *func, int line);
+void *packet_get_do(const struct pool *p, const size_t index,
+		    size_t offset, size_t len, size_t *left,
+		    const char *func, int line);
 void pool_flush(struct pool *p);
 
 #define packet_add(p, len, start)					\

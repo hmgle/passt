@@ -199,12 +199,12 @@ __attribute__ ((weak)) int ffsl(long int i) { return __builtin_ffsl(i); }
 void __openlog(const char *ident, int option, int facility);
 void passt_vsyslog(int pri, const char *format, va_list ap);
 void __setlogmask(int mask);
-char *ipv6_l4hdr(struct pool *p, int index, size_t offset, uint8_t *proto,
+char *ipv6_l4hdr(const struct pool *p, int index, size_t offset, uint8_t *proto,
 		 size_t *dlen);
-int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
+int sock_l4(const struct ctx *c, int af, uint8_t proto, uint16_t port,
 	    enum bind_type bind_addr, uint32_t data);
 void sock_probe_mem(struct ctx *c);
-int timespec_diff_ms(struct timespec *a, struct timespec *b);
+int timespec_diff_ms(const struct timespec *a, const struct timespec *b);
 void bitmap_set(uint8_t *map, int bit);
 void bitmap_clear(uint8_t *map, int bit);
 int bitmap_isset(const uint8_t *map, int bit);
@@ -212,7 +212,7 @@ char *line_read(char *buf, size_t len, int fd);
 void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
 			uint8_t *map, uint8_t *exclude);
 void drop_caps(void);
-int ns_enter(struct ctx *c);
+int ns_enter(const struct ctx *c);
 void write_pidfile(int fd, pid_t pid);
 int __daemon(int pidfile_fd, int devnull_fd);
 int fls(unsigned long x);

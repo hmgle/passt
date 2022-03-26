@@ -8,13 +8,13 @@
 
 #define UDP_TIMER_INTERVAL		1000 /* ms */
 
-void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
-		      struct timespec *now);
-int udp_tap_handler(struct ctx *c, int af, void *addr, struct pool *p,
-		    struct timespec *now);
-int udp_sock_init(struct ctx *c);
-void udp_timer(struct ctx *c, struct timespec *ts);
-void udp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
+void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
+		      const struct timespec *now);
+int udp_tap_handler(struct ctx *c, int af, const void *addr,
+		    const struct pool *p, const struct timespec *now);
+int udp_sock_init(const struct ctx *c);
+void udp_timer(struct ctx *c, const struct timespec *ts);
+void udp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 		       const uint32_t *ip_da);
 void udp_remap_to_tap(in_port_t port, in_port_t delta);
 void udp_remap_to_init(in_port_t port, in_port_t delta);

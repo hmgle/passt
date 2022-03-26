@@ -306,7 +306,7 @@ static void udp_update_check4(struct udp4_l2_buf_t *buf)
  * @eth_s:	Ethernet source address, NULL if unchanged
  * @ip_da:	Pointer to IPv4 destination address, NULL if unchanged
  */
-void udp_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
+void udp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 		       const uint32_t *ip_da)
 {
 	int i;
@@ -429,7 +429,7 @@ static void udp_sock6_iov_init(void)
  *
  * #syscalls:pasta getsockname
  */
-int udp_splice_connect(struct ctx *c, int v6, int bound_sock,
+int udp_splice_connect(const struct ctx *c, int v6, int bound_sock,
 		       in_port_t src, in_port_t dst, int splice)
 {
 	struct epoll_event ev = { .events = EPOLLIN | EPOLLRDHUP | EPOLLHUP };
@@ -519,7 +519,7 @@ fail:
  * @s:		Newly created socket or negative error code
  */
 struct udp_splice_connect_ns_arg {
-	struct ctx *c;
+	const struct ctx *c;
 	int v6;
 	int bound_sock;
 	in_port_t src;
@@ -555,8 +555,8 @@ static int udp_splice_connect_ns(void *arg)
  * @events:	epoll events bitmap
  * @now:	Current timestamp
  */
-static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
-				    uint32_t events, struct timespec *now)
+static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
+				    uint32_t events, const struct timespec *now)
 {
 	in_port_t src, dst = ref.r.p.udp.udp.port, send_dst = 0;
 	struct msghdr *mh = &udp_mmh_recv[0].msg_hdr;
@@ -671,9 +671,10 @@ static void udp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
  * @msg_len:	Length of current message being prepared for sending
  * @now:	Current timestamp
  */
-static void udp_sock_fill_data_v4(struct ctx *c, int n, union epoll_ref ref,
+static void udp_sock_fill_data_v4(const struct ctx *c, int n,
+				  union epoll_ref ref,
 				  int *msg_idx, int *msg_bufs, ssize_t *msg_len,
-				  struct timespec *now)
+				  const struct timespec *now)
 {
 	struct msghdr *mh = &udp6_l2_mh_tap[*msg_idx].msg_hdr;
 	struct udp4_l2_buf_t *b = &udp4_l2_buf[n];
@@ -746,9 +747,10 @@ static void udp_sock_fill_data_v4(struct ctx *c, int n, union epoll_ref ref,
  * @msg_len:	Length of current message being prepared for sending
  * @now:	Current timestamp
  */
-static void udp_sock_fill_data_v6(struct ctx *c, int n, union epoll_ref ref,
+static void udp_sock_fill_data_v6(const struct ctx *c, int n,
+				  union epoll_ref ref,
 				  int *msg_idx, int *msg_bufs, ssize_t *msg_len,
-				  struct timespec *now)
+				  const struct timespec *now)
 {
 	struct msghdr *mh = &udp6_l2_mh_tap[*msg_idx].msg_hdr;
 	struct udp6_l2_buf_t *b = &udp6_l2_buf[n];
@@ -845,8 +847,8 @@ static void udp_sock_fill_data_v6(struct ctx *c, int n, union epoll_ref ref,
  * #syscalls recvmmsg
  * #syscalls:passt sendmmsg sendmsg
  */
-void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
-		      struct timespec *now)
+void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
+		      const struct timespec *now)
 {
 	ssize_t n, msg_len = 0, missing = 0;
 	int msg_bufs = 0, msg_i = 0, ret;
@@ -958,8 +960,8 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  *
  * #syscalls sendmmsg
  */
-int udp_tap_handler(struct ctx *c, int af, void *addr, struct pool *p,
-		    struct timespec *now)
+int udp_tap_handler(struct ctx *c, int af, const void *addr,
+		    const struct pool *p, const struct timespec *now)
 {
 	struct mmsghdr mm[UIO_MAXIOV] = { 0 };
 	struct iovec m[UIO_MAXIOV];
@@ -1180,7 +1182,7 @@ static void udp_splice_iov_init(void)
  *
  * Return: 0 on success, -1 on failure
  */
-int udp_sock_init(struct ctx *c)
+int udp_sock_init(const struct ctx *c)
 {
 	union udp_epoll_ref uref = { .udp.bound = 1 };
 	int dst, s;
@@ -1246,7 +1248,7 @@ int udp_sock_init(struct ctx *c)
  * @ts:		Timestamp from caller
  */
 static void udp_timer_one(struct ctx *c, int v6, enum udp_act_type type,
-			  in_port_t port, struct timespec *ts)
+			  in_port_t port, const struct timespec *ts)
 {
 	struct udp_splice_port *sp;
 	struct udp_tap_port *tp;
@@ -1292,7 +1294,7 @@ static void udp_timer_one(struct ctx *c, int v6, enum udp_act_type type,
  * @c:		Execution context
  * @ts:		Timestamp from caller
  */
-void udp_timer(struct ctx *c, struct timespec *ts)
+void udp_timer(struct ctx *c, const struct timespec *ts)
 {
 	int n, t, v6 = 0;
 	unsigned int i;

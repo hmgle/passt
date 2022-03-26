@@ -93,8 +93,8 @@ char *ip_proto_str[IPPROTO_SCTP + 1] = {
  * @events:	epoll events
  * @now:	Current timestamp
  */
-static void sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
-			 struct timespec *now)
+static void sock_handler(struct ctx *c, union epoll_ref ref,
+			 uint32_t events, const struct timespec *now)
 {
 	trace("%s: %s packet from socket %i (events: 0x%08x)",
 	      c->mode == MODE_PASST ? "passt" : "pasta",
@@ -114,7 +114,7 @@ static void sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  * @c:		Execution context
  * @now:	Current timestamp
  */
-static void post_handler(struct ctx *c, struct timespec *now)
+static void post_handler(struct ctx *c, const struct timespec *now)
 {
 #define CALL_PROTO_HANDLER(c, now, lc, uc)				\
 	do {								\
@@ -149,7 +149,7 @@ static void post_handler(struct ctx *c, struct timespec *now)
  * @c:		Execution context
  * @now:	Current timestamp
  */
-static void timer_init(struct ctx *c, struct timespec *now)
+static void timer_init(struct ctx *c, const struct timespec *now)
 {
 	c->tcp.timer_run = c->udp.timer_run = c->icmp.timer_run = *now;
 }
@@ -160,8 +160,8 @@ static void timer_init(struct ctx *c, struct timespec *now)
  * @eth_s:	Ethernet source address, NULL if unchanged
  * @ip_da:	Pointer to IPv4 destination address, NULL if unchanged
  */
-void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
-			 uint32_t *ip_da)
+void proto_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
+			 const uint32_t *ip_da)
 {
 	tcp_update_l2_buf(eth_d, eth_s, ip_da);
 	udp_update_l2_buf(eth_d, eth_s, ip_da);
@@ -171,7 +171,7 @@ void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
  * seccomp() - Set up seccomp filters depending on mode, won't return on failure
  * @c:		Execution context
  */
-static void seccomp(struct ctx *c)
+static void seccomp(const struct ctx *c)
 {
 	struct sock_fprog prog;
 

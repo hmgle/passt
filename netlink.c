@@ -74,7 +74,7 @@ ns:
  *
  * Return: -EIO if sockets couldn't be set up, 0 otherwise
  */
-int nl_sock_init(struct ctx *c)
+int nl_sock_init(const struct ctx *c)
 {
 	if (c->mode == MODE_PASTA) {
 		NS_CALL(nl_sock_init_do, c);
@@ -99,7 +99,7 @@ int nl_sock_init(struct ctx *c)
  *
  * Return: received length on success, negative error code on failure
  */
-static int nl_req(int ns, char *buf, void *req, ssize_t len)
+static int nl_req(int ns, char *buf, const void *req, ssize_t len)
 {
 	int s = ns ? nl_sock_ns : nl_sock, done = 0;
 	char flush[BUFSIZ];

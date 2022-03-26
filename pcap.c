@@ -41,7 +41,7 @@
 static int pcap_fd = -1;
 
 /* See pcap.h from libpcap, or pcap-savefile(5) */
-static struct {
+static const struct {
 	uint32_t magic;
 #define PCAP_MAGIC		0xa1b2c3d4
 
@@ -74,7 +74,7 @@ struct pcap_pkthdr {
  * @pkt:	Pointer to data buffer, including L2 headers
  * @len:	L2 packet length
  */
-void pcap(char *pkt, size_t len)
+void pcap(const char *pkt, size_t len)
 {
 	struct pcap_pkthdr h;
 	struct timeval tv;
@@ -95,7 +95,7 @@ void pcap(char *pkt, size_t len)
  * pcapm() - Capture multiple frames from message header to pcap file
  * @mh:		Pointer to sendmsg() message header buffer
  */
-void pcapm(struct msghdr *mh)
+void pcapm(const struct msghdr *mh)
 {
 	struct pcap_pkthdr h;
 	struct iovec *iov;
@@ -130,7 +130,7 @@ fail:
  * pcapm() - Capture multiple frames from multiple message headers to pcap file
  * @mmh:	Pointer to first sendmmsg() header
  */
-void pcapmm(struct mmsghdr *mmh, unsigned int vlen)
+void pcapmm(const struct mmsghdr *mmh, unsigned int vlen)
 {
 	struct pcap_pkthdr h;
 	struct iovec *iov;
@@ -145,7 +145,7 @@ void pcapmm(struct mmsghdr *mmh, unsigned int vlen)
 	h.tv_usec = tv.tv_usec;
 
 	for (i = 0; i < vlen; i++) {
-		struct msghdr *mh = &mmh[i].msg_hdr;
+		const struct msghdr *mh = &mmh[i].msg_hdr;
 
 		for (j = 0; j < mh->msg_iovlen; j++) {
 			iov = &mh->msg_iov[j];

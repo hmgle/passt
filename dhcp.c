@@ -178,7 +178,8 @@ static int fill(struct msg *m)
  *
  * Return: offset to corresponding compression pointer if any, -1 if not found
  */
-static int opt_dns_search_dup_ptr(unsigned char *buf, char *cmp, size_t len)
+static int opt_dns_search_dup_ptr(unsigned char *buf, const char *cmp,
+				  size_t len)
 {
 	unsigned int i;
 
@@ -202,7 +203,7 @@ static int opt_dns_search_dup_ptr(unsigned char *buf, char *cmp, size_t len)
  * @c:		Execution context
  * @max_len:	Maximum total length of option buffer
  */
-static void opt_set_dns_search(struct ctx *c, size_t max_len)
+static void opt_set_dns_search(const struct ctx *c, size_t max_len)
 {
 	char buf[NS_MAXDNAME];
 	int i;
@@ -215,7 +216,7 @@ static void opt_set_dns_search(struct ctx *c, size_t max_len)
 	for (i = 0; *c->dns_search[i].n; i++) {
 		unsigned int n;
 		int count = -1;
-		char *p;
+		const char *p;
 
 		buf[0] = 0;
 		for (p = c->dns_search[i].n, n = 1; *p; p++) {
@@ -263,7 +264,7 @@ static void opt_set_dns_search(struct ctx *c, size_t max_len)
  *
  * Return: 0 if it's not a DHCP message, 1 if handled, -1 on failure
  */
-int dhcp(struct ctx *c, struct pool *p)
+int dhcp(const struct ctx *c, const struct pool *p)
 {
 	size_t mlen, len, offset = 0, opt_len, opt_off = 0;
 	struct ethhdr *eh;

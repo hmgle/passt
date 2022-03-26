@@ -233,7 +233,7 @@ struct ctx {
 	int low_rmem;
 };
 
-void proto_update_l2_buf(unsigned char *eth_d, unsigned char *eth_s,
-			 uint32_t *ip_da);
+void proto_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
+			 const uint32_t *ip_da);
 
 #endif /* PASST_H */

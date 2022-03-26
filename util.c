@@ -172,7 +172,7 @@ void passt_vsyslog(int pri, const char *format, va_list ap)
  *
  * Return: pointer to L4 header, NULL if not found
  */
-char *ipv6_l4hdr(struct pool *p, int index, size_t offset, uint8_t *proto,
+char *ipv6_l4hdr(const struct pool *p, int index, size_t offset, uint8_t *proto,
 		 size_t *dlen)
 {
 	struct ipv6_opt_hdr *o;
@@ -223,7 +223,7 @@ found:
  *
  * Return: newly created socket, -1 on error
  */
-int sock_l4(struct ctx *c, int af, uint8_t proto, uint16_t port,
+int sock_l4(const struct ctx *c, int af, uint8_t proto, uint16_t port,
 	    enum bind_type bind_addr, uint32_t data)
 {
 	union epoll_ref ref = { .r.proto = proto, .r.p.data = data };
@@ -357,7 +357,7 @@ void sock_probe_mem(struct ctx *c)
  *
  * Return: difference in milliseconds
  */
-int timespec_diff_ms(struct timespec *a, struct timespec *b)
+int timespec_diff_ms(const struct timespec *a, const struct timespec *b)
 {
 	if (a->tv_nsec < b->tv_nsec) {
 		return (b->tv_nsec - a->tv_nsec) / 1000000 +
@@ -540,7 +540,7 @@ void drop_caps(void)
  *
  * #syscalls:pasta setns
  */
-int ns_enter(struct ctx *c)
+int ns_enter(const struct ctx *c)
 {
 	if (!c->netns_only &&
 	    c->pasta_userns_fd != -1 &&

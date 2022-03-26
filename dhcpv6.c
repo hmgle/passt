@@ -297,7 +297,8 @@ static struct resp_not_on_link_t {
  *
  * Return: pointer to option header, or NULL on malformed or missing option
  */
-static struct opt_hdr *dhcpv6_opt(struct pool *p, size_t *offset, uint16_t type)
+static struct opt_hdr *dhcpv6_opt(const struct pool *p, size_t *offset,
+				  uint16_t type)
 {
 	struct opt_hdr *o;
 	size_t left;
@@ -322,13 +323,13 @@ static struct opt_hdr *dhcpv6_opt(struct pool *p, size_t *offset, uint16_t type)
 
 /**
  * dhcpv6_ia_notonlink() - Check if any IA contains non-appropriate addresses
- * @o:		First option header to check for IAs
- * @rem_len:	Remaining message length, host order
- * @addr:	Address we want to lease to the client
+ * @p:		Packet pool, single packet starting from UDP header
+ * @la:		Address we want to lease to the client
  *
  * Return: pointer to non-appropriate IA_NA or IA_TA, if any, NULL otherwise
  */
-static struct opt_hdr *dhcpv6_ia_notonlink(struct pool *p, struct in6_addr *la)
+static struct opt_hdr *dhcpv6_ia_notonlink(const struct pool *p,
+					   struct in6_addr *la)
 {
 	char buf[INET6_ADDRSTRLEN];
 	struct in6_addr *req_addr;
@@ -379,7 +380,7 @@ ia_ta:
  *
  * Return: updated length of response message buffer.
  */
-static size_t dhcpv6_dns_fill(struct ctx *c, char *buf, int offset)
+static size_t dhcpv6_dns_fill(const struct ctx *c, char *buf, int offset)
 {
 	struct opt_dns_servers *srv = NULL;
 	struct opt_dns_search *srch = NULL;
@@ -447,7 +448,7 @@ search:
  *
  * Return: 0 if it's not a DHCPv6 message, 1 if handled, -1 on failure
  */
-int dhcpv6(struct ctx *c, struct pool *p,
+int dhcpv6(struct ctx *c, const struct pool *p,
 	   const struct in6_addr *saddr, const struct in6_addr *daddr)
 {
 	struct opt_hdr *ia, *bad_ia, *client_id, *server_id;
@@ -588,7 +589,7 @@ int dhcpv6(struct ctx *c, struct pool *p,
  * dhcpv6_init() - Initialise DUID and addresses for DHCPv6 server
  * @c:		Execution context
  */
-void dhcpv6_init(struct ctx *c)
+void dhcpv6_init(const struct ctx *c)
 {
 	time_t y2k = 946684800; /* Epoch to 2000-01-01T00:00:00Z, no mktime() */
 	uint32_t duid_time;

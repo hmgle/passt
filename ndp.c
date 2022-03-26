@@ -45,8 +45,8 @@
  *
  * Return: 0 if not handled here, 1 if handled, -1 on failure
  */
-int ndp(struct ctx *c, struct icmp6hdr *ih, unsigned char *eh_source,
-	struct in6_addr *saddr)
+int ndp(struct ctx *c, const struct icmp6hdr *ih,
+	const unsigned char *eh_source, const struct in6_addr *saddr)
 {
 	char buf[BUFSIZ] = { 0 };
 	struct ipv6hdr *ip6hr;

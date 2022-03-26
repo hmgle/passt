@@ -6,7 +6,7 @@
 #ifndef DHCP_H
 #define DHCP_H
 
-int dhcp(struct ctx *c, struct pool *p);
+int dhcp(const struct ctx *c, const struct pool *p);
 void dhcp_init(void);
 
 #endif /* DHCP_H */

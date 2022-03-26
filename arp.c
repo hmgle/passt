@@ -36,7 +36,7 @@
  *
  * Return: 1 if handled, -1 on failure
  */
-int arp(struct ctx *c, struct pool *p)
+int arp(const struct ctx *c, const struct pool *p)
 {
 	unsigned char swap[4];
 	struct ethhdr *eh;

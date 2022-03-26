@@ -156,7 +156,8 @@ static void tcp_splice_conn_epoll_events(uint16_t events,
 }
 
 static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn);
-static int tcp_splice_epoll_ctl(struct ctx *c, struct tcp_splice_conn *conn);
+static int tcp_splice_epoll_ctl(const struct ctx *c,
+				struct tcp_splice_conn *conn);
 
 /**
  * conn_flag_do() - Set/unset given flag, log, update epoll on CLOSING flag
@@ -164,7 +165,7 @@ static int tcp_splice_epoll_ctl(struct ctx *c, struct tcp_splice_conn *conn);
  * @conn:	Connection pointer
  * @flag:	Flag to set, or ~flag to unset
  */
-static void conn_flag_do(struct ctx *c, struct tcp_splice_conn *conn,
+static void conn_flag_do(const struct ctx *c, struct tcp_splice_conn *conn,
 			 unsigned long flag)
 {
 	if (flag & (flag - 1)) {
@@ -201,7 +202,8 @@ static void conn_flag_do(struct ctx *c, struct tcp_splice_conn *conn,
  *
  * Return: 0 on success, negative error code on failure (not on deletion)
  */
-static int tcp_splice_epoll_ctl(struct ctx *c, struct tcp_splice_conn *conn)
+static int tcp_splice_epoll_ctl(const struct ctx *c,
+				struct tcp_splice_conn *conn)
 {
 	int m = (conn->flags & IN_EPOLL) ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 	union epoll_ref ref_a = { .r.proto = IPPROTO_TCP, .r.s = conn->a,
@@ -243,7 +245,7 @@ delete:
  * @conn:	Connection pointer
  * @event:	Connection event
  */
-static void conn_event_do(struct ctx *c, struct tcp_splice_conn *conn,
+static void conn_event_do(const struct ctx *c, struct tcp_splice_conn *conn,
 			  unsigned long event)
 {
 	if (event & (event - 1)) {
@@ -348,7 +350,7 @@ static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
  *
  * Return: 0 on success, -EIO on failure
  */
-static int tcp_splice_connect_finish(struct ctx *c,
+static int tcp_splice_connect_finish(const struct ctx *c,
 				     struct tcp_splice_conn *conn)
 {
 	int i;
@@ -393,7 +395,7 @@ static int tcp_splice_connect_finish(struct ctx *c,
  *
  * Return: 0 for connect() succeeded or in progress, negative value on error
  */
-static int tcp_splice_connect(struct ctx *c, struct tcp_splice_conn *conn,
+static int tcp_splice_connect(const struct ctx *c, struct tcp_splice_conn *conn,
 			      int s, in_port_t port)
 {
 	int sock_conn = (s >= 0) ? s : socket(CONN_V6(conn) ? AF_INET6 :
@@ -460,7 +462,7 @@ static int tcp_splice_connect(struct ctx *c, struct tcp_splice_conn *conn,
  * @ret:	Return value of tcp_splice_connect_ns()
  */
 struct tcp_splice_connect_ns_arg {
-	struct ctx *c;
+	const struct ctx *c;
 	struct tcp_splice_conn *conn;
 	in_port_t port;
 	int ret;
@@ -490,7 +492,7 @@ static int tcp_splice_connect_ns(void *arg)
  *
  * Return: return code from connect()
  */
-static int tcp_splice_new(struct ctx *c, struct tcp_splice_conn *conn,
+static int tcp_splice_new(const struct ctx *c, struct tcp_splice_conn *conn,
 			  in_port_t port)
 {
 	struct tcp_splice_connect_ns_arg ns_arg = { c, conn, port, 0 };
@@ -800,7 +802,7 @@ smaller:
  * tcp_splice_pipe_refill() - Refill pool of pre-opened pipes
  * @c:		Execution context
  */
-static void tcp_splice_pipe_refill(struct ctx *c)
+static void tcp_splice_pipe_refill(const struct ctx *c)
 {
 	int i;
 

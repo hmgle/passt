@@ -65,8 +65,8 @@ static uint8_t icmp_act			[IP_VERSIONS][USHRT_MAX / 8];
  * @events:	epoll events bitmap
  * @now:	Current timestamp, unused
  */
-void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
-		       struct timespec *now)
+void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
+		       uint32_t events, const struct timespec *now)
 {
 	struct in6_addr a6 = { .s6_addr = {    0,    0,    0,    0,
 					       0,    0,    0,    0,
@@ -136,13 +136,14 @@ void icmp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  * icmp_tap_handler() - Handle packets from tap
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
+ * @addr:	Destination address
  * @p:		Packet pool, single packet with ICMP/ICMPv6 header
  * @now:	Current timestamp
  *
  * Return: count of consumed packets (always 1, even if malformed)
  */
-int icmp_tap_handler(struct ctx *c, int af, void *addr, struct pool *p,
-		     struct timespec *now)
+int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
+		     const struct pool *p, const struct timespec *now)
 {
 	size_t plen;
 
@@ -227,8 +228,8 @@ fail_sock:
  * @id:		Echo identifier, host order
  * @ts:		Timestamp from caller
  */
-static void icmp_timer_one(struct ctx *c, int v6, uint16_t id,
-			   struct timespec *ts)
+static void icmp_timer_one(const struct ctx *c, int v6, uint16_t id,
+			   const struct timespec *ts)
 {
 	struct icmp_id_sock *id_map = &icmp_id_map[v6 ? V6 : V4][id];
 
@@ -247,7 +248,7 @@ static void icmp_timer_one(struct ctx *c, int v6, uint16_t id,
  * @c:		Execution context
  * @ts:		Timestamp from caller
  */
-void icmp_timer(struct ctx *c, struct timespec *ts)
+void icmp_timer(const struct ctx *c, const struct timespec *ts)
 {
 	long *word, tmp;
 	unsigned int i;
