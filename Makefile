@@ -187,9 +187,6 @@ pkgs: static
 # - cppcoreguidelines-avoid-non-const-global-variables
 #	TODO: check, fix, and more in general constify wherever possible
 #
-# - bugprone-suspicious-string-compare
-#	Return value of memcmp(), not really suspicious
-#
 # - altera-unroll-loops
 # - altera-id-dependent-backward-branch
 #	TODO: check paths where it might make sense to improve performance
@@ -224,12 +221,12 @@ clang-tidy: $(wildcard *.c) $(wildcard *.h)
 	-bugprone-narrowing-conversions,\
 	-cppcoreguidelines-narrowing-conversions,\
 	-cppcoreguidelines-avoid-non-const-global-variables,\
-	-bugprone-suspicious-string-compare,\
 	-altera-unroll-loops,-altera-id-dependent-backward-branch,\
 	-bugprone-easily-swappable-parameters,\
 	-readability-function-cognitive-complexity,\
 	-altera-struct-pack-align,\
 	-concurrency-mt-unsafe \
+	-config='{CheckOptions: [{key: bugprone-suspicious-string-compare.WarnOnImplicitComparison, value: "false"}]}' \
 	--warnings-as-errors=* $(wildcard *.c) -- $(filter-out -pie,$(CFLAGS))
 
 ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"),1)
