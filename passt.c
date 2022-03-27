@@ -241,8 +241,6 @@ static int sandbox(struct ctx *c)
 {
 	int flags = CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
 
-	errno = 0;
-
 	if (!c->netns_only) {
 		if (c->pasta_userns_fd == -1)
 			flags |= CLONE_NEWUSER;
@@ -259,19 +257,37 @@ static int sandbox(struct ctx *c)
 	if (!c->foreground || c->mode == MODE_PASST)
 		flags |= CLONE_NEWPID;
 
-	unshare(flags);
-
-	mount("", "/", "", MS_UNBINDABLE | MS_REC, NULL);
-	mount("", TMPDIR, "tmpfs", MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_RDONLY,
-	      "nr_inodes=2,nr_blocks=0");
-	if (chdir(TMPDIR))
+	if (unshare(flags)) {
+		perror("unshare");
 		return -errno;
+	}
 
-	syscall(SYS_pivot_root, ".", ".");
-	umount2(".", MNT_DETACH | UMOUNT_NOFOLLOW);
-
-	if (errno)
+	if (mount("", "/", "", MS_UNBINDABLE | MS_REC, NULL)) {
+		perror("mount /");
 		return -errno;
+	}
+
+	if (mount("", TMPDIR, "tmpfs",
+		  MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_RDONLY,
+		  "nr_inodes=2,nr_blocks=0")) {
+		perror("mount tmpfs");
+		return -errno;
+	}
+
+	if (chdir(TMPDIR)) {
+		perror("chdir");
+		return -errno;
+	}
+
+	if (syscall(SYS_pivot_root, ".", ".")) {
+		perror("pivot_root");
+		return -errno;
+	}
+
+	if (umount2(".", MNT_DETACH | UMOUNT_NOFOLLOW)) {
+		perror("umount2");
+		return -errno;
+	}
 
 	drop_caps();	/* Relative to the new user namespace this time. */
 
