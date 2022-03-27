@@ -370,8 +370,8 @@ static int tcp_splice_connect_finish(const struct ctx *c,
 	}
 
 	if (conn->pipe_a_b[0] < 0) {
-		if (pipe2(conn->pipe_a_b, O_NONBLOCK) ||
-		    pipe2(conn->pipe_b_a, O_NONBLOCK)) {
+		if (pipe2(conn->pipe_a_b, O_NONBLOCK | O_CLOEXEC) ||
+		    pipe2(conn->pipe_b_a, O_NONBLOCK | O_CLOEXEC)) {
 			conn_flag(c, conn, CLOSING);
 			return -EIO;
 		}
@@ -773,7 +773,7 @@ static void tcp_set_pipe_size(struct ctx *c)
 
 smaller:
 	for (i = 0; i < TCP_SPLICE_PIPE_POOL_SIZE * 2; i++) {
-		if (pipe2(probe_pipe[i], 0)) {
+		if (pipe2(probe_pipe[i], O_CLOEXEC)) {
 			i++;
 			break;
 		}
@@ -809,9 +809,9 @@ static void tcp_splice_pipe_refill(const struct ctx *c)
 	for (i = 0; i < TCP_SPLICE_PIPE_POOL_SIZE; i++) {
 		if (splice_pipe_pool[i][0][0] >= 0)
 			break;
-		if (pipe2(splice_pipe_pool[i][0], O_NONBLOCK))
+		if (pipe2(splice_pipe_pool[i][0], O_NONBLOCK | O_CLOEXEC))
 			continue;
-		if (pipe2(splice_pipe_pool[i][1], O_NONBLOCK)) {
+		if (pipe2(splice_pipe_pool[i][1], O_NONBLOCK | O_CLOEXEC)) {
 			close(splice_pipe_pool[i][1][0]);
 			close(splice_pipe_pool[i][1][1]);
 			continue;
@@ -832,7 +832,6 @@ void tcp_splice_init(struct ctx *c)
 {
 	memset(splice_pipe_pool, 0xff, sizeof(splice_pipe_pool));
 	tcp_set_pipe_size(c);
-	tcp_splice_pipe_refill(c);
 }
 
 /**

@@ -495,7 +495,7 @@ void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
 
 	if (*fd != -1)
 		lseek(*fd, 0, SEEK_SET);
-	else if ((*fd = open(path, O_RDONLY)) < 0)
+	else if ((*fd = open(path, O_RDONLY | O_CLOEXEC)) < 0)
 		return;
 
 	*line = 0;

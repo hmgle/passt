@@ -285,7 +285,7 @@ static void get_dns(struct ctx *c)
 	if (dns_set && dnss_set)
 		return;
 
-	if ((fd = open("/etc/resolv.conf", O_RDONLY)) < 0)
+	if ((fd = open("/etc/resolv.conf", O_RDONLY | O_CLOEXEC)) < 0)
 		goto out;
 
 	while (!(*buf = 0) && line_read(buf, BUFSIZ, fd)) {
@@ -406,13 +406,17 @@ static int conf_ns_opt(struct ctx *c,
 				continue;
 		}
 
+		/* Don't pass O_CLOEXEC here: ns_enter() needs those files */
 		if (!c->netns_only) {
 			if (*conf_userns)
+				/* NOLINTNEXTLINE(android-cloexec-open) */
 				ufd = open(conf_userns, O_RDONLY);
 			else if (*userns)
+				/* NOLINTNEXTLINE(android-cloexec-open) */
 				ufd = open(userns, O_RDONLY);
 		}
 
+		/* NOLINTNEXTLINE(android-cloexec-open) */
 		nfd = open(netns, O_RDONLY);
 
 		if (nfd == -1 || (ufd == -1 && !c->netns_only)) {

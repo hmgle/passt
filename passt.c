@@ -202,7 +202,7 @@ static void check_root(void)
 	if (getuid() && geteuid())
 		return;
 
-	if ((fd = open("/proc/self/uid_map", O_RDONLY)) < 0)
+	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0)
 		return;
 
 	if (read(fd, buf, BUFSIZ) > 0 &&
@@ -359,7 +359,7 @@ int main(int argc, char **argv)
 	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
 		__openlog(log_name, LOG_PERROR, LOG_DAEMON);
 
-	c.epollfd = epoll_create1(0);
+	c.epollfd = epoll_create1(c.foreground ? O_CLOEXEC : 0);
 	if (c.epollfd == -1) {
 		perror("epoll_create1");
 		exit(EXIT_FAILURE);
@@ -405,11 +405,12 @@ int main(int argc, char **argv)
 	pcap_init(&c);
 
 	if (!c.foreground)
+		/* NOLINTNEXTLINE(android-cloexec-open): see __daemon() */
 		devnull_fd = open("/dev/null", O_RDWR);
 
 	if (*c.pid_file)
-		pidfile_fd = open(c.pid_file,
-				  O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+		pidfile_fd = open(c.pid_file, O_CREAT | O_WRONLY | O_CLOEXEC,
+				  S_IRUSR | S_IWUSR);
 
 	if (sandbox(&c)) {
 		err("Failed to sandbox process, exiting\n");

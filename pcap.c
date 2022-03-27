@@ -170,6 +170,7 @@ fail:
  */
 void pcap_init(struct ctx *c)
 {
+	int flags = O_WRONLY | O_CREAT | O_TRUNC;
 	struct timeval tv;
 
 	if (pcap_fd != -1)
@@ -200,8 +201,8 @@ void pcap_init(struct ctx *c)
 		strncpy(c->pcap, name, PATH_MAX);
 	}
 
-	pcap_fd = open(c->pcap, O_WRONLY | O_CREAT | O_TRUNC,
-		       S_IRUSR | S_IWUSR);
+	flags |= c->foreground ? O_CLOEXEC : 0;
+	pcap_fd = open(c->pcap, flags, S_IRUSR | S_IWUSR);
 	if (pcap_fd == -1) {
 		perror("open");
 		return;

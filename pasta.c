@@ -78,6 +78,7 @@ void pasta_child_handler(int signal)
 static int pasta_wait_for_ns(void *arg)
 {
 	struct ctx *c = (struct ctx *)arg;
+	int flags = O_RDONLY | O_CLOEXEC;
 	char ns[PATH_MAX];
 
 	if (c->netns_only)
@@ -85,14 +86,14 @@ static int pasta_wait_for_ns(void *arg)
 
 	snprintf(ns, PATH_MAX, "/proc/%i/ns/user", pasta_child_pid);
 	do
-		while ((c->pasta_userns_fd = open(ns, O_RDONLY)) < 0);
+		while ((c->pasta_userns_fd = open(ns, flags)) < 0);
 	while (setns(c->pasta_userns_fd, CLONE_NEWUSER) &&
 	       !close(c->pasta_userns_fd));
 
 netns:
 	snprintf(ns, PATH_MAX, "/proc/%i/ns/net", pasta_child_pid);
 	do
-		while ((c->pasta_netns_fd = open(ns, O_RDONLY)) < 0);
+		while ((c->pasta_netns_fd = open(ns, flags)) < 0);
 	while (setns(c->pasta_netns_fd, CLONE_NEWNET) &&
 	       !close(c->pasta_netns_fd));
 
@@ -126,23 +127,23 @@ static int pasta_setup_ns(void *arg)
 
 		snprintf(buf, BUFSIZ, "%i %i %i", 0, a->euid, 1);
 
-		fd = open("/proc/self/uid_map", O_WRONLY);
+		fd = open("/proc/self/uid_map", O_WRONLY | O_CLOEXEC);
 		if (write(fd, buf, strlen(buf)) < 0)
 			warn("Cannot set uid_map in namespace");
 		close(fd);
 
-		fd = open("/proc/self/setgroups", O_WRONLY);
+		fd = open("/proc/self/setgroups", O_WRONLY | O_CLOEXEC);
 		if (write(fd, "deny", sizeof("deny")) < 0)
 			warn("Cannot write to setgroups in namespace");
 		close(fd);
 
-		fd = open("/proc/self/gid_map", O_WRONLY);
+		fd = open("/proc/self/gid_map", O_WRONLY | O_CLOEXEC);
 		if (write(fd, buf, strlen(buf)) < 0)
 			warn("Cannot set gid_map in namespace");
 		close(fd);
 	}
 
-	fd = open("/proc/sys/net/ipv4/ping_group_range", O_WRONLY);
+	fd = open("/proc/sys/net/ipv4/ping_group_range", O_WRONLY | O_CLOEXEC);
 	if (write(fd, "0 0", strlen("0 0")) < 0)
 		warn("Cannot set ping_group_range, ICMP requests might fail");
 	close(fd);
@@ -231,13 +232,14 @@ void pasta_ns_conf(struct ctx *c)
  */
 int pasta_netns_quit_init(struct ctx *c)
 {
+	int flags = O_NONBLOCK | (c->foreground ? O_CLOEXEC : 0);
 	struct epoll_event ev = { .events = EPOLLIN };
 	int inotify_fd;
 
 	if (c->mode != MODE_PASTA || c->no_netns_quit || !*c->netns_base)
 		return -1;
 
-	if ((inotify_fd = inotify_init1(O_NONBLOCK)) < 0) {
+	if ((inotify_fd = inotify_init1(flags)) < 0) {
 		perror("inotify_init(): won't quit once netns is gone");
 		return -1;
 	}

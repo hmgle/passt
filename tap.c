@@ -875,12 +875,13 @@ static int tun_ns_fd = -1;
 static int tap_ns_tun(void *arg)
 {
 	struct ifreq ifr = { .ifr_flags = IFF_TAP | IFF_NO_PI };
+	int flags = O_RDWR | O_NONBLOCK | O_CLOEXEC;
 	struct ctx *c = (struct ctx *)arg;
 
 	strncpy(ifr.ifr_name, c->pasta_ifn, IFNAMSIZ);
 
 	if (ns_enter(c) ||
-	    (tun_ns_fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK)) < 0 ||
+	    (tun_ns_fd = open("/dev/net/tun", flags)) < 0 ||
 	    ioctl(tun_ns_fd, TUNSETIFF, &ifr) ||
 	    !(c->pasta_ifi = if_nametoindex(c->pasta_ifn)))
 		tun_ns_fd = -1;
