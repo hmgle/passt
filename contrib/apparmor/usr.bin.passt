@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# contrib/apparmor/usr.bin.passt - AppArmor profile example/template for passt
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+abi <abi/3.0>,
+
+include <tunables/global>
+
+/usr/bin/passt {
+  ### Alternatively: include <abstractions/base>
+  @{etc_ro}/ld.so.cache			r,
+  /{usr/,}lib{,32,64}/ld-*.so		r,
+  /{usr/,}lib{,32,64}/libc-*.so		mr,
+  /{usr/,}lib/@{multiarch}/ld-*.so	r,
+  /{usr/,}lib/@{multiarch}/libc-*.so	mr,
+  /dev/null 				rw,	# __daemon(), util.c
+  signal receive set=int peer=unconfined,
+  signal receive set=term peer=unconfined,
+  ###
+
+  ### Alternatively: include <abstractions/nameservice>
+  @{etc_ro}/resolv.conf			r,	# get_dns(), conf.c
+  ###
+
+  capability sys_admin,				# sandbox(), passt.c
+  capability setpcap,				# drop_caps(), util.c
+
+  mount		""	-> "/",			# sandbox(), passt.c
+  mount		""	-> "/tmp/",
+  pivot_root	"/tmp/" -> "/tmp/",
+  umount	"/",
+
+  network netlink raw,				# netlink.c
+
+  network inet stream,				# tcp.c
+  network inet6 stream,
+
+  network inet dgram,				# udp.c
+  network inet6 dgram,
+
+  network unix stream,				# tap.c
+
+  network unix dgram,				# __openlog(), util.c
+
+  ### Alternatively: include <abstractions/user-tmp>
+  owner /tmp/**				w,	# tap_sock_unix_init(), pcap(),
+						# write_pidfile()
+  ###
+
+  owner @{HOME}/**			w,	# pcap(), write_pidfile()
+
+  /usr/bin/passt.avx2			ix,	# arch_avx2_exec(), arch.c
+}
