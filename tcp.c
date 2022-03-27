@@ -398,12 +398,16 @@
  * @seq_init_from_tap:	Initial sequence number from tap
  */
 struct tcp_conn {
-	int	 	next_index	:TCP_CONN_INDEX_BITS + 1;
+	int	 	next_index	:TCP_CONN_INDEX_BITS + 2;
 
-#define TCP_MSS_BITS			14
-	unsigned int	tap_mss		:TCP_MSS_BITS;
-#define MSS_SET(conn, mss)	(conn->tap_mss = (mss >> (16 - TCP_MSS_BITS)))
-#define MSS_GET(conn)		(conn->tap_mss << (16 - TCP_MSS_BITS))
+#define TCP_RETRANS_BITS		3
+	unsigned int	retrans		:TCP_RETRANS_BITS;
+#define TCP_MAX_RETRANS			((1U << TCP_RETRANS_BITS) - 1)
+
+#define TCP_WS_BITS			4	/* RFC 7323 */
+#define TCP_WS_MAX			14
+	unsigned int	ws_from_tap	:TCP_WS_BITS;
+	unsigned int	ws_to_tap	:TCP_WS_BITS;
 
 
 	int		sock		:SOCKET_REF_BITS;
@@ -438,14 +442,10 @@ struct tcp_conn {
 
 	unsigned int	hash_bucket	:TCP_HASH_BUCKET_BITS;
 
-#define TCP_RETRANS_BITS		3
-	unsigned int	retrans		:TCP_RETRANS_BITS;
-#define TCP_MAX_RETRANS			((1U << TCP_RETRANS_BITS) - 1)
-
-#define TCP_WS_BITS			4	/* RFC 7323 */
-#define TCP_WS_MAX			14
-	unsigned int	ws_from_tap	:TCP_WS_BITS;
-	unsigned int	ws_to_tap	:TCP_WS_BITS;
+#define TCP_MSS_BITS			14
+	unsigned int	tap_mss		:TCP_MSS_BITS;
+#define MSS_SET(conn, mss)	(conn->tap_mss = (mss >> (16 - TCP_MSS_BITS)))
+#define MSS_GET(conn)		(conn->tap_mss << (16 - TCP_MSS_BITS))
 
 
 #define SNDBUF_BITS		24
