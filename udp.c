@@ -124,17 +124,17 @@
 /**
  * struct udp_tap_port - Port tracking based on tap-facing source port
  * @sock:	Socket bound to source port used as index
- * @ts:		Activity timestamp from tap, used for socket aging
  * @flags:	Flags for local bind, loopback address/unicast address as source
+ * @ts:		Activity timestamp from tap, used for socket aging
  */
 struct udp_tap_port {
 	int sock;
-	time_t ts;
-
 	uint8_t flags;
 #define PORT_LOCAL	BIT(0)
 #define PORT_LOOPBACK	BIT(1)
 #define PORT_GUA	BIT(2)
+
+	time_t ts;
 };
 
 /**
