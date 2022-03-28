@@ -102,10 +102,10 @@ struct tcp_splice_conn {
 #define RCVLOWAT_ACT_B			BIT(5)
 #define CLOSING				BIT(6)
 
-	uint64_t a_read;
-	uint64_t a_written;
-	uint64_t b_read;
-	uint64_t b_written;
+	uint32_t a_read;
+	uint32_t a_written;
+	uint32_t b_read;
+	uint32_t b_written;
 };
 
 #define CONN_V6(x)			(x->flags & SOCK_V6)
@@ -553,7 +553,7 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 {
 	uint8_t lowat_set_flag, lowat_act_flag;
 	int from, to, *pipes, eof, never_read;
-	uint64_t *seq_read, *seq_write;
+	uint32_t *seq_read, *seq_write;
 	struct tcp_splice_conn *conn;
 
 	if (ref.r.p.tcp.tcp.listen) {

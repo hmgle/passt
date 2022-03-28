@@ -117,8 +117,8 @@
 #include "pcap.h"
 
 #define UDP_CONN_TIMEOUT	180 /* s, timeout for ephemeral or local bind */
-#define UDP_SPLICE_FRAMES	128
-#define UDP_TAP_FRAMES_MEM	128
+#define UDP_SPLICE_FRAMES	32
+#define UDP_TAP_FRAMES_MEM	32
 #define UDP_TAP_FRAMES		(c->mode == MODE_PASST ? UDP_TAP_FRAMES_MEM : 1)
 
 /**

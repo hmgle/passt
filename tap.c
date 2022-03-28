@@ -57,6 +57,8 @@
 static PACKET_POOL_NOINIT(pool_tap4, TAP_MSGS, pkt_buf);
 static PACKET_POOL_NOINIT(pool_tap6, TAP_MSGS, pkt_buf);
 
+#define TAP_SEQS		128 /* Different L4 tuples in one batch */
+
 /**
  * tap_send() - Send frame, with qemu socket header if needed
  * @c:		Execution context
@@ -225,7 +227,7 @@ static struct tap4_l4_t {
 	uint32_t daddr;
 
 	struct pool_l4_t p;
-} tap4_l4[UIO_MAXIOV /* Arbitrary: TAP_MSGS in theory, so limit in users */];
+} tap4_l4[TAP_SEQS /* Arbitrary: TAP_MSGS in theory, so limit in users */];
 
 /**
  * struct l4_seq6_t - Message sequence for one protocol handler call, IPv6
@@ -247,7 +249,7 @@ static struct tap6_l4_t {
 	struct in6_addr daddr;
 
 	struct pool_l4_t p;
-} tap6_l4[UIO_MAXIOV /* Arbitrary: TAP_MSGS in theory, so limit in users */];
+} tap6_l4[TAP_SEQS /* Arbitrary: TAP_MSGS in theory, so limit in users */];
 
 /**
  * tap_packet_debug() - Print debug message for packet(s) from guest/tap
@@ -401,12 +403,12 @@ resume:
 		seq->daddr	= iph->daddr;				\
 	} while (0)
 
-		if (seq && L4_MATCH(iph, uh, seq) && seq->p.count < UIO_MAXIOV)
+		if (seq && L4_MATCH(iph, uh, seq) && seq->p.count < TAP_SEQS)
 			goto append;
 
 		for (seq = tap4_l4 + seq_count - 1; seq >= tap4_l4; seq--) {
 			if (L4_MATCH(iph, uh, seq)) {
-				if (seq->p.count >= UIO_MAXIOV)
+				if (seq->p.count >= TAP_SEQS)
 					seq = NULL;
 				break;
 			}
@@ -424,7 +426,7 @@ resume:
 append:
 		packet_add((struct pool *)&seq->p, l4_len, l4h);
 
-		if (seq_count == UIO_MAXIOV)
+		if (seq_count == TAP_SEQS)
 			break;	/* Resume after flushing if i < count */
 	}
 
@@ -563,12 +565,12 @@ resume:
 	} while (0)
 
 		if (seq && L4_MATCH(ip6h, proto, uh, seq) &&
-		    seq->p.count < UIO_MAXIOV)
+		    seq->p.count < TAP_SEQS)
 			goto append;
 
 		for (seq = tap6_l4 + seq_count - 1; seq >= tap6_l4; seq--) {
 			if (L4_MATCH(ip6h, proto, uh, seq)) {
-				if (seq->p.count >= UIO_MAXIOV)
+				if (seq->p.count >= TAP_SEQS)
 					seq = NULL;
 				break;
 			}
@@ -586,7 +588,7 @@ resume:
 append:
 		packet_add((struct pool *)&seq->p, l4_len, l4h);
 
-		if (seq_count == UIO_MAXIOV)
+		if (seq_count == TAP_SEQS)
 			break;	/* Resume after flushing if i < count */
 	}
 
@@ -924,9 +926,9 @@ void tap_sock_init(struct ctx *c)
 	pool_tap4_storage = PACKET_INIT(pool_tap4, TAP_MSGS, pkt_buf, sz);
 	pool_tap6_storage = PACKET_INIT(pool_tap6, TAP_MSGS, pkt_buf, sz);
 
-	for (i = 0; i < UIO_MAXIOV; i++) {
-		tap4_l4[i].p = PACKET_INIT(pool_l4, UIO_MAXIOV, pkt_buf, sz);
-		tap6_l4[i].p = PACKET_INIT(pool_l4, UIO_MAXIOV, pkt_buf, sz);
+	for (i = 0; i < TAP_SEQS; i++) {
+		tap4_l4[i].p = PACKET_INIT(pool_l4, TAP_SEQS, pkt_buf, sz);
+		tap6_l4[i].p = PACKET_INIT(pool_l4, TAP_SEQS, pkt_buf, sz);
 	}
 
 	if (c->fd_tap != -1) {

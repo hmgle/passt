@@ -63,7 +63,7 @@ union epoll_ref {
 };
 
 #define TAP_BUF_BYTES							\
-	ROUND_DOWN(((ETH_MAX_MTU + sizeof(uint32_t)) * 256), PAGE_SIZE)
+	ROUND_DOWN(((ETH_MAX_MTU + sizeof(uint32_t)) * 128), PAGE_SIZE)
 #define TAP_BUF_FILL		(TAP_BUF_BYTES - ETH_MAX_MTU - sizeof(uint32_t))
 #define TAP_MSGS							\
 	DIV_ROUND_UP(TAP_BUF_BYTES, ETH_ZLEN - 2 * ETH_ALEN + sizeof(uint32_t))

@@ -70,9 +70,9 @@
  *
  * Data needs to linger on sockets as long as it's not acknowledged by the
  * guest, and is read using MSG_PEEK into preallocated static buffers sized
- * to the maximum supported window, 64MiB ("discard" buffer, for already-sent
+ * to the maximum supported window, 16 MiB ("discard" buffer, for already-sent
  * data) plus a number of maximum-MSS-sized buffers. This imposes a practical
- * limitation on window scaling, that is, the maximum factor is 1024. Larger
+ * limitation on window scaling, that is, the maximum factor is 256. Larger
  * factors will be accepted, but resulting, larger values are never advertised
  * to the other side, and not used while queueing data.
  *
@@ -299,7 +299,7 @@
 #include "conf.h"
 #include "tcp_splice.h"
 
-#define TCP_FRAMES_MEM			256
+#define TCP_FRAMES_MEM			128
 #define TCP_FRAMES							\
 	(c->mode == MODE_PASST ? TCP_FRAMES_MEM : 1)
 
@@ -311,17 +311,48 @@
 #define TCP_HASH_TABLE_SIZE		(TCP_MAX_CONNS * 100 /		\
 					 TCP_HASH_TABLE_LOAD)
 
-#define MAX_WS				10
+#define MAX_WS				8
 #define MAX_WINDOW			(1 << (16 + (MAX_WS)))
 
 /* MSS rounding: see SET_MSS() */
 #define MSS_DEFAULT			536
-#define MSS4	ROUND_DOWN(USHRT_MAX -					\
-			   sizeof(uint32_t) - sizeof(struct ethhdr) -	\
-			   sizeof(struct iphdr) - sizeof(struct tcphdr), 4)
-#define MSS6	ROUND_DOWN(USHRT_MAX -					\
-			   sizeof(uint32_t) - sizeof(struct ethhdr) -	\
-			   sizeof(struct ipv6hdr) - sizeof(struct tcphdr), 4)
+
+struct tcp4_l2_head {	/* For MSS4 macro: keep in sync with tcp4_l2_buf_t */
+	uint32_t psum;
+	uint32_t tsum;
+#ifdef __AVX2__
+	uint8_t pad[18];
+#else
+	uint8_t pad[2];
+#endif
+	uint32_t vnet_len;
+	struct ethhdr eh;
+	struct iphdr iph;
+	struct tcphdr th;
+#ifdef __AVX2__
+} __attribute__ ((packed, aligned(32)));
+#else
+} __attribute__ ((packed, aligned(__alignof__(unsigned int))));
+#endif
+
+struct tcp6_l2_head {	/* For MSS6 macro: keep in sync with tcp6_l2_buf_t */
+#ifdef __AVX2__
+	uint8_t pad[14];
+#else
+	uint8_t pad[2];
+#endif
+	uint32_t vnet_len;
+	struct ethhdr eh;
+	struct ipv6hdr ip6h;
+	struct tcphdr th;
+#ifdef __AVX2__
+} __attribute__ ((packed, aligned(32)));
+#else
+} __attribute__ ((packed, aligned(__alignof__(unsigned int))));
+#endif
+
+#define MSS4	ROUND_DOWN(USHRT_MAX - sizeof(struct tcp4_l2_head), 4)
+#define MSS6	ROUND_DOWN(USHRT_MAX - sizeof(struct tcp6_l2_head), 4)
 
 #define WINDOW_DEFAULT			14600		/* RFC 6928 */
 #ifdef HAS_SND_WND

@@ -43,13 +43,13 @@
 /**
  * struct icmp_id_sock - Tracking information for single ICMP echo identifier
  * @sock:	Bound socket for identifier
- * @ts:		Last associated activity from tap, seconds
  * @seq:	Last sequence number sent to tap, host order
+ * @ts:		Last associated activity from tap, seconds
  */
 struct icmp_id_sock {
 	int sock;
-	time_t ts;
 	uint16_t seq;
+	time_t ts;
 };
 
 /* Indexed by ICMP echo identifier */
@@ -168,6 +168,10 @@ int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 			s = sock_l4(c, AF_INET, IPPROTO_ICMP, id, 0, iref.u32);
 			if (s < 0)
 				goto fail_sock;
+			if (s > SOCKET_MAX) {
+				close(s);
+				return 1;
+			}
 
 			icmp_id_map[V4][id].sock = s;
 		}
@@ -201,6 +205,10 @@ int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 				    iref.u32);
 			if (s < 0)
 				goto fail_sock;
+			if (s > SOCKET_MAX) {
+				close(s);
+				return 1;
+			}
 
 			icmp_id_map[V6][id].sock = s;
 		}
