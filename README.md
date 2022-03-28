@@ -290,6 +290,8 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ✅ no external dependencies (other than a standard C library)
 * ✅ restrictive seccomp profiles (25 syscalls allowed for _passt_, 37 for
   _pasta_ on x86_64)
+* ✅ examples of [AppArmor](/passt/tree/contrib/apparmor) and
+  [SELinux](/passt/tree/contrib/selinux) profiles available
 * ✅ static checkers in continuous integration (clang-tidy, cppcheck)
 * ✅️ clearly defined boundary-checked packet abstraction
 * 🛠️ ~5 000 LoC target

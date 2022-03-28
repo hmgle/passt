@@ -1,0 +1,183 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# contrib/selinux/pasta.te - SELinux profile example: Type Enforcement for pasta
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+policy_module(pasta, 0.1)
+
+require {
+	type unconfined_t;
+	role unconfined_r;
+	class process transition;
+
+	type bin_t;
+	type user_home_t;
+	type user_home_dir_t;
+	type fs_t;
+	type tmp_t;
+	type tmpfs_t;
+	type root_t;
+	type nsfs_t;
+
+	class file { ioctl getattr setattr create read write unlink open relabelto execute_no_trans map execute };
+	class dir { getattr search read write add_name remove_name mounton watch };
+	class chr_file { append read write open getattr ioctl };
+	class filesystem { getattr mount unmount };
+	class lnk_file read;
+
+	type console_device_t;
+	type user_devpts_t;
+	type devlog_t;
+	type syslogd_t;
+	type var_run_t;
+	class unix_dgram_socket { create connect sendto };
+
+	type net_conf_t;
+	type proc_net_t;
+	type node_t;
+	class tcp_socket { create accept listen name_bind name_connect };
+	class udp_socket { create accept listen name_bind };
+	class icmp_socket { bind create name_bind node_bind setopt read write };
+	class sock_file { create unlink write };
+	class unix_stream_socket connectto;
+
+	type ifconfig_var_run_t;
+	class netlink_route_socket { bind create nlmsg_read nlmsg_write setopt };
+	type tun_tap_device_t;
+	type sysctl_net_t;
+	class tun_socket create;
+
+	attribute port_type;
+	type port_t;
+	type http_port_t;
+	type ssh_port_t;
+	type reserved_port_t;
+	type dns_port_t;
+	type dhcpc_port_t;
+	type chronyd_port_t;
+	type llmnr_port_t;
+
+	type hostname_exec_t;
+	type system_dbusd_var_run_t;
+	type system_dbusd_t;
+	type systemd_hostnamed_t;
+	type systemd_systemctl_exec_t;
+	type passwd_file_t;
+	type sssd_public_t;
+	type sssd_var_lib_t;
+	class dbus send_msg;
+	class system module_request;
+	class system status;
+
+	type kernel_t;
+	class process setpgid;
+	type shell_exec_t;
+	type init_t;
+
+	class cap_userns { setpcap sys_admin sys_ptrace net_bind_service net_admin };
+}
+
+type pasta_t;
+domain_type(pasta_t);
+type pasta_exec_t;
+files_type(pasta_exec_t);
+type pasta_log_t;
+logging_log_file(pasta_log_t);
+type pasta_pid_t;
+files_pid_file(pasta_pid_t);
+
+type pasta_port_t;
+typeattribute pasta_port_t port_type;
+
+role unconfined_r types pasta_t;
+
+allow pasta_t pasta_exec_t : file { ioctl read getattr lock execute execute_no_trans entrypoint open } ;
+type_transition unconfined_t pasta_exec_t : process pasta_t;
+allow unconfined_t pasta_t : process transition ;
+
+init_daemon_domain(pasta_t, pasta_exec_t)
+
+allow pasta_t self:capability { setpcap net_bind_service sys_tty_config dac_read_search net_admin sys_resource };
+allow pasta_t self:cap_userns { setpcap sys_admin sys_ptrace net_admin net_bind_service };
+
+allow pasta_t bin_t:file { execute execute_no_trans map };
+allow pasta_t nsfs_t:file { open read };
+
+allow pasta_t user_home_t:dir getattr;
+allow pasta_t user_home_t:file { open read getattr setattr };
+allow pasta_t user_home_dir_t:dir { search getattr open add_name read write };
+allow pasta_t user_home_dir_t:file { create open read write };
+allow pasta_t tmp_t:dir { add_name mounton remove_name write };
+allow pasta_t tmpfs_t:filesystem mount;
+allow pasta_t fs_t:filesystem unmount;
+allow pasta_t root_t:dir mounton;
+manage_files_pattern(pasta_t, pasta_pid_t, pasta_pid_t)
+files_pid_filetrans(pasta_t, pasta_pid_t, file)
+
+allow pasta_t console_device_t:chr_file { open write getattr ioctl };
+allow pasta_t user_devpts_t:chr_file { getattr read write ioctl };
+logging_send_syslog_msg(pasta_t)
+allow syslogd_t self:cap_userns sys_ptrace;
+
+allow pasta_t proc_net_t:file { open read };
+allow pasta_t net_conf_t:file { open read };
+allow pasta_t self:netlink_route_socket { bind create nlmsg_read nlmsg_write setopt read write };
+
+allow pasta_t tmp_t:sock_file { create unlink write };
+
+allow pasta_t self:tcp_socket create_stream_socket_perms;
+corenet_tcp_sendrecv_generic_node(pasta_t)
+corenet_tcp_bind_generic_node(pasta_t)
+allow pasta_t pasta_port_t:tcp_socket { name_bind name_connect };
+allow pasta_t pasta_port_t:udp_socket { name_bind };
+allow pasta_t http_port_t:tcp_socket { name_bind name_connect };
+allow pasta_t chronyd_port_t:udp_socket name_bind;
+allow pasta_t dhcpc_port_t:udp_socket name_bind;
+allow pasta_t dns_port_t:tcp_socket name_bind;
+allow pasta_t dns_port_t:udp_socket name_bind;
+allow pasta_t ssh_port_t:tcp_socket name_bind;
+allow pasta_t self:udp_socket create_stream_socket_perms;
+allow pasta_t reserved_port_t:udp_socket name_bind;
+allow pasta_t llmnr_port_t:tcp_socket name_bind;
+allow pasta_t llmnr_port_t:udp_socket name_bind;
+corenet_udp_sendrecv_generic_node(pasta_t)
+corenet_udp_bind_generic_node(pasta_t)
+allow pasta_t node_t:icmp_socket { name_bind node_bind };
+allow pasta_t self:icmp_socket { bind create setopt read write };
+
+allow pasta_t init_t:dir search;
+allow pasta_t init_t:file { getattr open read };
+allow pasta_t init_t:lnk_file read;
+allow pasta_t init_t:unix_stream_socket connectto;
+allow pasta_t init_t:dbus send_msg;
+allow pasta_t init_t:system status;
+allow pasta_t unconfined_t:dir search;
+allow pasta_t unconfined_t:file read;
+allow pasta_t unconfined_t:lnk_file read;
+allow pasta_t passwd_file_t:file { getattr open read };
+allow pasta_t self:process setpgid;
+allow pasta_t shell_exec_t:file { execute execute_no_trans map };
+
+allow pasta_t sssd_var_lib_t:dir search;
+allow pasta_t sssd_public_t:dir search;
+allow pasta_t hostname_exec_t:file { execute execute_no_trans getattr open read map };
+allow pasta_t system_dbusd_t:unix_stream_socket connectto;
+allow pasta_t system_dbusd_t:dbus send_msg;
+allow pasta_t system_dbusd_var_run_t:dir search;
+allow pasta_t system_dbusd_var_run_t:sock_file write;
+allow pasta_t systemd_hostnamed_t:dbus send_msg;
+allow pasta_t systemd_systemctl_exec_t:file { execute execute_no_trans getattr open read map };
+
+allow pasta_t ifconfig_var_run_t:dir { read search watch };
+allow pasta_t self:tun_socket create;
+allow pasta_t tun_tap_device_t:chr_file { ioctl open read write };
+allow pasta_t sysctl_net_t:dir search;
+allow pasta_t sysctl_net_t:file { open write };
+allow pasta_t kernel_t:system module_request;
+
+

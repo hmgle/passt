@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# contrib/selinux/passt.te - SELinux profile example: Type Enforcement for passt
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+policy_module(passt, 0.1)
+
+require {
+	type unconfined_t;
+	role unconfined_r;
+	class process transition;
+
+	type bin_t;
+	type user_home_dir_t;
+	type fs_t;
+	type tmp_t;
+	type tmpfs_t;
+	type root_t;
+
+	class file { ioctl getattr setattr create read write unlink open relabelto execute execute_no_trans map };
+	class dir { search write add_name remove_name mounton };
+	class chr_file { append read write open getattr ioctl };
+	class filesystem { getattr mount unmount };
+
+	type console_device_t;
+	type user_devpts_t;
+	type devlog_t;
+	type syslogd_t;
+	type var_run_t;
+	class unix_dgram_socket { create connect sendto };
+
+	type net_conf_t;
+	type proc_net_t;
+	type node_t;
+	class tcp_socket { create accept listen name_bind name_connect };
+	class udp_socket { create accept listen };
+	class icmp_socket { bind create name_bind node_bind setopt read write };
+	class sock_file { create unlink write };
+
+	attribute port_type;
+	type port_t;
+	type http_port_t;
+
+	class netlink_route_socket { bind create nlmsg_read };
+
+	class capability sys_tty_config;
+	class cap_userns { setpcap sys_admin sys_ptrace };
+}
+
+type passt_t;
+domain_type(passt_t);
+type passt_exec_t;
+files_type(passt_exec_t);
+type passt_log_t;
+logging_log_file(passt_log_t);
+type passt_pid_t;
+files_pid_file(passt_pid_t);
+type passt_etc_t;
+files_config_file(passt_etc_t);
+
+type passt_port_t;
+typeattribute passt_port_t port_type;
+
+role unconfined_r types passt_t;
+
+allow passt_t passt_exec_t : file { ioctl read getattr lock execute execute_no_trans entrypoint open } ;
+type_transition unconfined_t passt_exec_t : process passt_t;
+allow unconfined_t passt_t : process transition ;
+
+init_daemon_domain(passt_t, passt_exec_t)
+
+allow passt_t bin_t:file { execute execute_no_trans map };
+allow passt_t user_home_dir_t:dir { search add_name write };
+allow passt_t user_home_dir_t:file { create open write };
+allow passt_t root_t:dir mounton;
+allow passt_t tmp_t:dir { add_name mounton remove_name write };
+allow passt_t tmpfs_t:filesystem mount;
+allow passt_t fs_t:filesystem unmount;
+
+manage_files_pattern(passt_t, passt_pid_t, passt_pid_t)
+files_pid_filetrans(passt_t, passt_pid_t, file)
+
+allow passt_t console_device_t:chr_file { open write getattr ioctl };
+allow passt_t user_devpts_t:chr_file { getattr read write ioctl };
+logging_send_syslog_msg(passt_t)
+allow syslogd_t self:cap_userns sys_ptrace;
+
+allow passt_t self:capability { sys_tty_config setpcap net_bind_service };
+allow passt_t self:cap_userns { setpcap sys_admin sys_ptrace };
+
+allow passt_t proc_net_t:file read;
+allow passt_t net_conf_t:file { open read };
+allow passt_t tmp_t:sock_file { create unlink write };
+allow passt_t self:netlink_route_socket { bind create nlmsg_read read write };
+
+allow passt_t self:tcp_socket create_stream_socket_perms;
+corenet_tcp_sendrecv_generic_node(passt_t)
+corenet_tcp_bind_generic_node(passt_t)
+allow passt_t passt_port_t:tcp_socket { name_bind name_connect };
+allow passt_t http_port_t:tcp_socket { name_bind name_connect };
+allow passt_t self:udp_socket create_stream_socket_perms;
+corenet_udp_sendrecv_generic_node(passt_t)
+corenet_udp_bind_generic_node(passt_t)
+allow passt_t passt_port_t:udp_socket { name_bind };
+allow passt_t node_t:icmp_socket { name_bind node_bind };
+allow passt_t self:icmp_socket { bind create setopt read write };

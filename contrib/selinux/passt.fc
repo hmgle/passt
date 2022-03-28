@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# contrib/selinux/passt.fc - SELinux profile example: File Context for passt
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+/usr/bin/passt(\.*)?		system_u:object_r:passt_exec_t:s0
+/tmp/passt\.pcap		system_u:object_r:passt_log_t:s0
+/var/run/passt\.pid		system_u:object_r:passt_pid_t:s0

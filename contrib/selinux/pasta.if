@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# contrib/selinux/pasta.if - SELinux profile example: Interface File for pasta
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+interface('passt_read_data','
+	gen_require(`
+		type passt_data_t;
+	')
+	allow $1 passt_t:dir { search add_name };
+	allow $1 passt_t:file { open read getattr };
+')
+
+interface('pasta_read_data','
+	gen_require(`
+		type pasta_data_t;
+	')
+	allow $1 pasta_t:dir { search add_name };
+	allow $1 pasta_t:file { open read getattr };
+')

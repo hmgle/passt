@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# contrib/selinux/pasta.fc - SELinux profile example: File Context for pasta
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+/usr/bin/pasta(\.*)?		system_u:object_r:pasta_exec_t:s0
+/tmp/pasta\.pcap		system_u:object_r:pasta_log_t:s0
+/var/run/pasta\.pid		system_u:object_r:pasta_pid_t:s0
