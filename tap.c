@@ -873,6 +873,8 @@ static int tun_ns_fd = -1;
  * @c:		Execution context
  *
  * Return: 0
+ *
+ * #syscalls:pasta ioctl openat
  */
 static int tap_ns_tun(void *arg)
 {
