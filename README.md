@@ -343,7 +343,7 @@ speeding up local connections, and usually requiring NAT. _pasta_:
   x86_64 (static builds)
 * ✅ testing on non-x86_64 architectures (aarch64, armv7l, i386, ppc64, ppc64le,
   s390x)
-* ✅ example Debian [package files](passt/tree/contrib/debian),
+* ✅ example Debian [package files](/passt/tree/contrib/debian),
   example [`spec` file](/passt/tree/contrib/fedora) for Fedora
 * 🛠 official
   [OpenSUSE packages](https://build.opensuse.org/package/show/home:mnhauke/passt)
