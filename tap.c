@@ -713,8 +713,11 @@ next:
  */
 static int tap_handler_pasta(struct ctx *c, const struct timespec *now)
 {
-	ssize_t n = 0, len;
+	ssize_t n, len;
 	int ret;
+
+redo:
+	n = 0;
 
 	pool_flush(pool_tap4);
 	pool_flush(pool_tap6);
@@ -746,7 +749,8 @@ restart:
 			break;
 		}
 
-		n += len;
+		if ((n += len) == TAP_BUF_BYTES)
+			break;
 	}
 
 	if (len < 0 && errno == EINTR)
@@ -759,6 +763,9 @@ restart:
 
 	if (len > 0 || ret == EAGAIN)
 		return 0;
+
+	if (n == TAP_BUF_BYTES)
+		goto redo;
 
 	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_tap, NULL);
 	close(c->fd_tap);
