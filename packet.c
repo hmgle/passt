@@ -53,12 +53,12 @@ void packet_add_do(struct pool *p, size_t len, const char *start,
 	}
 
 	if (len > UINT16_MAX) {
-		trace("add packet length %lu, %s:%i", func, line);
+		trace("add packet length %lu, %s:%i", len, func, line);
 		return;
 	}
 
 	if ((unsigned int)((intptr_t)start - (intptr_t)p->buf) > UINT32_MAX) {
-		trace("add packet start %p, buffer start %lu, %s:%i",
+		trace("add packet start %p, buffer start %p, %s:%i",
 		      start, p->buf, func, line);
 		return;
 	}
@@ -111,7 +111,7 @@ void *packet_get_do(const struct pool *p, size_t index, size_t offset,
 
 	if (len + offset > p->pkt[index].len) {
 		if (func) {
-			trace("data length %lu, offset %lu from length %lu, "
+			trace("data length %lu, offset %lu from length %u, "
 			      "%s:%i", len, offset, p->pkt[index].len,
 			      func, line);
 		}

@@ -88,7 +88,7 @@ void pcap(const char *pkt, size_t len)
 	h.caplen = h.len = len;
 
 	if (write(pcap_fd, &h, sizeof(h)) < 0 || write(pcap_fd, pkt, len) < 0)
-		debug("Cannot log packet, length %u", len);
+		debug("Cannot log packet, length %lu", len);
 }
 
 /**
@@ -123,7 +123,7 @@ void pcapm(const struct msghdr *mh)
 
 	return;
 fail:
-	debug("Cannot log packet, length %u", iov->iov_len - 4);
+	debug("Cannot log packet, length %lu", iov->iov_len - 4);
 }
 
 /**
@@ -161,7 +161,7 @@ void pcapmm(const struct mmsghdr *mmh, unsigned int vlen)
 	}
 	return;
 fail:
-	debug("Cannot log packet, length %u", iov->iov_len - 4);
+	debug("Cannot log packet, length %lu", iov->iov_len - 4);
 }
 
 /**

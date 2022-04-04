@@ -173,14 +173,14 @@ static void conn_flag_do(const struct ctx *c, struct tcp_splice_conn *conn,
 			return;
 
 		conn->flags &= flag;
-		debug("TCP (spliced): index %i: %s dropped", (conn) - tc,
+		debug("TCP (spliced): index %li: %s dropped", conn - tc,
 		      tcp_splice_flag_str[fls(~flag)]);
 	} else {
 		if (conn->flags & flag)
 			return;
 
 		conn->flags |= flag;
-		debug("TCP (spliced): index %i: %s", (conn) - tc,
+		debug("TCP (spliced): index %li: %s", conn - tc,
 		      tcp_splice_flag_str[fls(flag)]);
 	}
 
@@ -253,14 +253,14 @@ static void conn_event_do(const struct ctx *c, struct tcp_splice_conn *conn,
 			return;
 
 		conn->events &= event;
-		debug("TCP (spliced): index %i, ~%s", conn - tc,
+		debug("TCP (spliced): index %li, ~%s", conn - tc,
 		      tcp_splice_event_str[fls(~event)]);
 	} else {
 		if (conn->events & event)
 			return;
 
 		conn->events |= event;
-		debug("TCP (spliced): index %i, %s", conn - tc,
+		debug("TCP (spliced): index %li, %s", conn - tc,
 		      tcp_splice_event_str[fls(event)]);
 	}
 
@@ -286,7 +286,7 @@ static void tcp_table_splice_compact(struct ctx *c,
 	struct tcp_splice_conn *move;
 
 	if ((hole - tc) == --c->tcp.splice_conn_count) {
-		debug("TCP (spliced): index %i (max) removed", hole - tc);
+		debug("TCP (spliced): index %li (max) removed", hole - tc);
 		return;
 	}
 
@@ -300,7 +300,7 @@ static void tcp_table_splice_compact(struct ctx *c,
 	move->pipe_b_a[0] = move->pipe_b_a[1] = -1;
 	move->flags = move->events = 0;
 
-	debug("TCP (spliced): index %i moved to %i", move - tc, hole - tc);
+	debug("TCP (spliced): index %li moved to %li", move - tc, hole - tc);
 	tcp_splice_epoll_ctl(c, hole);
 	if (tcp_splice_epoll_ctl(c, hole))
 		conn_flag(c, hole, CLOSING);
@@ -338,7 +338,7 @@ static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
 
 	conn->events = CLOSED;
 	conn->flags = 0;
-	debug("TCP (spliced): index %i, CLOSED", conn - tc);
+	debug("TCP (spliced): index %li, CLOSED", conn - tc);
 
 	tcp_table_splice_compact(c, conn);
 }

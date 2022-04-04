@@ -848,7 +848,7 @@ static void tcp_timer_ctl(const struct ctx *c, struct tcp_conn *conn)
 		it.it_value.tv_sec = ACT_TIMEOUT;
 	}
 
-	debug("TCP: index %i, timer expires in %u.%03us", conn - tc,
+	debug("TCP: index %li, timer expires in %lu.%03lus", conn - tc,
 	      it.it_value.tv_sec, it.it_value.tv_nsec / 1000 / 1000);
 
 	timerfd_settime(conn->timer, 0, &it, NULL);
@@ -868,14 +868,14 @@ static void conn_flag_do(const struct ctx *c, struct tcp_conn *conn,
 			return;
 
 		conn->flags &= flag;
-		debug("TCP: index %i: %s dropped", (conn) - tc,
+		debug("TCP: index %li: %s dropped", conn - tc,
 		      tcp_flag_str[fls(~flag)]);
 	} else {
 		if (conn->flags & flag)
 			return;
 
 		conn->flags |= flag;
-		debug("TCP: index %i: %s", (conn) - tc,
+		debug("TCP: index %li: %s", conn - tc,
 		      tcp_flag_str[fls(flag)]);
 	}
 
@@ -924,12 +924,12 @@ static void conn_event_do(const struct ctx *c, struct tcp_conn *conn,
 		new += 5;
 
 	if (prev != new) {
-		debug("TCP: index %i, %s: %s -> %s", (conn) - tc,
+		debug("TCP: index %li, %s: %s -> %s", conn - tc,
 		      num == -1 	       ? "CLOSED" : tcp_event_str[num],
 		      prev == -1	       ? "CLOSED" : tcp_state_str[prev],
 		      (new == -1 || num == -1) ? "CLOSED" : tcp_state_str[new]);
 	} else {
-		debug("TCP: index %i, %s", (conn) - tc,
+		debug("TCP: index %li, %s", conn - tc,
 		      num == -1 	       ? "CLOSED" : tcp_event_str[num]);
 	}
 
@@ -1371,8 +1371,8 @@ static void tcp_hash_insert(const struct ctx *c, struct tcp_conn *conn,
 	tc_hash[b] = conn;
 	conn->hash_bucket = b;
 
-	debug("TCP: hash table insert: index %i, sock %i, bucket: %i, next: %p",
-	      conn - tc, conn->sock, b, CONN_OR_NULL(conn->next_index));
+	debug("TCP: hash table insert: index %li, sock %i, bucket: %i, next: "
+	      "%p", conn - tc, conn->sock, b, CONN_OR_NULL(conn->next_index));
 }
 
 /**
@@ -1395,7 +1395,7 @@ static void tcp_hash_remove(const struct tcp_conn *conn)
 		}
 	}
 
-	debug("TCP: hash table remove: index %i, sock %i, bucket: %i, new: %p",
+	debug("TCP: hash table remove: index %li, sock %i, bucket: %i, new: %p",
 	      conn - tc, conn->sock, b,
 	      prev ? CONN_OR_NULL(prev->next_index) : tc_hash[b]);
 }
@@ -1421,7 +1421,7 @@ static void tcp_hash_update(struct tcp_conn *old, struct tcp_conn *new)
 		}
 	}
 
-	debug("TCP: hash table update: old index %i, new index %i, sock %i, "
+	debug("TCP: hash table update: old index %li, new index %li, sock %i, "
 	      "bucket: %i, old: %p, new: %p",
 	      old - tc, new - tc, new->sock, b, old, new);
 }
@@ -1461,7 +1461,7 @@ static void tcp_table_compact(struct ctx *c, struct tcp_conn *hole)
 	struct tcp_conn *from, *to;
 
 	if ((hole - tc) == --c->tcp.conn_count) {
-		debug("TCP: hash table compaction: index %i (%p) was max index",
+		debug("TCP: hash table compaction: maximum index was %li (%p)",
 		      hole - tc, hole);
 		memset(hole, 0, sizeof(*hole));
 		return;
@@ -1475,7 +1475,7 @@ static void tcp_table_compact(struct ctx *c, struct tcp_conn *hole)
 
 	tcp_epoll_ctl(c, to);
 
-	debug("TCP: hash table compaction: old index %i, new index %i, "
+	debug("TCP: hash table compaction: old index %li, new index %li, "
 	      "sock %i, from: %p, to: %p",
 	      from - tc, to - tc, from->sock, from, to);
 
@@ -1500,7 +1500,7 @@ static void tcp_conn_destroy(struct ctx *c, struct tcp_conn *conn)
 static void tcp_rst_do(struct ctx *c, struct tcp_conn *conn);
 #define tcp_rst(c, conn)						\
 	do {								\
-		debug("TCP: index %i, reset at %s:%i", conn - tc,	\
+		debug("TCP: index %li, reset at %s:%i", conn - tc,	\
 		      __func__, __LINE__);				\
 		tcp_rst_do(c, conn);					\
 	} while (0)
@@ -2357,7 +2357,7 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_conn *conn)
 
 	if (SEQ_LT(already_sent, 0)) {
 		/* RFC 761, section 2.1. */
-		trace("TCP: ACK sequence gap: ACK for %lu, sent: %lu",
+		trace("TCP: ACK sequence gap: ACK for %u, sent: %u",
 		      conn->seq_ack_from_tap, conn->seq_to_tap);
 		conn->seq_to_tap = conn->seq_ack_from_tap;
 		already_sent = 0;
@@ -2589,7 +2589,7 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_conn *conn,
 	}
 
 	if (retr) {
-		trace("TCP: fast re-transmit, ACK: %lu, previous sequence: %lu",
+		trace("TCP: fast re-transmit, ACK: %u, previous sequence: %u",
 		      max_ack_seq, conn->seq_to_tap);
 		conn->seq_ack_from_tap = max_ack_seq;
 		conn->seq_to_tap = max_ack_seq;
@@ -2956,17 +2956,17 @@ static void tcp_timer_handler(struct ctx *c, union epoll_ref ref)
 		conn_flag(c, conn, ~ACK_TO_TAP_DUE);
 	} else if (conn->flags & ACK_FROM_TAP_DUE) {
 		if (!(conn->events & ESTABLISHED)) {
-			debug("TCP: index %i, handshake timeout", conn - tc);
+			debug("TCP: index %li, handshake timeout", conn - tc);
 			tcp_rst(c, conn);
 		} else if (CONN_HAS(conn, SOCK_FIN_SENT | TAP_FIN_ACKED)) {
-			debug("TCP: index %i, FIN timeout", conn - tc);
+			debug("TCP: index %li, FIN timeout", conn - tc);
 			tcp_rst(c, conn);
 		} else if (conn->retrans == TCP_MAX_RETRANS) {
-			debug("TCP: index %i, maximum retransmissions exceeded",
+			debug("TCP: index %li, retransmissions count exceeded",
 			      conn - tc);
 			tcp_rst(c, conn);
 		} else {
-			debug("TCP: index %i, ACK timeout, retry", conn - tc);
+			debug("TCP: index %li, ACK timeout, retry", conn - tc);
 			conn->retrans++;
 			conn->seq_to_tap = conn->seq_ack_from_tap;
 			tcp_data_from_sock(c, conn);
@@ -2984,7 +2984,7 @@ static void tcp_timer_handler(struct ctx *c, union epoll_ref ref)
 		 */
 		timerfd_settime(conn->timer, 0, &new, &old);
 		if (old.it_value.tv_sec == ACT_TIMEOUT) {
-			debug("TCP: index %i, activity timeout", conn - tc);
+			debug("TCP: index %li, activity timeout", conn - tc);
 			tcp_rst(c, conn);
 		}
 	}
