@@ -58,6 +58,18 @@ void trace_init(int enable);
 #define TMPDIR		"/tmp"
 #endif
 
+#define FWRITE(path, buf, str)						\
+	do {								\
+		int flags = O_WRONLY | O_CLOEXEC;			\
+		int fd = open(path, flags);				\
+									\
+		if (fd < 0 ||						\
+		    write(fd, buf, strlen(buf)) != (int)strlen(buf))	\
+			warn(str);					\
+		if (fd >= 0)						\
+			close(fd);					\
+	} while (0)
+
 #define V4		0
 #define V6		1
 #define IP_VERSIONS	2

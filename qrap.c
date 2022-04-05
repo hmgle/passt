@@ -234,15 +234,15 @@ int main(int argc, char **argv)
 valid_args:
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
 		s = socket(AF_UNIX, SOCK_STREAM, 0);
-		if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)))
-			perror("setsockopt SO_RCVTIMEO");
-		if (setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)))
-			perror("setsockopt SO_SNDTIMEO");
-
 		if (s < 0) {
 			perror("socket");
 			exit(EXIT_FAILURE);
 		}
+
+		if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)))
+			perror("setsockopt SO_RCVTIMEO");
+		if (setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)))
+			perror("setsockopt SO_SNDTIMEO");
 
 		snprintf(addr.sun_path, UNIX_PATH_MAX, UNIX_SOCK_PATH, i);
 		if (connect(s, (const struct sockaddr *)&addr, sizeof(addr)))

@@ -803,6 +803,11 @@ static void tap_sock_unix_init(struct ctx *c)
 			snprintf(path, UNIX_PATH_MAX, UNIX_SOCK_PATH, i);
 
 		ex = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
+		if (ex < 0) {
+			perror("UNIX domain socket check");
+			exit(EXIT_FAILURE);
+		}
+
 		ret = connect(ex, (const struct sockaddr *)&addr, sizeof(addr));
 		if (!ret || (errno != ENOENT && errno != ECONNREFUSED)) {
 			if (*c->sock_path) {

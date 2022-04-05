@@ -120,33 +120,24 @@ static int pasta_setup_ns(void *arg)
 {
 	struct pasta_setup_ns_arg *a = (struct pasta_setup_ns_arg *)arg;
 	char *shell;
-	int fd;
 
 	if (!a->c->netns_only) {
 		char buf[BUFSIZ];
 
 		snprintf(buf, BUFSIZ, "%i %i %i", 0, a->euid, 1);
 
-		fd = open("/proc/self/uid_map", O_WRONLY | O_CLOEXEC);
-		if (write(fd, buf, strlen(buf)) < 0)
-			warn("Cannot set uid_map in namespace");
-		close(fd);
+		FWRITE("/proc/self/uid_map", buf,
+		       "Cannot set uid_map in namespace");
 
-		fd = open("/proc/self/setgroups", O_WRONLY | O_CLOEXEC);
-		if (write(fd, "deny", sizeof("deny")) < 0)
-			warn("Cannot write to setgroups in namespace");
-		close(fd);
+		FWRITE("/proc/self/setgroups", "deny",
+		       "Cannot write to setgroups in namespace");
 
-		fd = open("/proc/self/gid_map", O_WRONLY | O_CLOEXEC);
-		if (write(fd, buf, strlen(buf)) < 0)
-			warn("Cannot set gid_map in namespace");
-		close(fd);
+		FWRITE("/proc/self/gid_map", buf,
+		       "Cannot set gid_map in namespace");
 	}
 
-	fd = open("/proc/sys/net/ipv4/ping_group_range", O_WRONLY | O_CLOEXEC);
-	if (write(fd, "0 0", strlen("0 0")) < 0)
-		warn("Cannot set ping_group_range, ICMP requests might fail");
-	close(fd);
+	FWRITE("/proc/sys/net/ipv4/ping_group_range", "0 0",
+	       "Cannot set ping_group_range, ICMP requests might fail");
 
 	shell = getenv("SHELL") ? getenv("SHELL") : "/bin/sh";
 	if (strstr(shell, "/bash"))
