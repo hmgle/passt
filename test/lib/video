@@ -48,7 +48,7 @@ for (var i = 0; i < video___VIDEO_NAME__links.length; i++) {
 		__VIDEO_NAME___player = AsciinemaPlayer.create(
 			"/builds/latest/web/__VIDEO_NAME__.cast",
 			__VIDEO_NAME___div,
-			{ startAt: seek, autoplay: true });
+			{ cols: 240, rows: 51, poster: "npt:999:0", startAt: seek, autoplay: true });
 
 		window.scrollTo({ top: top, behavior: "smooth" })
 	}, false);

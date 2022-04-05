@@ -117,7 +117,7 @@ for (var i = 0; i < perf_links.length; i++) {
 		ci_player.dispose();
 		ci_player = AsciinemaPlayer.create("/builds/latest/web/ci.cast",
 						   ci_video,
-						   { startAt: seek, autoplay: true });
+						   { cols: 240, rows: 51, poster: "npt:999:0", startAt: seek, autoplay: true });
 
 		window.scrollTo({ top: top, behavior: "smooth" })
 	}, false);
