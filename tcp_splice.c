@@ -170,15 +170,19 @@ static void conn_flag_do(const struct ctx *c, struct tcp_splice_conn *conn,
 			return;
 
 		conn->flags &= flag;
-		debug("TCP (spliced): index %li: %s dropped", conn - tc,
-		      tcp_splice_flag_str[fls(~flag)]);
+		if (fls(~flag) >= 0) {
+			debug("TCP (spliced): index %li: %s dropped", conn - tc,
+			      tcp_splice_flag_str[fls(~flag)]);
+		}
 	} else {
 		if (conn->flags & flag)
 			return;
 
 		conn->flags |= flag;
-		debug("TCP (spliced): index %li: %s", conn - tc,
-		      tcp_splice_flag_str[fls(flag)]);
+		if (fls(flag) >= 0) {
+			debug("TCP (spliced): index %li: %s", conn - tc,
+			      tcp_splice_flag_str[fls(flag)]);
+		}
 	}
 
 	if (flag == CLOSING)
@@ -250,15 +254,19 @@ static void conn_event_do(const struct ctx *c, struct tcp_splice_conn *conn,
 			return;
 
 		conn->events &= event;
-		debug("TCP (spliced): index %li, ~%s", conn - tc,
-		      tcp_splice_event_str[fls(~event)]);
+		if (fls(~event) >= 0) {
+			debug("TCP (spliced): index %li, ~%s", conn - tc,
+			      tcp_splice_event_str[fls(~event)]);
+		}
 	} else {
 		if (conn->events & event)
 			return;
 
 		conn->events |= event;
-		debug("TCP (spliced): index %li, %s", conn - tc,
-		      tcp_splice_event_str[fls(event)]);
+		if (fls(event) >= 0) {
+			debug("TCP (spliced): index %li, %s", conn - tc,
+			      tcp_splice_event_str[fls(event)]);
+		}
 	}
 
 	if (tcp_splice_epoll_ctl(c, conn))

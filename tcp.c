@@ -868,15 +868,19 @@ static void conn_flag_do(const struct ctx *c, struct tcp_conn *conn,
 			return;
 
 		conn->flags &= flag;
-		debug("TCP: index %li: %s dropped", conn - tc,
-		      tcp_flag_str[fls(~flag)]);
+		if (fls(~flag) >= 0) {
+			debug("TCP: index %li: %s dropped", conn - tc,
+			      tcp_flag_str[fls(~flag)]);
+		}
 	} else {
 		if (conn->flags & flag)
 			return;
 
 		conn->flags |= flag;
-		debug("TCP: index %li: %s", conn - tc,
-		      tcp_flag_str[fls(flag)]);
+		if (fls(flag) >= 0) {
+			debug("TCP: index %li: %s", conn - tc,
+			      tcp_flag_str[fls(flag)]);
+		}
 	}
 
 	if (flag == STALLED || flag == ~STALLED)
