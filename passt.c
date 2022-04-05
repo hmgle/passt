@@ -421,13 +421,22 @@ int main(int argc, char **argv)
 
 	pcap_init(&c);
 
-	if (!c.foreground)
+	if (!c.foreground) {
 		/* NOLINTNEXTLINE(android-cloexec-open): see __daemon() */
-		devnull_fd = open("/dev/null", O_RDWR);
+		if ((devnull_fd = open("/dev/null", O_RDWR)) < 0) {
+			perror("/dev/null open");
+			exit(EXIT_FAILURE);
+		}
+	}
 
-	if (*c.pid_file)
-		pidfile_fd = open(c.pid_file, O_CREAT | O_WRONLY | O_CLOEXEC,
-				  S_IRUSR | S_IWUSR);
+	if (*c.pid_file) {
+		if ((pidfile_fd = open(c.pid_file,
+				       O_CREAT | O_WRONLY | O_CLOEXEC,
+				       S_IRUSR | S_IWUSR)) < 0) {
+			perror("PID file open");
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	if (sandbox(&c)) {
 		err("Failed to sandbox process, exiting\n");
