@@ -2729,7 +2729,7 @@ int tcp_tap_handler(struct ctx *c, int af, const void *addr,
 
 	/* New connection from tap */
 	if (!conn) {
-		if (th->syn && !th->ack)
+		if (opts && th->syn && !th->ack)
 			tcp_conn_from_tap(c, af, addr, th, opts, optlen, now);
 		return 1;
 	}
