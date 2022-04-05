@@ -195,6 +195,7 @@ static void seccomp(const struct ctx *c)
  */
 static void check_root(void)
 {
+	const char root_uid_map[] = "         0          0 4294967295";
 	struct passwd *pw;
 	char buf[BUFSIZ];
 	int fd;
@@ -205,8 +206,8 @@ static void check_root(void)
 	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0)
 		return;
 
-	if (read(fd, buf, BUFSIZ) > 0 &&
-	    strcmp(buf, "         0          0 4294967295")) {
+	if (read(fd, buf, BUFSIZ) != sizeof(root_uid_map) ||
+	    strncmp(buf, root_uid_map, sizeof(root_uid_map) - 1)) {
 		close(fd);
 		return;
 	}
