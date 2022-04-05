@@ -369,6 +369,7 @@ static int conf_ns_opt(struct ctx *c,
 	int ufd = -1, nfd = -1, try, ret, netns_only_reset = c->netns_only;
 	char userns[PATH_MAX] = { 0 }, netns[PATH_MAX];
 	char *endptr;
+	long pid_arg;
 	pid_t pid;
 
 	if (c->netns_only && *conf_userns) {
@@ -379,9 +380,11 @@ static int conf_ns_opt(struct ctx *c,
 	/* It might be a PID, a netns path, or a netns name */
 	for (try = 0; try < 3; try++) {
 		if (try == 0) {
-			pid = strtol(optarg, &endptr, 10);
-			if (*endptr || pid > INT_MAX)
+			pid_arg = strtol(optarg, &endptr, 10);
+			if (*endptr || pid_arg < 0 || pid_arg > INT_MAX)
 				continue;
+
+			pid = pid_arg;
 
 			if (!*conf_userns && !c->netns_only) {
 				ret = snprintf(userns, PATH_MAX,

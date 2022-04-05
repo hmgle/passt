@@ -57,11 +57,13 @@ void packet_add_do(struct pool *p, size_t len, const char *start,
 		return;
 	}
 
-	if ((unsigned int)((intptr_t)start - (intptr_t)p->buf) > UINT32_MAX) {
+#if UINTPTR_MAX == UINT64_MAX
+	if ((uintptr_t)start - (uintptr_t)p->buf > UINT32_MAX) {
 		trace("add packet start %p, buffer start %p, %s:%i",
 		      start, p->buf, func, line);
 		return;
 	}
+#endif
 
 	p->pkt[index].offset = start - p->buf;
 	p->pkt[index].len = len;
