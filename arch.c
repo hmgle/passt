@@ -22,6 +22,8 @@
  * @argv:	Arguments from command line
  */
 #ifdef __x86_64__
+static char avx2_path[PATH_MAX];
+
 void arch_avx2_exec(char **argv)
 {
 	char *p = strstr(argv[0], ".avx2");
@@ -29,11 +31,9 @@ void arch_avx2_exec(char **argv)
 	if (p) {
 		*p = 0;
 	} else if (__builtin_cpu_supports("avx2")) {
-		char path[PATH_MAX];
-
-		snprintf(path, PATH_MAX, "%s.avx2", argv[0]);
-		argv[0] = path;
-		execve(path, argv, environ);
+		snprintf(avx2_path, PATH_MAX, "%s.avx2", argv[0]);
+		argv[0] = avx2_path;
+		execve(avx2_path, argv, environ);
 		perror("Can't run AVX2 build, using non-AVX2 version");
 	}
 }
