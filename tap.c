@@ -798,9 +798,9 @@ static void tap_sock_unix_init(struct ctx *c)
 		char *path = addr.sun_path;
 
 		if (*c->sock_path)
-			strncpy(path, c->sock_path, UNIX_PATH_MAX);
+			memcpy(path, c->sock_path, UNIX_PATH_MAX);
 		else
-			snprintf(path, UNIX_PATH_MAX, UNIX_SOCK_PATH, i);
+			snprintf(path, UNIX_PATH_MAX - 1, UNIX_SOCK_PATH, i);
 
 		ex = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
 		if (ex < 0) {
@@ -899,7 +899,7 @@ static int tap_ns_tun(void *arg)
 	int flags = O_RDWR | O_NONBLOCK | O_CLOEXEC;
 	struct ctx *c = (struct ctx *)arg;
 
-	strncpy(ifr.ifr_name, c->pasta_ifn, IFNAMSIZ);
+	memcpy(ifr.ifr_name, c->pasta_ifn, IFNAMSIZ);
 
 	if (ns_enter(c) ||
 	    (tun_ns_fd = open("/dev/net/tun", flags)) < 0 ||

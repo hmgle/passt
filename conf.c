@@ -1035,7 +1035,7 @@ void conf(struct ctx *c, int argc, char **argv)
 				usage(argv[0]);
 			}
 
-			ret = snprintf(c->sock_path, sizeof(c->sock_path), "%s",
+			ret = snprintf(c->sock_path, UNIX_SOCK_MAX - 1, "%s",
 				       optarg);
 			if (ret <= 0 || ret >= (int)sizeof(c->pcap)) {
 				err("Invalid socket path: %s", optarg);
@@ -1048,9 +1048,9 @@ void conf(struct ctx *c, int argc, char **argv)
 				usage(argv[0]);
 			}
 
-			ret = snprintf(c->pasta_ifn, sizeof(c->pasta_ifn), "%s",
+			ret = snprintf(c->pasta_ifn, IFNAMSIZ - 1, "%s",
 				       optarg);
-			if (ret <= 0 || ret >= (int)sizeof(c->pasta_ifn)) {
+			if (ret <= 0 || ret >= IFNAMSIZ - 1) {
 				err("Invalid interface name: %s", optarg);
 				usage(argv[0]);
 			}
