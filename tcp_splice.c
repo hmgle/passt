@@ -139,9 +139,6 @@ static void tcp_splice_conn_epoll_events(uint16_t events,
 {
 	*a = *b = 0;
 
-	if (events & CLOSED)
-		return;
-
 	if (events & ESTABLISHED) {
 		if (!(events & B_FIN_SENT))
 			*a = EPOLLIN | EPOLLRDHUP;
@@ -649,8 +646,8 @@ swap:
 	}
 
 	while (1) {
-		int retry_write = 0, more = 0;
 		ssize_t readlen, to_write = 0, written;
+		int more = 0;
 
 retry:
 		readlen = splice(from, NULL, pipes[1], NULL, c->tcp.pipe_size,
@@ -714,9 +711,6 @@ eintr:
 
 			if (never_read)
 				break;
-
-			if (retry_write--)
-				goto retry;
 
 			if (to == conn->a)
 				conn_event(c, conn, A_OUT_WAIT);
