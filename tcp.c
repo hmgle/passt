@@ -2394,8 +2394,12 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_conn *conn)
 	iov_sock[0].iov_len = already_sent;
 
 	if (( v4 && tcp4_l2_buf_used + fill_bufs > ARRAY_SIZE(tcp4_l2_buf)) ||
-	    (!v4 && tcp6_l2_buf_used + fill_bufs > ARRAY_SIZE(tcp6_l2_buf)))
+	    (!v4 && tcp6_l2_buf_used + fill_bufs > ARRAY_SIZE(tcp6_l2_buf))) {
 		tcp_l2_data_buf_flush(c);
+
+		/* Silence Coverity CWE-125 false positive */
+		tcp4_l2_buf_used = tcp6_l2_buf_used = 0;
+	}
 
 	for (i = 0, iov = iov_sock + 1; i < fill_bufs; i++, iov++) {
 		if (v4)
