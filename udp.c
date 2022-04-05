@@ -180,7 +180,7 @@ enum udp_act_type {
 };
 
 /* Activity-based aging for bindings */
-static uint8_t udp_act[IP_VERSIONS][UDP_ACT_TYPE_MAX][USHRT_MAX / 8];
+static uint8_t udp_act[IP_VERSIONS][UDP_ACT_TYPE_MAX][(USHRT_MAX + 1) / 8];
 
 /* Static buffers */
 
