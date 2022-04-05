@@ -234,8 +234,10 @@ int main(int argc, char **argv)
 valid_args:
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
 		s = socket(AF_UNIX, SOCK_STREAM, 0);
-		setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-		setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+		if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)))
+			perror("setsockopt SO_RCVTIMEO");
+		if (setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)))
+			perror("setsockopt SO_SNDTIMEO");
 
 		if (s < 0) {
 			perror("socket");
@@ -263,8 +265,11 @@ valid_args:
 	}
 
 	tv.tv_usec = 0;
-	setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-	setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+	if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)))
+		perror("setsockopt, SO_RCVTIMEO reset");
+	if (setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)))
+		perror("setsockopt, SO_SNDTIMEO reset");
+
 	fprintf(stderr, "Connected to %s\n", addr.sun_path);
 
 	if (dup2(s, (int)fd) < 0) {

@@ -84,7 +84,8 @@ int tap_send(const struct ctx *c, const void *data, size_t len, int vnet_pre)
 		} else {
 			uint32_t vnet_len = htonl(len);
 
-			send(c->fd_tap, &vnet_len, 4, flags);
+			if (send(c->fd_tap, &vnet_len, 4, flags) < 0)
+				return -1;
 		}
 
 		return send(c->fd_tap, data, len, flags);
@@ -150,7 +151,8 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 			ih->checksum = csum_unaligned(ih, len, 0);
 		}
 
-		tap_send(c, buf, len + sizeof(*iph) + sizeof(*eh), 1);
+		if (tap_send(c, buf, len + sizeof(*iph) + sizeof(*eh), 1) < 0)
+			debug("tap: failed to send %lu bytes (IPv4)", len);
 	} else {
 		struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1);
 		char *data = (char *)(ip6h + 1);
@@ -201,7 +203,8 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 			ip6h->flow_lbl[2] = (flow >> 0) & 0xff;
 		}
 
-		tap_send(c, buf, len + sizeof(*ip6h) + sizeof(*eh), 1);
+		if (tap_send(c, buf, len + sizeof(*ip6h) + sizeof(*eh), 1) < 1)
+			debug("tap: failed to send %lu bytes (IPv6)", len);
 	}
 }
 
@@ -862,11 +865,13 @@ static void tap_sock_unix_new(struct ctx *c)
 
 	c->fd_tap = accept4(c->fd_tap_listen, NULL, NULL, 0);
 
-	if (!c->low_rmem)
-		setsockopt(c->fd_tap, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v));
+	if (!c->low_rmem &&
+	    setsockopt(c->fd_tap, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v)))
+		trace("tap: failed to set SO_RCVBUF to %i", v);
 
-	if (!c->low_wmem)
-		setsockopt(c->fd_tap, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v));
+	if (!c->low_wmem &&
+	    setsockopt(c->fd_tap, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v)))
+		trace("tap: failed to set SO_SNDBUF to %i", v);
 
 	ev.data.fd = c->fd_tap;
 	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;

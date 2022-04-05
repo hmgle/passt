@@ -938,7 +938,8 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 
 			last_mh->msg_iov = &last_mh->msg_iov[i];
 
-			sendmsg(c->fd_tap, last_mh, MSG_NOSIGNAL);
+			if (sendmsg(c->fd_tap, last_mh, MSG_NOSIGNAL) < 0)
+				debug("UDP: %li bytes to tap missing", missing);
 
 			*iov_base -= first_offset;
 			break;

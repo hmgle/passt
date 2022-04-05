@@ -160,6 +160,9 @@ int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 		if (!ih)
 			return 1;
 
+		if (ih->type != ICMP_ECHO && ih->type != ICMP_ECHOREPLY)
+			return 1;
+
 		sa.sin_port = ih->un.echo.id;
 
 		iref.icmp.id = id = ntohs(ih->un.echo.id);
@@ -179,8 +182,9 @@ int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 		bitmap_set(icmp_act[V4], id);
 
 		sa.sin_addr = *(struct in_addr *)addr;
-		sendto(s, ih, sizeof(*ih) + plen, MSG_NOSIGNAL,
-		       (struct sockaddr *)&sa, sizeof(sa));
+		if (sendto(s, ih, sizeof(*ih) + plen, MSG_NOSIGNAL,
+			   (struct sockaddr *)&sa, sizeof(sa)) < 0)
+			debug("ICMP: failed to relay request to socket");
 	} else if (af == AF_INET6) {
 		union icmp_epoll_ref iref = { .icmp.v6 = 1 };
 		struct sockaddr_in6 sa = {
@@ -216,8 +220,9 @@ int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 		bitmap_set(icmp_act[V6], id);
 
 		sa.sin6_addr = *(struct in6_addr *)addr;
-		sendto(s, ih, sizeof(*ih) + plen, MSG_NOSIGNAL,
-		       (struct sockaddr *)&sa, sizeof(sa));
+		if (sendto(s, ih, sizeof(*ih) + plen, MSG_NOSIGNAL,
+			   (struct sockaddr *)&sa, sizeof(sa)) < 1)
+			debug("ICMPv6: failed to relay request to socket");
 	}
 
 	return 1;

@@ -1053,11 +1053,11 @@ void tcp_sock_set_bufsize(const struct ctx *c, int s)
 	if (s == -1)
 		return;
 
-	if (!c->low_rmem)
-		setsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v));
+	if (!c->low_rmem && setsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v)))
+		trace("TCP: failed to set SO_RCVBUF to %i", v);
 
-	if (!c->low_wmem)
-		setsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v));
+	if (!c->low_wmem && setsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v)))
+		trace("TCP: failed to set SO_SNDBUF to %i", v);
 }
 
 /**
@@ -1547,7 +1547,8 @@ static void tcp_l2_buf_flush_part(const struct ctx *c,
 
 	missing = end - sent;
 	p = (char *)iov->iov_base + iov->iov_len - missing;
-	send(c->fd_tap, p, missing, MSG_NOSIGNAL);
+	if (send(c->fd_tap, p, missing, MSG_NOSIGNAL))
+		debug("TCP: failed to flush %lu missing bytes to tap", missing);
 }
 
 /**
@@ -2010,6 +2011,7 @@ static void tcp_clamp_window(const struct ctx *c, struct tcp_conn *conn,
 			     unsigned wnd)
 {
 	uint32_t prev_scaled = conn->wnd_from_tap << conn->ws_from_tap;
+	int s = conn->sock;
 
 	wnd <<= conn->ws_from_tap;
 	wnd = MIN(MAX_WINDOW, wnd);
@@ -2025,7 +2027,9 @@ static void tcp_clamp_window(const struct ctx *c, struct tcp_conn *conn,
 	}
 
 	conn->wnd_from_tap = MIN(wnd >> conn->ws_from_tap, USHRT_MAX);
-	setsockopt(conn->sock, SOL_TCP, TCP_WINDOW_CLAMP, &wnd, sizeof(wnd));
+	if (setsockopt(s, SOL_TCP, TCP_WINDOW_CLAMP, &wnd, sizeof(wnd)))
+		trace("TCP: failed to set TCP_WINDOW_CLAMP on socket %i", s);
+
 	conn_flag(c, conn, WND_CLAMPED);
 }
 
@@ -2209,7 +2213,8 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	conn->wnd_to_tap = WINDOW_DEFAULT;
 
 	mss = tcp_conn_tap_mss(c, conn, opts, optlen);
-	setsockopt(s, SOL_TCP, TCP_MAXSEG, &mss, sizeof(mss));
+	if (setsockopt(s, SOL_TCP, TCP_MAXSEG, &mss, sizeof(mss)))
+		trace("TCP: failed to set TCP_MAXSEG on socket %i", s);
 	MSS_SET(conn, mss);
 
 	tcp_get_tap_ws(conn, opts, optlen);

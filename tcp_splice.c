@@ -376,8 +376,15 @@ static int tcp_splice_connect_finish(const struct ctx *c,
 			return -EIO;
 		}
 
-		fcntl(conn->pipe_a_b[0], F_SETPIPE_SZ, c->tcp.pipe_size);
-		fcntl(conn->pipe_b_a[0], F_SETPIPE_SZ, c->tcp.pipe_size);
+		if (fcntl(conn->pipe_a_b[0], F_SETPIPE_SZ, c->tcp.pipe_size)) {
+			trace("TCP (spliced): cannot set a->b pipe size to %lu",
+			      c->tcp.pipe_size);
+		}
+
+		if (fcntl(conn->pipe_b_a[0], F_SETPIPE_SZ, c->tcp.pipe_size)) {
+			trace("TCP (spliced): cannot set b->a pipe size to %lu",
+			      c->tcp.pipe_size);
+		}
 	}
 
 	if (!(conn->events & ESTABLISHED))
@@ -428,7 +435,11 @@ static int tcp_splice_connect(const struct ctx *c, struct tcp_splice_conn *conn,
 	if (s < 0)
 		tcp_sock_set_bufsize(c, conn->b);
 
-	setsockopt(conn->b, SOL_TCP, TCP_QUICKACK, &((int){ 1 }), sizeof(int));
+	if (setsockopt(conn->b, SOL_TCP, TCP_QUICKACK,
+		       &((int){ 1 }), sizeof(int))) {
+		trace("TCP (spliced): failed to set TCP_QUICKACK on socket %i",
+		      conn->b);
+	}
 
 	if (CONN_V6(conn)) {
 		sa = (struct sockaddr *)&addr6;
@@ -565,8 +576,11 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 		if ((s = accept4(ref.r.s, NULL, NULL, SOCK_NONBLOCK)) < 0)
 			return;
 
-		setsockopt(s, SOL_TCP, TCP_QUICKACK, &((int){ 1 }),
-			   sizeof(int));
+		if (setsockopt(s, SOL_TCP, TCP_QUICKACK, &((int){ 1 }),
+			       sizeof(int))) {
+			trace("TCP (spliced): failed to set TCP_QUICKACK on %i",
+			      s);
+		}
 
 		conn = CONN(c->tcp.splice_conn_count++);
 		conn->a = s;
@@ -817,10 +831,17 @@ static void tcp_splice_pipe_refill(const struct ctx *c)
 			continue;
 		}
 
-		fcntl(splice_pipe_pool[i][0][0], F_SETPIPE_SZ,
-		      c->tcp.pipe_size);
-		fcntl(splice_pipe_pool[i][1][0], F_SETPIPE_SZ,
-		      c->tcp.pipe_size);
+		if (fcntl(splice_pipe_pool[i][0][0], F_SETPIPE_SZ,
+			  c->tcp.pipe_size)) {
+			trace("TCP (spliced): cannot set a->b pipe size to %lu",
+			      c->tcp.pipe_size);
+		}
+
+		if (fcntl(splice_pipe_pool[i][1][0], F_SETPIPE_SZ,
+			  c->tcp.pipe_size)) {
+			trace("TCP (spliced): cannot set b->a pipe size to %lu",
+			      c->tcp.pipe_size);
+		}
 	}
 }
 
@@ -850,15 +871,21 @@ void tcp_splice_timer(struct ctx *c)
 
 		if ( (conn->flags & RCVLOWAT_SET_A) &&
 		    !(conn->flags & RCVLOWAT_ACT_A)) {
-			setsockopt(conn->a, SOL_SOCKET, SO_RCVLOWAT,
-				   &((int){ 1 }), sizeof(int));
+			if (setsockopt(conn->a, SOL_SOCKET, SO_RCVLOWAT,
+				       &((int){ 1 }), sizeof(int))) {
+				trace("TCP (spliced): can't set SO_RCVLOWAT on "
+				      "%i", conn->a);
+			}
 			conn_flag(c, conn, ~RCVLOWAT_SET_A);
 		}
 
 		if ( (conn->flags & RCVLOWAT_SET_B) &&
 		    !(conn->flags & RCVLOWAT_ACT_B)) {
-			setsockopt(conn->b, SOL_SOCKET, SO_RCVLOWAT,
-				   &((int){ 1 }), sizeof(int));
+			if (setsockopt(conn->b, SOL_SOCKET, SO_RCVLOWAT,
+				       &((int){ 1 }), sizeof(int))) {
+				trace("TCP (spliced): can't set SO_RCVLOWAT on "
+				      "%i", conn->b);
+			}
 			conn_flag(c, conn, ~RCVLOWAT_SET_B);
 		}
 

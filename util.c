@@ -154,7 +154,8 @@ void passt_vsyslog(int pri, const char *format, va_list ap)
 	if (log_opt & LOG_PERROR)
 		fprintf(stderr, "%s", buf + sizeof("<0>"));
 
-	send(log_sock, buf, n, 0);
+	if (send(log_sock, buf, n, 0) != n)
+		fprintf(stderr, "Failed to send %i bytes to syslog\n", n);
 }
 
 #define IPV6_NH_OPT(nh)							\
@@ -239,7 +240,7 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto, uint16_t port,
 	};
 	const struct sockaddr *sa;
 	struct epoll_event ev;
-	int fd, sl, one = 1;
+	int fd, sl, y = 1;
 
 	if (proto != IPPROTO_TCP && proto != IPPROTO_UDP &&
 	    proto != IPPROTO_ICMP && proto != IPPROTO_ICMPV6)
@@ -287,10 +288,12 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto, uint16_t port,
 		sa = (const struct sockaddr *)&addr6;
 		sl = sizeof(addr6);
 
-		setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &one, sizeof(one));
+		if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &y, sizeof(y)))
+			debug("Failed to set IPV6_V6ONLY on socket %i", fd);
 	}
 
-	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(y)))
+		debug("Failed to set IPV6_V6ONLY on socket %i", fd);
 
 	if (bind(fd, sa, sl) < 0) {
 		/* We'll fail to bind to low ports if we don't have enough

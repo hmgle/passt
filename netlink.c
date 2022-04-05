@@ -60,7 +60,8 @@ ns:
 		return 0;
 
 #ifdef NETLINK_GET_STRICT_CHK
-	setsockopt(*s, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &y, sizeof(y));
+	if (setsockopt(*s, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &y, sizeof(y)))
+		debug("netlink: cannot set NETLINK_GET_STRICT_CHK on %i", *s);
 #endif
 
 	ns_enter((struct ctx *)arg);
@@ -152,7 +153,8 @@ unsigned int nl_get_ext_if(int *v4, int *v6)
 	char buf[BUFSIZ];
 	long *word, tmp;
 	uint8_t *vmap;
-	size_t n, na;
+	ssize_t n;
+	size_t na;
 	int *v;
 
 	if (*v4 == IP_VERSION_PROBE) {
@@ -168,7 +170,9 @@ v6:
 		return 0;
 	}
 
-	n = nl_req(0, buf, &req, sizeof(req));
+	if ((n = nl_req(0, buf, &req, sizeof(req))) < 0)
+		return 0;
+
 	nh = (struct nlmsghdr *)buf;
 
 	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
@@ -289,7 +293,8 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 	struct rtattr *rta;
 	struct rtmsg *rtm;
 	char buf[BUFSIZ];
-	size_t n, na;
+	ssize_t n;
+	size_t na;
 
 	if (set) {
 		if (af == AF_INET6) {
@@ -323,8 +328,7 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 		req.nlh.nlmsg_flags |= NLM_F_DUMP;
 	}
 
-	n = nl_req(ns, buf, &req, req.nlh.nlmsg_len);
-	if (set)
+	if (set || (n = nl_req(ns, buf, &req, req.nlh.nlmsg_len)) < 0)
 		return;
 
 	nh = (struct nlmsghdr *)buf;
@@ -398,7 +402,8 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 	struct nlmsghdr *nh;
 	struct rtattr *rta;
 	char buf[BUFSIZ];
-	size_t n, na;
+	ssize_t n;
+	size_t na;
 
 	if (set) {
 		if (af == AF_INET6) {
@@ -430,8 +435,7 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 		req.nlh.nlmsg_flags |= NLM_F_DUMP;
 	}
 
-	n = nl_req(ns, buf, &req, req.nlh.nlmsg_len);
-	if (set)
+	if (set || (n = nl_req(ns, buf, &req, req.nlh.nlmsg_len)) < 0)
 		return;
 
 	nh = (struct nlmsghdr *)buf;
@@ -504,14 +508,17 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 	struct nlmsghdr *nh;
 	struct rtattr *rta;
 	char buf[BUFSIZ];
-	size_t n, na;
+	ssize_t n;
+	size_t na;
 
 	if (!MAC_IS_ZERO(mac)) {
 		req.nlh.nlmsg_len = sizeof(req);
 		memcpy(req.set.mac, mac, ETH_ALEN);
 		req.rta.rta_type = IFLA_ADDRESS;
 		req.rta.rta_len = RTA_LENGTH(ETH_ALEN);
-		nl_req(ns, buf, &req, req.nlh.nlmsg_len);
+		if (nl_req(ns, buf, &req, req.nlh.nlmsg_len) < 0)
+			return;
+
 		up = 0;
 	}
 
@@ -520,17 +527,20 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 		req.set.mtu.mtu = mtu;
 		req.rta.rta_type = IFLA_MTU;
 		req.rta.rta_len = RTA_LENGTH(sizeof(unsigned int));
-		nl_req(ns, buf, &req, req.nlh.nlmsg_len);
+		if (nl_req(ns, buf, &req, req.nlh.nlmsg_len) < 0)
+			return;
+
 		up = 0;
 	}
 
-	if (up)
-		nl_req(ns, buf, &req, req.nlh.nlmsg_len);
+	if (up && nl_req(ns, buf, &req, req.nlh.nlmsg_len) < 0)
+		return;
 
 	if (change)
 		return;
 
-	n = nl_req(ns, buf, &req, req.nlh.nlmsg_len);
+	if ((n = nl_req(ns, buf, &req, req.nlh.nlmsg_len)) < 0)
+		return;
 
 	nh = (struct nlmsghdr *)buf;
 	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
