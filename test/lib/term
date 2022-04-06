@@ -203,6 +203,7 @@ pane_run() {
 # $1:	Pane name
 pane_wait() {
 	__lc="$(echo "${1}" | tr [A-Z] [a-z])"
+	sleep 0.1 || sleep 1
 
 	__done=0
 	while
