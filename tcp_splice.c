@@ -48,7 +48,7 @@
 #include "util.h"
 #include "passt.h"
 
-#define MAX_PIPE_SIZE			(2UL * 1024 * 1024)
+#define MAX_PIPE_SIZE			(8UL * 1024 * 1024)
 #define TCP_SPLICE_MAX_CONNS		(128 * 1024)
 #define TCP_SPLICE_PIPE_POOL_SIZE	16
 #define TCP_SPLICE_CONN_PRESSURE	30	/* % of splice_conn_count */
