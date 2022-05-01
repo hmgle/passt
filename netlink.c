@@ -328,7 +328,7 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 		req.nlh.nlmsg_flags |= NLM_F_DUMP;
 	}
 
-	if (set || (n = nl_req(ns, buf, &req, req.nlh.nlmsg_len)) < 0)
+	if ((n = nl_req(ns, buf, &req, req.nlh.nlmsg_len)) < 0 || set)
 		return;
 
 	nh = (struct nlmsghdr *)buf;
@@ -435,7 +435,7 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 		req.nlh.nlmsg_flags |= NLM_F_DUMP;
 	}
 
-	if (set || (n = nl_req(ns, buf, &req, req.nlh.nlmsg_len)) < 0)
+	if ((n = nl_req(ns, buf, &req, req.nlh.nlmsg_len)) < 0 || set)
 		return;
 
 	nh = (struct nlmsghdr *)buf;
