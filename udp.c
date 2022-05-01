@@ -1000,7 +1000,8 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 			union udp_epoll_ref uref = { .udp.bound = 1,
 						     .udp.port = src };
 
-			s = sock_l4(c, AF_INET, IPPROTO_UDP, src, 0, uref.u32);
+			s = sock_l4(c, AF_INET, IPPROTO_UDP, NULL, src,
+				    uref.u32);
 			if (s < 0)
 				return p->count;
 
@@ -1026,7 +1027,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 			.sin6_port = uh->dest,
 			.sin6_addr = *(struct in6_addr *)addr,
 		};
-		enum bind_type bind_to = BIND_ANY;
+		const void *bind_addr = &in6addr_any;
 
 		sa = (struct sockaddr *)&s_in6;
 		sl = sizeof(s_in6);
@@ -1043,7 +1044,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 			   ntohs(s_in6.sin6_port) == 53) {
 			s_in6.sin6_addr = c->dns6[0];
 		} else if (IN6_IS_ADDR_LINKLOCAL(&s_in6.sin6_addr)) {
-			bind_to = BIND_LL;
+			bind_addr = &c->addr6_ll;
 		}
 
 		if (!(s = udp_tap_map[V6][src].sock)) {
@@ -1051,7 +1052,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 						     .udp.v6 = 1,
 						     .udp.port = src };
 
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, src, bind_to,
+			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, src,
 				    uref.u32);
 			if (s < 0)
 				return p->count;
@@ -1093,6 +1094,96 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 }
 
 /**
+ * udp_sock_init() - Initialise listening sockets for a given port
+ * @c:		Execution context
+ * @ns:		In pasta mode, if set, bind with loopback address in namespace
+ * @af:		Address family to select a specific IP version, or AF_UNSPEC
+ * @addr:	Pointer to address for binding, NULL if not configured
+ * @port:	Port, host order
+ */
+void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
+		   const void *addr, in_port_t port)
+{
+	union udp_epoll_ref uref = { .udp.bound = 1 };
+	const void *bind_addr;
+	int s;
+
+	if (ns) {
+		uref.udp.port = (in_port_t)(port +
+					    udp_port_delta_to_init[port]);
+	} else {
+		uref.udp.port = (in_port_t)(port +
+					    udp_port_delta_to_tap[port]);
+	}
+
+	if (af == AF_INET || af == AF_UNSPEC) {
+		if (!addr && c->mode == MODE_PASTA)
+			bind_addr = &c->addr4;
+		else
+			bind_addr = addr;
+
+		uref.udp.v6 = 0;
+
+		if (!ns) {
+			uref.udp.splice = 0;
+			s = sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, port,
+				    uref.u32);
+
+			udp_tap_map[V4][uref.udp.port].sock = s;
+		}
+
+		if (c->mode == MODE_PASTA) {
+			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
+			uref.udp.splice = UDP_TO_NS;
+
+			sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, port,
+				uref.u32);
+		}
+
+		if (ns) {
+			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
+			uref.udp.splice = UDP_TO_INIT;
+
+			sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, port,
+				uref.u32);
+		}
+	}
+
+	if (af == AF_INET6 || af == AF_UNSPEC) {
+		if (!addr && c->mode == MODE_PASTA)
+			bind_addr = &c->addr6;
+		else
+			bind_addr = addr;
+
+		uref.udp.v6 = 1;
+
+		if (!ns) {
+			uref.udp.splice = 0;
+			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, port,
+				    uref.u32);
+
+			udp_tap_map[V6][uref.udp.port].sock = s;
+		}
+
+		if (c->mode == MODE_PASTA) {
+			bind_addr = &in6addr_loopback;
+			uref.udp.splice = UDP_TO_NS;
+
+			sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, port,
+				uref.u32);
+		}
+
+		if (ns) {
+			bind_addr = &in6addr_loopback;
+			uref.udp.splice = UDP_TO_INIT;
+
+			sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, port,
+				uref.u32);
+		}
+	}
+}
+
+/**
  * udp_sock_init_ns() - Bind sockets in namespace for inbound connections
  * @arg:	Execution context
  *
@@ -1100,8 +1191,6 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
  */
 int udp_sock_init_ns(void *arg)
 {
-	union udp_epoll_ref uref = { .udp.bound = 1,
-				     .udp.splice = UDP_TO_INIT };
 	struct ctx *c = (struct ctx *)arg;
 	int dst;
 
@@ -1112,19 +1201,7 @@ int udp_sock_init_ns(void *arg)
 		if (!bitmap_isset(c->udp.port_to_init, dst))
 			continue;
 
-		uref.udp.port = dst + udp_port_delta_to_init[dst];
-
-		if (c->v4) {
-			uref.udp.v6 = 0;
-			sock_l4(c, AF_INET, IPPROTO_UDP, dst, BIND_LOOPBACK,
-				uref.u32);
-		}
-
-		if (c->v6) {
-			uref.udp.v6 = 1;
-			sock_l4(c, AF_INET6, IPPROTO_UDP, dst, BIND_LOOPBACK,
-				uref.u32);
-		}
+		udp_sock_init(c, 1, AF_UNSPEC, NULL, dst);
 	}
 
 	return 0;
@@ -1178,54 +1255,13 @@ static void udp_splice_iov_init(void)
 }
 
 /**
- * udp_sock_init() - Create and bind listening sockets for inbound packets
+ * udp_init() - Initialise per-socket data, and sockets in namespace
  * @c:		Execution context
  *
- * Return: 0 on success, -1 on failure
+ * Return: 0
  */
-int udp_sock_init(const struct ctx *c)
+int udp_init(const struct ctx *c)
 {
-	union udp_epoll_ref uref = { .udp.bound = 1 };
-	int dst, s;
-
-	for (dst = 0; dst < USHRT_MAX; dst++) {
-		if (!bitmap_isset(c->udp.port_to_tap, dst))
-			continue;
-
-		uref.udp.port = dst + udp_port_delta_to_tap[dst];
-
-		if (c->v4) {
-			uref.udp.splice = 0;
-			uref.udp.v6 = 0;
-			s = sock_l4(c, AF_INET, IPPROTO_UDP, dst,
-				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
-				    uref.u32);
-			if (s > 0)
-				udp_tap_map[V4][uref.udp.port].sock = s;
-
-			if (c->mode == MODE_PASTA) {
-				uref.udp.splice = UDP_TO_NS;
-				sock_l4(c, AF_INET, IPPROTO_UDP, dst,
-					BIND_LOOPBACK, uref.u32);
-			}
-		}
-		if (c->v6) {
-			uref.udp.splice = 0;
-			uref.udp.v6 = 1;
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, dst,
-				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
-				    uref.u32);
-			if (s > 0)
-				udp_tap_map[V6][uref.udp.port].sock = s;
-
-			if (c->mode == MODE_PASTA) {
-				uref.udp.splice = UDP_TO_NS;
-				sock_l4(c, AF_INET6, IPPROTO_UDP, dst,
-					BIND_LOOPBACK, uref.u32);
-			}
-		}
-	}
-
 	if (c->v4)
 		udp_sock4_iov_init();
 

@@ -3082,14 +3082,18 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 }
 
 /**
- * tcp_sock_init_one() - Initialise listening sockets for a given port
+ * tcp_sock_init() - Initialise listening sockets for a given port
  * @c:		Execution context
  * @ns:		In pasta mode, if set, bind with loopback address in namespace
+ * @af:		Address family to select a specific IP version, or AF_UNSPEC
+ * @addr:	Pointer to address for binding, NULL if not configured
  * @port:	Port, host order
  */
-static void tcp_sock_init_one(const struct ctx *c, int ns, in_port_t port)
+void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
+		   const void *addr, in_port_t port)
 {
 	union tcp_epoll_ref tref = { .tcp.listen = 1 };
+	const void *bind_addr;
 	int s;
 
 	if (ns) {
@@ -3100,13 +3104,17 @@ static void tcp_sock_init_one(const struct ctx *c, int ns, in_port_t port)
 					     tcp_port_delta_to_tap[port]);
 	}
 
-	if (c->v4) {
-		tref.tcp.v6 = 0;
+	if (af == AF_INET || af == AF_UNSPEC) {
+		if (!addr && c->mode == MODE_PASTA)
+			bind_addr = &c->addr4;
+		else
+			bind_addr = addr;
 
+		tref.tcp.v6 = 0;
 		tref.tcp.splice = 0;
+
 		if (!ns) {
-			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
-				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
+			s = sock_l4(c, AF_INET, IPPROTO_TCP, bind_addr, port,
 				    tref.u32);
 			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
@@ -3118,9 +3126,11 @@ static void tcp_sock_init_one(const struct ctx *c, int ns, in_port_t port)
 		}
 
 		if (c->mode == MODE_PASTA) {
+			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
+
 			tref.tcp.splice = 1;
-			s = sock_l4(c, AF_INET, IPPROTO_TCP, port,
-				    BIND_LOOPBACK, tref.u32);
+			s = sock_l4(c, AF_INET, IPPROTO_TCP, bind_addr, port,
+				    tref.u32);
 			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
 			else
@@ -3135,13 +3145,17 @@ static void tcp_sock_init_one(const struct ctx *c, int ns, in_port_t port)
 		}
 	}
 
-	if (c->v6) {
+	if (af == AF_INET6 || af == AF_UNSPEC) {
+		if (!addr && c->mode == MODE_PASTA)
+			bind_addr = &c->addr6;
+		else
+			bind_addr = addr;
+
 		tref.tcp.v6 = 1;
 
 		tref.tcp.splice = 0;
 		if (!ns) {
-			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
-				    c->mode == MODE_PASTA ? BIND_EXT : BIND_ANY,
+			s = sock_l4(c, AF_INET6, IPPROTO_TCP, bind_addr, port,
 				    tref.u32);
 			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
@@ -3153,9 +3167,11 @@ static void tcp_sock_init_one(const struct ctx *c, int ns, in_port_t port)
 		}
 
 		if (c->mode == MODE_PASTA) {
+			bind_addr = &in6addr_loopback;
+
 			tref.tcp.splice = 1;
-			s = sock_l4(c, AF_INET6, IPPROTO_TCP, port,
-				    BIND_LOOPBACK, tref.u32);
+			s = sock_l4(c, AF_INET6, IPPROTO_TCP, bind_addr, port,
+				    tref.u32);
 			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
 			else
@@ -3188,7 +3204,7 @@ static int tcp_sock_init_ns(void *arg)
 		if (!bitmap_isset(c->tcp.port_to_init, port))
 			continue;
 
-		tcp_sock_init_one(c, 1, port);
+		tcp_sock_init(c, 1, AF_UNSPEC, NULL, port);
 	}
 
 	return 0;
@@ -3259,15 +3275,15 @@ static int tcp_sock_refill(void *arg)
 }
 
 /**
- * tcp_sock_init() - Bind sockets for inbound connections, get key for sequence
+ * tcp_init() - Get initial sequence, hash secret, initialise per-socket data
  * @c:		Execution context
  *
- * Return: 0 on success, -1 on failure
+ * Return: 0, doesn't return on failure
  */
-int tcp_sock_init(struct ctx *c)
+int tcp_init(struct ctx *c)
 {
 	struct tcp_sock_refill_arg refill_arg = { c, 0 };
-	int i, port;
+	int i;
 #ifndef HAS_GETRANDOM
 	int dev_random = open("/dev/random", O_RDONLY);
 	unsigned int random_read = 0;
@@ -3294,13 +3310,6 @@ int tcp_sock_init(struct ctx *c)
 #endif /* !HAS_GETRANDOM */
 		perror("TCP initial sequence getrandom");
 		exit(EXIT_FAILURE);
-	}
-
-	for (port = 0; port < USHRT_MAX; port++) {
-		if (!bitmap_isset(c->tcp.port_to_tap, port))
-			continue;
-
-		tcp_sock_init_one(c, 0, port);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(tcp_l2_mh); i++)
@@ -3412,7 +3421,7 @@ static int tcp_port_rebind(void *arg)
 
 			if ((a->c->v4 && tcp_sock_ns[port][V4] == -1) ||
 			    (a->c->v6 && tcp_sock_ns[port][V6] == -1))
-				tcp_sock_init_one(a->c, 1, port);
+				tcp_sock_init(a->c, 1, AF_UNSPEC, NULL, port);
 		}
 	} else {
 		for (port = 0; port < USHRT_MAX; port++) {
@@ -3445,7 +3454,7 @@ static int tcp_port_rebind(void *arg)
 
 			if ((a->c->v4 && tcp_sock_init_ext[port][V4] == -1) ||
 			    (a->c->v6 && tcp_sock_init_ext[port][V6] == -1))
-				tcp_sock_init_one(a->c, 0, port);
+				tcp_sock_init(a->c, 0, AF_UNSPEC, NULL, port);
 		}
 	}
 

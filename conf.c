@@ -109,14 +109,24 @@ enum conf_port_type {
 	PORT_ALL,
 };
 
+/**
+ * conf_ports() - Parse port configuration options, initialise UDP/TCP sockets
+ * @c:		Execution context
+ * @optname:	Short option name, t, T, u, or U
+ * @optarg:	Option argument (port specification)
+ * @set:	Pointer to @conf_port_type to be set (port binding type)
+ *
+ * Return: -EINVAL on parsing error, 0 otherwise
+ */
 static int conf_ports(struct ctx *c, char optname, const char *optarg,
 		      enum conf_port_type *set)
 {
 	int start_src = -1, end_src = -1, start_dst = -1, end_dst = -1;
 	void (*remap)(in_port_t port, in_port_t delta);
-	const char *p;
+	char addr_buf[sizeof(struct in6_addr)] = { 0 };
+	sa_family_t af = AF_UNSPEC;
+	char buf[BUFSIZ], *sep, *p, *addr = addr_buf;
 	uint8_t *map;
-	char *sep;
 
 	if (optname == 't') {
 		map = c->tcp.port_to_tap;
@@ -149,10 +159,20 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 	}
 
 	if (!strcmp(optarg, "all")) {
+		int i;
+
 		if (*set || c->mode != MODE_PASST)
 			return -EINVAL;
 		*set = PORT_ALL;
 		memset(map, 0xff, PORT_EPHEMERAL_MIN / 8);
+
+		for (i = 0; i < PORT_EPHEMERAL_MIN; i++) {
+			if (optname == 't')
+				tcp_sock_init(c, 0, AF_UNSPEC, NULL, i);
+			else if (optname == 'u')
+				udp_sock_init(c, 0, AF_UNSPEC, NULL, i);
+		}
+
 		return 0;
 	}
 
@@ -161,12 +181,30 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 
 	*set = PORT_SPEC;
 
-	if (strspn(optarg, "0123456789-,:") != strlen(optarg)) {
-		err("Invalid port specifier %s", optarg);
-		return -EINVAL;
+	strncpy(buf, optarg, sizeof(buf) - 1);
+
+	if ((p = strchr(buf, '/'))) {
+		*p = 0;
+		p++;
+
+		if (optname != 't' && optname != 'u')
+			goto bad;
+
+		if (inet_pton(AF_INET, buf, addr))
+			af = AF_INET;
+		else if (inet_pton(AF_INET6, buf, addr))
+			af = AF_INET6;
+		else
+			goto bad;
+	} else {
+		p = buf;
+
+		addr = NULL;
 	}
 
-	p = optarg;
+	if (strspn(p, "0123456789-,:") != strlen(p))
+		goto bad;
+
 	do {
 		int i, port;
 
@@ -242,11 +280,16 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 
 				bitmap_set(map, i);
 
-				if (start_dst == -1)	/* 22 or 22-80 */
-					continue;
+				if (start_dst != -1) {
+					/* 80:8080 or 22-80:8080:8080 */
+					remap(i, (in_port_t)(start_dst -
+							     start_src));
+				}
 
-				/* 80:8080 or 22-80:8080:8080 */
-				remap(i, (in_port_t)(start_dst - start_src));
+				if (optname == 't')
+					tcp_sock_init(c, 0, af, addr, i);
+				else if (optname == 'u')
+					udp_sock_init(c, 0, af, addr, i);
 			}
 
 			start_src = end_src = start_dst = end_dst = -1;
@@ -655,13 +698,15 @@ static void usage(const char *name)
 	info(   "      'none': don't forward any ports");
 	info(   "      'all': forward all unbound, non-ephemeral ports");
 	info(   "      a comma-separated list, optionally ranged with '-'");
-	info(   "        and optional target ports after ':'. Examples:");
+	info(   "        and optional target ports after ':', with optional");
+	info(   "        address specification suffixed by '/'. Examples:");
 	info(   "        -t 22		Forward local port 22 to 22 on guest");
 	info(   "        -t 22:23	Forward local port 22 to 23 on guest");
 	info(   "        -t 22,25	Forward ports 22, 25 to ports 22, 25");
 	info(   "        -t 22-80  	Forward ports 22 to 80");
 	info(   "        -t 22-80:32-90	Forward ports 22 to 80 to");
 	info(   "			corresponding port numbers plus 10");
+	info(   "        -t 192.0.2.1/5	Bind port 5 of 192.0.2.1 to guest");
 	info(   "    default: none");
 	info(   "  -u, --udp-ports SPEC	UDP port forwarding to guest");
 	info(   "    SPEC is as described for TCP above");
@@ -676,13 +721,15 @@ pasta_opts:
 	info(   "      'none': don't forward any ports");
 	info(   "      'auto': forward all ports currently bound in namespace");
 	info(   "      a comma-separated list, optionally ranged with '-'");
-	info(   "        and optional target ports after ':'. Examples:");
+	info(   "        and optional target ports after ':', with optional");
+	info(   "        address specification suffixed by '/'. Examples:");
 	info(   "        -t 22	Forward local port 22 to port 22 in netns");
 	info(   "        -t 22:23	Forward local port 22 to port 23");
 	info(   "        -t 22,25	Forward ports 22, 25 to ports 22, 25");
 	info(   "        -t 22-80	Forward ports 22 to 80");
 	info(   "        -t 22-80:32-90	Forward ports 22 to 80 to");
 	info(   "			corresponding port numbers plus 10");
+	info(   "        -t 192.0.2.1/5	Bind port 5 of 192.0.2.1 to namespace");
 	info(   "    default: auto");
 	info(   "    IPv6 bound ports are also forwarded for IPv4");
 	info(   "  -u, --udp-ports SPEC	UDP port forwarding to namespace");
@@ -857,7 +904,6 @@ void conf(struct ctx *c, int argc, char **argv)
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
 
 	do {
-		enum conf_port_type *set = NULL;
 		const char *optstring;
 
 		if (c->mode == MODE_PASST)
@@ -1242,18 +1288,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		case 'u':
 		case 'T':
 		case 'U':
-			if (name == 't')
-				set = &tcp_tap;
-			else if (name == 'T')
-				set = &tcp_init;
-			else if (name == 'u')
-				set = &udp_tap;
-			else if (name == 'U')
-				set = &udp_init;
-
-			if (conf_ports(c, name, optarg, set))
-				usage(argv[0]);
-
+			/* Handle these later, once addresses are configured */
 			break;
 		case '?':
 		case 'h':
@@ -1293,6 +1328,41 @@ void conf(struct ctx *c, int argc, char **argv)
 	}
 
 	conf_ip(c);
+
+	/* Now we can process port configuration options */
+	optind = 1;
+	do {
+		enum conf_port_type *set = NULL;
+		const char *optstring;
+
+		if (c->mode == MODE_PASST)
+			optstring = "dqfehs:p::P:m:a:n:M:g:i:D::S::46t:u:";
+		else
+			optstring = "dqfehI:p::P:m:a:n:M:g:i:D::S::46t:u:T:U:";
+
+		name = getopt_long(argc, argv, optstring, options, NULL);
+		switch (name) {
+		case 't':
+		case 'u':
+		case 'T':
+		case 'U':
+			if (name == 't')
+				set = &tcp_tap;
+			else if (name == 'T')
+				set = &tcp_init;
+			else if (name == 'u')
+				set = &udp_tap;
+			else if (name == 'U')
+				set = &udp_init;
+
+			if (!optarg || conf_ports(c, name, optarg, set))
+				usage(argv[0]);
+
+			break;
+		default:
+			break;
+		}
+	} while (name != -1);
 
 	if (!c->v4)
 		c->no_dhcp = 1;

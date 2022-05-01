@@ -370,19 +370,12 @@ int main(int argc, char **argv)
 
 	__setlogmask(LOG_MASK(LOG_EMERG));
 
-	conf(&c, argc, argv);
-	trace_init(c.trace);
-
-	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
-		__openlog(log_name, LOG_PERROR, LOG_DAEMON);
-
-	c.epollfd = epoll_create1(c.foreground ? O_CLOEXEC : 0);
+	/* NOLINTNEXTLINE(android-cloexec-epoll-create1): forking in a moment */
+	c.epollfd = epoll_create1(0);
 	if (c.epollfd == -1) {
 		perror("epoll_create1");
 		exit(EXIT_FAILURE);
 	}
-
-	quit_fd = pasta_netns_quit_init(&c);
 
 	if (getrlimit(RLIMIT_NOFILE, &limit)) {
 		perror("getrlimit");
@@ -395,13 +388,20 @@ int main(int argc, char **argv)
 	}
 	sock_probe_mem(&c);
 
+	conf(&c, argc, argv);
+	trace_init(c.trace);
+
+	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
+		__openlog(log_name, LOG_PERROR, LOG_DAEMON);
+
+	quit_fd = pasta_netns_quit_init(&c);
+
 	c.fd_tap = c.fd_tap_listen = -1;
 	tap_sock_init(&c);
 
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	if ((!c.no_udp && udp_sock_init(&c)) ||
-	    (!c.no_tcp && tcp_sock_init(&c)))
+	if ((!c.no_udp && udp_init(&c)) || (!c.no_tcp && tcp_init(&c)))
 		exit(EXIT_FAILURE);
 
 	proto_update_l2_buf(c.mac_guest, c.mac, &c.addr4);

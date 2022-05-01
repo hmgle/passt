@@ -218,14 +218,14 @@ found:
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
  * @proto:	Protocol number
+ * @bind_addr:	Address for binding, NULL for any
  * @port:	Port, host order
- * @bind_type:	Type of address for binding
  * @data:	epoll reference portion for protocol handlers
  *
  * Return: newly created socket, -1 on error
  */
-int sock_l4(const struct ctx *c, int af, uint8_t proto, uint16_t port,
-	    enum bind_type bind_addr, uint32_t data)
+int sock_l4(const struct ctx *c, int af, uint8_t proto,
+	    const void *bind_addr, uint16_t port, uint32_t data)
 {
 	union epoll_ref ref = { .r.proto = proto, .r.p.data = data };
 	struct sockaddr_in addr4 = {
@@ -264,23 +264,20 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto, uint16_t port,
 	ref.r.s = fd;
 
 	if (af == AF_INET) {
-		if (bind_addr == BIND_LOOPBACK)
-			addr4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		else if (bind_addr == BIND_EXT)
-			addr4.sin_addr.s_addr = c->addr4;
+		if (bind_addr)
+			addr4.sin_addr.s_addr = *(in_addr_t *)bind_addr;
 		else
 			addr4.sin_addr.s_addr = htonl(INADDR_ANY);
 
 		sa = (const struct sockaddr *)&addr4;
 		sl = sizeof(addr4);
 	} else {
-		if (bind_addr == BIND_LOOPBACK) {
-			addr6.sin6_addr = in6addr_loopback;
-		} else if (bind_addr == BIND_EXT) {
-			addr6.sin6_addr = c->addr6;
-		} else if (bind_addr == BIND_LL) {
-			addr6.sin6_addr = c->addr6_ll;
-			addr6.sin6_scope_id = c->ifi;
+		if (bind_addr) {
+			addr6.sin6_addr = *(struct in6_addr *)bind_addr;
+
+			if (!memcmp(bind_addr, &c->addr6_ll,
+			    sizeof(c->addr6_ll)))
+				addr6.sin6_scope_id = c->ifi;
 		} else {
 			addr6.sin6_addr = in6addr_any;
 		}
@@ -303,7 +300,7 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto, uint16_t port,
 		 */
 		if (proto != IPPROTO_ICMP && proto != IPPROTO_ICMPV6) {
 			close(fd);
-			return 0;
+			return -1;
 		}
 	}
 

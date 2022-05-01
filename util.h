@@ -170,13 +170,6 @@ enum {
 
 #include "packet.h"
 
-enum bind_type {
-	BIND_ANY = 0,
-	BIND_LOOPBACK,
-	BIND_LL,
-	BIND_EXT,
-};
-
 struct ctx;
 
 struct ipv6hdr {
@@ -213,8 +206,8 @@ void passt_vsyslog(int pri, const char *format, va_list ap);
 void __setlogmask(int mask);
 char *ipv6_l4hdr(const struct pool *p, int index, size_t offset, uint8_t *proto,
 		 size_t *dlen);
-int sock_l4(const struct ctx *c, int af, uint8_t proto, uint16_t port,
-	    enum bind_type bind_addr, uint32_t data);
+int sock_l4(const struct ctx *c, int af, uint8_t proto,
+	    const void *bind_addr, uint16_t port, uint32_t data);
 void sock_probe_mem(struct ctx *c);
 int timespec_diff_ms(const struct timespec *a, const struct timespec *b);
 void bitmap_set(uint8_t *map, int bit);

@@ -298,7 +298,8 @@ For low (< 1024) ports, see \fBNOTES\fR.
 .TP
 .BR ports
 A comma-separated list of ports, optionally ranged with \fI-\fR, and,
-optionally, with target ports after \fI:\fR, if they differ. Examples:
+optionally, with target ports after \fI:\fR, if they differ. Specific addresses
+can be bound as well, separated by \fI/\fR. Examples:
 .RS
 .TP
 -t 22
@@ -315,6 +316,9 @@ Forward local ports 22 to 80 to corresponding ports on the guest
 .TP
 -t 22-80-32:90
 Forward local ports 22 to 80 to corresponding ports on the guest plus 10
+.TP
+-t 192.0.2.1/22
+Forward local port 22, bound to 192.0.2.1, to port 22 on the guest
 .RE
 
 Default is \fBnone\fR.
@@ -356,7 +360,8 @@ periodically derived (every second) from listening sockets reported by
 .TP
 .BR ports
 A comma-separated list of ports, optionally ranged with \fI-\fR, and,
-optionally, with target ports after \fI:\fR, if they differ. Examples:
+optionally, with target ports after \fI:\fR, if they differ. Specific addresses
+can be bound as well, separated by \fI/\fR. Examples:
 .RS
 .TP
 -t 22
@@ -374,6 +379,9 @@ Forward local ports 22 to 80 to corresponding ports in the target namespace
 -t 22-80-32:90
 Forward local ports 22 to 80 to corresponding ports plus 10 in the target
 namespace
+.TP
+-t 192.0.2.1/22
+Forward local port 22, bound to 192.0.2.1, to port 22 in the target namespace
 .RE
 
 IPv6 bound ports are also forwarded for IPv4.
