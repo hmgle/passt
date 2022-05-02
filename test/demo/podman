@@ -13,8 +13,7 @@
 
 onlyfor	podman
 
-set	OPTS -Z -w 4M -l 1M -P 2 -t5 --pacing-timer 10000
-set	OPTS_10s -Z -w 4M -l 1M -P 2 -t10 --pacing-timer 10000
+set	OPTS -Z -w 4M -l 1M -P 2 -t10 --pacing-timer 10000
 
 say	This is an overview of 
 em	Podman
@@ -35,7 +34,7 @@ say	, patch it
 sleep	1
 host	cp ../contrib/podman/0001-libpod-Add-pasta-networking-mode.patch __TEMPDIR__/podman
 host	cd __TEMPDIR__/podman
-host	patch -p1 < 0001-libpod-Add-pasta-networking-mode.patch
+host	git am 0001-libpod-Add-pasta-networking-mode.patch
 sleep	1
 
 say	, and build it.
@@ -89,11 +88,6 @@ hl	NS2
 sleep	2
 
 nl
-say	- pasta enables IPv6 by default
-hl	NS2
-sleep	2
-
-nl
 say	- slirp4netns uses 
 em	tap0
 say	 as interface name
@@ -134,17 +128,9 @@ sleep	5
 nl
 nl
 
-say	Let's run a service in the container. We didn't
+say	Let's run a service in the container,
 nl
-say	configure port forwarding. With default options,
-nl
-say	pasta detects services bound inside and outside
-nl
-say	the container and forwards ports accordingly, so
-nl
-say	we don't need to restart it. Let's restart the
-nl
-say	container running with slirp4netns...
+say	configuring port forwarding first
 sleep	5
 
 ns1b	exit
@@ -152,9 +138,14 @@ sleep	2
 ns1b	podman run --rm -p 8080:8080/tcp -ti alpine sh
 sleep	5
 
+ns2b	exit
+sleep	2
+ns2b	podman run --rm -p 8081:8081/tcp -ti alpine sh
+sleep	5
+
 nl
 nl
-say	and now actually start the service
+say	...and now actually start the service
 ns1b	apk add thttpd
 ns2b	apk add thttpd
 ns1b	>index.html cat << EOF
@@ -194,11 +185,8 @@ say	access to the host, which needs an extra option
 nl
 say	in slirp4netns. Let's restart that container,
 nl
-say	while also mapping ports for iperf3 and neper,
+say	while also mapping ports for iperf3 and neper.
 nl
-say	and enabling IPv6 for slirp4netns (experimental)
-nl
-say	too.
 sleep	3
 
 ns1	exit
@@ -218,7 +206,7 @@ nl
 nl
 ns2	exit
 
-say	Options after '--net-pasta:' are the same as
+say	Options after '--net=pasta:' are the same as
 nl
 say	documented for the command line of pasta(1).
 nl
@@ -240,16 +228,16 @@ sleep	5
 nl
 say	But back to performance now. By the way,
 nl
-say	pasta doesn't detect bound UDP ports
+say	pasta can also forward ports through the
 nl
-say	periodically (only when it starts), so we
+say	loopback interface for improved throughput.
 nl
-say	have to pass the ones we need explicitly.
+say	Let's configure that.
 nl
 sleep	2
 ns2b	exit
 sleep	1
-ns2b	./bin/podman run --net=pasta:-U,5214 -p 5204:5204/udp --rm -ti alpine sh
+ns2b	./bin/podman run --net=pasta:-T,5213-5214,-U,5213-5214 -p 5203-5204:5203-5204/tcp -p 5203-5204:5203-5204/udp --rm -ti alpine sh
 sleep	5
 
 nl
@@ -336,20 +324,16 @@ info	  non-loopback (tap) connections
 th	mode slirp4netns pasta
 
 tr	TCP/IPv6 to ns
-#ns1b	(iperf3 -s1J -p 5201 | jq -rM ".end.sum_received.bits_per_second" >t1) &
-#ns1b	iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second" >t2
-#hostb	iperf3 -c __ADDR6__ -p 5201 __OPTS_10s__ & iperf3 -c __ADDR6__ -p 5202 __OPTS_10s__
-#sleep	15
-#ns1b	
-#ns1out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+#ns1b	iperf3 -s1J -p 5201 | jq -rM ".end.sum_received.bits_per_second" >t1
+#hostb	iperf3 -c __ADDR6__ -p 5201 __OPTS__
+#ns1out	BW cat t1
 #bw	__BW__ 0.0 0.0
 bw	-
-ns2b	(iperf3 -s1J -p 5203 | jq -rM ".end.sum_received.bits_per_second" >t1) &
-ns2b	iperf3 -s1J -p 5204 | jq -rM ".end.sum_received.bits_per_second" >t2
-hostb	iperf3 -c __ADDR6__ -p 5203 -t5 -l 1M -Z & iperf3 -c __ADDR6__ -p 5204 -t5 -l 1M -Z
-sleep	10
+ns2b	iperf3 -s1J -p 5203 | jq -rM ".end.sum_received.bits_per_second" >t1
+hostb	iperf3 -c __ADDR6__ -p 5203 __OPTS__
+sleep	12
 ns2b	
-ns2out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+ns2out	BW cat t1
 bw	__BW__ 0.0 0.0
 hostb	
 
@@ -376,19 +360,17 @@ hout	LAT tcp_crr --nolog -c -H __ADDR6__ -C 5203 -P 5204 -l 5 | sed -n 's/^throu
 lat	__LAT__ 100000 100000
 
 tl	TCP/IPv4 to ns
-ns1b	(iperf3 -s1J -p 5201 | jq -rM ".end.sum_received.bits_per_second" >t1) &
-ns1b	iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second" >t2
-hostb	iperf3 -c __ADDR4__ -p 5201 __OPTS__ & iperf3 -c __ADDR4__ -p 5202 __OPTS__
-sleep	10
+ns1b	iperf3 -s1J -p 5201 | jq -rM ".end.sum_received.bits_per_second" >t1
+hostb	iperf3 -c __ADDR4__ -p 5201 __OPTS__
+sleep	12
 ns1b	
-ns1out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+ns1out	BW cat t1
 bw	__BW__ 0.0 0.0
-ns2b	(iperf3 -s1J -p 5203 | jq -rM ".end.sum_received.bits_per_second" >t1) &
-ns2b	iperf3 -s1J -p 5204 | jq -rM ".end.sum_received.bits_per_second" >t2
-hostb	iperf3 -c __ADDR4__ -p 5203 __OPTS__ & iperf3 -c __ADDR4__ -p 5204 __OPTS__
-sleep	10
+ns2b	iperf3 -s1J -p 5203 | jq -rM ".end.sum_received.bits_per_second" >t1
+hostb	iperf3 -c __ADDR4__ -p 5203 __OPTS__
+sleep	12
 ns2b	
-ns2out	BW echo "$(cat t1) + $(cat t2)" | bc -l
+ns2out	BW cat t1
 bw	__BW__ 0.0 0.0
 hostb	
 
@@ -413,19 +395,17 @@ hout	LAT tcp_crr --nolog -c -H __ADDR4__ -C 5203 -P 5204 -l 5 | sed -n 's/^throu
 lat	__LAT__ 100000 100000
 
 tr	TCP/IPv6 to host
-hostb	(iperf3 -s1J -p 5211 | jq -rM ".end.sum_received.bits_per_second" >t1) &
-hostb	iperf3 -s1J -p 5212 | jq -rM ".end.sum_received.bits_per_second" >t2
-ns1b	iperf3 -c fd00::2 -p 5211 __OPTS__ & iperf3 -c fd00::2 -p 5212 __OPTS__
-sleep	10
+hostb	iperf3 -s1J -p 5211 | jq -rM ".end.sum_received.bits_per_second" >t1
+ns1b	iperf3 -c fd00::2 -p 5211 __OPTS__
+sleep	12
 hostb	
-hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+hout	BW cat t1
 bw	__BW__ 0.0 0.0
-hostb	(iperf3 -s1J -p 5213 | jq -rM ".end.sum_received.bits_per_second" >t1) &
-hostb	iperf3 -s1J -p 5214 | jq -rM ".end.sum_received.bits_per_second" >t2
-ns2b	iperf3 -c __GW6__%__IFNAME__ -p 5213 __OPTS__ & iperf3 -c __GW6__%__IFNAME__ -p 5214 __OPTS__
-sleep	10
+hostb	iperf3 -s1J -p 5213 | jq -rM ".end.sum_received.bits_per_second" >t1
+ns2b	iperf3 -c __GW6__%__IFNAME__ -p 5213 __OPTS__
+sleep	12
 hostb	
-hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+hout	BW cat t1
 bw	__BW__ 0.0 0.0
 ns1b	
 ns2b	
@@ -451,19 +431,17 @@ ns2out	LAT ./tcp_crr --nolog -c -H __GW6__%__IFNAME__ -C 5213 -P 5214 -l 5 | sed
 lat	__LAT__ 100000 100000
 
 tl	TCP/IPv4 to host
-hostb	(iperf3 -s1J -p 5211 | jq -rM ".end.sum_received.bits_per_second" >t1) &
-hostb	iperf3 -s1J -p 5212 | jq -rM ".end.sum_received.bits_per_second" >t2
-ns1b	iperf3 -c 10.0.2.2 -p 5211 __OPTS__ & iperf3 -c 10.0.2.2 -p 5212 __OPTS__
-sleep	10
+hostb	iperf3 -s1J -p 5211 | jq -rM ".end.sum_received.bits_per_second" >t1
+ns1b	iperf3 -c 10.0.2.2 -p 5211 __OPTS__
+sleep	12
 hostb	
-hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+hout	BW cat t1
 bw	__BW__ 0.0 0.0
-hostb	(iperf3 -s1J -p 5213 | jq -rM ".end.sum_received.bits_per_second" >t1) &
-hostb	iperf3 -s1J -p 5214 | jq -rM ".end.sum_received.bits_per_second" >t2
-ns2b	iperf3 -c __GW4__ -p 5213 __OPTS__ & iperf3 -c __GW4__ -p 5214 __OPTS__
+hostb	iperf3 -s1J -p 5213 | jq -rM ".end.sum_received.bits_per_second" >t1
+ns2b	iperf3 -c __GW4__ -p 5213 __OPTS__
 sleep	10
 hostb	
-hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
+hout	BW cat t1
 bw	__BW__ 0.0 0.0
 ns1b	
 ns2b	
@@ -597,15 +575,15 @@ th	mode rootlesskit pasta
 tr	TCP/IPv6 to ns
 ns1b	(iperf3 -s1J -p 5201 | jq -rM ".end.sum_received.bits_per_second" >t1) &
 ns1b	iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second" >t2
-hostb	iperf3 -c ::1 -p 5201 -t5 -l 1M -Z & iperf3 -c ::1 -p 5202 -t5 -l 1M -Z
-sleep	10
+hostb	iperf3 -c ::1 -p 5201 __OPTS__ & iperf3 -c ::1 -p 5202 __OPTS__
+sleep	12
 ns1b	
 ns1out	BW echo "$(cat t1) + $(cat t2)" | bc -l
 bw	__BW__ 0.0 0.0
 ns2b	(iperf3 -s1J -p 5203 | jq -rM ".end.sum_received.bits_per_second" >t1) &
 ns2b	iperf3 -s1J -p 5204 | jq -rM ".end.sum_received.bits_per_second" >t2
-hostb	iperf3 -c ::1 -p 5203 -t5 -l 1M -Z & iperf3 -c ::1 -p 5204 -t5 -l 1M -Z
-sleep	10
+hostb	iperf3 -c ::1 -p 5203 __OPTS__ & iperf3 -c ::1 -p 5204 __OPTS__
+sleep	12
 ns2b	
 ns2out	BW echo "$(cat t1) + $(cat t2)" | bc -l
 bw	__BW__ 0.0 0.0
@@ -635,14 +613,14 @@ tl	TCP/IPv4 to ns
 ns1b	(iperf3 -s1J -p 5201 | jq -rM ".end.sum_received.bits_per_second" >t1) &
 ns1b	iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second" >t2
 hostb	iperf3 -c 127.0.0.1 -p 5201 __OPTS__ & iperf3 -c 127.0.0.1 -p 5202 __OPTS__
-sleep	10
+sleep	12
 ns1b	
 ns1out	BW echo "$(cat t1) + $(cat t2)" | bc -l
 bw	__BW__ 0.0 0.0
 ns2b	(iperf3 -s1J -p 5203 | jq -rM ".end.sum_received.bits_per_second" >t1) &
 ns2b	iperf3 -s1J -p 5204 | jq -rM ".end.sum_received.bits_per_second" >t2
 hostb	iperf3 -c 127.0.0.1 -p 5203 __OPTS__ & iperf3 -c 127.0.0.1 -p 5204 __OPTS__
-sleep	10
+sleep	12
 ns2b	
 ns2out	BW echo "$(cat t1) + $(cat t2)" | bc -l
 bw	__BW__ 0.0 0.0
@@ -672,14 +650,14 @@ tr	TCP/IPv6 to host
 hostb	(iperf3 -s1J -p 5211 | jq -rM ".end.sum_received.bits_per_second" >t1) &
 hostb	iperf3 -s1J -p 5212 | jq -rM ".end.sum_received.bits_per_second" >t2
 ns1b	iperf3 -c fd00::2 -p 5211 __OPTS__ & iperf3 -c fd00::2 -p 5212 __OPTS__
-sleep	10
+sleep	12
 hostb	
 hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
 bw	__BW__ 0.0 0.0
 hostb	(iperf3 -s1J -p 5213 | jq -rM ".end.sum_received.bits_per_second" >t1) &
 hostb	iperf3 -s1J -p 5214 | jq -rM ".end.sum_received.bits_per_second" >t2
 ns2b	iperf3 -c ::1 -p 5213 __OPTS__ & iperf3 -c ::1 -p 5214 __OPTS__
-sleep	10
+sleep	12
 hostb	
 hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
 bw	__BW__ 0.0 0.0
@@ -710,14 +688,14 @@ tl	TCP/IPv4 to host
 hostb	(iperf3 -s1J -p 5211 | jq -rM ".end.sum_received.bits_per_second" >t1) &
 hostb	iperf3 -s1J -p 5212 | jq -rM ".end.sum_received.bits_per_second" >t2
 ns1b	iperf3 -c 10.0.2.2 -p 5211 __OPTS__ & iperf3 -c 10.0.2.2 -p 5212 __OPTS__
-sleep	10
+sleep	12
 hostb	
 hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
 bw	__BW__ 0.0 0.0
 hostb	(iperf3 -s1J -p 5213 | jq -rM ".end.sum_received.bits_per_second" >t1) &
 hostb	iperf3 -s1J -p 5214 | jq -rM ".end.sum_received.bits_per_second" >t2
 ns2b	iperf3 -c 127.0.0.1 -p 5213 __OPTS__ & iperf3 -c 127.0.0.1 -p 5214 __OPTS__
-sleep	10
+sleep	12
 hostb	
 hout	BW echo "$(cat t1) + $(cat t2)" | bc -l
 bw	__BW__ 0.0 0.0
