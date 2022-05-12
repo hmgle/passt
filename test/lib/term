@@ -542,26 +542,25 @@ pause_continue() {
 
 # run_term() - Start tmux session, running entry point, with recording if needed
 run_term() {
-	export SHELL="/bin/sh"
-	tmux set-option -g default-shell "/bin/sh"
-
 	TMUX="tmux new-session -s passt_test -ePCAP=$PCAP -eDEBUG=$DEBUG"
 
 	if [ ${CI} -eq 1 ]; then
 		printf '\e[8;50;240t'
-		asciinema rec --overwrite ci.uncut -c "$TMUX ./ci from_term"
+		asciinema rec --overwrite ci.uncut -c "$TMUX /bin/sh -c './ci from_term'"
 		video_postprocess ci.uncut
 	elif [ ${DEMO} -eq 1 ]; then
 		printf '\e[8;40;130t'
-		asciinema rec --overwrite demo.uncut -c "$TMUX ./run_demo from_term"
+		asciinema rec --overwrite demo.uncut -c "$TMUX /bin/sh -c './run_demo from_term'"
 		video_postprocess demo.uncut
 	else
-		$TMUX ./run from_term
+		$TMUX /bin/sh -c './run from_term'
 	fi
 }
 
 # term() - Set up terminal window and panes for regular tests or CI
 term() {
+	tmux set-option default-shell "/bin/sh"
+
 	tmux set status-interval 1
 	tmux rename-window ''
 
@@ -596,6 +595,8 @@ term() {
 
 # term_demo() - Set up terminal window and panes for demo
 term_demo() {
+	tmux set-option default-shell "/bin/sh"
+
 	tmux set status-interval 1
 	tmux rename-window ''
 
