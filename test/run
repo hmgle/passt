@@ -35,9 +35,6 @@ DEBUG=${DEBUG:-0}
 # If set, tell passt and pasta to take packet captures
 PCAP=${PCAP:-0}
 
-# If set, run X terminals for CI and demos in Xvfb
-XVFB=${XVFB:-1}
-
 COMMIT="$(git log --oneline --no-decorate -1)"
 
 . lib/util
