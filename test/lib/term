@@ -221,7 +221,7 @@ pane_wait() {
 pane_parse() {
 	__pane_lc="$(echo "${1}" | tr [A-Z] [a-z])"
 
-	__buf="$(tail -n2 ${LOGDIR}/pane_${__pane_lc}.log | head -n1 | tr -d -c [:print:])"
+	__buf="$(tail -n2 ${LOGDIR}/pane_${__pane_lc}.log | head -n1 | sed 's/^[^\r]*\r\([^\r]\)/\1/' | tr -d '\r\n')"
 
 	[ "# $(eval printf '%s' \"\$${1}_LAST_CMD\")" != "${__buf}" ] && \
 	[ "$ $(eval printf '%s' \"\$${1}_LAST_CMD\")" != "${__buf}" ] &&
