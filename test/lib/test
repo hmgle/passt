@@ -89,6 +89,8 @@ test_iperf3() {
 test_one_line() {
 	__line="${1}"
 
+	[ ${DEBUG} -eq 1 ] && info DEBUG: "${__line}"
+
 	# Strip comments
 	__line="${__line%%#*}"
 
