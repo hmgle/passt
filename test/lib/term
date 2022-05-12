@@ -228,6 +228,20 @@ pane_parse() {
 		printf '%s' "${__buf}" || printf '@EMPTY@'
 }
 
+# pane_status() - Wait for command to complete and return its exit status
+# $1:	Pane name
+pane_status() {
+	pane_wait "${1}"
+	__status="$(pane_parse "${1}")"
+	while ! [ "${__status}" -eq "${__status}" ]; do
+		sleep 1
+		pane_run "${1}" 'echo $?'
+		pane_wait "${1}"
+		__status="$(pane_parse "${1}")"
+	done
+	return ${__status}
+}
+
 # status_file_end() - Display and log messages when tests from one file are done
 status_file_end() {
 	[ -z "${STATUS_FILE}" ] && return

@@ -52,7 +52,7 @@ test_iperf3() {
 
 	pane_run "${__pane}" 'for i in $(seq 0 '${__procs}'); do'	\
 		':> s${i}.bw; done'
-	pane_wait "${__pane}"
+	pane_status "${__pane}"
 
 	if [ ${UDP_CLIENT} -eq 0 ]; then
 		pane_run "${__pane}" 'for i in $(seq 0 '${__procs}');'	\
@@ -70,7 +70,7 @@ test_iperf3() {
 			'done'
 	fi
 
-	pane_wait "${__pane}"
+	pane_status "${__pane}"
 	sleep 45
 	pane_run "${__pane}" 'for i in $(seq 0 '${__procs}'); do'	\
 		 'kill -INT $(cat s${i}.pid) 2>/dev/null; done'
@@ -83,7 +83,7 @@ test_iperf3() {
 	pane_parse "${__pane}"
 	pane_run "${__pane}" 'for i in $(seq 0 '${__procs}'); do'	\
 		'rm -f s${i}.bw; done'
-	pane_wait "${__pane}"
+	pane_status "${__pane}"
 }
 
 test_one_line() {
@@ -139,13 +139,13 @@ test_one_line() {
 		;;
 	"host")
 		pane_run HOST "${__arg}"
-		pane_wait HOST
+		pane_status HOST || TEST_ONE_nok=1
 		;;
 	"hostb")
 		pane_run HOST "${__arg}"
 		;;
 	"hostw")
-		pane_wait HOST
+		pane_status HOST || TEST_ONE_nok=1
 		;;
 	"hint")
 		tmux send-keys -t ${PANE_HOST} "C-c"
@@ -157,13 +157,13 @@ test_one_line() {
 		;;
 	"passt")
 		pane_run PASST "${__arg}"
-		pane_wait PASST
+		pane_status PASST || TEST_ONE_nok=1
 		;;
 	"passtb")
 		pane_run PASST "${__arg}"
 		;;
 	"passtw")
-		pane_wait PASST
+		pane_status PASST || TEST_ONE_nok=1
 		;;
 	"pout")
 		__varname="${__arg%% *}"
@@ -173,23 +173,23 @@ test_one_line() {
 		;;
 	"guest")
 		pane_run GUEST "${__arg}"
-		pane_wait GUEST
+		pane_status GUEST || TEST_ONE_nok=1
 		;;
 	"guestb")
 		pane_run GUEST "${__arg}"
 		;;
 	"guestw")
-		pane_wait GUEST
+		pane_status GUEST || TEST_ONE_nok=1
 		;;
 	"guest1")
 		pane_run GUEST_1 "${__arg}"
-		pane_wait GUEST_1
+		pane_status GUEST_1 || TEST_ONE_nok=1
 		;;
 	"guest1b")
 		pane_run GUEST_1 "${__arg}"
 		;;
 	"guest1w")
-		pane_wait GUEST_1
+		pane_status GUEST_1 || TEST_ONE_nok=1
 		;;
 	"gtools")
 		pane_run GUEST 'which '"${__arg}"' >/dev/null || echo skip'
@@ -208,25 +208,25 @@ test_one_line() {
 		;;
 	"guest2")
 		pane_run GUEST_2 "${__arg}"
-		pane_wait GUEST_2
+		pane_status GUEST_2 || TEST_ONE_nok=1
 		;;
 	"guest2b")
 		pane_run GUEST_2 "${__arg}"
 		;;
 	"guest2w")
-		pane_wait GUEST_2
+		pane_status GUEST_2 || TEST_ONE_nok=1
 		;;
 	"ns")
 		pane_run NS "${__arg}"
-		pane_wait NS
+		pane_status NS || TEST_ONE_nok=1
 		;;
 	"ns1")
 		pane_run NS1 "${__arg}"
-		pane_wait NS1
+		pane_status NS1 || TEST_ONE_nok=1
 		;;
 	"ns2")
 		pane_run NS2 "${__arg}"
-		pane_wait NS2
+		pane_status NS2 || TEST_ONE_nok=1
 		;;
 	"nsb")
 		pane_run NS "${__arg}"
@@ -238,13 +238,13 @@ test_one_line() {
 		pane_run NS2 "${__arg}"
 		;;
 	"nsw")
-		pane_wait NS
+		pane_status NS || TEST_ONE_nok=1
 		;;
 	"ns1w")
-		pane_wait NS1
+		pane_status NS1 || TEST_ONE_nok=1
 		;;
 	"ns2w")
-		pane_wait NS2
+		pane_status NS2 || TEST_ONE_nok=1
 		;;
 	"nstools")
 		pane_run NS 'which '"${__arg}"' >/dev/null || echo skip'
