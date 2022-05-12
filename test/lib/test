@@ -153,7 +153,7 @@ test_one_line() {
 	"htools")
 		pane_run HOST 'which '"${__arg}"' >/dev/null || echo skip'
 		pane_wait HOST
-		[ "$(pane_parse HOST)" = "skip" ] && TEST_ONE_skip=1
+		[ "$(pane_parse HOST)" = "skip" ] && TEST_ONE_skip=1 || true
 		;;
 	"passt")
 		pane_run PASST "${__arg}"
@@ -194,17 +194,17 @@ test_one_line() {
 	"gtools")
 		pane_run GUEST 'which '"${__arg}"' >/dev/null || echo skip'
 		pane_wait GUEST
-		[ "$(pane_parse GUEST)" = "skip" ] && TEST_ONE_skip=1
+		[ "$(pane_parse GUEST)" = "skip" ] && TEST_ONE_skip=1 || true
 		;;
 	"g1tools")
 		pane_run GUEST_1 'which '"${__arg}"' >/dev/null || echo skip'
 		pane_wait GUEST_1
-		[ "$(pane_parse GUEST_1)" = "skip" ] && TEST_ONE_skip=1
+		[ "$(pane_parse GUEST_1)" = "skip" ] && TEST_ONE_skip=1 || true
 		;;
 	"g2tools")
 		pane_run GUEST_2 'which '"${__arg}"' >/dev/null || echo skip'
 		pane_wait GUEST_2
-		[ "$(pane_parse GUEST_2)" = "skip" ] && TEST_ONE_skip=1
+		[ "$(pane_parse GUEST_2)" = "skip" ] && TEST_ONE_skip=1 || true
 		;;
 	"guest2")
 		pane_run GUEST_2 "${__arg}"
@@ -249,7 +249,7 @@ test_one_line() {
 	"nstools")
 		pane_run NS 'which '"${__arg}"' >/dev/null || echo skip'
 		pane_wait NS
-		[ "$(pane_parse NS)" = "skip" ] && TEST_ONE_skip=1
+		[ "$(pane_parse NS)" = "skip" ] && TEST_ONE_skip=1 || true
 		;;
 	"gout")
 		__varname="${__arg%% *}"
