@@ -62,8 +62,7 @@ host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
 
 host	make clean
-hout	RET CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits" make
 
 # TODO: pasta test skipped for the moment: clone() as called by NS_CALL hangs
 # with wrapper provided by glibc 2.19, probably wrong argument order.
@@ -96,8 +95,7 @@ host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
 
 host	make clean
-hout	RET CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits -Wno-sign-compare" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits -Wno-sign-compare" make
 
 # TODO: pasta test skipped for the moment: clone() as called by NS_CALL hangs
 # with wrapper provided by glibc 2.19, probably wrong argument order.
@@ -127,8 +125,7 @@ host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
 
 host	make clean
-hout	RET CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits -Wno-sign-compare" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits -Wno-sign-compare" make
 
 # TODO: pasta test skipped for the moment: clone() as called by NS_CALL hangs
 # with wrapper provided by glibc 2.19, probably wrong argument order.
@@ -160,8 +157,7 @@ host	dhclient
 host	apt-get -y install make gcc netcat-openbsd
 
 host	make clean
-hout	RET CFLAGS="-Werror" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Werror" make
 
 distro_quick_pasta_test
 
@@ -195,8 +191,7 @@ host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
 
 host	make clean
-hout	RET CFLAGS="-Werror" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Werror" make
 
 host	export SHELL="/bin/dash"
 host	dash

@@ -60,8 +60,7 @@ host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
 host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
 
 host	make clean
-hout	RET CFLAGS="-Werror" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Werror" make
 
 distro_quick_pasta_test
 
@@ -89,8 +88,7 @@ host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
 host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
 
 host	make clean
-hout	RET CFLAGS="-Werror" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Werror" make
 
 distro_quick_pasta_test
 
@@ -117,8 +115,7 @@ host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
 host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
 
 host	make clean
-hout	RET CFLAGS="-Werror" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Werror" make
 
 distro_quick_pasta_test
 
@@ -143,8 +140,7 @@ sleep	10
 host	zypper install -y gcc make netcat-openbsd; echo
 
 host	make clean
-hout	RET CFLAGS="-Werror" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Werror" make
 
 distro_quick_pasta_test
 
@@ -172,8 +168,7 @@ sleep	10
 host	zypper install -y gcc make netcat-openbsd; echo
 
 host	make clean
-hout	RET CFLAGS="-Werror" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Werror" make
 
 distro_quick_pasta_test
 
@@ -200,8 +195,7 @@ host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i ens2
 host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
 
 host	make clean
-hout	RET CFLAGS="-Werror" make; echo $?
-check	[ __RET__ -eq 0 ]
+host	CFLAGS="-Werror" make
 
 distro_quick_pasta_test
 

@@ -14,9 +14,7 @@
 htools	clang-tidy cppcheck
 
 test	Run clang-tidy
-hout	RET make clang-tidy; echo $?
-check	[ __RET__ -eq 0 ]
+host	make clang-tidy
 
 test	Run cppcheck
-hout	RET make cppcheck; echo $?
-check	[ __RET__ -eq 0 ]
+host	make cppcheck

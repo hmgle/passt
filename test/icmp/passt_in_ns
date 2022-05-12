@@ -24,14 +24,10 @@ test	ICMP echo: guest to ns
 nsout	IFNAME_NS ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
 ns	ip addr add 192.0.2.1/32 dev __IFNAME_NS__
 guest	ping -c1 -w1 192.0.2.1
-gout	RET echo $?
 ns	ip addr del 192.0.2.1/32 dev __IFNAME_NS__
-check	[ __RET__ -eq 0 ]
 
 test	ICMPv6 echo: guest to ns
 ns	ip addr add 2001:db8::1 dev __IFNAME_NS__ && sleep 2 # DAD
 gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
 guest	ping -c1 -w1 2001:db8::1
-gout	RET echo $?
 ns	ip addr del 2001:db8::1 dev __IFNAME_NS__
-check	[ __RET__ -eq 0 ]
