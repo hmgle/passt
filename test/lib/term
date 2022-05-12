@@ -544,18 +544,19 @@ pause_continue() {
 run_term() {
 	export SHELL="/bin/sh"
 	tmux set-option -g default-shell "/bin/sh"
-	tmux set-option -g update-environment "PCAP DEBUG"
+
+	TMUX="tmux new-session -s passt_test -ePCAP=$PCAP -eDEBUG=$DEBUG"
 
 	if [ ${CI} -eq 1 ]; then
 		printf '\e[8;50;240t'
-		asciinema rec --overwrite ci.uncut -c 'tmux new-session -s passt_test ./ci from_term'
+		asciinema rec --overwrite ci.uncut -c "$TMUX ./ci from_term"
 		video_postprocess ci.uncut
 	elif [ ${DEMO} -eq 1 ]; then
 		printf '\e[8;40;130t'
-		asciinema rec --overwrite demo.uncut -c 'tmux new-session -s passt_test ./run_demo from_term'
+		asciinema rec --overwrite demo.uncut -c "$TMUX ./run_demo from_term"
 		video_postprocess demo.uncut
 	else
-		tmux new-session -s passt_test ./run from_term
+		$TMUX ./run from_term
 	fi
 }
 
