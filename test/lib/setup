@@ -31,7 +31,7 @@ setup_passt() {
 	layout_passt
 
 	__mbuto_dir="$(mktemp -d)"
-	pane_run GUEST "git -C ${__mbuto_dir} clone https://mbuto.lameexcu.se/mbuto/"
+	pane_run GUEST "git -C ${__mbuto_dir} clone git://mbuto.sh/mbuto"
 	pane_wait GUEST
 
 	pane_run GUEST "${__mbuto_dir}/mbuto/mbuto -p passt -c lz4 -f mbuto.img"
