@@ -19,10 +19,10 @@ A running instance of \fBpasst\fR(1) is probed checking for UNIX domain sockets,
 answering a dummy ARP request, with names starting from
 \fI/tmp/passt_1.socket\fR up to \fI/tmp/passt_64.socket\fR.
 
-If first and second arguments are not a socket number and a path, that is,
+If first and second arguments are not a socket number and a command, that is,
 respectively, \fIFDNUM\fR and \fIQEMU_CMD\fR, \fBqrap\fR will try to locate a
-qemu binary and patch the command line to specify a network device and a
-\fInetdev\fR back-end for usage with \fBpasst\fR(1).
+qemu executable in \fBPATH\fR and patch the command line to specify a network
+device and a \fInetdev\fR back-end for usage with \fBpasst\fR(1).
 
 If \fBqrap\fR patches the command line, it will remove any potentially
 conflicting network device, that is, any \fI-netdev\fR or \fI-net\fR option, or
