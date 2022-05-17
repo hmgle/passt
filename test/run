@@ -110,7 +110,7 @@ run() {
 		"Interrupted, press any key to quit"		\
 		9
 
-	return ${STATUS_FAIL}
+	return 0
 }
 
 # demo() - Simpler path for demo purposes
