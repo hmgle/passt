@@ -62,7 +62,6 @@ lat	__LAT__ 200 150
 
 tr	UDP throughput over IPv4: ns to host
 ns	ip link set dev lo mtu 1500
-ns	ip addr add ::1 dev lo
 iperf3c	ns 127.0.0.1 100${i}3 __THREADS__ __OPTS__ -b 3G
 iperf3s	BW host 100${i}3 __THREADS__
 bw	__BW__ 1.0 1.5
