@@ -232,6 +232,9 @@ pane_parse() {
 # $1:	Pane name
 pane_status() {
 	pane_wait "${1}"
+
+	[ ${DEMO} -eq 1 ] && return 0
+
 	__status="$(pane_parse "${1}")"
 	while ! [ "${__status}" -eq "${__status}" ]; do
 		sleep 1
