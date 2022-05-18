@@ -46,8 +46,6 @@
 #include <sys/stat.h>
 #include <sys/prctl.h>
 #include <stddef.h>
-#include <pwd.h>
-#include <grp.h>
 #include <netinet/udp.h>
 #include <netinet/tcp.h>
 #include <netinet/if_ether.h>
@@ -191,49 +189,6 @@ static void seccomp(const struct ctx *c)
 }
 
 /**
- * check_root() - Warn if root in init, exit if we can't drop to nobody
- */
-static void check_root(void)
-{
-	const char root_uid_map[] = "         0          0 4294967295";
-	struct passwd *pw;
-	char buf[BUFSIZ];
-	int fd;
-
-	if (getuid() && geteuid())
-		return;
-
-	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0)
-		return;
-
-	if (read(fd, buf, BUFSIZ) != sizeof(root_uid_map) ||
-	    strncmp(buf, root_uid_map, sizeof(root_uid_map) - 1)) {
-		close(fd);
-		return;
-	}
-
-	close(fd);
-
-	fprintf(stderr, "Don't run this as root. Changing to nobody...\n");
-#ifndef GLIBC_NO_STATIC_NSS
-	pw = getpwnam("nobody");
-	if (!pw) {
-		perror("getpwnam");
-		exit(EXIT_FAILURE);
-	}
-
-	if (!initgroups(pw->pw_name, pw->pw_gid) &&
-	    !setgid(pw->pw_gid) && !setuid(pw->pw_uid))
-		return;
-#else
-	(void)pw;
-#endif
-
-	fprintf(stderr, "Can't change to user/group nobody, exiting");
-	exit(EXIT_FAILURE);
-}
-
-/**
  * sandbox() - Unshare IPC, mount, PID, UTS, and user namespaces, "unmount" root
  *
  * Return: negative error code on failure, zero on success
@@ -336,7 +291,6 @@ int main(int argc, char **argv)
 
 	arch_avx2_exec(argv);
 
-	check_root();
 	drop_caps();
 
 	c.pasta_userns_fd = c.pasta_netns_fd = c.fd_tap = c.fd_tap_listen = -1;

@@ -33,6 +33,8 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+#include <pwd.h>
+#include <grp.h>
 
 #include <linux/capability.h>
 
@@ -530,6 +532,56 @@ void drop_caps(void)
 
 		prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
 	}
+}
+
+/**
+ * check_root() - Check if root in init ns, exit if we can't drop to user
+ */
+void check_root(struct ctx *c)
+{
+	const char root_uid_map[] = "         0          0 4294967295";
+	struct passwd *pw;
+	char buf[BUFSIZ];
+	int fd;
+
+	if (getuid() && geteuid())
+		return;
+
+	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0)
+		return;
+
+	if (read(fd, buf, BUFSIZ) != sizeof(root_uid_map) ||
+	    strncmp(buf, root_uid_map, sizeof(root_uid_map) - 1)) {
+		close(fd);
+		return;
+	}
+
+	close(fd);
+
+	if (!c->uid) {
+		fprintf(stderr, "Don't run as root. Changing to nobody...\n");
+#ifndef GLIBC_NO_STATIC_NSS
+		pw = getpwnam("nobody");
+		if (!pw) {
+			perror("getpwnam");
+			exit(EXIT_FAILURE);
+		}
+
+		c->uid = pw->pw_uid;
+		c->gid = pw->pw_gid;
+#else
+		(void)pw;
+
+		/* Common value for 'nobody', not really specified */
+		c->uid = c->gid = 65534;
+#endif
+	}
+
+	if (!setgid(c->gid) && !setuid(c->uid))
+		return;
+
+	fprintf(stderr, "Can't change user/group, exiting");
+	exit(EXIT_FAILURE);
 }
 
 /**

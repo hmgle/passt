@@ -22,6 +22,8 @@
 #include <sys/stat.h>
 #include <libgen.h>
 #include <limits.h>
+#include <grp.h>
+#include <pwd.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -614,6 +616,9 @@ static void usage(const char *name)
 	info(   "    default: run in background if started from a TTY");
 	info(   "  -e, --stderr		Log to stderr too");
 	info(   "    default: log to system logger only if started from a TTY");
+	info(   "  --runas UID|UID:GID 	Use given UID, GID if started as root");
+	info(   "    UID and GID can be numeric, or login and group names");
+	info(   "    default: drop to user \"nobody\"");
 	info(   "  -h, --help		Display this help message and exit");
 
 	if (strstr(name, "pasta")) {
@@ -838,6 +843,57 @@ dns6:
 }
 
 /**
+ * conf_runas() - Handle --runas: look up desired UID and GID
+ * @opt:	Passed option value
+ * @uid:	User ID, set on return if valid
+ * @gid:	Group ID, set on return if valid
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int conf_runas(const char *opt, unsigned int *uid, unsigned int *gid)
+{
+	char ubuf[LOGIN_NAME_MAX], gbuf[LOGIN_NAME_MAX], *endptr;
+	struct passwd *pw;
+	struct group *gr;
+
+	/* NOLINTNEXTLINE(cert-err34-c): 2 if conversion succeeds */
+	if (sscanf(opt, "%u:%u", uid, gid) == 2 && uid && gid)
+		return 0;
+
+	*uid = strtol(opt, &endptr, 0);
+	if (!*endptr && (*gid = *uid))
+		return 0;
+
+#ifdef GLIBC_NO_STATIC_NSS
+	(void)ubuf;
+	(void)gbuf;
+	(void)pw;
+
+	return -EINVAL;
+#else
+	/* NOLINTNEXTLINE(cert-err34-c): 2 if conversion succeeds */
+	if (sscanf(opt, "%" STR(LOGIN_NAME_MAX) "[^:]:"
+			"%" STR(LOGIN_NAME_MAX) "s", ubuf, gbuf) == 2) {
+		pw = getpwnam(ubuf);
+		if (!pw || !(*uid = pw->pw_uid))
+			return -ENOENT;
+
+		gr = getgrnam(gbuf);
+		if (!gr || !(*gid = gr->gr_gid))
+			return -ENOENT;
+
+		return 0;
+	}
+
+	pw = getpwnam(ubuf);
+	if (!pw || !(*uid = pw->pw_uid) || !(*gid = pw->pw_gid))
+		return -ENOENT;
+
+	return 0;
+#endif /* !GLIBC_NO_STATIC_NSS */
+}
+
+/**
  * conf() - Process command-line arguments and set configuration
  * @c:		Execution context
  * @argc:	Argument count
@@ -889,6 +945,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"dns-forward",	required_argument,	NULL,		9 },
 		{"no-netns-quit", no_argument,		NULL,		10 },
 		{"trace",	no_argument,		NULL,		11 },
+		{"runas",	required_argument,	NULL,		12 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
@@ -1031,6 +1088,17 @@ void conf(struct ctx *c, int argc, char **argv)
 			}
 
 			c->trace = c->debug = c->foreground = 1;
+			break;
+		case 12:
+			if (c->uid || c->gid) {
+				err("Multiple --runas options given");
+				usage(argv[0]);
+			}
+
+			if (conf_runas(optarg, &c->uid, &c->gid)) {
+				err("Invalid --runas option: %s", optarg);
+				usage(argv[0]);
+			}
 			break;
 		case 'd':
 			if (c->debug) {
@@ -1297,6 +1365,8 @@ void conf(struct ctx *c, int argc, char **argv)
 			break;
 		}
 	} while (name != -1);
+
+	check_root(c);
 
 	if (c->mode == MODE_PASTA && optind + 1 == argc) {
 		ret = conf_ns_opt(c, nsdir, userns, argv[optind]);
