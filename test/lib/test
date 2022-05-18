@@ -386,8 +386,10 @@ test_one() {
 		return
 	fi
 
-	__ntests="$(grep -c "^test$(printf '\t')" "${__test_file}")"
-	[ ${DEMO} -eq 0 ] && status_file_start "${1}" "${__ntests}"
+	if [ ${DEMO} -eq 0 ]; then
+		__ntests="$(grep -c "^test$(printf '\t')" "${__test_file}")"
+		status_file_start "${1}" "${__ntests}"
+	fi
 
 	[ ${CI} -eq 1 ] && video_link "${1}"
 
