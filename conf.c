@@ -857,7 +857,7 @@ static int conf_runas(const char *opt, unsigned int *uid, unsigned int *gid)
 	struct group *gr;
 
 	/* NOLINTNEXTLINE(cert-err34-c): 2 if conversion succeeds */
-	if (sscanf(opt, "%u:%u", uid, gid) == 2 && uid && gid)
+	if (sscanf(opt, "%u:%u", uid, gid) == 2 && *uid && *gid)
 		return 0;
 
 	*uid = strtol(opt, &endptr, 0);
@@ -874,12 +874,10 @@ static int conf_runas(const char *opt, unsigned int *uid, unsigned int *gid)
 	/* NOLINTNEXTLINE(cert-err34-c): 2 if conversion succeeds */
 	if (sscanf(opt, "%" STR(LOGIN_NAME_MAX) "[^:]:"
 			"%" STR(LOGIN_NAME_MAX) "s", ubuf, gbuf) == 2) {
-		pw = getpwnam(ubuf);
-		if (!pw || !(*uid = pw->pw_uid))
+		if (!(pw = getpwnam(ubuf)) || !(*uid = pw->pw_uid))
 			return -ENOENT;
 
-		gr = getgrnam(gbuf);
-		if (!gr || !(*gid = gr->gr_gid))
+		if (!(gr = getgrnam(gbuf)) || !(*gid = gr->gr_gid))
 			return -ENOENT;
 
 		return 0;
