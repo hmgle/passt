@@ -1011,6 +1011,12 @@ static void tcp_rtt_dst_check(const struct tcp_conn *conn,
 			hole = i;
 	}
 
+	/* Keep gcc 12 happy: this won't actually happen because the table is
+	 * guaranteed to have a hole, see the second memcpy() below.
+	 */
+	if (hole == -1)
+		return;
+
 	memcpy(low_rtt_dst + hole++, &conn->a.a6, sizeof(conn->a.a6));
 	if (hole == LOW_RTT_TABLE_SIZE)
 		hole = 0;
