@@ -12,12 +12,12 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 Name:		passt
-Version:	0+git-8fd20ad99d24
+Version:	0.git.202206071425.67103ea
 Release:	0
 Summary:	User-mode networking daemons for virtual machines and namespaces
 License:	AGPLv3+ and BSD
 URL:		https://passt.top/
-Source:		https://passt.top/passt/snapshot/passt-8fd20ad99d24a517fa1771e1863f51a32d2fe8a4.tar.xz
+Source:		https://passt.top/passt/snapshot/passt-67103ea556da00106da900f20aac286511171ea2.tar.xz
 
 BuildRequires:	gcc, make, checkpolicy, selinux-policy-devel
 
@@ -91,5 +91,5 @@ semodule -r pasta 2>/dev/null || :
 %{_datadir}/selinux/packages/%{name}/pasta.pp
 
 %changelog
-* Mon Mar 28 2022 Stefano Brivio <sbrivio@redhat.com> 0+git-8fd20ad99d24-0
+* Tue Jun 07 2022 Stefano Brivio <sbrivio@redhat.com> 0.git.202206071425.67103ea
 - Pro forma: example
