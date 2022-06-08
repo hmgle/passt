@@ -2505,7 +2505,11 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_conn *conn,
 		char *data;
 		size_t off;
 
-		packet_get(p, i, 0, 0, &len);
+		if (!packet_get(p, i, 0, 0, &len)) {
+			tcp_rst(c, conn);
+			return;
+		}
+
 		th = packet_get(p, i, 0, sizeof(*th), NULL);
 		if (!th) {
 			tcp_rst(c, conn);
@@ -2729,7 +2733,9 @@ int tcp_tap_handler(struct ctx *c, int af, const void *addr,
 	int ack_due = 0;
 	char *opts;
 
-	packet_get(p, 0, 0, 0, &len);
+	if (!packet_get(p, 0, 0, 0, &len))
+		return 1;
+
 	th = packet_get(p, 0, 0, sizeof(*th), NULL);
 	if (!th)
 		return 1;

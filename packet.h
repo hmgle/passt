@@ -40,10 +40,10 @@ void *packet_get_do(const struct pool *p, const size_t index,
 void pool_flush(struct pool *p);
 
 #define packet_add(p, len, start)					\
-	packet_add_do(p, len, start, __func__, __LINE__);
+	packet_add_do(p, len, start, __func__, __LINE__)
 
 #define packet_get(p, index, offset, len, left)				\
-	packet_get_do(p, index, offset, len, left, __func__, __LINE__);
+	packet_get_do(p, index, offset, len, left, __func__, __LINE__)
 
 #define packet_get_try(p, index, offset, len, left)			\
 	packet_get_do(p, index, offset, len, left, NULL, 0)
