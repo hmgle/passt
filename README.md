@@ -530,7 +530,7 @@ See also the [test logs](/builds/latest/test/).
         cd passt
         make
 
-    * alternatively, [static builds]((/builds/latest/x86_64/) for x86_64 as of
+    * alternatively, [static builds](/builds/latest/x86_64/) for x86_64 as of
       the latest commit are also available for convenience. Non-official
       packages for Debian (and derivatives) and RPM-based distributions are also
       available there. These binaries and packages are simply built with:
@@ -588,7 +588,7 @@ See also the [test logs](/builds/latest/test/).
         cd passt
         make
 
-    * alternatively, [static builds]((/builds/latest/x86_64/) for x86_64 as of
+    * alternatively, [static builds](/builds/latest/x86_64/) for x86_64 as of
       the latest commit are also available for convenience. Non-official
       packages for Debian (and derivatives) and RPM-based distributions are also
       available there. These binaries and packages are simply built with:
