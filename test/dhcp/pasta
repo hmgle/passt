@@ -12,7 +12,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 onlyfor	pasta
-nstools	ip jq /sbin/udhcpc /sbin/dhclient
+nstools	ip jq /sbin/dhclient
 htools	ip jq
 
 test	Interface name
@@ -20,7 +20,7 @@ nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifnam
 check	[ -n "__IFNAME__" ]
 
 test	DHCP: address
-ns	/sbin/udhcpc -i __IFNAME__
+ns	/sbin/dhclient -4 --no-pid __IFNAME__
 nsout	ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
 hout	HOST_ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
 check	[ __ADDR__ = __HOST_ADDR__ ]
