@@ -73,9 +73,9 @@ sleep	3
 passt	cd __TEMPDIR__/passt
 passtb	./pasta
 sleep	3
-passt	/sbin/dhclient
+passt	/sbin/dhclient -4 --no-pid
 sleep	2
-passt	/sbin/dhclient -6
+passt	/sbin/dhclient -6 --no-pid
 sleep	2
 
 nl
@@ -112,7 +112,7 @@ guest	ip link show
 sleep	3
 say	Guest is up. Let's configure IPv4 first...
 sleep	2
-guest	dhclient
+guest	dhclient -4
 sleep	2
 guest	ip addr show
 sleep	5

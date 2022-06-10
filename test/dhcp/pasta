@@ -35,7 +35,7 @@ nsout	MTU ip -j link show | jq -rM '.[] | select(.ifname == "__IFNAME__").mtu'
 check	[ __MTU__ = 65520 ]
 
 test	DHCPv6: address
-ns	/sbin/dhclient -6 __IFNAME__
+ns	/sbin/dhclient -6 --no-pid __IFNAME__
 nsout	ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.prefixlen == 128).local'
 hout	HOST_ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global").local'
 check	[ __ADDR6__ = __HOST_ADDR6__ ]

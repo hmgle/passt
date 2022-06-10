@@ -147,7 +147,7 @@ setup_passt_in_ns() {
 	pane_run NS "/sbin/udhcpc -i ${__ifname}"
 	pane_status NS
 	sleep 2
-	pane_run NS "/sbin/dhclient -6 ${__ifname}"
+	pane_run NS "/sbin/dhclient -6 --no-pid ${__ifname}"
 	pane_status NS
 
 	__opts=

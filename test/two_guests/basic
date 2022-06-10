@@ -23,8 +23,8 @@ check	[ -n "__IFNAME1__" ]
 check	[ -n "__IFNAME2__" ]
 
 test	DHCP: addresses
-guest1	/sbin/dhclient __IFNAME1__
-guest2	/sbin/dhclient __IFNAME1__
+guest1	/sbin/dhclient -4 __IFNAME1__
+guest2	/sbin/dhclient -4 __IFNAME1__
 g1out	ADDR1 ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME1__").addr_info[0].local'
 g2out	ADDR2 ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME2__").addr_info[0].local'
 hout	HOST_ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[0].local'

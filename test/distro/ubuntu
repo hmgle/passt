@@ -150,7 +150,7 @@ host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
 host	./qrap 5 qemu-system-ppc64 -m 1024 -M pseries -nographic -nodefaults -serial stdio -no-reboot -nographic -vga none -hda __IMG__ -net socket,fd=5 -net nic,model=virtio
 host	PS1='$ '
-host	dhclient
+host	dhclient -4
 # Skip apt-get update here: some updates to xenial-updates around 2022-01-30
 # broke dependencies for libc6 and gcc-5 -- note that powerpc is not officially
 # supported on this version
@@ -185,7 +185,7 @@ host	./qrap 5 qemu-system-s390x -m 2048 -smp 2 -serial stdio -nodefaults -nograp
 host	service systemd-resolved stop
 host	export DEBIAN_FRONTEND=noninteractive
 host	apt-get -y remove needrestart snapd
-host	dhclient
+host	dhclient -4
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
