@@ -73,13 +73,13 @@ host	q
 
 nl
 nl
-ns	ip li sh
+ns	ip link show
 sleep	3
 say	Let's configure IPv4 first...
 sleep	2
 ns	dhclient
 sleep	2
-ns	ip ad sh
+ns	ip addr show
 sleep	5
 
 nl
@@ -119,7 +119,7 @@ sleep	5
 nl
 say	  or the address of the default gateway.
 sleep	2
-nsout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
 sleep	5
 hostb	nc -l -p 31337
 sleep	2

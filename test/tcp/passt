@@ -27,7 +27,7 @@ check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
 
 test	TCP/IPv4: guest to host: big transfer
 hostb	nc -4 -l 10003 > __TEMP_BIG__
-gout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+gout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
 guest	cat test_big.bin | nc -N __GW__ 10003
 hostw
 hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
@@ -62,8 +62,8 @@ check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
 
 test	TCP/IPv6: guest to host: big transfer
 hostb	nc -6 -l 10003 > __TEMP_BIG__
-gout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+gout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 guest	cat test_big.bin | nc -N __GW6__%__IFNAME__ 10003
 hostw
 hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1

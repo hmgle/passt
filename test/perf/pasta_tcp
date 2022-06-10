@@ -170,9 +170,9 @@ te
 
 test	pasta: throughput and latency (connections via tap)
 
-nsout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-nsout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-nsout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 set	THREADS 1
 set	STREAMS 2
 set	OPTS -Z -P __STREAMS__ -i1 -t30 -O5 --pacing-timer 100000

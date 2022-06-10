@@ -21,13 +21,13 @@ nstools	ip jq sleep
 gtools	ping ip jq
 
 test	ICMP echo: guest to ns
-nsout	IFNAME_NS ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	IFNAME_NS ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 ns	ip addr add 192.0.2.1/32 dev __IFNAME_NS__
 guest	ping -c1 -w1 192.0.2.1
 ns	ip addr del 192.0.2.1/32 dev __IFNAME_NS__
 
 test	ICMPv6 echo: guest to ns
 ns	ip addr add 2001:db8::1 dev __IFNAME_NS__ && sleep 2 # DAD
-gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 guest	ping -c1 -w1 2001:db8::1
 ns	ip addr del 2001:db8::1 dev __IFNAME_NS__

@@ -73,13 +73,13 @@ nl
 say	We can observe some practical differences:
 nl
 
-ns1b	ip ad sh
+ns1b	ip addr show
 sleep	3
 say	- slirp4netns uses a predefined IPv4 address
 hl	NS1
 sleep	2
 
-ns2b	ip ad sh
+ns2b	ip addr show
 sleep	3
 say	,
 nl
@@ -103,7 +103,7 @@ sleep	2
 nl
 say	- same for routes:
 
-ns1b	ip ro sh
+ns1b	ip route show
 sleep	3
 say	 slirp4netns defines its own
 nl
@@ -112,8 +112,8 @@ hl	NS1
 sleep	2
 
 say	, pasta copies it from the host
-ns2b	ip ro sh
-ns2b	ip -6 ro sh
+ns2b	ip route show
+ns2b	ip -6 route show
 sleep	5
 
 nl
@@ -310,11 +310,11 @@ nl
 nl
 say	Everything is set now, let's start
 sleep	2
-hout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
-hout	ADDR4 ip -j -4 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global").local'
-hout	ADDR6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global").local'
-hout	GW4 ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-hout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+hout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+hout	ADDR4 ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global").local'
+hout	ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global").local'
+hout	GW4 ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
 
 nl
 nl

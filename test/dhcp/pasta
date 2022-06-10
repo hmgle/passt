@@ -16,31 +16,31 @@ nstools	ip jq /sbin/udhcpc /sbin/dhclient
 htools	ip jq
 
 test	Interface name
-nsout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 check	[ -n "__IFNAME__" ]
 
 test	DHCP: address
 ns	/sbin/udhcpc -i __IFNAME__
-nsout	ADDR ip -j -4 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
-hout	HOST_ADDR ip -j -4 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+nsout	ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+hout	HOST_ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
 check	[ __ADDR__ = __HOST_ADDR__ ]
 
 test	DHCP: route
-nsout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-hout	HOST_GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	HOST_GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
 check	[ __GW__ = __HOST_GW__ ]
 
 test	DHCP: MTU
-nsout	MTU ip -j li sh | jq -rM '.[] | select(.ifname == "__IFNAME__").mtu'
+nsout	MTU ip -j link show | jq -rM '.[] | select(.ifname == "__IFNAME__").mtu'
 check	[ __MTU__ = 65520 ]
 
 test	DHCPv6: address
 ns	/sbin/dhclient -6 __IFNAME__
-nsout	ADDR6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.prefixlen == 128).local'
-hout	HOST_ADDR6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global").local'
+nsout	ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.prefixlen == 128).local'
+hout	HOST_ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global").local'
 check	[ __ADDR6__ = __HOST_ADDR6__ ]
 
 test	DHCPv6: route
-nsout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-hout	HOST_GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	HOST_GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
 check	[ __GW6__ = __HOST_GW6__ ]

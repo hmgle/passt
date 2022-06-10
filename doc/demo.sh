@@ -19,9 +19,9 @@ get_token() {
 	unset IFS
 }
 
-ipv6_dev() { get_token "dev" $(ip -o -6 ro show default | grep via); }
-ipv6_devaddr() { get_token "inet6" $(ip -o -6 ad sh dev "${1}" scope global); }
-ipv6_ll_addr() { get_token "inet6" $(ip -o -6 ad sh dev "${1}" scope link); }
+ipv6_dev() { get_token "dev" $(ip -o -6 route show default | grep via); }
+ipv6_devaddr() { get_token "inet6" $(ip -o -6 addr show dev "${1}" scope global); }
+ipv6_ll_addr() { get_token "inet6" $(ip -o -6 addr show dev "${1}" scope link); }
 ipv6_mask() { echo ${1#*/}; }
 ipv6_mangle() {
 	IFS=':'
@@ -93,7 +93,7 @@ if [ -n "${ipv6_addr}" ]; then
 	ip addr add "${ipv6_addr}" dev "veth_${ns}"
 	ip route add "${ipv6_passt}" dev "veth_${ns}"
 	passt_ll="$(ipv6_ll_addr "veth_${ns}")"
-	main_ll="$(get_token "link/ether" $(ip -o li sh "veth_${ns}"))"
+	main_ll="$(get_token "link/ether" $(ip -o link show "veth_${ns}"))"
 	ip neigh add "${passt_ll%%/*}" dev "veth_${ns}" lladdr "${main_ll}"
 	ip -n "${ns}" route add default via "${passt_ll%%/*}" dev "veth_${ns}"
 

@@ -16,23 +16,23 @@ gtools	ip jq dhclient sed tr
 htools	ip jq sed tr head
 
 test	Interface name
-gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
-hout	HOST_IFNAME ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").dev'
+gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+hout	HOST_IFNAME ip -j -4 route show|jq -rM '.[] | select(.dst == "default").dev'
 check	[ -n "__IFNAME__" ]
 
 test	DHCP: address
 guest	/sbin/dhclient __IFNAME__
-gout	ADDR ip -j -4 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
-hout	HOST_ADDR ip -j -4 ad sh|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[0].local'
+gout	ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+hout	HOST_ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[0].local'
 check	[ "__ADDR__" = "__HOST_ADDR__" ]
 
 test	DHCP: route
-gout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-hout	HOST_GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+gout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	HOST_GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
 check	[ "__GW__" = "__HOST_GW__" ]
 
 test	DHCP: MTU
-gout	MTU ip -j li sh | jq -rM '.[] | select(.ifname == "__IFNAME__").mtu'
+gout	MTU ip -j link show | jq -rM '.[] | select(.ifname == "__IFNAME__").mtu'
 check	[ __MTU__ = 65520 ]
 
 test	DHCP: DNS
@@ -49,13 +49,13 @@ check	[ "__SEARCH__" = "__HOST_SEARCH__" ]
 
 test	DHCPv6: address
 guest	/sbin/dhclient -6 __IFNAME__
-gout	ADDR6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.prefixlen == 128).local'
-hout	HOST_ADDR6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[] | select(.scope == "global").local'
+gout	ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.prefixlen == 128).local'
+hout	HOST_ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[] | select(.scope == "global").local'
 check	[ "__ADDR6__" = "__HOST_ADDR6__" ]
 
 test	DHCPv6: route
-gout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-hout	HOST_GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+gout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	HOST_GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
 check	[ "__GW6__" = "__HOST_GW6__" ]
 
 # Strip interface specifier: interface names might differ between host and guest

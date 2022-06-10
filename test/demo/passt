@@ -108,13 +108,13 @@ sleep	10
 
 nl
 nl
-guest	ip li sh
+guest	ip link show
 sleep	3
 say	Guest is up. Let's configure IPv4 first...
 sleep	2
 guest	dhclient
 sleep	2
-guest	ip ad sh
+guest	ip addr show
 sleep	5
 
 nl
@@ -140,7 +140,7 @@ say	Now the other way around... using
 nl
 say	   the address of the default gateway.
 sleep	2
-gout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+gout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
 sleep	5
 hostb	nc -l -p 31337
 sleep	2
@@ -168,8 +168,8 @@ host	sysctl -w net.ipv4.tcp_rmem="4096 524288 134217728"
 host	sysctl -w net.ipv4.tcp_wmem="4096 524288 134217728"
 host	sysctl -w net.ipv4.tcp_timestamps=0
 
-gout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-gout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+gout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 nl
 nl
 info	Throughput in Gbps, latency in µs

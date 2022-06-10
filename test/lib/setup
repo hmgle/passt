@@ -141,7 +141,7 @@ setup_passt_in_ns() {
 	pane_status GUEST
 	pane_status NS
 
-	pane_run NS "ip -j li sh | jq -rM '.[] | select(.link_type == \"ether\").ifname'"
+	pane_run NS "ip -j link show | jq -rM '.[] | select(.link_type == \"ether\").ifname'"
 	pane_wait NS
 	__ifname="$(pane_parse NS)"
 	pane_run NS "/sbin/udhcpc -i ${__ifname}"
@@ -228,7 +228,7 @@ setup_two_guests() {
 	pane_run GUEST_1 "nsenter -t ${__ns1_pid} -U -n --preserve-credentials"
 	pane_run GUEST_2 "nsenter -t ${__ns2_pid} -U -n --preserve-credentials"
 
-	pane_run PASST_1 "ip -j li sh | jq -rM '.[] | select(.link_type == \"ether\").ifname'"
+	pane_run PASST_1 "ip -j link show | jq -rM '.[] | select(.link_type == \"ether\").ifname'"
 	pane_wait PASST_1
 	__ifname="$(pane_parse PASST_1)"
 

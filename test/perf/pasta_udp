@@ -129,9 +129,9 @@ te
 
 test	pasta: throughput and latency (traffic via tap)
 
-nsout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-nsout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-nsout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 
 info	Throughput in Gbps, latency in µs, one thread at __FREQ__ GHz, __STREAMS__ streams
 report	pasta tap_udp 1 __FREQ__

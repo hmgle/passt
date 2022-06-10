@@ -16,20 +16,20 @@ nstools	ip jq sipcalc grep cut
 htools	ip jq sipcalc grep cut
 
 test	Interface name
-nsout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 ns	ip link set dev __IFNAME__ up
 sleep	2
-hout	HOST_IFNAME ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").dev'
+hout	HOST_IFNAME ip -j -4 route show|jq -rM '.[] | select(.dst == "default").dev'
 check	[ -n "__IFNAME__" ]
 
 test	SLAAC: prefix
-nsout	ADDR6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global" and .prefixlen == 64).local'
+nsout	ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global" and .prefixlen == 64).local'
 nsout	PREFIX6 sipcalc __ADDR6__/64 | grep prefix | cut -d' ' -f4
-hout	HOST_ADDR6 ip -j -6 ad sh|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[] | select(.scope == "global").local'
+hout	HOST_ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[] | select(.scope == "global").local'
 hout	HOST_PREFIX6 sipcalc __HOST_ADDR6__/64 | grep prefix | cut -d' ' -f4
 check	[ "__PREFIX6__" = "__HOST_PREFIX6__" ]
 
 test	SLAAC: route
-nsout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-hout	HOST_GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	HOST_GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
 check	[ __GW6__ = __HOST_GW6__ ]

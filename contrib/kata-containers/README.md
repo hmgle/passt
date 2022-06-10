@@ -259,7 +259,7 @@ we can now:
 
 ### verify that addresses are properly configured
 
-    crictl exec $c ip ad sh
+    crictl exec $c ip addr show
 
 ## Enable support for ICMP/ICMPv6 Echo Request
 

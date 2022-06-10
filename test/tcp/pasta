@@ -35,7 +35,7 @@ check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv4: ns to host (via tap): big transfer
 hostb	nc -4 -l 10003 > __TEMP_BIG__
-nsout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
 ns	cat __TEMP_NS_BIG__ | nc -N __GW__ 10003
 hostw
 hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
@@ -61,7 +61,7 @@ check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv4: ns to host (via tap): small transfer
 hostb	nc -4 -l 10003 > __TEMP_SMALL__
-nsout	GW ip -j -4 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
 ns	cat __TEMP_NS_SMALL__ | nc -N __GW__ 10003
 hostw
 hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
@@ -85,8 +85,8 @@ nsw
 
 test	TCP/IPv6: ns to host (via tap): big transfer
 hostb	nc -6 -l 10003 > __TEMP_BIG__
-nsout	GW6 ip -j -6 ro sh|jq -rM '.[] | select(.dst == "default").gateway'
-nsout	IFNAME ip -j li sh | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 ns	cat __TEMP_NS_BIG__ | nc -N __GW6__%__IFNAME__ 10003
 hostw
 hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
