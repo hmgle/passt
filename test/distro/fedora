@@ -16,13 +16,13 @@ htools	wget virt-edit guestfish head sed cat kill
 
 # Quick pasta test: send message from init to ns, and from ns to init
 def	distro_quick_pasta_test
-host	(nc -6 -l -p 10000 > /tmp/init_msg; echo "from_init" | nc ::1 9999) &
+host	(ncat -6 -l ::1 10000 > /tmp/init_msg; echo "from_init" | ncat ::1 9999) &
 hostb	./pasta
 sleep	1
 host	PS1='$ '
-host	nc -6 -l -p 9999 > /tmp/ns_msg &
+host	ncat -6 -l ::1 9999 > /tmp/ns_msg &
 sleep	2
-host	echo "from_ns" | nc ::1 10000
+host	echo "from_ns" | ncat ::1 10000
 sleep	2
 host	echo
 sleep	1
@@ -34,17 +34,17 @@ hout	INIT_MSG cat /tmp/init_msg
 check	[ __INIT_MSG__ = "from_ns" ]
 endef
 
-# Explicit listening address, bracketed paste mode off, needed from Fedora 34
+# Bracketed paste mode off, needed from Fedora 34
 def	distro_quick_pasta_test_fedora34
 host	bind 'set enable-bracketed-paste off'
-host	(nc -6 -l -p 10000 > /tmp/init_msg; echo "from_init" | nc -6 ::1 9999) &
+host	(ncat -6 -l ::1 10000 > /tmp/init_msg; echo "from_init" | ncat -6 ::1 9999) &
 hostb	./pasta
 sleep	1
 host	PS1='$ '
 host	bind 'set enable-bracketed-paste off'
-host	nc -6 -l ::1 9999 > /tmp/ns_msg &
+host	ncat -6 -l ::1 9999 > /tmp/ns_msg &
 sleep	2
-host	echo "from_ns" | nc -6 ::1 10000
+host	echo "from_ns" | ncat -6 ::1 10000
 sleep	2
 host	echo
 hout	NS_MSG cat /tmp/ns_msg
