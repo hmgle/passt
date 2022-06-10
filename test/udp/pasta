@@ -12,17 +12,18 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 onlyfor	pasta
-nstools	nc tee grep cat ip jq md5sum cut
-htools	printf dd nc tee grep cat ip jq md5sum cut
+nstools	ncat tee grep cat ip jq md5sum cut
+htools	printf dd ncat tee grep cat ip jq md5sum cut
 
 test	UDP/IPv4: host to ns
 temp	TEMP
 temp	TEMP_NS
 temp	NC_PID
 ns	:> __TEMP_NS__
-nsb	(nc -u -q1 -4 -l 10002 & echo $! > __NC_PID__) | tee __TEMP_NS__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
+nsb	(ncat -u -4 -l 127.0.0.1 10002 & echo $! > __NC_PID__) | tee __TEMP_NS__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
 host	dd if=/dev/urandom bs=1k count=5 > __TEMP__ && printf "\nEND_OF_TEST\n" >> __TEMP__
-host	cat __TEMP__ | nc -u -q1 -N 127.0.0.1 10002
+
+host	cat __TEMP__ | ncat -u 127.0.0.1 10002
 nsw
 hout	MD5 md5sum __TEMP__ | cut -d' ' -f1
 nsout	NS_MD5 md5sum __TEMP_NS__ | cut -d' ' -f1
@@ -30,26 +31,26 @@ check	[ "__NS_MD5__" = "__MD5__" ]
 
 test	UDP/IPv4: ns to host (recvmmsg/sendmmsg)
 host	:> __TEMP__
-hostb	(nc -u -q1 -4 -l 10003 & echo $! > __NC_PID__) | tee __TEMP__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
+hostb	(ncat -u -4 -l 127.0.0.1 10003 & echo $! > __NC_PID__) | tee __TEMP__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
 sleep	1
-ns	cat __TEMP_NS__ | nc -u -q1 -N 127.0.0.1 10003
+ns	cat __TEMP_NS__ | ncat -u 127.0.0.1 10003
 hostw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
 check	[ "__HOST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv4: ns to host (via tap)
 host	:> __TEMP__
-hostb	(nc -u -q1 -4 -l 10003 & echo $! > __NC_PID__) | tee __TEMP__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
+hostb	(ncat -u -4 -l 0.0.0.0 10003 & echo $! > __NC_PID__) | tee __TEMP__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
 nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
-ns	cat __TEMP_NS__ | nc -u -q1 -N __GW__ 10003
+ns	cat __TEMP_NS__ | ncat -u __GW__ 10003
 hostw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
 check	[ "__HOST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv6: host to ns
 ns	:> __TEMP_NS__
-nsb	(nc -u -q1 -6 -l 10002 & echo $! > __NC_PID__) | tee __TEMP_NS__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
-host	cat __TEMP__ | nc -u -q1 -N ::1 10002
+nsb	(ncat -u -6 -l ::1 10002 & echo $! > __NC_PID__) | tee __TEMP_NS__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
+host	cat __TEMP__ | ncat -u ::1 10002
 nsw
 hout	MD5 md5sum __TEMP__ | cut -d' ' -f1
 nsout	NS_MD5 md5sum __TEMP_NS__ | cut -d' ' -f1
@@ -57,9 +58,9 @@ check	[ "__NS_MD5__" = "__MD5__" ]
 
 test	UDP/IPv6: ns to host (recvmmsg/sendmmsg)
 host	:> __TEMP__
-hostb	(nc -u -q1 -6 -l 10003 & echo $! > __NC_PID__) | tee __TEMP__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
+hostb	(ncat -u -6 -l ::1 10003 & echo $! > __NC_PID__) | tee __TEMP__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
 sleep	1
-ns	cat __TEMP_NS__ | nc -u -q1 -N ::1 10003
+ns	cat __TEMP_NS__ | ncat -u ::1 10003
 hostw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
 check	[ "__HOST_MD5__" = "__MD5__" ]
@@ -67,10 +68,10 @@ nsw
 
 test	UDP/IPv6: ns to host (via tap)
 host	:> __TEMP__
-hostb	(nc -u -q1 -6 -l 10003 & echo $! > __NC_PID__) | tee __TEMP__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
+hostb	(ncat -u -6 -l :: 10003 & echo $! > __NC_PID__) | tee __TEMP__ | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
 nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
 nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
-ns	cat __TEMP_NS__ | nc -u -q1 -N __GW6__%__IFNAME__ 10003
+ns	cat __TEMP_NS__ | ncat -u __GW6__%__IFNAME__ 10003
 hostw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
 check	[ "__HOST_MD5__" = "__MD5__" ]

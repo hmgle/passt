@@ -12,31 +12,31 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 onlyfor	pasta
-htools	dd nc ip jq cat md5sum cut
-nstools	nc ip jq cat md5sum cut
+htools	dd ncat ip jq cat md5sum cut
+nstools	ncat ip jq cat md5sum cut
 
 test	TCP/IPv4: host to ns: big transfer
 temp	TEMP_BIG
 temp	TEMP_NS_BIG
-nsb	nc -4 -l 10002 > __TEMP_NS_BIG__
+nsb	ncat -4 -l 127.0.0.1 10002 > __TEMP_NS_BIG__
 host	dd if=/dev/urandom bs=1M count=10 > __TEMP_BIG__
-host	cat __TEMP_BIG__ | nc -N 127.0.0.1 10002
+host	cat __TEMP_BIG__ | ncat 127.0.0.1 10002
 nsw
 hout	MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
 nsout	NS_MD5_BIG md5sum __TEMP_NS_BIG__ | cut -d' ' -f1
 check	[ "__NS_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv4: ns to host (spliced): big transfer
-hostb	nc -4 -l 10003 > __TEMP_BIG__
-ns	cat __TEMP_NS_BIG__ | nc -N 127.0.0.1 10003
+hostb	ncat -4 -l 127.0.0.1 10003 > __TEMP_BIG__
+ns	cat __TEMP_NS_BIG__ | ncat 127.0.0.1 10003
 hostw
 hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
 check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv4: ns to host (via tap): big transfer
-hostb	nc -4 -l 10003 > __TEMP_BIG__
+hostb	ncat -4 -l 0.0.0.0 10003 > __TEMP_BIG__
 nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
-ns	cat __TEMP_NS_BIG__ | nc -N __GW__ 10003
+ns	cat __TEMP_NS_BIG__ | ncat __GW__ 10003
 hostw
 hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
 check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
@@ -44,50 +44,50 @@ check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 test	TCP/IPv4: host to ns: small transfer
 temp	TEMP_SMALL
 temp	TEMP_NS_SMALL
-nsb	nc -4 -l 10002 > __TEMP_NS_SMALL__
+nsb	ncat -4 -l 127.0.0.1 10002 > __TEMP_NS_SMALL__
 host	dd if=/dev/urandom bs=2k count=1 > __TEMP_SMALL__
-host	cat __TEMP_SMALL__ | nc -N 127.0.0.1 10002
+host	cat __TEMP_SMALL__ | ncat 127.0.0.1 10002
 nsw
 hout	MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
 nsout	NS_MD5_SMALL md5sum __TEMP_NS_SMALL__ | cut -d' ' -f1
 check	[ "__NS_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv4: ns to host (spliced): small transfer
-hostb	nc -4 -l 10003 > __TEMP_SMALL__
-ns	cat __TEMP_NS_SMALL__ | nc -N 127.0.0.1 10003
+hostb	ncat -4 -l 127.0.0.1 10003 > __TEMP_SMALL__
+ns	cat __TEMP_NS_SMALL__ | ncat 127.0.0.1 10003
 hostw
 hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
 check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv4: ns to host (via tap): small transfer
-hostb	nc -4 -l 10003 > __TEMP_SMALL__
+hostb	ncat -4 -l 0.0.0.0 10003 > __TEMP_SMALL__
 nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
-ns	cat __TEMP_NS_SMALL__ | nc -N __GW__ 10003
+ns	cat __TEMP_NS_SMALL__ | ncat __GW__ 10003
 hostw
 hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
 check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv6: host to ns: big transfer
-nsb	nc -6 -l 10002 > __TEMP_NS_BIG__
-host	cat __TEMP_BIG__ | nc -N ::1 10002
+nsb	ncat -6 -l ::1 10002 > __TEMP_NS_BIG__
+host	cat __TEMP_BIG__ | ncat ::1 10002
 nsw
 hout	MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
 nsout	NS_MD5_BIG md5sum __TEMP_NS_BIG__ | cut -d' ' -f1
 check	[ "__NS_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv6: ns to host (spliced): big transfer
-hostb	nc -6 -l 10003 > __TEMP_BIG__
-ns	cat __TEMP_NS_BIG__ | nc -N ::1 10003
+hostb	ncat -6 -l ::1 10003 > __TEMP_BIG__
+ns	cat __TEMP_NS_BIG__ | ncat ::1 10003
 hostw
 hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
 check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 nsw
 
 test	TCP/IPv6: ns to host (via tap): big transfer
-hostb	nc -6 -l 10003 > __TEMP_BIG__
+hostb	ncat -6 -l :: 10003 > __TEMP_BIG__
 nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
 nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
-ns	cat __TEMP_NS_BIG__ | nc -N __GW6__%__IFNAME__ 10003
+ns	cat __TEMP_NS_BIG__ | ncat __GW6__%__IFNAME__ 10003
 hostw
 hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
 check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
@@ -95,24 +95,24 @@ check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 test	TCP/IPv6: host to ns: small transfer
 temp	TEMP_SMALL
 temp	TEMP_NS_SMALL
-nsb	nc -6 -l 10002 > __TEMP_NS_SMALL__
+nsb	ncat -6 -l ::1 10002 > __TEMP_NS_SMALL__
 host	dd if=/dev/urandom bs=2k count=1 > __TEMP_SMALL__
-host	cat __TEMP_SMALL__ | nc -N ::1 10002
+host	cat __TEMP_SMALL__ | ncat ::1 10002
 nsw
 hout	MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
 nsout	NS_MD5_SMALL md5sum __TEMP_NS_SMALL__ | cut -d' ' -f1
 check	[ "__NS_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv6: ns to host (spliced): small transfer
-hostb	nc -6 -l 10003 > __TEMP_SMALL__
-ns	cat __TEMP_NS_SMALL__ | nc -N ::1 10003
+hostb	ncat -6 -l ::1 10003 > __TEMP_SMALL__
+ns	cat __TEMP_NS_SMALL__ | ncat ::1 10003
 hostw
 hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
 check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv6: ns to host (via tap): small transfer
-hostb	nc -6 -l 10003 > __TEMP_SMALL__
-ns	cat __TEMP_NS_SMALL__ | nc -N __GW6__%__IFNAME__ 10003
+hostb	ncat -6 -l :: 10003 > __TEMP_SMALL__
+ns	cat __TEMP_NS_SMALL__ | ncat __GW6__%__IFNAME__ 10003
 hostw
 hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
 check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
