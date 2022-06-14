@@ -121,7 +121,7 @@ valgrind: all
 
 .PHONY: clean
 clean:
-	-${RM} $(BIN) *.o seccomp.h pasta.1 \
+	$(RM) $(BIN) *.o seccomp.h pasta.1 \
 		passt.tar passt.tar.gz *.deb *.rpm
 
 install: $(BIN) $(MANPAGES)
@@ -130,8 +130,8 @@ install: $(BIN) $(MANPAGES)
 	cp -d $(MANPAGES) $(DESTDIR)$(prefix)/share/man/man1
 
 uninstall:
-	-${RM} $(BIN:%=$(DESTDIR)$(prefix)/bin/%)
-	-${RM} $(MANPAGES:%=$(DESTDIR)$(prefix)/share/man/man1/%)
+	$(RM) $(BIN:%=$(DESTDIR)$(prefix)/bin/%)
+	$(RM) $(MANPAGES:%=$(DESTDIR)$(prefix)/share/man/man1/%)
 
 pkgs: static
 	tar cf passt.tar -P --xform 's//\/usr\/bin\//' $(BIN)
