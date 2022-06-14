@@ -78,7 +78,7 @@ ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
 	CFLAGS += -DHAS_GETRANDOM
 endif
 
-ifeq ($(shell :|$(CC) -fstack-protector-strong -S -xc - >/dev/null 2>&1; echo $$?),0)
+ifeq ($(shell :|$(CC) -fstack-protector-strong -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
 	CFLAGS += -fstack-protector-strong
 endif
 
