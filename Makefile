@@ -31,6 +31,17 @@ CFLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
 CFLAGS += -DRLIMIT_STACK_VAL=$(RLIMIT_STACK_VAL)
 CFLAGS += -DARCH=\"$(TARGET_ARCH)\"
 
+PASST_SRCS = arch.c arp.c checksum.c conf.c dhcp.c dhcpv6.c icmp.c igmp.c \
+	mld.c ndp.c netlink.c packet.c passt.c pasta.c pcap.c siphash.c \
+	tap.c tcp.c tcp_splice.c udp.c util.c
+QRAP_SRCS = qrap.c
+SRCS = $(PASST_SRCS) $(QRAP_SRCS)
+
+PASST_HEADERS = arch.h arp.h checksum.h conf.h dhcp.h dhcpv6.h icmp.h \
+	ndp.h netlink.h packet.h passt.h pasta.h pcap.h siphash.h \
+	tap.h tcp.h tcp_splice.h udp.h util.h
+HEADERS = $(PASST_HEADERS)
+
 # On gcc 11.2, with -O2 and -flto, tcp_hash() and siphash_20b(), if inlined,
 # seem to be hitting something similar to:
 #	https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78993
@@ -82,18 +93,15 @@ endif
 static: CFLAGS += -static -DGLIBC_NO_STATIC_NSS
 static: clean all
 
-seccomp.h: *.c $(filter-out seccomp.h,$(wildcard *.h))
-	@ EXTRA_SYSCALLS=$(EXTRA_SYSCALLS) ./seccomp.sh
+seccomp.h: $(PASST_SRCS) $(PASST_HEADERS)
+	@ EXTRA_SYSCALLS=$(EXTRA_SYSCALLS) ./seccomp.sh $^
 
-passt: $(filter-out qrap.c,$(wildcard *.c)) \
-	$(filter-out qrap.h,$(wildcard *.h)) seccomp.h
-	$(CC) $(CFLAGS) $(filter-out qrap.c,$(wildcard *.c)) -o passt
+passt: $(PASST_SRCS) $(PASST_HEADERS) seccomp.h
+	$(CC) $(CFLAGS) $(PASST_SRCS) -o passt
 
 passt.avx2: CFLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
-passt.avx2: $(filter-out qrap.c,$(wildcard *.c)) \
-	$(filter-out qrap.h,$(wildcard *.h)) seccomp.h
-	$(CC) $(filter-out -O2,$(CFLAGS)) $(filter-out qrap.c,$(wildcard *.c)) \
-		-o passt.avx2
+passt.avx2: $(PASST_SRCS) $(PASST_HEADERS) seccomp.h
+	$(CC) $(filter-out -O2,$(CFLAGS)) $(PASST_SRCS) -o passt.avx2
 
 passt.avx2: passt
 
@@ -104,9 +112,8 @@ pasta: passt
 	ln -s passt pasta
 	ln -s passt.1 pasta.1
 
-qrap: qrap.c passt.h
-	$(CC) $(CFLAGS) \
-		qrap.c -o qrap
+qrap: $(QRAP_SRCS) passt.h
+	$(CC) $(CFLAGS) $(QRAP_SRCS) -o qrap
 
 valgrind: EXTRA_SYSCALLS="rt_sigprocmask rt_sigtimedwait rt_sigaction \
 			  getpid gettid kill clock_gettime mmap munmap open \
@@ -203,7 +210,7 @@ pkgs: static
 # - concurrency-mt-unsafe
 #	TODO: check again if multithreading is implemented
 
-clang-tidy: $(wildcard *.c) $(wildcard *.h)
+clang-tidy: $(SRCS) $(HEADERS)
 	clang-tidy -checks=*,-modernize-*,\
 	-clang-analyzer-valist.Uninitialized,\
 	-cppcoreguidelines-init-variables,\
@@ -227,7 +234,7 @@ clang-tidy: $(wildcard *.c) $(wildcard *.h)
 	-altera-struct-pack-align,\
 	-concurrency-mt-unsafe \
 	-config='{CheckOptions: [{key: bugprone-suspicious-string-compare.WarnOnImplicitComparison, value: "false"}]}' \
-	--warnings-as-errors=* $(wildcard *.c) -- $(filter-out -pie,$(CFLAGS))
+	--warnings-as-errors=* $(SRCS) -- $(filter-out -pie,$(CFLAGS))
 
 ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"),1)
 TARGET := $(shell ${CC} -v 2>&1 | sed -n 's/Target: \(.*\)/\1/p')
@@ -237,7 +244,7 @@ EXTRA_INCLUDES_OPT := -I$(EXTRA_INCLUDES)
 else
 EXTRA_INCLUDES_OPT :=
 endif
-cppcheck: $(wildcard *.c) $(wildcard *.h)
+cppcheck: $(SRCS) $(HEADERS)
 	cppcheck --std=c99 --error-exitcode=1 --enable=all --force	\
 	--inconclusive --library=posix					\
 	-I/usr/include $(EXTRA_INCLUDES_OPT)				\
