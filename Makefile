@@ -37,6 +37,8 @@ PASST_SRCS = arch.c arp.c checksum.c conf.c dhcp.c dhcpv6.c icmp.c igmp.c \
 QRAP_SRCS = qrap.c
 SRCS = $(PASST_SRCS) $(QRAP_SRCS)
 
+MANPAGES = passt.1 pasta.1 qrap.1
+
 PASST_HEADERS = arch.h arp.h checksum.h conf.h dhcp.h dhcpv6.h icmp.h \
 	ndp.h netlink.h packet.h passt.h pasta.h pcap.h siphash.h \
 	tap.h tcp.h tcp_splice.h udp.h util.h
@@ -83,12 +85,12 @@ endif
 prefix ?= /usr/local
 
 ifeq ($(TARGET_ARCH),X86_64)
-all: passt passt.avx2 pasta pasta.avx2 qrap
 BIN := passt passt.avx2 pasta pasta.avx2 qrap
 else
-all: passt pasta qrap
 BIN := passt pasta qrap
 endif
+
+all: $(BIN) $(MANPAGES)
 
 static: CFLAGS += -static -DGLIBC_NO_STATIC_NSS
 static: clean all
@@ -110,6 +112,8 @@ pasta.avx2: passt.avx2
 
 pasta: passt
 	ln -s passt pasta
+
+pasta.1: passt.1
 	ln -s passt.1 pasta.1
 
 qrap: $(QRAP_SRCS) passt.h
@@ -123,28 +127,22 @@ valgrind: all
 
 .PHONY: clean
 clean:
-	-${RM} passt passt.avx2 *.o seccomp.h qrap pasta pasta.avx2 pasta.1 \
+	-${RM} $(BIN) *.o seccomp.h pasta.1 \
 		passt.tar passt.tar.gz *.deb *.rpm
 
-install: $(BIN)
+install: $(BIN) $(MANPAGES)
 	mkdir -p $(DESTDIR)$(prefix)/bin $(DESTDIR)$(prefix)/share/man/man1
 	cp -d $(BIN) $(DESTDIR)$(prefix)/bin
-	cp -d passt.1 pasta.1 qrap.1 $(DESTDIR)$(prefix)/share/man/man1
+	cp -d $(MANPAGES) $(DESTDIR)$(prefix)/share/man/man1
 
 uninstall:
-	-${RM} $(DESTDIR)$(prefix)/bin/passt
-	-${RM} $(DESTDIR)$(prefix)/bin/passt.avx2
-	-${RM} $(DESTDIR)$(prefix)/bin/pasta
-	-${RM} $(DESTDIR)$(prefix)/bin/pasta.avx2
-	-${RM} $(DESTDIR)$(prefix)/bin/qrap
-	-${RM} $(DESTDIR)$(prefix)/share/man/man1/passt.1
-	-${RM} $(DESTDIR)$(prefix)/share/man/man1/pasta.1
-	-${RM} $(DESTDIR)$(prefix)/share/man/man1/qrap.1
+	-${RM} $(BIN:%=$(DESTDIR)$(prefix)/bin/%)
+	-${RM} $(MANPAGES:%=$(DESTDIR)$(prefix)/share/man/man1/%)
 
 pkgs: static
 	tar cf passt.tar -P --xform 's//\/usr\/bin\//' $(BIN)
 	tar rf passt.tar -P --xform 's//\/usr\/share\/man\/man1\//' \
-		passt.1 pasta.1 qrap.1
+		$(MANPAGES)
 	gzip passt.tar
 	EMAIL="sbrivio@redhat.com" fakeroot alien --to-deb \
 		--description="User-mode networking for VMs and namespaces" \

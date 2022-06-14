@@ -38,7 +38,7 @@ endef
 hostb	./passt -P __PIDFILE__ &
 sleep	1
 host	echo
-hout	GUEST_FILES ls -1 *.c *.h *.sh Makefile | tr '\n' ' '; echo
+hout	GUEST_FILES ls -1 *.c *.h *.sh passt.1 qrap.1 Makefile | tr '\n' ' '; echo
 
 
 test	Ubuntu 14.04.5 LTS (Trusty Tahr), amd64
