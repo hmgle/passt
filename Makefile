@@ -259,8 +259,10 @@ cppcheck: $(wildcard *.c) $(wildcard *.h)
 	--suppress=localtimeCalled:pcap.c				\
 	--suppress=unusedStructMember:pcap.c				\
 	--suppress=funcArgNamesDifferent:util.h				\
+	--suppress=unusedStructMember:dhcp.c				\
 									\
 	--suppress=unmatchedSuppression:conf.c				\
+	--suppress=unmatchedSuppression:dhcp.c				\
 	--suppress=unmatchedSuppression:passt.c				\
 	--suppress=unmatchedSuppression:pcap.c				\
 	--suppress=unmatchedSuppression:qrap.c				\
