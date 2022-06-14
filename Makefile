@@ -107,14 +107,8 @@ passt.avx2: $(PASST_SRCS) $(PASST_HEADERS) seccomp.h
 
 passt.avx2: passt
 
-pasta.avx2: passt.avx2
-	ln -s passt.avx2 pasta.avx2
-
-pasta: passt
-	ln -s passt pasta
-
-pasta.1: passt.1
-	ln -s passt.1 pasta.1
+pasta.avx2 pasta.1 pasta: pasta%: passt%
+	ln -s $< $@
 
 qrap: $(QRAP_SRCS) passt.h
 	$(CC) $(CFLAGS) $(QRAP_SRCS) -o qrap
