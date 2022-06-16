@@ -868,6 +868,7 @@ static int conf_runas(const char *opt, unsigned int *uid, unsigned int *gid)
 	(void)ubuf;
 	(void)gbuf;
 	(void)pw;
+	(void)gr;
 
 	return -EINVAL;
 #else
