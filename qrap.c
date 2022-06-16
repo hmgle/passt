@@ -25,6 +25,7 @@
 #include <net/if_arp.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+#include <time.h>
 
 #include "util.h"
 #include "passt.h"
@@ -112,7 +113,7 @@ void usage(const char *name)
 int main(int argc, char **argv)
 {
 	struct timeval tv = { .tv_sec = 0, .tv_usec = (long)(500 * 1000) };
-	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0;
+	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0, retry_on_reset;
 	char *qemu_argv[ARG_MAX], dev_str[ARG_MAX];
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
@@ -233,6 +234,9 @@ int main(int argc, char **argv)
 
 valid_args:
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
+		retry_on_reset = 1;
+
+retry:
 		s = socket(AF_UNIX, SOCK_STREAM, 0);
 		if (s < 0) {
 			perror("socket");
@@ -253,6 +257,34 @@ valid_args:
 			perror("recv");
 		else
 			break;
+
+		/* FIXME: in a KubeVirt environment, libvirtd invokes qrap three
+		 * times in a strict sequence when a virtual machine needs to
+		 * be started, namely, when:
+		 * - the domain XML is saved
+		 * - the domain is started (for "probing")
+		 * - the virtual machine is started for real
+		 * and it often happens that the qemu process is still running
+		 * when qrap is invoked again, so passt will refuse the new
+		 * connection because the previous one is still active. This
+		 * overlap seems to be anywhere between 0 and 3ms.
+		 *
+		 * If we get a connection reset, retry, just once, after 100ms,
+		 * to allow for the previous qemu instance to terminate and, in
+		 * turn, for the connection to passt to be closed.
+		 *
+		 * This should be fixed in libvirt instead. It probably makes
+		 * sense to check this behaviour once native libvirt support is
+		 * there, and this implies native qemu support too, so at that
+		 * point qrap will have no reason to exist anymore -- that is,
+		 * this FIXME will probably remain until the tool itself is
+		 * obsoleted.
+		 */
+		if (retry_on_reset && errno == ECONNRESET) {
+			retry_on_reset = 0;
+			usleep(100 * 1000);
+			goto retry;
+		}
 
 		fprintf(stderr, "Probe of %s failed\n", addr.sun_path);
 
