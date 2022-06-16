@@ -856,11 +856,18 @@ static void tap_sock_unix_new(struct ctx *c)
 {
 	struct epoll_event ev = { 0 };
 	int v = INT_MAX / 2;
+	struct ucred ucred;
+	socklen_t len;
+
+	len = sizeof(ucred);
 
 	/* Another client is already connected: accept and close right away. */
 	if (c->fd_tap != -1) {
 		int discard = accept4(c->fd_tap_listen, NULL, NULL,
 				      SOCK_NONBLOCK);
+
+		if (!getsockopt(discard, SOL_SOCKET, SO_PEERCRED, &ucred, &len))
+			info("discarding connection from PID %i", ucred.pid);
 
 		if (discard != -1)
 			close(discard);
@@ -869,6 +876,9 @@ static void tap_sock_unix_new(struct ctx *c)
 	}
 
 	c->fd_tap = accept4(c->fd_tap_listen, NULL, NULL, 0);
+
+	if (!getsockopt(c->fd_tap, SOL_SOCKET, SO_PEERCRED, &ucred, &len))
+		info("accepted connection from PID %i", ucred.pid);
 
 	if (!c->low_rmem &&
 	    setsockopt(c->fd_tap, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v)))
