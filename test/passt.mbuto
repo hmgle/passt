@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# test/passt.mbuto - mbuto (https://mbuto.sh) profile for test images
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+PROGS="${PROGS:-ash,dash,bash ip mount ls insmod mkdir ln cat chmod lsmod
+       modprobe find grep mknod mv rm umount jq iperf3 dhclient busybox logger
+       sed tr chown sipcalc cut md5sum nc dd strace ping tail killall sleep
+       sysctl nproc tcp_rr tcp_crr udp_rr which tee seq bc}"
+
+KMODS="${KMODS:- virtio_net virtio_pci}"
+
+LINKS="${LINKS:-
+	 ash,dash,bash		/init
+	 ash,dash,bash		/bin/sh
+	 ash,dash,bash		/usr/bin/bash}"
+
+COPIES="${COPIES}
+	/sbin/dhclient-script"
+
+DIRS="${DIRS} /tmp"
+
+FIXUP="${FIXUP}
+	:> /etc/fstab
+	sh +m
+"
+
+OUTPUT="KERNEL=__KERNEL__
+INITRD=__INITRD__
+"

@@ -34,7 +34,7 @@ setup_passt() {
 	pane_run GUEST "git -C ${__mbuto_dir} clone git://mbuto.sh/mbuto"
 	pane_status GUEST
 
-	pane_run GUEST "${__mbuto_dir}/mbuto/mbuto -p passt -c lz4 -f mbuto.img"
+	pane_run GUEST "${__mbuto_dir}/mbuto/mbuto -p test/passt.mbuto -c lz4 -f mbuto.img"
 	pane_status GUEST
 
 	rm -rf "${__mbuto_dir}"

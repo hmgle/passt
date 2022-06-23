@@ -56,7 +56,7 @@ say	Let's create a small initramfs image for the guest.
 guest	cd __TEMPDIR__
 guest	git clone git://mbuto.sh/mbuto
 guest	cd mbuto
-guest	./mbuto -f passt.img -p passt -c lz4
+guest	./mbuto -f passt.img -p __TEMPDIR__/passt/test/passt.mbuto -c lz4
 sleep	2
 
 nl
