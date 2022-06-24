@@ -38,6 +38,7 @@
 #include "udp.h"
 #include "tcp.h"
 #include "pasta.h"
+#include "lineread.h"
 
 /**
  * get_bound_ports() - Get maps of ports with bound sockets
@@ -320,7 +321,9 @@ static void get_dns(struct ctx *c)
 	struct in6_addr *dns6 = &c->dns6[0];
 	struct fqdn *s = c->dns_search;
 	uint32_t *dns4 = &c->dns4[0];
-	char buf[BUFSIZ], *p, *end;
+	struct lineread resolvconf;
+	int line_len;
+	char *line, *p, *end;
 
 	dns4_set = !c->v4  || !!*dns4;
 	dns6_set = !c->v6  || !IN6_IS_ADDR_UNSPECIFIED(dns6);
@@ -333,13 +336,14 @@ static void get_dns(struct ctx *c)
 	if ((fd = open("/etc/resolv.conf", O_RDONLY | O_CLOEXEC)) < 0)
 		goto out;
 
-	for (*buf = 0; line_read(buf, BUFSIZ, fd); *buf = 0) {
-		if (!dns_set && strstr(buf, "nameserver ") == buf) {
-			p = strrchr(buf, ' ');
+	lineread_init(&resolvconf, fd);
+	while ((line_len = lineread_get(&resolvconf, &line)) > 0) {
+		if (!dns_set && strstr(line, "nameserver ") == line) {
+			p = strrchr(line, ' ');
 			if (!p)
 				continue;
 
-			end = strpbrk(buf, "%\n");
+			end = strpbrk(line, "%\n");
 			if (end)
 				*end = 0;
 
@@ -356,13 +360,13 @@ static void get_dns(struct ctx *c)
 				dns6++;
 				memset(dns6, 0, sizeof(*dns6));
 			}
-		} else if (!dnss_set && strstr(buf, "search ") == buf &&
+		} else if (!dnss_set && strstr(line, "search ") == line &&
 			   s == c->dns_search) {
-			end = strpbrk(buf, "\n");
+			end = strpbrk(line, "\n");
 			if (end)
 				*end = 0;
 
-			if (!strtok(buf, " \t"))
+			if (!strtok(line, " \t"))
 				continue;
 
 			while (s - c->dns_search < ARRAY_SIZE(c->dns_search) - 1
@@ -374,6 +378,8 @@ static void get_dns(struct ctx *c)
 		}
 	}
 
+	if (line_len < 0)
+		warn("Error reading /etc/resolv.conf: %s", strerror(errno));
 	close(fd);
 
 out:
