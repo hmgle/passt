@@ -410,60 +410,6 @@ int bitmap_isset(const uint8_t *map, int bit)
 }
 
 /**
- * line_read() - Similar to fgets(), no heap usage, a file instead of a stream
- * @buf:	Read buffer: on non-empty string, use that instead of reading
- * @len:	Maximum line length
- * @fd:		File descriptor for reading
- *
- * Return: @buf if a line is found, NULL on EOF or error
- */
-char *line_read(char *buf, size_t len, int fd)
-{
-	int n, do_read = !*buf;
-	char *p;
-
-	if (!do_read) {
-		char *nl;
-
-		buf[len - 1] = 0;
-		if (!strlen(buf))
-			return NULL;
-
-		p = buf + strlen(buf) + 1;
-
-		while (*p == '\n' && strlen(p) && (size_t)(p - buf) < len)
-			p++;
-
-		if (!(nl = strchr(p, '\n')))
-			return NULL;
-		*nl = 0;
-
-		return memmove(buf, p, len - (p - buf));
-	}
-
-	n = read(fd, buf, --len);
-	if (n <= 0)
-		return NULL;
-
-	buf[len] = 0;
-
-	p = buf;
-	while (*p == '\n' && strlen(p) && (size_t)(p - buf) < len)
-		p++;
-
-	if (!(p = strchr(p, '\n')))
-		return buf;
-
-	*p = 0;
-	if (p == buf)
-		return buf;
-
-	lseek(fd, (p - buf) - n + 1, SEEK_CUR);
-
-	return buf;
-}
-
-/**
  * procfs_scan_listen() - Set bits for listening TCP or UDP sockets from procfs
  * @proto:	IPPROTO_TCP or IPPROTO_UDP
  * @ip_version:	IP version, V4 or V6
