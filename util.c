@@ -41,6 +41,7 @@
 #include "util.h"
 #include "passt.h"
 #include "packet.h"
+#include "lineread.h"
 
 /* For __openlog() and __setlogmask() wrappers, and passt_vsyslog() */
 static int	log_mask;
@@ -476,7 +477,8 @@ char *line_read(char *buf, size_t len, int fd)
 void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
 			uint8_t *map, uint8_t *exclude)
 {
-	char line[BUFSIZ], *path;
+	char *path, *line;
+	struct lineread lr;
 	unsigned long port;
 	unsigned int state;
 	int *fd;
@@ -500,9 +502,9 @@ void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
 	else if ((*fd = open(path, O_RDONLY | O_CLOEXEC)) < 0)
 		return;
 
-	*line = 0;
-	line_read(line, sizeof(line), *fd);
-	while (line_read(line, sizeof(line), *fd)) {
+	lineread_init(&lr, *fd);
+	lineread_get(&lr, &line); /* throw away header */
+	while (lineread_get(&lr, &line) > 0) {
 		/* NOLINTNEXTLINE(cert-err34-c): != 2 if conversion fails */
 		if (sscanf(line, "%*u: %*x:%lx %*x:%*x %x", &port, &state) != 2)
 			continue;
