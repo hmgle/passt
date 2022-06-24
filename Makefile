@@ -32,16 +32,16 @@ CFLAGS += -DRLIMIT_STACK_VAL=$(RLIMIT_STACK_VAL)
 CFLAGS += -DARCH=\"$(TARGET_ARCH)\"
 
 PASST_SRCS = arch.c arp.c checksum.c conf.c dhcp.c dhcpv6.c icmp.c igmp.c \
-	mld.c ndp.c netlink.c packet.c passt.c pasta.c pcap.c siphash.c \
-	tap.c tcp.c tcp_splice.c udp.c util.c
+	lineread.c mld.c ndp.c netlink.c packet.c passt.c pasta.c pcap.c \
+	siphash.c tap.c tcp.c tcp_splice.c udp.c util.c
 QRAP_SRCS = qrap.c
 SRCS = $(PASST_SRCS) $(QRAP_SRCS)
 
 MANPAGES = passt.1 pasta.1 qrap.1
 
 PASST_HEADERS = arch.h arp.h checksum.h conf.h dhcp.h dhcpv6.h icmp.h \
-	ndp.h netlink.h packet.h passt.h pasta.h pcap.h siphash.h \
-	tap.h tcp.h tcp_splice.h udp.h util.h
+	lineread.h ndp.h netlink.h packet.h passt.h pasta.h pcap.h \
+	siphash.h tap.h tcp.h tcp_splice.h udp.h util.h
 HEADERS = $(PASST_HEADERS)
 
 # On gcc 11.2, with -O2 and -flto, tcp_hash() and siphash_20b(), if inlined,
