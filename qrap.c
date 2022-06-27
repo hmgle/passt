@@ -234,7 +234,7 @@ int main(int argc, char **argv)
 
 valid_args:
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
-		retry_on_reset = 5;
+		retry_on_reset = 50;
 
 retry:
 		s = socket(AF_UNIX, SOCK_STREAM, 0);
