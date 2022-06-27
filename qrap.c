@@ -234,7 +234,7 @@ int main(int argc, char **argv)
 
 valid_args:
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
-		retry_on_reset = 1;
+		retry_on_reset = 5;
 
 retry:
 		s = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -269,9 +269,9 @@ retry:
 		 * connection because the previous one is still active. This
 		 * overlap seems to be anywhere between 0 and 3ms.
 		 *
-		 * If we get a connection reset, retry, just once, after 100ms,
-		 * to allow for the previous qemu instance to terminate and, in
-		 * turn, for the connection to passt to be closed.
+		 * If we get a connection reset, retry a few times, to allow for
+		 * the previous qemu instance to terminate and, in turn, for the
+		 * connection to passt to be closed.
 		 *
 		 * This should be fixed in libvirt instead. It probably makes
 		 * sense to check this behaviour once native libvirt support is
@@ -281,8 +281,8 @@ retry:
 		 * obsoleted.
 		 */
 		if (retry_on_reset && errno == ECONNRESET) {
-			retry_on_reset = 0;
-			usleep(100 * 1000);
+			retry_on_reset--;
+			usleep(50 * 1000);
 			goto retry;
 		}
 
