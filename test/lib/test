@@ -393,7 +393,7 @@ test_one() {
 
 	[ ${CI} -eq 1 ] && video_link "${1}"
 
-	TEST_ONE_subs=
+	TEST_ONE_subs="$(list_add_pair "" "__BASEPATH__" "${BASEPATH}")"
 	TEST_ONE_nok=-1
 	TEST_ONE_perf_nok=0
 	TEST_ONE_skip=0
