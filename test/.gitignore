@@ -3,3 +3,5 @@ test_logs/
 mbuto/
 *.img
 QEMU_EFI.fd
+*.qcow2
+*.raw.xz

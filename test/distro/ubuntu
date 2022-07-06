@@ -1,4 +1,4 @@
-<# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # PASST - Plug A Simple Socket Transport
 #  for qemu/UNIX domain socket mode
@@ -12,7 +12,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 temp	PIDFILE
-htools	wget virt-edit guestfish head sed cat kill qemu-system-x86_64 qemu-system-ppc64 qemu-system-s390x
+htools	qemu-img virt-edit guestfish head sed cat kill qemu-system-x86_64 qemu-system-ppc64 qemu-system-s390x
 
 # Quick pasta test: send message from init to ns, and from ns to init
 def	distro_quick_pasta_test
@@ -44,7 +44,7 @@ hout	GUEST_FILES ls -1 *.c *.h *.sh passt.1 qrap.1 Makefile | tr '\n' ' '; echo
 test	Ubuntu 14.04.5 LTS (Trusty Tahr), amd64
 
 temp	IMG
-host	wget https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img -O __IMG__
+host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/trusty-server-cloudimg-amd64-disk1.img __IMG__
 host	virt-edit -a __IMG__ /etc/init/ttyS0.conf -e 's/\/getty/\/getty --autologin root/'
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-config.conf
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-final.conf
@@ -77,7 +77,7 @@ hout	PID cat __PIDFILE__
 test	Ubuntu 14.04.5 LTS (Trusty Tahr), i386
 
 temp	IMG
-host	wget https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-i386-disk1.img -O __IMG__
+host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/trusty-server-cloudimg-i386-disk1.img __IMG__
 host	virt-edit -a __IMG__ /etc/init/ttyS0.conf -e 's/\/getty/\/getty --autologin root/'
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-config.conf
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-final.conf
@@ -107,7 +107,7 @@ sleep	1
 test	Ubuntu 14.04.5 LTS (Trusty Tahr), ppc64le
 
 temp	IMG
-host	wget https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-ppc64el-disk1.img -O __IMG__
+host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/trusty-server-cloudimg-ppc64el-disk1.img __IMG__
 host	virt-edit -a __IMG__ /etc/init/hvc0.conf -e 's/\/getty/\/getty --autologin root/'
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-config.conf
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-final.conf
@@ -140,7 +140,7 @@ host	echo
 test	Ubuntu 16.04 LTS (Xenial Xerus), ppc64 (be)
 
 temp	IMG
-host	wget https://cloud-images.ubuntu.com/xenial/current/xenial-server-cloudimg-powerpc-disk1.img -O __IMG__
+host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/xenial-server-cloudimg-powerpc-disk1.img __IMG__
 host	virt-edit -a __IMG__ /lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
 host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/cloud-init.target.wants/cloud-config.service
 host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/cloud-init.target.wants/cloud-final.service
@@ -170,7 +170,7 @@ host	echo
 
 test	Ubuntu 22.04 (Jammy Jellyfish), s390x
 temp	IMG
-host	wget https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-s390x.img -O __IMG__
+host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/jammy-server-cloudimg-s390x.img __IMG__
 host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
