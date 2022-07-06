@@ -122,7 +122,8 @@ valgrind: all
 .PHONY: clean
 clean:
 	$(RM) $(BIN) *.o seccomp.h pasta.1 \
-		passt.tar passt.tar.gz *.deb *.rpm
+		passt.tar passt.tar.gz *.deb *.rpm \
+		passt.pid
 
 install: $(BIN) $(MANPAGES)
 	mkdir -p $(DESTDIR)$(prefix)/bin $(DESTDIR)$(prefix)/share/man/man1
