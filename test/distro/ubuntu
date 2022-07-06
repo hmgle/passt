@@ -12,7 +12,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 temp	PIDFILE
-htools	qemu-img virt-edit guestfish head sed cat kill qemu-system-x86_64 qemu-system-ppc64 qemu-system-s390x
+htools	qemu-img virt-edit guestfish cat kill qemu-system-x86_64 qemu-system-ppc64 qemu-system-s390x
 
 # Quick pasta test: send message from init to ns, and from ns to init
 def	distro_quick_pasta_test

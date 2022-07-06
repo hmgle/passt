@@ -12,7 +12,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 temp	PIDFILE
-htools	head sed cat kill qemu-system-x86_64
+htools	cat kill qemu-system-x86_64
 
 # Quick pasta test: send message from init to ns, and from ns to init
 def	distro_quick_pasta_test
@@ -59,7 +59,6 @@ endef
 hostb	./passt -P __PIDFILE__ &
 sleep	1
 host	echo
-hout	DNS6 sed -n 's/^nameserver \([^:]*:\)\([^%]*\).*/\1\2/p' /etc/resolv.conf | head -1
 
 test	Fedora 26, x86_64
 
