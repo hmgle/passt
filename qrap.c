@@ -112,8 +112,8 @@ void usage(const char *name)
  */
 int main(int argc, char **argv)
 {
+	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0, retry_on_reset, err;
 	struct timeval tv = { .tv_sec = 0, .tv_usec = (long)(500 * 1000) };
-	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0, retry_on_reset;
 	char *qemu_argv[ARG_MAX], dev_str[ARG_MAX];
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
@@ -249,14 +249,21 @@ retry:
 			perror("setsockopt SO_SNDTIMEO");
 
 		snprintf(addr.sun_path, UNIX_PATH_MAX, UNIX_SOCK_PATH, i);
-		if (connect(s, (const struct sockaddr *)&addr, sizeof(addr)))
+
+		errno = 0;
+
+		if (connect(s, (const struct sockaddr *)&addr, sizeof(addr))) {
+			err = errno;
 			perror("connect");
-		else if (send(s, &probe, sizeof(probe), 0) != sizeof(probe))
+		} else if (send(s, &probe, sizeof(probe), 0) != sizeof(probe)) {
+			err = errno;
 			perror("send");
-		else if (recv(s, &probe_r, 1, MSG_PEEK) <= 0)
+		} else if (recv(s, &probe_r, 1, MSG_PEEK) <= 0) {
+			err = errno;
 			perror("recv");
-		else
+		} else {
 			break;
+		}
 
 		/* FIXME: in a KubeVirt environment, libvirtd invokes qrap three
 		 * times in a strict sequence when a virtual machine needs to
@@ -280,7 +287,7 @@ retry:
 		 * this FIXME will probably remain until the tool itself is
 		 * obsoleted.
 		 */
-		if (retry_on_reset && errno == ECONNRESET) {
+		if (retry_on_reset && err == ECONNRESET) {
 			retry_on_reset--;
 			usleep(50 * 1000);
 			goto retry;
