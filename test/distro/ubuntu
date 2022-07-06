@@ -139,16 +139,7 @@ host	echo
 
 test	Ubuntu 16.04 LTS (Xenial Xerus), ppc64 (be)
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/xenial-server-cloudimg-powerpc-disk1.img __IMG__
-host	virt-edit -a __IMG__ /lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/cloud-init.target.wants/cloud-config.service
-host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/cloud-init.target.wants/cloud-final.service
-host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/cloud-init.target.wants/cloud-init-local.service
-host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/cloud-init.target.wants/cloud-init.service
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-ppc64 -m 1024 -M pseries -nographic -nodefaults -serial stdio -no-reboot -nographic -vga none -hda __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-ppc64 -m 1024 -M pseries -nographic -nodefaults -serial stdio -no-reboot -nographic -vga none -hda __BASEPATH__/prepared-xenial-server-cloudimg-powerpc-disk1.img -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 host	dhclient -4
 # Skip apt-get update here: some updates to xenial-updates around 2022-01-30
@@ -169,18 +160,8 @@ host	echo
 
 
 test	Ubuntu 22.04 (Jammy Jellyfish), s390x
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/jammy-server-cloudimg-s390x.img __IMG__
-host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
-host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/multi-user.target.wants/snapd.service
-host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/snap.lxd.activate.service
-host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/snap.lxd.daemon.service
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-host	./qrap 5 qemu-system-s390x -m 2048 -smp 2 -serial stdio -nodefaults -nographic __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-ccw
+
+host	./qrap 5 qemu-system-s390x -m 2048 -smp 2 -serial stdio -nodefaults -nographic __BASEPATH__/prepared-jammy-server-cloudimg-s390x.img -net socket,fd=5 -net nic,model=virtio -device virtio-rng-ccw -snapshot
 
 host	service systemd-resolved stop
 host	export DEBIAN_FRONTEND=noninteractive

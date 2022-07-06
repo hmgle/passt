@@ -12,7 +12,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 temp	PIDFILE
-htools	qemu-img virt-edit guestfish head sed cat kill qemu-system-x86_64 qemu-system-aarch64 qemu-system-ppc64
+htools	head sed cat kill qemu-system-x86_64 qemu-system-aarch64 qemu-system-ppc64
 
 # Quick pasta test: send message from init to ns, and from ns to init
 def	distro_quick_pasta_test
@@ -39,22 +39,11 @@ endef
 hostb	./passt -P __PIDFILE__ &
 sleep	1
 host	echo
-hout	GUEST_FILES ls -1 *.c *.h *.sh passt.1 qrap.1 Makefile | tr '\n' ' '; echo
 
 
 test	Debian GNU/Linux 8 (jessie), amd64
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-8.11.0-openstack-amd64.qcow2 __IMG__
-host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-config
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-final
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__IMG__,if=virtio -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__BASEPATH__/prepared-debian-8.11.0-openstack-amd64.qcow2,if=virtio -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -75,13 +64,7 @@ hout	PID cat __PIDFILE__
 
 test	Debian GNU/Linux 9 (stretch, oldoldstable), amd64
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-9-nocloud-amd64-daily-20200210-166.qcow2 __IMG__
-host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-9-nocloud-amd64-daily-20200210-166.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -99,13 +82,7 @@ sleep	1
 
 test	Debian GNU/Linux 10 (buster, oldstable), amd64
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-10-nocloud-amd64.qcow2 __IMG__
-host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-nocloud-amd64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -123,20 +100,7 @@ sleep	1
 
 test	Debian GNU/Linux 10 (buster, oldstable), aarch64
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-10-generic-arm64.qcow2 __IMG__
-host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-config
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-final
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-generic-arm64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -154,22 +118,7 @@ sleep	1
 
 test	Debian GNU/Linux 10 (buster, oldstable), ppc64le
 
-temp	IMG
-
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-10-generic-ppc64el.qcow2 __IMG__
-host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
-host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-config
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-final
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-generic-ppc64el.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -188,13 +137,7 @@ hostb	reset
 
 test	Debian GNU/Linux 11 (bullseye, stable), amd64
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-11-nocloud-amd64.qcow2  __IMG__
-host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-nocloud-amd64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
@@ -210,20 +153,7 @@ sleep	1
 
 test	Debian GNU/Linux 11 (bullseye, stable), aarch64
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-11-generic-arm64.qcow2 __IMG__
-host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-config
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-final
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-generic-arm64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
@@ -239,21 +169,7 @@ sleep	1
 
 test	Debian GNU/Linux 11 (bullseye, stable), ppc64le
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-11-generic-ppc64el.qcow2 __IMG__
-host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
-host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-config.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.service
-host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-config
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-final
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
-host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-generic-ppc64el.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
@@ -270,13 +186,7 @@ hostb	reset
 
 test	Debian GNU/Linux sid (experimental), amd64
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-sid-nocloud-amd64-daily.qcow2 __IMG__
-host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
-host	guestfish --rw -a __IMG__ -i rm /lib/systemd/system/serial-getty@.service
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-amd64-daily.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
@@ -292,12 +202,7 @@ sleep	1
 
 test	Debian GNU/Linux sid (experimental), aarch64
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-sid-nocloud-arm64-daily.qcow2 __IMG__
-host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-arm64-daily.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
@@ -313,13 +218,7 @@ sleep	1
 
 test	Debian GNU/Linux sid (experimental), ppc64le
 
-temp	IMG
-host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/debian-sid-nocloud-ppc64el-daily.qcow2 __IMG__
-host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
-host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
-host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
-
-host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-ppc64el-daily.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd

@@ -45,15 +45,18 @@ OPENSUSE_IMGS = openSUSE-Leap-15.1-JeOS.x86_64-kvm-and-xen.qcow2 \
 	openSUSE-Tumbleweed-ARM-JeOS-efi.armv7l.raw.xz \
 	openSUSE-Tumbleweed-JeOS.x86_64-kvm-and-xen.qcow2
 
-UBUNTU_IMGS = trusty-server-cloudimg-amd64-disk1.img \
+UBUNTU_OLD_IMGS = trusty-server-cloudimg-amd64-disk1.img \
 	trusty-server-cloudimg-i386-disk1.img \
-	trusty-server-cloudimg-ppc64el-disk1.img \
-	xenial-server-cloudimg-powerpc-disk1.img \
+	trusty-server-cloudimg-ppc64el-disk1.img
+UBUNTU_NEW_IMGS = xenial-server-cloudimg-powerpc-disk1.img \
 	jammy-server-cloudimg-s390x.img
+UBUNTU_IMGS = $(UBUNTU_OLD_IMGS) $(UBUNTU_NEW_IMGS)
 
 DOWNLOAD_ASSETS = mbuto \
 	$(DEBIAN_IMGS) $(FEDORA_IMGS) $(OPENSUSE_IMGS) $(UBUNTU_IMGS)
-LOCAL_ASSETS = mbuto.img QEMU_EFI.fd
+LOCAL_ASSETS = mbuto.img QEMU_EFI.fd \
+	$(DEBIAN_IMGS:%=prepared-%) $(FEDORA_IMGS:%=prepared-%) \
+	$(UBUNTU_NEW_IMGS:%=prepared-%)
 
 ASSETS = $(DOWNLOAD_ASSETS) $(LOCAL_ASSETS)
 
@@ -68,6 +71,14 @@ mbuto.img: passt.mbuto mbuto
 QEMU_EFI.fd:
 	./find-arm64-firmware.sh $@
 
+prepared-%.qcow2: %.qcow2 ./prepare-distro-img.sh
+	qemu-img create -f qcow2 -F qcow2 -b $< $@
+	./prepare-distro-img.sh $@
+
+prepared-%.img: %.img ./prepare-distro-img.sh
+	qemu-img create -f qcow2 -F qcow2 -b $< $@
+	./prepare-distro-img.sh $(IMGTYPE) $@
+
 check: assets
 	./run
 
@@ -78,6 +89,7 @@ clean:
 	rm -f perf.js *~
 	rm -f $(LOCAL_ASSETS)
 	rm -rf test_logs
+	rm -f prepared-*.qcow2 prepared-*.img
 
 realclean: clean
 	rm -rf $(DOWNLOAD_ASSETS)
