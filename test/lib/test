@@ -415,12 +415,12 @@ test_one() {
 }
 
 # test() - Build list of tests to run, in order, then issue test_one()
-# $1:	Name of directory containing set of test files, relative to test/
+# $@:	Test files to run, relative to test/
 test() {
 	__list=
 
 	cd test
-	for __f in "${1}"/*; do
+	for __f; do
 		__type="$(file -b --mime-type ${__f})"
 		if [ "${__type}" = "text/x-shellscript" ]; then
 			__list="$(list_add "${__list}" "${__f}")"

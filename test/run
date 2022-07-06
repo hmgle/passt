@@ -60,43 +60,43 @@ run() {
 	[ ${CI} -eq 1 ]   && video_start ci
 
 	setup build
-	test build
-	test distro
+	test $(cd test && echo build/*)
+	test $(cd test && echo distro/*)
 
 	setup pasta
-	test ndp
-	test dhcp
-	test tcp
-	test udp
+	test $(cd test && echo ndp/*)
+	test $(cd test && echo dhcp/*)
+	test $(cd test && echo tcp/*)
+	test $(cd test && echo udp/*)
 	teardown pasta
 
 	setup passt
-	test ndp
-	test dhcp
-	test tcp
-	test udp
-	test valgrind
+	test $(cd test && echo ndp/*)
+	test $(cd test && echo dhcp/*)
+	test $(cd test && echo tcp/*)
+	test $(cd test && echo udp/*)
+	test $(cd test && echo valgrind/*)
 	teardown passt
 
 	VALGRIND=1
 	setup passt_in_ns
-	test ndp
-	test dhcp
-	test icmp
-	test tcp
-	test udp
-	test valgrind
+	test $(cd test && echo ndp/*)
+	test $(cd test && echo dhcp/*)
+	test $(cd test && echo icmp/*)
+	test $(cd test && echo tcp/*)
+	test $(cd test && echo udp/*)
+	test $(cd test && echo valgrind/*)
 	teardown passt_in_ns
 
 	VALGRIND=0
 	setup passt_in_ns
-	test ndp
-	test dhcp
-	test perf
+	test $(cd test && echo ndp/*)
+	test $(cd test && echo dhcp/*)
+	test $(cd test && echo perf/*)
 	teardown passt_in_ns
 
 	setup two_guests
-	test two_guests
+	test $(cd test && echo two_guests/*)
 	teardown two_guests
 
 	perf_finish
@@ -125,21 +125,21 @@ demo() {
 	layout_demo_passt
 	video_start demo_passt
 	MODE=passt
-	test demo
+	test $(cd test && echo demo/*)
 	video_stop
 	teardown demo_passt
 
 	layout_demo_pasta
 	video_start demo_pasta
 	MODE=pasta
-	test demo
+	test $(cd test && echo demo/*)
 	video_stop
 	teardown demo_pasta
 
 	layout_demo_podman
 	video_start demo_podman
 	MODE=podman
-	test demo
+	test $(cd test && echo demo/*)
 	video_stop
 	teardown_demo_podman
 
