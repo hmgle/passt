@@ -12,7 +12,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 temp	PIDFILE
-htools	wget virt-edit guestfish head sed cat kill qemu-system-aarch64 qemu-system-ppc64le
+htools	wget virt-edit guestfish head sed cat kill qemu-system-aarch64 qemu-system-ppc64
 
 # Quick pasta test: send message from init to ns, and from ns to init
 def	distro_quick_pasta_test
@@ -168,7 +168,7 @@ host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
 host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-ppc64le -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -252,7 +252,7 @@ host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
 host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-ppc64le -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
@@ -318,7 +318,7 @@ host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.serv
 host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-ppc64le -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
