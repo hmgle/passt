@@ -130,7 +130,7 @@ host	wget http://download.opensuse.org/ports/aarch64/tumbleweed/appliances/openS
 host	virt-edit -a __IMG__ -m /dev/sda3 /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 %I $TERM/g'
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio
 host	PS1='$ '
 host	ip link set enp0s1 up
 sleep	10

@@ -2,3 +2,4 @@ perf.js
 test_logs/
 mbuto/
 *.img
+QEMU_EFI.fd

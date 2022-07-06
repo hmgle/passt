@@ -136,7 +136,7 @@ host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
 host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -222,7 +222,7 @@ host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init
 host	guestfish --rw -a __IMG__ -i rm /etc/init.d/cloud-init-local
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
@@ -296,7 +296,7 @@ host	wget https://cloud.debian.org/images/cloud/sid/daily/latest/debian-sid-nocl
 host	virt-edit -a __IMG__ /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd

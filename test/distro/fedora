@@ -158,7 +158,7 @@ host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.se
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc nmap-ncat
@@ -213,7 +213,7 @@ host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.se
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc nmap-ncat
@@ -268,7 +268,7 @@ host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.se
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc nmap-ncat
@@ -323,7 +323,7 @@ host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.se
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc nmap-ncat
@@ -378,7 +378,7 @@ host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.se
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc nmap-ncat
@@ -433,7 +433,7 @@ host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.se
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc nmap-ncat
@@ -488,7 +488,7 @@ host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.se
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc nmap-ncat
@@ -543,7 +543,7 @@ host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-init-local.se
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/cloud-final.service
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
+host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __IMG__ -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc nmap-ncat

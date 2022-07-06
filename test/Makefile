@@ -6,7 +6,7 @@
 # Author: David Gibson <david@gibson.dropbear.id.au>
 
 DOWNLOAD_ASSETS = mbuto
-LOCAL_ASSETS = mbuto.img
+LOCAL_ASSETS = mbuto.img QEMU_EFI.fd
 
 ASSETS = $(DOWNLOAD_ASSETS) $(LOCAL_ASSETS)
 
@@ -17,6 +17,9 @@ mbuto:
 
 mbuto.img: passt.mbuto mbuto
 	./mbuto/mbuto -p ./$< -c lz4 -f $@
+
+QEMU_EFI.fd:
+	./find-arm64-firmware.sh $@
 
 check: assets
 	./run
