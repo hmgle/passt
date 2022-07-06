@@ -114,19 +114,6 @@ subs_apply() {
 	IFS="${__ifs}"
 }
 
-# set_mode() - Set 'passt' or 'pasta' mode for terminal control, renaming panes
-# $1:	Mode to be set
-set_mode() {
-	MODE="${1}"
-	if [ "${1}" = "pasta" ]; then
-		tmux select-pane -t ${PANE_GUEST} -T "namespace"
-		tmux select-pane -t ${PANE_PASST} -T "pasta"
-	else
-		tmux select-pane -t ${PANE_GUEST} -T "guest"
-		tmux select-pane -t ${PANE_PASST} -T "passt"
-	fi
-}
-
 # get_info_cols() - Get number of columns for info pane
 get_info_cols() {
 	__log_pane_cols=
