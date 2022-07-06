@@ -350,6 +350,14 @@ static void get_dns(struct ctx *c)
 			if (!dns4_set &&
 			    dns4 - &c->dns4[0] < ARRAY_SIZE(c->dns4) - 1 &&
 			    inet_pton(AF_INET, p + 1, dns4)) {
+				/* We can only access local addresses via the gw redirect */
+				if (ntohl(*dns4) >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET) {
+					if (c->no_map_gw) {
+						*dns4 = 0;
+						continue;
+					}
+					*dns4 = c->gw4;
+				}
 				dns4++;
 				*dns4 = 0;
 			}
@@ -357,6 +365,14 @@ static void get_dns(struct ctx *c)
 			if (!dns6_set &&
 			    dns6 - &c->dns6[0] < ARRAY_SIZE(c->dns6) - 1 &&
 			    inet_pton(AF_INET6, p + 1, dns6)) {
+				/* We can only access local addresses via the gw redirect */
+				if (IN6_IS_ADDR_LOOPBACK(dns6)) {
+					if (c->no_map_gw) {
+						memset(dns6, 0, sizeof(*dns6));
+						continue;
+					}
+					memcpy(dns6, &c->gw6, sizeof(*dns6));
+				}
 				dns6++;
 				memset(dns6, 0, sizeof(*dns6));
 			}
