@@ -20,15 +20,11 @@ VMEM="$((${__mem_kib} / 1024 / 4))"
 
 # setup_build() - Set up pane layout for build tests
 setup_build() {
-	MODE=build
-
 	layout_host
 }
 
 # setup_passt() - Start qemu and passt
 setup_passt() {
-	MODE=passt
-
 	layout_passt
 
 	# Ports:
@@ -65,8 +61,6 @@ setup_passt() {
 
 # setup_pasta() - Create a network and user namespace, connect pasta to it
 setup_pasta() {
-	MODE=pasta
-
 	layout_pasta
 
 	pane_run NS 'echo $$'
@@ -98,8 +92,6 @@ setup_pasta() {
 
 # setup_passt_in_ns() - Set up namespace (with pasta), run qemu and passt into it
 setup_passt_in_ns() {
-	MODE=passt_in_ns
-
 	layout_passt_in_pasta
 
 	# Ports:
@@ -180,8 +172,6 @@ setup_passt_in_ns() {
 
 # setup_two_guests() - Set up two namespace, run qemu and passt in both of them
 setup_two_guests() {
-	MODE=passt_in_ns
-
 	layout_two_guests
 
 	# Ports:

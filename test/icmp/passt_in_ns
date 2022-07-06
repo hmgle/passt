@@ -16,7 +16,6 @@
 # to create "ping" sockets. Inside the namespace, there's a single group, which
 # is allowed by default to create them.
 
-onlyfor	passt_in_ns
 nstools	ip jq sleep
 gtools	ping ip jq
 

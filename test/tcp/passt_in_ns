@@ -11,7 +11,6 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-onlyfor	passt_in_ns
 gtools	nc ip jq cat md5sum cut
 htools	dd nc ip jq cat md5sum cut
 nstools	nc ip jq cat md5sum cut

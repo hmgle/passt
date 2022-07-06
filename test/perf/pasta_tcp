@@ -11,7 +11,6 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-onlyfor	passt_in_ns
 htools	head ip seq bc sleep iperf3 tcp_rr tcp_crr jq sed
 nstools	sysctl nproc ip seq bc sleep iperf3 tcp_rr tcp_crr jq sed
 

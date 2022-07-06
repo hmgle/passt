@@ -13,9 +13,6 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-# Empty, 'passt' or 'pasta', to match against 'onlyfor' directive
-MODE=
-
 # test_iperf3() - Ugly helper for iperf3c/iperf3s directives
 # $1:	Role: client or server
 # $2:	Pane name, can be lowercase
@@ -426,12 +423,6 @@ test() {
 			__list="$(list_add "${__list}" "${__f}")"
 			continue
 		fi
-
-		if [ -n "$(file_def "${__f}" onlyfor)" ] && \
-			   ! list_has "$(file_def "${__f}" onlyfor)" "${MODE}"; then
-			continue
-		fi
-
 		__list="$(list_add "${__list}" "${__f}")"
 	done
 	cd ..

@@ -60,43 +60,50 @@ run() {
 	[ ${CI} -eq 1 ]   && video_start ci
 
 	setup build
-	test $(cd test && echo build/*)
-	test $(cd test && echo distro/*)
+	test build/all
+	test build/static_checkers
+	test distro/debian
+	test distro/fedora
+	test distro/opensuse
+	test distro/ubuntu
 
 	setup pasta
-	test $(cd test && echo ndp/*)
-	test $(cd test && echo dhcp/*)
-	test $(cd test && echo tcp/*)
-	test $(cd test && echo udp/*)
+	test ndp/pasta
+	test dhcp/pasta
+	test tcp/pasta
+	test udp/pasta
 	teardown pasta
 
 	setup passt
-	test $(cd test && echo ndp/*)
-	test $(cd test && echo dhcp/*)
-	test $(cd test && echo tcp/*)
-	test $(cd test && echo udp/*)
-	test $(cd test && echo valgrind/*)
+	test ndp/passt
+	test dhcp/passt
+	test tcp/passt
+	test udp/passt
+	test valgrind/passt
 	teardown passt
 
 	VALGRIND=1
 	setup passt_in_ns
-	test $(cd test && echo ndp/*)
-	test $(cd test && echo dhcp/*)
-	test $(cd test && echo icmp/*)
-	test $(cd test && echo tcp/*)
-	test $(cd test && echo udp/*)
-	test $(cd test && echo valgrind/*)
+	test ndp/passt
+	test dhcp/passt
+	test icmp/passt_in_ns
+	test tcp/passt_in_ns
+	test udp/passt_in_ns
+	test valgrind/passt_in_ns
 	teardown passt_in_ns
 
 	VALGRIND=0
 	setup passt_in_ns
-	test $(cd test && echo ndp/*)
-	test $(cd test && echo dhcp/*)
-	test $(cd test && echo perf/*)
+	test ndp/passt
+	test dhcp/passt
+	test perf/passt_tcp
+	test perf/passt_udp
+	test perf/pasta_tcp
+	test perf/pasta_udp
 	teardown passt_in_ns
 
 	setup two_guests
-	test $(cd test && echo two_guests/*)
+	test two_guests/basic
 	teardown two_guests
 
 	perf_finish
@@ -124,22 +131,19 @@ demo() {
 
 	layout_demo_passt
 	video_start demo_passt
-	MODE=passt
-	test $(cd test && echo demo/*)
+	test demo/passt
 	video_stop
 	teardown demo_passt
 
 	layout_demo_pasta
 	video_start demo_pasta
-	MODE=pasta
-	test $(cd test && echo demo/*)
+	test demo/pasta
 	video_stop
 	teardown demo_pasta
 
 	layout_demo_podman
 	video_start demo_podman
-	MODE=podman
-	test $(cd test && echo demo/*)
+	test demo/podman
 	video_stop
 	teardown_demo_podman
 

@@ -11,7 +11,6 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-onlyfor	passt_in_ns
 htools	bc head ip sleep iperf3 udp_rr jq sed
 nstools	ip sleep iperf3 udp_rr jq sed
 
