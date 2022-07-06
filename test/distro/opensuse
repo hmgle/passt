@@ -12,7 +12,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 temp	PIDFILE
-htools	wget virt-edit guestfish head sed cat kill kvm qemu-system-aarch64 xzcat tr
+htools	wget virt-edit guestfish head sed cat kill qemu-system-x86_64 qemu-system-aarch64 xzcat tr
 
 # Quick pasta test: send message from init to ns, and from ns to init
 def	distro_quick_pasta_test
@@ -51,7 +51,7 @@ host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/je
 host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
 host	PS1='$ '
 host	ip link set eth0 up
 sleep	2
@@ -79,7 +79,7 @@ host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/je
 host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
 host	PS1='$ '
 host	ip link set eth0 up
 sleep	2
@@ -104,7 +104,7 @@ host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/je
 host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
 # Multiple prompt logins might come up here
 sleep	10
 host	PS1='$ '
@@ -186,7 +186,7 @@ host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/serial-getty@.servi
 host	virt-edit -a __IMG__ /etc/systemd/system/getty.target.wants/getty@tty1.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 ttyS0 $TERM/g'
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 kvm -M pc -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
 host	PS1='$ '
 host	ip link set ens2 up
 sleep	2

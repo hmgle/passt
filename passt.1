@@ -616,16 +616,16 @@ NDP/DHCPv6:
 UNIX domain socket bound at /tmp/passt_1.socket
 
 You can now start qrap:
-    ./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio
+    ./qrap 5 qemu-system-x86_64 ... -net socket,fd=5 -net nic,model=virtio
 or directly qemu, patched with:
     qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch
 as follows:
-    kvm ... -net socket,connect=/tmp/passt_1.socket -net nic,model=virtio
+    qemu-system-x86_64 ... -net socket,connect=/tmp/passt_1.socket -net nic,model=virtio
 
 .fi
 .BR "	[From another terminal]"
 .nf
-$ ./qrap 5 kvm test.qcow2 -m 1024 -display none -nodefaults -nographic -net socket,fd=5 -net nic,model=virtio
+$ ./qrap 5 qemu-system-x86_64 test.qcow2 -m 1024 -display none -nodefaults -nographic -net socket,fd=5 -net nic,model=virtio
 Connected to /tmp/passt_1.socket
 
 .fi

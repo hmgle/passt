@@ -58,7 +58,9 @@ setup_passt() {
 	pane_run PASST "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt ${__opts} -f -t 10001 -u 10001 -P passt.pid"
 	sleep 5
 
-	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS} \
+	pane_run GUEST './qrap 5 qemu-system-$(uname -m)'                  \
+		' -machine accel=kvm'                                      \
+		' -m '${VMEM}' -cpu host -smp '${VCPUS}                    \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
 		' -initrd mbuto.img -nographic -serial stdio'		   \
 		' -nodefaults'						   \
@@ -170,7 +172,10 @@ setup_passt_in_ns() {
 	fi
 	sleep 5
 
-	pane_run GUEST './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS} \
+	pane_run GUEST './qrap 5 qemu-system-$(uname -m)'                  \
+		' -machine accel=kvm'                                      \
+		' -M accel=kvm:tcg'                                        \
+		' -m '${VMEM}' -cpu host -smp '${VCPUS}                    \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
 		' -initrd mbuto.img -nographic -serial stdio'		   \
 		' -nodefaults'						   \
@@ -259,7 +264,9 @@ setup_two_guests() {
 	pane_run GUEST_2 'cp mbuto.img mbuto_2.img'
 	pane_status GUEST_2
 
-	pane_run GUEST_1 './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS} \
+	pane_run GUEST_1 './qrap 5 qemu-system-$(uname -m)'                  \
+		' -M accel=kvm:tcg'                                          \
+		' -m '${VMEM}' -cpu host -smp '${VCPUS}                      \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			     \
 		' -initrd mbuto.img -nographic -serial stdio'		     \
 		' -nodefaults'						     \
@@ -267,7 +274,9 @@ setup_two_guests() {
 		'virtio-net.napi_tx=1"'					     \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
 		" -netdev socket,fd=5,id=hostnet0"
-	pane_run GUEST_2 './qrap 5 kvm -m '${VMEM}' -cpu host -smp '${VCPUS} \
+	pane_run GUEST_2 './qrap 5 qemu-system-$(uname -m)'                  \
+		' -M accel=kvm:tcg'                                          \
+		' -m '${VMEM}' -cpu host -smp '${VCPUS}                      \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			     \
 		' -initrd mbuto_2.img -nographic -serial stdio'		     \
 		' -nodefaults'						     \
