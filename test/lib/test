@@ -418,29 +418,21 @@ test_one() {
 # $1:	Name of directory containing set of test files, relative to test/
 test() {
 	__list=
-	__rem=1
 
 	cd test
-	while [ ${__rem} -eq 1 ]; do
-		__rem=0
-		for __f in "${1}"/*; do
-			__type="$(file -b --mime-type ${__f})"
-			if [ "${__type}" = "text/x-shellscript" ]; then
-				__list="$(list_add "${__list}" "${__f}")"
-				continue
-			fi
+	for __f in "${1}"/*; do
+		__type="$(file -b --mime-type ${__f})"
+		if [ "${__type}" = "text/x-shellscript" ]; then
+			__list="$(list_add "${__list}" "${__f}")"
+			continue
+		fi
 
-			if [ -n "$(file_def "${__f}" onlyfor)" ] && \
+		if [ -n "$(file_def "${__f}" onlyfor)" ] && \
 			   ! list_has "$(file_def "${__f}" onlyfor)" "${MODE}"; then
-				continue
-			fi
+			continue
+		fi
 
-			if list_has_all "${__list}" "$(file_def "${__f}" req)"; then
-				__list="$(list_add "${__list}" "${__f}")"
-			else
-				__rem=1
-			fi
-		done
+		__list="$(list_add "${__list}" "${__f}")"
 	done
 	cd ..
 
