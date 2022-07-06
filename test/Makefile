@@ -5,12 +5,18 @@
 # Copyright Red Hat
 # Author: David Gibson <david@gibson.dropbear.id.au>
 
-DOWNLOAD_ASSETS =
-LOCAL_ASSETS =
+DOWNLOAD_ASSETS = mbuto
+LOCAL_ASSETS = mbuto.img
 
 ASSETS = $(DOWNLOAD_ASSETS) $(LOCAL_ASSETS)
 
 assets: $(ASSETS)
+
+mbuto:
+	git clone git://mbuto.sh/mbuto
+
+mbuto.img: passt.mbuto mbuto
+	./mbuto/mbuto -p ./$< -c lz4 -f $@
 
 check: assets
 	./run

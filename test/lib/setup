@@ -13,6 +13,7 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
+INITRAMFS="${BASEPATH}/mbuto.img"
 VCPUS="$( [ $(nproc) -ge 8 ] && echo 6 || echo $(( $(nproc) / 2 + 1 )) )"
 __mem_kib="$(sed -n 's/MemTotal:[ ]*\([0-9]*\) kB/\1/p' /proc/meminfo)"
 VMEM="$((${__mem_kib} / 1024 / 4))"
@@ -24,20 +25,11 @@ setup_build() {
 	layout_host
 }
 
-# setup_passt() - Build guest initrd with mbuto, start qemu and passt
+# setup_passt() - Start qemu and passt
 setup_passt() {
 	MODE=passt
 
 	layout_passt
-
-	__mbuto_dir="$(mktemp -d)"
-	pane_run GUEST "git -C ${__mbuto_dir} clone git://mbuto.sh/mbuto"
-	pane_status GUEST
-
-	pane_run GUEST "${__mbuto_dir}/mbuto/mbuto -p test/passt.mbuto -c lz4 -f mbuto.img"
-	pane_status GUEST
-
-	rm -rf "${__mbuto_dir}"
 
 	# Ports:
 	#
@@ -62,7 +54,7 @@ setup_passt() {
 		' -machine accel=kvm'                                      \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                    \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
-		' -initrd mbuto.img -nographic -serial stdio'		   \
+		' -initrd '${INITRAMFS}' -nographic -serial stdio'	   \
 		' -nodefaults'						   \
 		' -append "console=ttyS0 mitigations=off apparmor=0 '	   \
 		'virtio-net.napi_tx=1"'					   \
@@ -177,7 +169,7 @@ setup_passt_in_ns() {
 		' -M accel=kvm:tcg'                                        \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                    \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
-		' -initrd mbuto.img -nographic -serial stdio'		   \
+		' -initrd '${INITRAMFS}' -nographic -serial stdio'	   \
 		' -nodefaults'						   \
 		' -append "console=ttyS0 mitigations=off apparmor=0 '	   \
 		'virtio-net.napi_tx=1"'					   \
@@ -261,14 +253,11 @@ setup_two_guests() {
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 	pane_run PASST_2 "./passt -f ${__opts} -t 10004 -u 10004"
 
-	pane_run GUEST_2 'cp mbuto.img mbuto_2.img'
-	pane_status GUEST_2
-
 	pane_run GUEST_1 './qrap 5 qemu-system-$(uname -m)'                  \
 		' -M accel=kvm:tcg'                                          \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                      \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			     \
-		' -initrd mbuto.img -nographic -serial stdio'		     \
+		' -initrd '${INITRAMFS}' -nographic -serial stdio'	     \
 		' -nodefaults'						     \
 		' -append "console=ttyS0 mitigations=off apparmor=0 '	     \
 		'virtio-net.napi_tx=1"'					     \
@@ -278,7 +267,7 @@ setup_two_guests() {
 		' -M accel=kvm:tcg'                                          \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                      \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			     \
-		' -initrd mbuto_2.img -nographic -serial stdio'		     \
+		' -initrd '${INITRAMFS}' -nographic -serial stdio'	     \
 		' -nodefaults'						     \
 		' -append "console=ttyS0 mitigations=off apparmor=0 '	     \
 		'virtio-net.napi_tx=1"'					     \
