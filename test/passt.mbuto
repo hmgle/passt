@@ -11,7 +11,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 PROGS="${PROGS:-ash,dash,bash ip mount ls insmod mkdir ln cat chmod lsmod
-       modprobe find grep mknod mv rm umount jq iperf3 dhclient busybox logger
+       modprobe find grep mknod mv rm umount jq iperf3 dhclient hostname
        sed tr chown sipcalc cut md5sum nc dd strace ping tail killall sleep
        sysctl nproc tcp_rr tcp_crr udp_rr which tee seq bc}"
 
@@ -22,15 +22,29 @@ LINKS="${LINKS:-
 	 ash,dash,bash		/bin/sh
 	 ash,dash,bash		/usr/bin/bash}"
 
-COPIES="${COPIES}
-	/sbin/dhclient-script"
+DIRS="${DIRS} /tmp /sbin"
 
-DIRS="${DIRS} /tmp"
+FIXUP="${FIXUP}"'
+	cat > /sbin/dhclient-script << EOF
+#!/bin/sh
+[ -n "\${new_interface_mtu}" ]       && ip link set dev \${interface} mtu \${new_interface_mtu}
 
-FIXUP="${FIXUP}
+[ -n "\${new_ip_address}" ]          && ip addr add \${new_ip_address}/\${new_subnet_mask} dev \${interface}
+[ -n "\${new_routers}" ]             && for r in \${new_routers}; do ip route add default via \${r} dev \${interface}; done
+[ -n "\${new_domain_name_servers}" ] && for d in \${new_domain_name_servers}; do echo "nameserver \${d}" >> /etc/resolv.conf; done
+[ -n "\${new_domain_name}" ]         && (printf "search"; for d in \${new_domain_name}; do printf " %s" "\${d}"; done; printf "\n") >> /etc/resolv.conf
+
+[ -n "\${new_ip6_address}" ]         && ip addr add \${new_ip6_address}/\${new_ip6_prefixlen} dev \${interface}
+[ -n "\${new_dhcp6_name_servers}" ]  && for d in \${new_dhcp6_name_servers}; do echo "nameserver \${d}%\${interface}" >> /etc/resolv.conf; done
+[ -n "\${new_dhcp6_domain_search}" ] && (printf "search"; for d in \${new_dhcp6_domain_search}; do printf " %s" "\${d}"; done; printf "\n") >> /etc/resolv.conf
+
+[ -n "\${new_host_name}" ]           && hostname "\${new_host_name}"
+exit 0
+EOF
+	chmod 755 /sbin/dhclient-script
 	:> /etc/fstab
 	sh +m
-"
+'
 
 OUTPUT="KERNEL=__KERNEL__
 INITRD=__INITRD__

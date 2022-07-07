@@ -23,8 +23,10 @@ check	[ -n "__IFNAME1__" ]
 check	[ -n "__IFNAME2__" ]
 
 test	DHCP: addresses
+guest1	ip link set dev __IFNAME1__ up
 guest1	/sbin/dhclient -4 __IFNAME1__
-guest2	/sbin/dhclient -4 __IFNAME1__
+guest2	ip link set dev __IFNAME2__ up
+guest2	/sbin/dhclient -4 __IFNAME2__
 g1out	ADDR1 ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME1__").addr_info[0].local'
 g2out	ADDR2 ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME2__").addr_info[0].local'
 hout	HOST_ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[0].local'
@@ -35,7 +37,7 @@ test	DHCPv6: addresses
 # Link is up now, wait for DAD to complete
 sleep	2
 guest1	/sbin/dhclient -6 __IFNAME1__
-guest2	/sbin/dhclient -6 __IFNAME1__
+guest2	/sbin/dhclient -6 __IFNAME2__
 g1out	ADDR1_6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME1__").addr_info[] | select(.prefixlen == 128).local'
 g2out	ADDR2_6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME2__").addr_info[] | select(.prefixlen == 128).local'
 hout	HOST_ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[] | select(.scope == "global").local'
