@@ -589,8 +589,8 @@ static void conf_ip(struct ctx *c)
 			IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ? &c->addr6 : NULL,
 			&prefix_len, &c->addr6_ll);
 
-		memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr4_seen));
-		memcpy(&c->addr6_ll_seen, &c->addr6, sizeof(c->addr4_seen));
+		memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr6));
+		memcpy(&c->addr6_ll_seen, &c->addr6_ll, sizeof(c->addr6_ll));
 	}
 
 	if (!c->gw4 || !c->addr4 ||
