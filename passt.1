@@ -306,7 +306,10 @@ For low (< 1024) ports, see \fBNOTES\fR.
 .BR ports
 A comma-separated list of ports, optionally ranged with \fI-\fR, and,
 optionally, with target ports after \fI:\fR, if they differ. Specific addresses
-can be bound as well, separated by \fI/\fR. Examples:
+can be bound as well, separated by \fI/\fR. Within given ranges, selected ports
+and ranges can be excluded by an additional specification prefixed by \fI~\fR.
+Specifying excluded ranges only implies that all other ports are forwarded.
+Examples:
 .RS
 .TP
 -t 22
@@ -326,6 +329,15 @@ Forward local ports 22 to 80 to corresponding ports on the guest plus 10
 .TP
 -t 192.0.2.1/22
 Forward local port 22, bound to 192.0.2.1, to port 22 on the guest
+.TP
+-t 2000-5000,~3000-3010
+Forward local ports 2000 to 5000, but not 3000 to 3010
+.TP
+-t 192.0.2.1/20-30,~25
+Forward local ports 20 to 24, and 26 to 30, bound to 192.0.2.1
+.TP
+-t ~20000-20010
+Forward all ports to the guest, except for the range from 20000 to 20010
 .RE
 
 Default is \fBnone\fR.
@@ -368,7 +380,10 @@ periodically derived (every second) from listening sockets reported by
 .BR ports
 A comma-separated list of ports, optionally ranged with \fI-\fR, and,
 optionally, with target ports after \fI:\fR, if they differ. Specific addresses
-can be bound as well, separated by \fI/\fR. Examples:
+can be bound as well, separated by \fI/\fR. Within given ranges, selected ports
+and ranges can be excluded by an additional specification prefixed by \fI~\fR.
+Specifying excluded ranges only implies that all other ports are forwarded.
+Examples:
 .RS
 .TP
 -t 22
@@ -389,6 +404,15 @@ namespace
 .TP
 -t 192.0.2.1/22
 Forward local port 22, bound to 192.0.2.1, to port 22 in the target namespace
+.TP
+-t 2000-5000,~3000-3010
+Forward local ports 2000 to 5000, but not 3000 to 3010
+.TP
+-t 192.0.2.1/20-30,~25
+Forward local ports 20 to 24, and 26 to 30, bound to 192.0.2.1
+.TP
+-t ~20000-20010
+Forward all ports to the namespace, except for the range from 20000 to 20010
 .RE
 
 IPv6 bound ports are also forwarded for IPv4.

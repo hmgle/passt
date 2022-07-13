@@ -124,12 +124,12 @@ enum conf_port_type {
 static int conf_ports(struct ctx *c, char optname, const char *optarg,
 		      enum conf_port_type *set)
 {
-	int start_src = -1, end_src = -1, start_dst = -1, end_dst = -1;
+	int start_src, end_src, start_dst, end_dst, exclude_only = 1, i, port;
+	char addr_buf[sizeof(struct in6_addr)] = { 0 }, *addr = addr_buf;
 	void (*remap)(in_port_t port, in_port_t delta);
-	char addr_buf[sizeof(struct in6_addr)] = { 0 };
+	uint8_t *map, exclude[USHRT_MAX / 8] = { 0 };
+	char buf[BUFSIZ], *sep, *spec, *p;
 	sa_family_t af = AF_UNSPEC;
-	char buf[BUFSIZ], *sep, *p, *addr = addr_buf;
-	uint8_t *map;
 
 	if (optname == 't') {
 		map = c->tcp.port_to_tap;
@@ -186,9 +186,9 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 
 	strncpy(buf, optarg, sizeof(buf) - 1);
 
-	if ((p = strchr(buf, '/'))) {
-		*p = 0;
-		p++;
+	if ((spec = strchr(buf, '/'))) {
+		*spec = 0;
+		spec++;
 
 		if (optname != 't' && optname != 'u')
 			goto bad;
@@ -200,16 +200,97 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 		else
 			goto bad;
 	} else {
-		p = buf;
+		spec = buf;
 
 		addr = NULL;
 	}
 
-	if (strspn(p, "0123456789-,:") != strlen(p))
+	if (strspn(spec, "0123456789-,:~") != strlen(spec))
 		goto bad;
 
+	/* Mark all exclusions first, they might be given after base ranges */
+	p = spec;
+	start_src = end_src = -1;
 	do {
-		int i, port;
+		while (*p != '~' && start_src == -1) {
+			exclude_only = 0;
+
+			if (!(p = strchr(p, ',')))
+				break;
+
+			p++;
+		}
+		if (!p || !*p)
+			break;
+
+		if (*p == '~')
+			p++;
+
+		errno = 0;
+		port = strtol(p, &sep, 10);
+		if (sep == p)
+			break;
+
+		if (port < 0 || port > USHRT_MAX || errno)
+			goto bad;
+
+		switch (*sep) {
+		case '-':
+			if (start_src == -1)		/* ~22-... */
+				start_src = port;
+			break;
+		case ',':
+		case 0:
+			if (start_src == -1)		/* ~80 */
+				start_src = end_src = port;
+			else if (end_src == -1)		/* ~22-25 */
+				end_src = port;
+			else
+				goto bad;
+
+			if (start_src > end_src)	/* ~80-22 */
+				goto bad;
+
+			for (i = start_src; i <= end_src; i++) {
+				if (bitmap_isset(exclude, i))
+					goto overlap;
+
+				bitmap_set(exclude, i);
+			}
+			break;
+		default:
+			goto bad;
+		}
+		p = sep + 1;
+	} while (*sep);
+
+	if (exclude_only) {
+		for (i = 0; i < PORT_EPHEMERAL_MIN; i++) {
+			if (bitmap_isset(exclude, i))
+				continue;
+
+			bitmap_set(map, i);
+
+			if (optname == 't')
+				tcp_sock_init(c, 0, af, addr, i);
+			else if (optname == 'u')
+				udp_sock_init(c, 0, af, addr, i);
+		}
+
+		return 0;
+	}
+
+	/* Now process base ranges, skipping exclusions */
+	start_src = end_src = start_dst = end_dst = -1;
+	p = spec;
+	do {
+		while (*p == '~') {
+			if (!(p = strchr(p, ',')))
+				break;
+			p++;
+		}
+		if (!p || !*p)
+			break;
 
 		errno = 0;
 		port = strtol(p, &sep, 10);
@@ -280,6 +361,9 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 			for (i = start_src; i <= end_src; i++) {
 				if (bitmap_isset(map, i))
 					goto overlap;
+
+				if (bitmap_isset(exclude, i))
+					continue;
 
 				bitmap_set(map, i);
 
@@ -726,7 +810,9 @@ static void usage(const char *name)
 	info(   "      'all': forward all unbound, non-ephemeral ports");
 	info(   "      a comma-separated list, optionally ranged with '-'");
 	info(   "        and optional target ports after ':', with optional");
-	info(   "        address specification suffixed by '/'. Examples:");
+	info(   "        address specification suffixed by '/'. Ranges can be");
+	info(   "        reduced by excluding ports or ranges prefixed by '~'");
+	info(   "        Examples:");
 	info(   "        -t 22		Forward local port 22 to 22 on guest");
 	info(   "        -t 22:23	Forward local port 22 to 23 on guest");
 	info(   "        -t 22,25	Forward ports 22, 25 to ports 22, 25");
@@ -734,6 +820,8 @@ static void usage(const char *name)
 	info(   "        -t 22-80:32-90	Forward ports 22 to 80 to");
 	info(   "			corresponding port numbers plus 10");
 	info(   "        -t 192.0.2.1/5	Bind port 5 of 192.0.2.1 to guest");
+	info(   "        -t 5-25,~10-20	Forward ports 5 to 9, and 21 to 25");
+	info(   "        -t ~25		Forward all ports except for 25");
 	info(   "    default: none");
 	info(   "  -u, --udp-ports SPEC	UDP port forwarding to guest");
 	info(   "    SPEC is as described for TCP above");
@@ -757,6 +845,8 @@ pasta_opts:
 	info(   "        -t 22-80:32-90	Forward ports 22 to 80 to");
 	info(   "			corresponding port numbers plus 10");
 	info(   "        -t 192.0.2.1/5	Bind port 5 of 192.0.2.1 to namespace");
+	info(   "        -t 5-25,~10-20	Forward ports 5 to 9, and 21 to 25");
+	info(   "        -t ~25		Forward all bound ports except for 25");
 	info(   "    default: auto");
 	info(   "    IPv6 bound ports are also forwarded for IPv4");
 	info(   "  -u, --udp-ports SPEC	UDP port forwarding to namespace");
