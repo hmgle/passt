@@ -115,7 +115,7 @@ qrap: $(QRAP_SRCS) passt.h
 
 valgrind: EXTRA_SYSCALLS="rt_sigprocmask rt_sigtimedwait rt_sigaction \
 			  getpid gettid kill clock_gettime mmap munmap open \
-			  unlink exit_group gettimeofday"
+			  unlink gettimeofday"
 valgrind: CFLAGS:=-g -O0 $(filter-out -O%,$(CFLAGS))
 valgrind: all
 

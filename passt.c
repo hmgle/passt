@@ -257,6 +257,8 @@ static int sandbox(struct ctx *c)
  *
  * TODO: After unsharing the PID namespace and forking, SIG_DFL for SIGTERM and
  * SIGQUIT unexpectedly doesn't cause the process to terminate, figure out why.
+ *
+ * #syscalls exit_group
  */
 void exit_handler(int signal)
 {
