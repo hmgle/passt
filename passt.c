@@ -35,6 +35,7 @@
 #include <sys/mount.h>
 #include <netinet/ip.h>
 #include <net/ethernet.h>
+#include <libgen.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <net/if.h>
@@ -283,11 +284,11 @@ int main(int argc, char **argv)
 {
 	int nfds, i, devnull_fd = -1, pidfile_fd = -1, quit_fd;
 	struct epoll_event events[EPOLL_EVENTS];
+	char *log_name, argv0[PATH_MAX], *name;
 	struct ctx c = { 0 };
 	struct rlimit limit;
 	struct timespec now;
 	struct sigaction sa;
-	char *log_name;
 
 	arch_avx2_exec(argv);
 
@@ -304,14 +305,16 @@ int main(int argc, char **argv)
 	if (argc < 1)
 		exit(EXIT_FAILURE);
 
-	if (strstr(argv[0], "pasta")) {
+	strncpy(argv0, argv[0], PATH_MAX - 1);
+	name = basename(argv0);
+	if (strstr(name, "pasta")) {
 		sa.sa_handler = pasta_child_handler;
 		sigaction(SIGCHLD, &sa, NULL);
 		signal(SIGPIPE, SIG_IGN);
 
 		c.mode = MODE_PASTA;
 		log_name = "pasta";
-	} else if (strstr(argv[0], "passt")) {
+	} else if (strstr(name, "passt")) {
 		c.mode = MODE_PASST;
 		log_name = "passt";
 	} else {

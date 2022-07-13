@@ -14,26 +14,31 @@
 
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 /**
- * arch_avx2_exec() - Run AVX2 build if supported, drop suffix from argv[0]
+ * arch_avx2_exec() - Switch to AVX2 build if supported
  * @argv:	Arguments from command line
  */
 #ifdef __x86_64__
-static char avx2_path[PATH_MAX];
-
 void arch_avx2_exec(char **argv)
 {
-	char *p = strstr(argv[0], ".avx2");
+	char exe[PATH_MAX] = { 0 }, new_path[PATH_MAX + sizeof(".avx2")], *p;
 
-	if (p) {
-		*p = 0;
-	} else if (__builtin_cpu_supports("avx2")) {
-		snprintf(avx2_path, PATH_MAX, "%s.avx2", argv[0]);
-		argv[0] = avx2_path;
-		execve(avx2_path, argv, environ);
+	if (readlink("/proc/self/exe", exe, PATH_MAX - 1) < 0) {
+		perror("readlink /proc/self/exe");
+		exit(EXIT_FAILURE);
+	}
+
+	p = strstr(exe, ".avx2");
+	if (p && strlen(p) == strlen(".avx2"))
+		return;
+
+	if (__builtin_cpu_supports("avx2")) {
+		snprintf(new_path, PATH_MAX + sizeof(".avx2"), "%s.avx2", exe);
+		execve(new_path, argv, environ);
 		perror("Can't run AVX2 build, using non-AVX2 version");
 	}
 }
