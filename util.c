@@ -293,7 +293,7 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 	}
 
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(y)))
-		debug("Failed to set IPV6_V6ONLY on socket %i", fd);
+		debug("Failed to set SO_REUSEADDR on socket %i", fd);
 
 	if (bind(fd, sa, sl) < 0) {
 		/* We'll fail to bind to low ports if we don't have enough
