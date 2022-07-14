@@ -111,6 +111,8 @@ guest	ip link show
 sleep	3
 say	Guest is up. Let's configure IPv4 first...
 sleep	2
+ns	ip link set dev eth0 up
+sleep	2
 guest	dhclient -4
 sleep	2
 guest	ip addr show
