@@ -257,6 +257,7 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 
 				bitmap_set(exclude, i);
 			}
+			start_src = end_src = -1;
 			break;
 		default:
 			goto bad;
