@@ -22,7 +22,7 @@ say	Let's fetch the source
 sleep	1
 tempdir	TEMPDIR
 host	cd __TEMPDIR__
-host	git clone https://passt.top/passt
+host	git clone git://passt.top/passt
 sleep	1
 
 say	 and build it.
