@@ -306,8 +306,6 @@ teardown_passt_in_ns() {
 	[ ${VALGRIND} -eq 0 ] && pane_status GUEST
 	tmux send-keys -t ${PANE_PASST} "C-d"
 
-	tmux send-keys -t ${PANE_NS} "C-d"
-
 	pane_wait GUEST
 	pane_wait NS
 	pane_wait PASST
