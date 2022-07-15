@@ -16,7 +16,7 @@ htools	ip jq sed tr head
 
 test	Interface name
 gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
-hout	HOST_IFNAME ip -j -4 route show|jq -rM '.[] | select(.dst == "default").dev'
+hout	HOST_IFNAME ip -j -4 route show|jq -rM '[.[] | select(.dst == "default").dev] | .[0]'
 check	[ -n "__IFNAME__" ]
 
 test	DHCP: address

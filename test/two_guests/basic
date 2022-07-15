@@ -18,7 +18,7 @@ htools	ip jq md5sum cut
 test	Interface names
 g1out	IFNAME1 ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 g2out	IFNAME2 ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
-hout	HOST_IFNAME ip -j -4 route show|jq -rM '.[] | select(.dst == "default").dev'
+hout	HOST_IFNAME ip -j -4 route show|jq -rM '[.[] | select(.dst == "default").dev] | .[0]'
 check	[ -n "__IFNAME1__" ]
 check	[ -n "__IFNAME2__" ]
 
