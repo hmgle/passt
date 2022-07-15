@@ -98,9 +98,9 @@ nl
 say	  pasta detects bound ports and forwards them.
 sleep	3
 
-nsb	ncat -6 -l ::1 31337
+nsb	socat TCP6-LISTEN:31337,bind=[::1] STDOUT
 sleep	2
-host	echo "Hello from the host" | ncat ::1 31337
+host	echo "Hello from the host" | socat -u STDIN TCP6:[::1]:31337
 sleep	5
 
 nl
@@ -109,9 +109,9 @@ say	Now the other way around...
 nl
 say	  we can use a loopback address
 sleep	2
-hostb	ncat -l ::1 31337
+hostb	socat TCP6-LISTEN:31337,bind=[::1] STDIO
 sleep	2
-ns	echo "Hello from the namespace" | ncat ::1 31337
+ns	echo "Hello from the namespace" | socat -u STDIN TCP6:[::1]:31337
 sleep	5
 
 nl
@@ -119,9 +119,9 @@ say	  or the address of the default gateway.
 sleep	2
 nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
 sleep	5
-hostb	ncat -l 0.0.0.0 31337
+hostb	socat TCP4-LISTEN:31337 STDIO
 sleep	2
-ns	echo "Hello from the namespace" | ncat __GW__ 31337
+ns	echo "Hello from the namespace" | socat -u STDIN TCP4:__GW__:31337
 sleep	3
 
 nl

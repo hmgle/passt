@@ -129,9 +129,9 @@ nl
 nl
 say	Let's try to communicate between host and guest.
 sleep	2
-guestb	nc -6 -l -p 5201
+guestb	socat TCP6-LISTEN:5201 STDIO
 sleep	2
-host	echo "Hello from the host" | nc -N ::1 5201
+host	echo "Hello from the host" | socat -u STDIN TCP6:[::1]:5201
 sleep	5
 
 nl
@@ -142,9 +142,9 @@ say	   the address of the default gateway.
 sleep	2
 gout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
 sleep	5
-hostb	nc -l -p 31337
+hostb	socat TCP4-LISTEN:31337 STDIO
 sleep	2
-guest	echo "Hello from the guest" | nc -N __GW__ 31337
+guest	echo "Hello from the guest" | socat -u STDIN TCP4:__GW__:31337
 sleep	3
 
 nl
