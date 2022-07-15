@@ -79,7 +79,7 @@ test_iperf3() {
 	pane_wait "${__pane}"
 	pane_parse "${__pane}"
 	pane_run "${__pane}" 'for i in $(seq 0 '${__procs}'); do'	\
-		'rm -f s${i}.bw; done'
+		'rm -f [cs]${i}.bw [cs]${i}.pid; done'
 	pane_status "${__pane}"
 }
 
