@@ -18,7 +18,7 @@ test	UDP/IPv4: host to guest
 temp	TEMP
 temp	NC_PID
 guestb	(nc -u -q1 -4 -l 10001 & echo $! > __NC_PID__) | tee test.bin | (grep -qm1 "END_OF_TEST" && kill $(cat __NC_PID__))
-host	dd if=/dev/urandom bs=1k count=5 > __TEMP_BIG__ && printf "\nEND_OF_TEST\n" >> __TEMP__
+host	dd if=/dev/urandom bs=1k count=5 > __TEMP__ && printf "\nEND_OF_TEST\n" >> __TEMP__
 host	cat __TEMP__ | nc -u -q1 -N 127.0.0.1 10001
 guestw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
