@@ -37,7 +37,7 @@ check	[ __MTU__ = 65520 ]
 test	DHCP: DNS
 gout	DNS sed -n 's/^nameserver \([0-9]*\.\)\(.*\)/\1\2/p' /etc/resolv.conf | tr '\n' ',' | sed 's/,$//;s/$/\n/'
 hout	HOST_DNS sed -n 's/^nameserver \([0-9]*\.\)\(.*\)/\1\2/p' /etc/resolv.conf | head -n3 | tr '\n' ',' | sed 's/,$//;s/$/\n/'
-check	[ "__DNS__" = "__HOST_DNS__" ]
+check	[ "__DNS__" = "__HOST_DNS__" ] || [ "__DNS__" = "__HOST_GW__" -a "__HOST_DNS__" = "127.0.0.1" ]
 
 # FQDNs should be terminated by dots, but the guest DHCP client might omit them:
 # strip them first
@@ -61,7 +61,7 @@ check	[ "__GW6__" = "__HOST_GW6__" ]
 test	DHCPv6: DNS
 gout	DNS6 sed -n 's/^nameserver \([^:]*:\)\([^%]*\).*/\1\2/p' /etc/resolv.conf | tr '\n' ',' | sed 's/,$//;s/$/\n/'
 hout	HOST_DNS6 sed -n 's/^nameserver \([^:]*:\)\([^%]*\).*/\1\2/p' /etc/resolv.conf | tr '\n' ',' | sed 's/,$//;s/$/\n/'
-check	[ "__DNS6__" = "__HOST_DNS6__" ]
+check	[ "__DNS6__" = "__HOST_DNS6__" ] || [ "__DNS6__" = "__HOST_GW6__" -a "__HOST_DNS6__" = "::1" ]
 
 test	DHCPv6: search list
 gout	SEARCH6 sed 's/\. / /g' /etc/resolv.conf | sed 's/\.$//g' | sed -n 's/^search \(.*\)/\1/p' | tr ' \n' ',' | sed 's/,$//;s/$/\n/'
