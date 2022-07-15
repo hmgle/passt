@@ -16,15 +16,14 @@ htools	ip jq sipcalc grep cut
 
 test	Interface name
 nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+check	[ -n "__IFNAME__" ]
 ns	ip link set dev __IFNAME__ up
 sleep	2
-hout	HOST_IFNAME ip -j -4 route show|jq -rM '.[] | select(.dst == "default").dev'
-check	[ -n "__IFNAME__" ]
 
 test	SLAAC: prefix
 nsout	ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global" and .prefixlen == 64).local'
 nsout	PREFIX6 sipcalc __ADDR6__/64 | grep prefix | cut -d' ' -f4
-hout	HOST_ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[] | select(.scope == "global").local'
+hout	HOST_ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global").local'
 hout	HOST_PREFIX6 sipcalc __HOST_ADDR6__/64 | grep prefix | cut -d' ' -f4
 check	[ "__PREFIX6__" = "__HOST_PREFIX6__" ]
 
