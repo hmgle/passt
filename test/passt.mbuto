@@ -21,11 +21,15 @@ LINKS="${LINKS:-
 	 ash,dash,bash		/init
 	 ash,dash,bash		/bin/sh}"
 
-DIRS="${DIRS} /tmp /sbin"
+DIRS="${DIRS} /tmp /sbin /var/log"
 
 FIXUP="${FIXUP}"'
 	cat > /sbin/dhclient-script << EOF
 #!/bin/sh
+LOG=/var/log/dhclient-script.log
+echo \${reason} \${interface} >> \$LOG
+set >> \$LOG
+
 [ -n "\${new_interface_mtu}" ]       && ip link set dev \${interface} mtu \${new_interface_mtu}
 
 [ -n "\${new_ip_address}" ]          && ip addr add \${new_ip_address}/\${new_subnet_mask} dev \${interface}
