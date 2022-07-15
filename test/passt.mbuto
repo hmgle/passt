@@ -19,8 +19,7 @@ KMODS="${KMODS:- virtio_net virtio_pci}"
 
 LINKS="${LINKS:-
 	 ash,dash,bash		/init
-	 ash,dash,bash		/bin/sh
-	 ash,dash,bash		/usr/bin/bash}"
+	 ash,dash,bash		/bin/sh}"
 
 DIRS="${DIRS} /tmp /sbin"
 
