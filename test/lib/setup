@@ -57,6 +57,13 @@ setup_passt() {
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"  \
 		" -netdev socket,fd=5,id=hostnet0"
 	pane_status GUEST
+
+	# Set things up to reduce problems parsing host command output
+	pane_run HOST "PS1='$ '"
+	pane_wait HOST
+	# Non-bash shells will fail this, but also don't need it, so ignore errors
+	pane_run HOST "bind 'set enable-bracketed-paste off'"
+	pane_wait HOST
 }
 
 # setup_pasta() - Create a network and user namespace, connect pasta to it
@@ -168,6 +175,13 @@ setup_passt_in_ns() {
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=524288" \
 		" -netdev socket,fd=5,id=hostnet0"
 	pane_status GUEST
+
+	# Set things up to reduce problems parsing host command output
+	pane_run HOST "PS1='$ '"
+	pane_wait HOST
+	# Non-bash shells will fail this, but also don't need it, so ignore errors
+	pane_run HOST "bind 'set enable-bracketed-paste off'"
+	pane_wait HOST
 }
 
 # setup_two_guests() - Set up two namespace, run qemu and passt in both of them
