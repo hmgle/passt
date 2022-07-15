@@ -233,13 +233,13 @@ setup_two_guests() {
 	pane_wait PASST_1
 	__ifname="$(pane_parse PASST_1)"
 
-	pane_run GUEST_1 "/sbin/dhclient -4 ${__ifname}"
-	pane_run GUEST_2 "/sbin/dhclient -4 ${__ifname}"
+	pane_run GUEST_1 "/sbin/dhclient -4 --no-pid ${__ifname}"
+	pane_run GUEST_2 "/sbin/dhclient -4 --no-pid ${__ifname}"
 	pane_status GUEST_1
 	pane_status GUEST_2
 	sleep 2
-	pane_run GUEST_1 "/sbin/dhclient -6 ${__ifname}"
-	pane_run GUEST_2 "/sbin/dhclient -6 ${__ifname}"
+	pane_run GUEST_1 "/sbin/dhclient -6 --no-pid ${__ifname}"
+	pane_run GUEST_2 "/sbin/dhclient -6 --no-pid ${__ifname}"
 	pane_status GUEST_1
 	pane_status GUEST_2
 
