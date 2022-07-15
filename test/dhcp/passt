@@ -35,15 +35,15 @@ gout	MTU ip -j link show | jq -rM '.[] | select(.ifname == "__IFNAME__").mtu'
 check	[ __MTU__ = 65520 ]
 
 test	DHCP: DNS
-gout	DNS sed -n 's/^nameserver \([0-9]*\.\)\(.*\)/\1\2/p' /etc/resolv.conf | tr '\n' ',' | sed 's/\(.*\)/\1\n/g'
-hout	HOST_DNS sed -n 's/^nameserver \([0-9]*\.\)\(.*\)/\1\2/p' /etc/resolv.conf | head -n3 | tr '\n' ',' | sed 's/\(.*\)/\1\n/g'
+gout	DNS sed -n 's/^nameserver \([0-9]*\.\)\(.*\)/\1\2/p' /etc/resolv.conf | tr '\n' ',' | sed 's/,$//;s/$/\n/'
+hout	HOST_DNS sed -n 's/^nameserver \([0-9]*\.\)\(.*\)/\1\2/p' /etc/resolv.conf | head -n3 | tr '\n' ',' | sed 's/,$//;s/$/\n/'
 check	[ "__DNS__" = "__HOST_DNS__" ]
 
 # FQDNs should be terminated by dots, but the guest DHCP client might omit them:
 # strip them first
 test	DHCP: search list
-gout	SEARCH sed 's/\. / /g' /etc/resolv.conf | sed 's/\.$//g' | sed -n 's/^search \(.*\)/\1/p' | tr ' \n' ',' | sed 's/\(.*\)/\1\n/g'
-hout	HOST_SEARCH sed 's/\. / /g' /etc/resolv.conf | sed 's/\.$//g' | sed -n 's/^search \(.*\)/\1/p' | tr ' \n' ',' | sed 's/\(.*\)/\1\n/g'
+gout	SEARCH sed 's/\. / /g' /etc/resolv.conf | sed 's/\.$//g' | sed -n 's/^search \(.*\)/\1/p' | tr ' \n' ',' | sed 's/,$//;s/$/\n/'
+hout	HOST_SEARCH sed 's/\. / /g' /etc/resolv.conf | sed 's/\.$//g' | sed -n 's/^search \(.*\)/\1/p' | tr ' \n' ',' | sed 's/,$//;s/$/\n/'
 check	[ "__SEARCH__" = "__HOST_SEARCH__" ]
 
 test	DHCPv6: address
@@ -59,11 +59,11 @@ check	[ "__GW6__" = "__HOST_GW6__" ]
 
 # Strip interface specifier: interface names might differ between host and guest
 test	DHCPv6: DNS
-gout	DNS6 sed -n 's/^nameserver \([^:]*:\)\([^%]*\).*/\1\2/p' /etc/resolv.conf | tr '\n' ',' | sed 's/\(.*\)/\1\n/g'
-hout	HOST_DNS6 sed -n 's/^nameserver \([^:]*:\)\([^%]*\).*/\1\2/p' /etc/resolv.conf | tr '\n' ',' | sed 's/\(.*\)/\1\n/g'
+gout	DNS6 sed -n 's/^nameserver \([^:]*:\)\([^%]*\).*/\1\2/p' /etc/resolv.conf | tr '\n' ',' | sed 's/,$//;s/$/\n/'
+hout	HOST_DNS6 sed -n 's/^nameserver \([^:]*:\)\([^%]*\).*/\1\2/p' /etc/resolv.conf | tr '\n' ',' | sed 's/,$//;s/$/\n/'
 check	[ "__DNS6__" = "__HOST_DNS6__" ]
 
 test	DHCPv6: search list
-gout	SEARCH6 sed 's/\. / /g' /etc/resolv.conf | sed 's/\.$//g' | sed -n 's/^search \(.*\)/\1/p' | tr ' \n' ',' | sed 's/\(.*\)/\1\n/g'
-hout	HOST_SEARCH6 sed 's/\. / /g' /etc/resolv.conf | sed 's/\.$//g' | sed -n 's/^search \(.*\)/\1/p' | tr ' \n' ',' | sed 's/\(.*\)/\1\n/g'
+gout	SEARCH6 sed 's/\. / /g' /etc/resolv.conf | sed 's/\.$//g' | sed -n 's/^search \(.*\)/\1/p' | tr ' \n' ',' | sed 's/,$//;s/$/\n/'
+hout	HOST_SEARCH6 sed 's/\. / /g' /etc/resolv.conf | sed 's/\.$//g' | sed -n 's/^search \(.*\)/\1/p' | tr ' \n' ',' | sed 's/,$//;s/$/\n/'
 check	[ "__SEARCH6__" = "__HOST_SEARCH6__" ]
