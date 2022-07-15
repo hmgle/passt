@@ -41,6 +41,7 @@ FIXUP="${FIXUP}"'
 exit 0
 EOF
 	chmod 755 /sbin/dhclient-script
+	ln -s /sbin /usr/sbin
 	:> /etc/fstab
 	sh +m
 '
