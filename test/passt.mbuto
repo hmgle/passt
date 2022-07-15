@@ -21,7 +21,7 @@ LINKS="${LINKS:-
 	 ash,dash,bash		/init
 	 ash,dash,bash		/bin/sh}"
 
-DIRS="${DIRS} /tmp /sbin /var/log"
+DIRS="${DIRS} /tmp /sbin /var/log /var/run /var/lib"
 
 FIXUP="${FIXUP}"'
 	cat > /sbin/dhclient-script << EOF
