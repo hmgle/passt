@@ -24,8 +24,11 @@
 #include <fcntl.h>
 #include <net/if_arp.h>
 #include <netinet/in.h>
+#include <netinet/ip6.h>
 #include <netinet/if_ether.h>
 #include <time.h>
+
+#include <linux/icmpv6.h>
 
 #include "util.h"
 #include "passt.h"
@@ -121,12 +124,18 @@ int main(int argc, char **argv)
 	const struct pci_dev *dev = NULL;
 	long fd;
 	struct {
-		uint32_t vnet_len;
-		struct ethhdr eh;
+		uint32_t vnet_len4;
+		struct ethhdr eh4;
 		struct arphdr ah;
 		struct arpmsg am;
-	} probe = {
-		.vnet_len = htonl(42),
+
+		uint32_t vnet_len6;
+		struct ethhdr eh6;
+		struct ipv6hdr ip6hr;
+		struct icmp6hdr ihr;
+		struct in6_addr target;
+	} __attribute__((__packed__)) probe = {
+		.vnet_len4 = htonl(42),
 		{
 			.h_dest   = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
 			.h_source = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
@@ -141,6 +150,25 @@ int main(int argc, char **argv)
 		{
 			.sha = { 0 }, .sip = { 0 }, .tha = { 0 }, .tip = { 0 },
 		},
+		.vnet_len6 = htonl(78),
+		{
+			.h_dest   = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
+			.h_source = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
+			.h_proto  = htons(ETH_P_IPV6),
+		},
+		{
+			.version = 6,
+			.payload_len = htons(24),
+			.nexthdr = IPPROTO_ICMPV6,
+			.hop_limit = 255,
+			.saddr = IN6ADDR_LOOPBACK_INIT,
+			.daddr = IN6ADDR_ANY_INIT,
+		},
+		{
+			.icmp6_type = 135,
+			.icmp6_code = 0,
+		},
+		IN6ADDR_ANY_INIT,
 	};
 	char probe_r;
 
