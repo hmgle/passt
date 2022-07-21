@@ -75,7 +75,7 @@ ns	ip link show
 sleep	3
 say	Let's configure IPv4 first...
 sleep	2
-ns	dhclient -4 --no-pid
+ns	/sbin/dhclient -4 --no-pid
 sleep	2
 ns	ip addr show
 sleep	5
@@ -85,7 +85,7 @@ say	  SLAAC is already done, but we can also
 nl
 say	  get another address via DHCPv6.
 sleep	3
-ns	dhclient -6 --no-pid
+ns	/sbin/dhclient -6 --no-pid
 sleep	3
 
 nl
