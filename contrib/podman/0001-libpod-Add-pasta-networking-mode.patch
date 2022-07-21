@@ -1,4 +1,4 @@
-From 657f20a4e57ec0deada4c6d02810e52c81c37cf1 Mon Sep 17 00:00:00 2001
+From 3aa86f0fd0d420c11d328c673e8162300172925a Mon Sep 17 00:00:00 2001
 From: Stefano Brivio <sbrivio@redhat.com>
 Date: Mon, 2 May 2022 16:12:07 +0200
 Subject: [PATCH] libpod: Add pasta networking mode
@@ -50,16 +50,16 @@ SPDX-License-Identifier: Apache-2.0
  pkg/namespaces/namespaces.go                |   6 ++
  pkg/specgen/generate/namespaces.go          |  10 ++
  pkg/specgen/generate/pod_create.go          |   6 ++
- pkg/specgen/namespaces.go                   |  18 +++-
+ pkg/specgen/namespaces.go                   |  16 ++-
  pkg/specgen/podspecgen.go                   |   2 +-
- 11 files changed, 288 insertions(+), 14 deletions(-)
+ 11 files changed, 286 insertions(+), 14 deletions(-)
  create mode 100644 libpod/networking_pasta.go
 
 diff --git a/docs/source/markdown/podman-create.1.md b/docs/source/markdown/podman-create.1.md
-index c63e8814b..9ffb5fff0 100644
+index 67bb573e2..3b96de4d7 100644
 --- a/docs/source/markdown/podman-create.1.md
 +++ b/docs/source/markdown/podman-create.1.md
-@@ -712,10 +712,15 @@ Valid _mode_ values are:
+@@ -717,10 +717,15 @@ Valid _mode_ values are:
    - **interface_name**: Specify a name for the created network interface inside the container.
  
    For example to set a static ipv4 address and a static mac address, use `--network bridge:ip=10.88.0.10,mac=44:33:22:11:00:99`.
@@ -75,7 +75,7 @@ index c63e8814b..9ffb5fff0 100644
  - **ns:**_path_: Path to a network namespace to join.
  - **private**: Create a new namespace for the container. This will use the **bridge** mode for rootful containers and **slirp4netns** for rootless ones.
  - **slirp4netns[:OPTIONS,...]**: use **slirp4netns**(1) to create a user network stack. This is the default for rootless containers. It is possible to specify these additional options, they can also be set with `network_cmd_options` in containers.conf:
-@@ -731,6 +736,40 @@ Valid _mode_ values are:
+@@ -736,6 +741,40 @@ Valid _mode_ values are:
    Note: Rootlesskit changes the source IP address of incoming packets to an IP address in the container network namespace, usually `10.0.2.100`. If your application requires the real source IP address, e.g. web server logs, use the slirp4netns port handler. The rootlesskit port handler is also used for rootless containers when connected to user-defined networks.
    - **port_handler=slirp4netns**: Use the slirp4netns port forwarding, it is slower than rootlesskit but preserves the correct source IP address. This port handler cannot be used for user-defined networks.
  
@@ -116,7 +116,7 @@ index c63e8814b..9ffb5fff0 100644
  #### **--network-alias**=*alias*
  
  Add a network-scoped alias for the container, setting the alias for all networks that the container joins. To set a name only for a specific network, use the alias option as described under the **--network** option.
-@@ -1583,8 +1622,9 @@ In order for users to run rootless, there must be an entry for their username in
+@@ -1592,8 +1631,9 @@ In order for users to run rootless, there must be an entry for their username in
  
  Rootless Podman works better if the fuse-overlayfs and slirp4netns packages are installed.
  The fuse-overlayfs package provides a userspace overlay storage driver, otherwise users need to use
@@ -128,7 +128,7 @@ index c63e8814b..9ffb5fff0 100644
  
  ## ENVIRONMENT
  
-@@ -1633,7 +1673,9 @@ page.
+@@ -1642,7 +1682,9 @@ page.
  NOTE: Use the environment variable `TMPDIR` to change the temporary storage location of downloaded container images. Podman defaults to use `/var/tmp`.
  
  ## SEE ALSO
@@ -140,10 +140,10 @@ index c63e8814b..9ffb5fff0 100644
  ## HISTORY
  October 2017, converted from Docker documentation to Podman by Dan Walsh for Podman `<dwalsh@redhat.com>`
 diff --git a/docs/source/markdown/podman-pod-create.1.md b/docs/source/markdown/podman-pod-create.1.md
-index 714909b98..2b82d9380 100644
+index de9a34bfa..e711d6823 100644
 --- a/docs/source/markdown/podman-pod-create.1.md
 +++ b/docs/source/markdown/podman-pod-create.1.md
-@@ -164,10 +164,15 @@ Valid _mode_ values are:
+@@ -193,10 +193,15 @@ Valid _mode_ values are:
    - **interface_name**: Specify a name for the created network interface inside the container.
  
    For example to set a static ipv4 address and a static mac address, use `--network bridge:ip=10.88.0.10,mac=44:33:22:11:00:99`.
@@ -159,7 +159,7 @@ index 714909b98..2b82d9380 100644
  - **ns:**_path_: Path to a network namespace to join.
  - **private**: Create a new namespace for the container. This will use the **bridge** mode for rootful containers and **slirp4netns** for rootless ones.
  - **slirp4netns[:OPTIONS,...]**: use **slirp4netns**(1) to create a user network stack. This is the default for rootless containers. It is possible to specify these additional options, they can also be set with `network_cmd_options` in containers.conf:
-@@ -183,6 +188,43 @@ Valid _mode_ values are:
+@@ -212,6 +217,43 @@ Valid _mode_ values are:
    Note: Rootlesskit changes the source IP address of incoming packets to an IP address in the container network namespace, usually `10.0.2.100`. If your application requires the real source IP address, e.g. web server logs, use the slirp4netns port handler. The rootlesskit port handler is also used for rootless containers when connected to user-defined networks.
    - **port_handler=slirp4netns**: Use the slirp4netns port forwarding, it is slower than rootlesskit but preserves the correct source IP address. This port handler cannot be used for user-defined networks.
  
@@ -203,7 +203,7 @@ index 714909b98..2b82d9380 100644
  #### **--network-alias**=*alias*
  
  Add a network-scoped alias for the pod, setting the alias for all networks that the pod joins. To set a name only for a specific network, use the alias option as described under the **--network** option.
-@@ -550,6 +592,8 @@ $ podman pod create --network slirp4netns:outbound_addr=127.0.0.1,allow_host_loo
+@@ -599,6 +641,8 @@ $ podman pod create --network slirp4netns:outbound_addr=127.0.0.1,allow_host_loo
  
  $ podman pod create --network slirp4netns:cidr=192.168.0.0/24
  
@@ -213,10 +213,10 @@ index 714909b98..2b82d9380 100644
  ```
  
 diff --git a/docs/source/markdown/podman-run.1.md b/docs/source/markdown/podman-run.1.md
-index 9d9394020..1143284bf 100644
+index 4566a73d0..8f8b5b4c1 100644
 --- a/docs/source/markdown/podman-run.1.md
 +++ b/docs/source/markdown/podman-run.1.md
-@@ -738,10 +738,15 @@ Valid _mode_ values are:
+@@ -734,10 +734,15 @@ Valid _mode_ values are:
    - **interface_name**: Specify a name for the created network interface inside the container.
  
    For example to set a static ipv4 address and a static mac address, use `--network bridge:ip=10.88.0.10,mac=44:33:22:11:00:99`.
@@ -232,7 +232,7 @@ index 9d9394020..1143284bf 100644
  - **ns:**_path_: Path to a network namespace to join.
  - **private**: Create a new namespace for the container. This will use the **bridge** mode for rootful containers and **slirp4netns** for rootless ones.
  - **slirp4netns[:OPTIONS,...]**: use **slirp4netns**(1) to create a user network stack. This is the default for rootless containers. It is possible to specify these additional options, they can also be set with `network_cmd_options` in containers.conf:
-@@ -757,6 +762,43 @@ Valid _mode_ values are:
+@@ -753,6 +758,43 @@ Valid _mode_ values are:
    Note: Rootlesskit changes the source IP address of incoming packets to an IP address in the container network namespace, usually `10.0.2.100`. If your application requires the real source IP address, e.g. web server logs, use the slirp4netns port handler. The rootlesskit port handler is also used for rootless containers when connected to user-defined networks.
    - **port_handler=slirp4netns**: Use the slirp4netns port forwarding, it is slower than rootlesskit but preserves the correct source IP address. This port handler cannot be used for user-defined networks.
  
@@ -276,7 +276,7 @@ index 9d9394020..1143284bf 100644
  #### **--network-alias**=*alias*
  
  Add a network-scoped alias for the container, setting the alias for all networks that the container joins. To set a name only for a specific network, use the alias option as described under the **--network** option.
-@@ -1963,8 +2005,9 @@ In order for users to run rootless, there must be an entry for their username in
+@@ -1964,8 +2006,9 @@ In order for users to run rootless, there must be an entry for their username in
  
  Rootless Podman works better if the fuse-overlayfs and slirp4netns packages are installed.
  The **fuse-overlayfs** package provides a userspace overlay storage driver, otherwise users need to use
@@ -288,7 +288,7 @@ index 9d9394020..1143284bf 100644
  
  ## ENVIRONMENT
  
-@@ -2011,7 +2054,7 @@ page.
+@@ -2012,7 +2055,7 @@ page.
  NOTE: Use the environment variable `TMPDIR` to change the temporary storage location of downloaded container images. Podman defaults to use `/var/tmp`.
  
  ## SEE ALSO
@@ -298,7 +298,7 @@ index 9d9394020..1143284bf 100644
  ## HISTORY
  September 2018, updated by Kunal Kushwaha `<kushwaha_kunal_v7@lab.ntt.co.jp>`
 diff --git a/docs/source/markdown/podman.1.md b/docs/source/markdown/podman.1.md
-index 3d1578ea1..0768fd082 100644
+index 4c019ae97..4c09d4bee 100644
 --- a/docs/source/markdown/podman.1.md
 +++ b/docs/source/markdown/podman.1.md
 @@ -88,7 +88,7 @@ Set libpod namespace. Namespaces are used to separate groups of containers and p
@@ -329,10 +329,10 @@ index 3d1578ea1..0768fd082 100644
  ## HISTORY
  Dec 2016, Originally compiled by Dan Walsh <dwalsh@redhat.com>
 diff --git a/libpod/networking_linux.go b/libpod/networking_linux.go
-index 0c124cf0b..4d25e26f2 100644
+index c05796768..5c1f0ea35 100644
 --- a/libpod/networking_linux.go
 +++ b/libpod/networking_linux.go
-@@ -644,6 +644,9 @@ func (r *Runtime) configureNetNS(ctr *Container, ctrNS ns.NetNS) (status map[str
+@@ -640,6 +640,9 @@ func (r *Runtime) configureNetNS(ctr *Container, ctrNS ns.NetNS) (status map[str
  	if ctr.config.NetMode.IsSlirp4netns() {
  		return nil, r.setupSlirp4netns(ctr, ctrNS)
  	}
@@ -342,7 +342,7 @@ index 0c124cf0b..4d25e26f2 100644
  	networks, err := ctr.networks()
  	if err != nil {
  		return nil, err
-@@ -811,7 +814,8 @@ func (r *Runtime) teardownCNI(ctr *Container) error {
+@@ -809,7 +812,8 @@ func (r *Runtime) teardownCNI(ctr *Container) error {
  		return err
  	}
  
@@ -466,7 +466,7 @@ index 000000000..66f81cbfc
 +	return nil
 +}
 diff --git a/pkg/namespaces/namespaces.go b/pkg/namespaces/namespaces.go
-index c95f8e275..46fa74640 100644
+index 8eacb8da7..49a6d3786 100644
 --- a/pkg/namespaces/namespaces.go
 +++ b/pkg/namespaces/namespaces.go
 @@ -19,6 +19,7 @@ const (
@@ -490,10 +490,10 @@ index c95f8e275..46fa74640 100644
  func (n NetworkMode) IsNS() bool {
  	return strings.HasPrefix(string(n), nsType)
 diff --git a/pkg/specgen/generate/namespaces.go b/pkg/specgen/generate/namespaces.go
-index 37d561ec2..3404746ee 100644
+index f0d4e9153..2c4b40509 100644
 --- a/pkg/specgen/generate/namespaces.go
 +++ b/pkg/specgen/generate/namespaces.go
-@@ -262,6 +262,16 @@ func namespaceOptions(s *specgen.SpecGenerator, rt *libpod.Runtime, pod *libpod.
+@@ -295,6 +295,16 @@ func namespaceOptions(s *specgen.SpecGenerator, rt *libpod.Runtime, pod *libpod.
  			val = fmt.Sprintf("slirp4netns:%s", s.NetNS.Value)
  		}
  		toReturn = append(toReturn, libpod.WithNetNS(portMappings, expose, postConfigureNetNS, val, nil))
@@ -507,16 +507,16 @@ index 37d561ec2..3404746ee 100644
 +			val = fmt.Sprintf("pasta:%s", s.NetNS.Value)
 +		}
 +		toReturn = append(toReturn, libpod.WithNetNS(portMappings, expose, postConfigureNetNS, val, nil))
- 	case specgen.Private:
- 		fallthrough
- 	case specgen.Bridge:
+ 	case specgen.Bridge, specgen.Private, specgen.Default:
+ 		portMappings, expose, err := createPortMappings(s, imageData)
+ 		if err != nil {
 diff --git a/pkg/specgen/generate/pod_create.go b/pkg/specgen/generate/pod_create.go
-index a3408b402..7d83e9ae1 100644
+index 212d613fe..b50fe3586 100644
 --- a/pkg/specgen/generate/pod_create.go
 +++ b/pkg/specgen/generate/pod_create.go
-@@ -233,6 +233,12 @@ func MapSpec(p *specgen.PodSpecGenerator) (*specgen.SpecGenerator, error) {
+@@ -163,6 +163,12 @@ func MapSpec(p *specgen.PodSpecGenerator) (*specgen.SpecGenerator, error) {
  			p.InfraContainerSpec.NetworkOptions = p.NetworkOptions
- 			p.InfraContainerSpec.NetNS.NSMode = specgen.NamespaceMode("slirp4netns")
+ 			p.InfraContainerSpec.NetNS.NSMode = specgen.Slirp
  		}
 +	case specgen.Pasta:
 +		logrus.Debugf("Pod will use pasta")
@@ -528,7 +528,7 @@ index a3408b402..7d83e9ae1 100644
  		logrus.Debugf("Pod will not use networking")
  		if len(p.InfraContainerSpec.PortMappings) > 0 ||
 diff --git a/pkg/specgen/namespaces.go b/pkg/specgen/namespaces.go
-index 7a7ca2706..861d08f89 100644
+index 03a2049f6..baa113570 100644
 --- a/pkg/specgen/namespaces.go
 +++ b/pkg/specgen/namespaces.go
 @@ -51,6 +51,9 @@ const (
@@ -556,19 +556,10 @@ index 7a7ca2706..861d08f89 100644
  		// Valid, do nothing
 -	case NoNetwork, Bridge, Slirp:
 +	case NoNetwork, Bridge, Slirp, Pasta:
- 		return errors.Errorf("cannot use network modes with non-network namespace")
+ 		return errors.New("cannot use network modes with non-network namespace")
  	default:
- 		return errors.Errorf("invalid namespace type %s specified", n.NSMode)
-@@ -328,6 +331,8 @@ func ParseNetworkNamespace(ns string, rootlessDefaultCNI bool) (Namespace, map[s
- 	switch {
- 	case ns == string(Slirp), strings.HasPrefix(ns, string(Slirp)+":"):
- 		toReturn.NSMode = Slirp
-+	case ns == string(Pasta), strings.HasPrefix(ns, string(Pasta) + ":"):
-+		toReturn.NSMode = Pasta
- 	case ns == string(FromPod):
- 		toReturn.NSMode = FromPod
- 	case ns == "" || ns == string(Default) || ns == string(Private):
-@@ -396,6 +401,13 @@ func ParseNetworkFlag(networks []string) (Namespace, map[string]types.PerNetwork
+ 		return fmt.Errorf("invalid namespace type %s specified", n.NSMode)
+@@ -340,6 +343,13 @@ func ParseNetworkFlag(networks []string) (Namespace, map[string]types.PerNetwork
  			networkOptions[parts[0]] = strings.Split(parts[1], ",")
  		}
  		toReturn.NSMode = Slirp
@@ -582,20 +573,20 @@ index 7a7ca2706..861d08f89 100644
  	case ns == string(FromPod):
  		toReturn.NSMode = FromPod
  	case ns == "" || ns == string(Default) || ns == string(Private):
-@@ -472,7 +484,7 @@ func ParseNetworkFlag(networks []string) (Namespace, map[string]types.PerNetwork
+@@ -410,7 +420,7 @@ func ParseNetworkFlag(networks []string) (Namespace, map[string]types.PerNetwork
  			if parts[0] == "" {
- 				return toReturn, nil, nil, errors.Wrapf(define.ErrInvalidArg, "network name cannot be empty")
+ 				return toReturn, nil, nil, fmt.Errorf("network name cannot be empty: %w", define.ErrInvalidArg)
  			}
--			if util.StringInSlice(parts[0], []string{string(Bridge), string(Slirp), string(FromPod), string(NoNetwork),
-+			if util.StringInSlice(parts[0], []string{string(Bridge), string(Slirp), string(Pasta), string(FromPod), string(NoNetwork),
+-			if cutil.StringInSlice(parts[0], []string{string(Bridge), string(Slirp), string(FromPod), string(NoNetwork),
++			if cutil.StringInSlice(parts[0], []string{string(Bridge), string(Slirp), string(Pasta), string(FromPod), string(NoNetwork),
  				string(Default), string(Private), string(Path), string(FromContainer), string(Host)}) {
- 				return toReturn, nil, nil, errors.Wrapf(define.ErrInvalidArg, "can only set extra network names, selected mode %s conflicts with bridge", parts[0])
+ 				return toReturn, nil, nil, fmt.Errorf("can only set extra network names, selected mode %s conflicts with bridge: %w", parts[0], define.ErrInvalidArg)
  			}
 diff --git a/pkg/specgen/podspecgen.go b/pkg/specgen/podspecgen.go
-index 759caa0c0..f95bbffc7 100644
+index 64a79f4ee..faeeb2ed6 100644
 --- a/pkg/specgen/podspecgen.go
 +++ b/pkg/specgen/podspecgen.go
-@@ -93,7 +93,7 @@ type PodNetworkConfig struct {
+@@ -98,7 +98,7 @@ type PodNetworkConfig struct {
  	// PortMappings is a set of ports to map into the infra container.
  	// As, by default, containers share their network with the infra
  	// container, this will forward the ports to the entire pod.
