@@ -140,7 +140,7 @@ sleep	5
 
 ns2b	exit
 sleep	2
-ns2b	podman run --rm -p 8081:8081/tcp -ti alpine sh
+ns2b	./bin/podman run --net=pasta --rm -p 8081:8081/tcp -ti alpine sh
 sleep	5
 
 nl
