@@ -36,6 +36,8 @@ host	git am 0001-libpod-Add-pasta-networking-mode.patch
 sleep	1
 
 say	, and build it.
+host	go get github.com/pkg/errors@v0.9.1
+host	go mod vendor
 host	make
 sleep	1
 
