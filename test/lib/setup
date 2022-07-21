@@ -329,13 +329,9 @@ teardown_two_guests() {
 teardown_demo_passt() {
 	tmux send-keys -t ${PANE_GUEST} "C-c"
 	pane_wait GUEST
+
 	tmux send-keys -t ${PANE_GUEST} "C-d"
-
-	tmux send-keys -t ${PANE_HOST} "C-d"
-
 	tmux send-keys -t ${PANE_PASST} "C-c"
-	pane_wait PASST
-	tmux send-keys -t ${PANE_PASST} "C-d"
 
 	pane_wait GUEST
 	pane_wait HOST
