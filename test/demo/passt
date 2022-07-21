@@ -70,7 +70,7 @@ say	  'pasta' demo above.
 sleep	3
 
 passt	cd __TEMPDIR__/passt
-passtb	./pasta
+passtb	./pasta -P /tmp/pasta.pid
 sleep	3
 passt	/sbin/dhclient -4 --no-pid
 sleep	2
@@ -83,8 +83,7 @@ say	Now let's run 'passt' in the new namespace, and
 nl
 say	  enter this namespace from the guest terminal too.
 sleep	3
-guest	pstree -p | grep pasta
-gout	TARGET_PID pstree -p | grep pasta | sed -n 's/.*(\([0-9].*\))$/\1/p'
+gout	TARGET_PID pgrep -P $(cat /tmp/pasta.pid)
 sleep	1
 
 passtb	./passt -f -t 5201,5203
