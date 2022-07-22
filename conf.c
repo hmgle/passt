@@ -630,17 +630,17 @@ static void conf_ip(struct ctx *c)
 		v4 = v6		= IP_VERSION_PROBE;
 	}
 
-	if (!c->ifi)
-		c->ifi = nl_get_ext_if(&v4, &v6);
+	if (!c->ifi4 && !c->ifi6)
+		c->ifi4 = c->ifi6 = nl_get_ext_if(&v4, &v6);
 
 	if (v4 != IP_VERSION_DISABLED) {
 		if (!c->gw4)
-			nl_route(0, c->ifi, AF_INET, &c->gw4);
+			nl_route(0, c->ifi4, AF_INET, &c->gw4);
 
 		if (!c->addr4) {
 			int mask_len = 0;
 
-			nl_addr(0, c->ifi, AF_INET, &c->addr4, &mask_len, NULL);
+			nl_addr(0, c->ifi4, AF_INET, &c->addr4, &mask_len, NULL);
 			c->mask4 = htonl(0xffffffff << (32 - mask_len));
 		}
 
@@ -658,7 +658,7 @@ static void conf_ip(struct ctx *c)
 		memcpy(&c->addr4_seen, &c->addr4, sizeof(c->addr4_seen));
 
 		if (!memcmp(c->mac, MAC_ZERO, ETH_ALEN))
-			nl_link(0, c->ifi, c->mac, 0, 0);
+			nl_link(0, c->ifi4, c->mac, 0, 0);
 	}
 
 	if (c->mode == MODE_PASST)
@@ -668,9 +668,9 @@ static void conf_ip(struct ctx *c)
 		int prefix_len = 0;
 
 		if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6))
-			nl_route(0, c->ifi, AF_INET6, &c->gw6);
+			nl_route(0, c->ifi6, AF_INET6, &c->gw6);
 
-		nl_addr(0, c->ifi, AF_INET6,
+		nl_addr(0, c->ifi6, AF_INET6,
 			IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ? &c->addr6 : NULL,
 			&prefix_len, &c->addr6_ll);
 
@@ -883,12 +883,12 @@ static void conf_print(const struct ctx *c)
 	char buf4[INET_ADDRSTRLEN], ifn[IFNAMSIZ];
 	int i;
 
-	if (c->mode == MODE_PASTA) {
-		info("Outbound interface: %s, namespace interface: %s",
-		     if_indextoname(c->ifi, ifn), c->pasta_ifn);
-	} else {
-		info("Outbound interface: %s", if_indextoname(c->ifi, ifn));
-	}
+	if (c->ifi4)
+		info("Outbound interface (IPv4): %s", if_indextoname(c->ifi4, ifn));
+	if (c->ifi6)
+		info("Outbound interface (IPv6): %s", if_indextoname(c->ifi6, ifn));
+	if (c->mode == MODE_PASTA)
+		info("Namespace interface: %s", c->pasta_ifn);
 
 	if (c->v4) {
 		info("ARP:");
@@ -1395,12 +1395,12 @@ void conf(struct ctx *c, int argc, char **argv)
 			usage(argv[0]);
 			break;
 		case 'i':
-			if (c->ifi) {
+			if (c->ifi4 || c->ifi6) {
 				err("Redundant interface: %s", optarg);
 				usage(argv[0]);
 			}
 
-			if (!(c->ifi = if_nametoindex(optarg))) {
+			if (!(c->ifi4 = c->ifi6 = if_nametoindex(optarg))) {
 				err("Invalid interface name %s: %s", optarg,
 				    strerror(errno));
 				usage(argv[0]);
@@ -1559,8 +1559,12 @@ void conf(struct ctx *c, int argc, char **argv)
 
 	get_dns(c);
 
-	if (!*c->pasta_ifn)
-		if_indextoname(c->ifi, c->pasta_ifn);
+	if (!*c->pasta_ifn) {
+		if (c->ifi4)
+			if_indextoname(c->ifi4, c->pasta_ifn);
+		else
+			if_indextoname(c->ifi6, c->pasta_ifn);
+	}
 
 	c->tcp.ns_detect_ports   = c->udp.ns_detect_ports   = 0;
 	c->tcp.init_detect_ports = c->udp.init_detect_ports = 0;

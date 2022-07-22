@@ -122,6 +122,7 @@ enum passt_modes {
  * @mac:		Host MAC address
  * @mac_guest:		MAC address of guest or namespace, seen or configured
  * @v4:			Enable IPv4 transport
+ * @ifi4:		Index of routable interface for IPv4
  * @addr4:		IPv4 address for external, routable interface
  * @addr4_seen:		Latest IPv4 address seen as source from tap
  * @mask4:		IPv4 netmask, network order
@@ -130,6 +131,7 @@ enum passt_modes {
  * @dns4_fwd:		Address forwarded (UDP) to first IPv4 DNS, network order
  * @dns_search:		DNS search list
  * @v6:			Enable IPv6 transport
+ * @ifi6:		Index of routable interface for IPv6
  * @addr6:		IPv6 address for external, routable interface
  * @addr6_ll:		Link-local IPv6 address on external, routable interface
  * @addr6_seen:		Latest IPv6 global/site address seen as source from tap
@@ -137,7 +139,6 @@ enum passt_modes {
  * @gw6:		Default IPv6 gateway
  * @dns6:		IPv6 DNS addresses, zero-terminated
  * @dns6_fwd:		Address forwarded (UDP) to first IPv6 DNS, network order
- * @ifi:		Index of routable interface
  * @pasta_ifn:		Name of namespace interface for pasta
  * @pasta_ifn:		Index of namespace interface for pasta
  * @pasta_conf_ns:	Configure namespace interface after creating it
@@ -193,6 +194,7 @@ struct ctx {
 	unsigned char mac_guest[ETH_ALEN];
 
 	int v4;
+	unsigned int ifi4;
 	uint32_t addr4;
 	uint32_t addr4_seen;
 	uint32_t mask4;
@@ -203,6 +205,7 @@ struct ctx {
 	struct fqdn dns_search[MAXDNSRCH];
 
 	int v6;
+	unsigned int ifi6;
 	struct in6_addr addr6;
 	struct in6_addr addr6_ll;
 	struct in6_addr addr6_seen;
@@ -211,7 +214,6 @@ struct ctx {
 	struct in6_addr dns6[MAXNS + 1];
 	struct in6_addr dns6_fwd;
 
-	unsigned int ifi;
 	char pasta_ifn[IF_NAMESIZE];
 	unsigned int pasta_ifi;
 	int pasta_conf_ns;
