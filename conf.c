@@ -630,8 +630,23 @@ static void conf_ip(struct ctx *c)
 		v4 = v6		= IP_VERSION_PROBE;
 	}
 
-	if (!c->ifi4 && !c->ifi6)
-		c->ifi4 = c->ifi6 = nl_get_ext_if(&v4, &v6);
+	if (v4 != IP_VERSION_DISABLED) {
+		if (!c->ifi4)
+			c->ifi4 = nl_get_ext_if(AF_INET);
+		if (!c->ifi4) {
+			warn("No external routable interface for IPv4");
+			v4 = IP_VERSION_DISABLED;
+		}
+	}
+
+	if (v6 != IP_VERSION_DISABLED) {
+		if (!c->ifi6)
+			c->ifi6 = nl_get_ext_if(AF_INET6);
+		if (!c->ifi6) {
+			warn("No external routable interface for IPv6");
+			v6 = IP_VERSION_DISABLED;
+		}
+	}
 
 	if (v4 != IP_VERSION_DISABLED) {
 		if (!c->gw4)

@@ -126,13 +126,13 @@ static int nl_req(int ns, char *buf, const void *req, ssize_t len)
 }
 
 /**
- * nl_get_ext_if() - Get interface index supporting IP versions being probed
- * @v4:		Probe IPv4 support, set to ENABLED or DISABLED on return
- * @v6:		Probe IPv4 support, set to ENABLED or DISABLED on return
+ * nl_get_ext_if() - Get interface index supporting IP version being probed
+ * @af:	Address family (AF_INET or AF_INET6) to look for connectivity
+ *      for.
  *
  * Return: interface index, 0 if not found
  */
-unsigned int nl_get_ext_if(int *v4, int *v6)
+unsigned int nl_get_ext_if(sa_family_t af)
 {
 	struct { struct nlmsghdr nlh; struct rtmsg rtm; } req = {
 		.nlh.nlmsg_type	 = RTM_GETROUTE,
@@ -143,32 +143,14 @@ unsigned int nl_get_ext_if(int *v4, int *v6)
 		.rtm.rtm_table	 = RT_TABLE_MAIN,
 		.rtm.rtm_scope	 = RT_SCOPE_UNIVERSE,
 		.rtm.rtm_type	 = RTN_UNICAST,
+		.rtm.rtm_family	 = af,
 	};
-	unsigned int i, first_v4 = 0, first_v6 = 0;
-	uint8_t has_v4[PAGE_SIZE * 8 / 8] = { 0 }; /* See __dev_alloc_name() */
-	uint8_t has_v6[PAGE_SIZE * 8 / 8] = { 0 }; /* in kernel */
 	struct nlmsghdr *nh;
 	struct rtattr *rta;
 	struct rtmsg *rtm;
 	char buf[BUFSIZ];
-	long *word, tmp;
-	uint8_t *vmap;
 	ssize_t n;
 	size_t na;
-	int *v;
-
-	if (*v4 == IP_VERSION_PROBE) {
-		v = v4;
-		req.rtm.rtm_family = AF_INET;
-		vmap = has_v4;
-	} else if (*v6 == IP_VERSION_PROBE) {
-v6:
-		v = v6;
-		req.rtm.rtm_family = AF_INET6;
-		vmap = has_v6;
-	} else {
-		return 0;
-	}
 
 	if ((n = nl_req(0, buf, &req, sizeof(req))) < 0)
 		return 0;
@@ -178,7 +160,7 @@ v6:
 	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
 		rtm = (struct rtmsg *)NLMSG_DATA(nh);
 
-		if (rtm->rtm_dst_len || rtm->rtm_family != req.rtm.rtm_family)
+		if (rtm->rtm_dst_len || rtm->rtm_family != af)
 			continue;
 
 		for (rta = RTM_RTA(rtm), na = RTM_PAYLOAD(nh); RTA_OK(rta, na);
@@ -190,57 +172,10 @@ v6:
 
 			ifi = *(unsigned int *)RTA_DATA(rta);
 
-			if (*v4 == IP_VERSION_DISABLED ||
-			    *v6 == IP_VERSION_DISABLED) {
-				*v = IP_VERSION_ENABLED;
-				return ifi;
-			}
-
-			if (v == v4 && !first_v4)
-				first_v4 = ifi;
-
-			if (v == v6 && !first_v6)
-				first_v6 = ifi;
-
-			bitmap_set(vmap, ifi);
+			return ifi;
 		}
 	}
 
-	if (v == v4 && *v6 == IP_VERSION_PROBE) {
-		req.nlh.nlmsg_seq = nl_seq++;
-		goto v6;
-	}
-
-	word = (long *)has_v4;
-	for (i = 0; i < ARRAY_SIZE(has_v4) / sizeof(long); i++, word++) {
-		tmp = *word;
-		while ((n = ffsl(tmp))) {
-			int ifi = i * sizeof(long) * 8 + n - 1;
-
-			if (!first_v4)
-				first_v4 = ifi;
-
-			tmp &= ~(1UL << (n - 1));
-			if (bitmap_isset(has_v6, ifi)) {
-				*v4 = *v6 = IP_VERSION_ENABLED;
-				return ifi;
-			}
-		}
-	}
-
-	if (first_v4) {
-		*v4 = IP_VERSION_ENABLED;
-		*v6 = IP_VERSION_DISABLED;
-		return first_v4;
-	}
-
-	if (first_v6) {
-		*v4 = IP_VERSION_DISABLED;
-		*v6 = IP_VERSION_ENABLED;
-		return first_v6;
-	}
-
-	err("No external routable interface for any IP protocol");
 	return 0;
 }
 

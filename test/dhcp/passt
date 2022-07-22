@@ -17,6 +17,7 @@ htools	ip jq sed tr head
 test	Interface name
 gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 hout	HOST_IFNAME ip -j -4 route show|jq -rM '[.[] | select(.dst == "default").dev] | .[0]'
+hout	HOST_IFNAME6 ip -j -6 route show|jq -rM '[.[] | select(.dst == "default").dev] | .[0]'
 check	[ -n "__IFNAME__" ]
 
 test	DHCP: address
@@ -49,7 +50,7 @@ check	[ "__SEARCH__" = "__HOST_SEARCH__" ]
 test	DHCPv6: address
 guest	/sbin/dhclient -6 __IFNAME__
 gout	ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.prefixlen == 128).local'
-hout	HOST_ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[] | select(.scope == "global").local'
+hout	HOST_ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__HOST_IFNAME6__").addr_info[] | select(.scope == "global").local'
 check	[ "__ADDR6__" = "__HOST_ADDR6__" ]
 
 test	DHCPv6: route
