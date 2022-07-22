@@ -390,7 +390,7 @@ int main(int argc, char **argv)
 
 	if (*c.pid_file) {
 		if ((pidfile_fd = open(c.pid_file,
-				       O_CREAT | O_WRONLY | O_CLOEXEC,
+				       O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC,
 				       S_IRUSR | S_IWUSR)) < 0) {
 			perror("PID file open");
 			exit(EXIT_FAILURE);
