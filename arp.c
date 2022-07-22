@@ -66,7 +66,7 @@ int arp(const struct ctx *c, const struct pool *p)
 		return 1;
 
 	/* Don't resolve our own address, either. */
-	if (!memcmp(am->tip, &c->addr4, sizeof(am->tip)))
+	if (!memcmp(am->tip, &c->ip4.addr, sizeof(am->tip)))
 		return 1;
 
 	ah->ar_op = htons(ARPOP_REPLY);

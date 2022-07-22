@@ -404,9 +404,9 @@ overlap:
 static void get_dns(struct ctx *c)
 {
 	int dns4_set, dns6_set, dnss_set, dns_set, fd;
-	struct in6_addr *dns6 = &c->dns6[0];
+	struct in6_addr *dns6 = &c->ip6.dns[0];
 	struct fqdn *s = c->dns_search;
-	uint32_t *dns4 = &c->dns4[0];
+	uint32_t *dns4 = &c->ip4.dns[0];
 	struct lineread resolvconf;
 	int line_len;
 	char *line, *p, *end;
@@ -434,7 +434,7 @@ static void get_dns(struct ctx *c)
 				*end = 0;
 
 			if (!dns4_set &&
-			    dns4 - &c->dns4[0] < ARRAY_SIZE(c->dns4) - 1 &&
+			    dns4 - &c->ip4.dns[0] < ARRAY_SIZE(c->ip4.dns) - 1 &&
 			    inet_pton(AF_INET, p + 1, dns4)) {
 				/* We can only access local addresses via the gw redirect */
 				if (ntohl(*dns4) >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET) {
@@ -442,14 +442,14 @@ static void get_dns(struct ctx *c)
 						*dns4 = 0;
 						continue;
 					}
-					*dns4 = c->gw4;
+					*dns4 = c->ip4.gw;
 				}
 				dns4++;
 				*dns4 = 0;
 			}
 
 			if (!dns6_set &&
-			    dns6 - &c->dns6[0] < ARRAY_SIZE(c->dns6) - 1 &&
+			    dns6 - &c->ip6.dns[0] < ARRAY_SIZE(c->ip6.dns) - 1 &&
 			    inet_pton(AF_INET6, p + 1, dns6)) {
 				/* We can only access local addresses via the gw redirect */
 				if (IN6_IS_ADDR_LOOPBACK(dns6)) {
@@ -457,7 +457,7 @@ static void get_dns(struct ctx *c)
 						memset(dns6, 0, sizeof(*dns6));
 						continue;
 					}
-					memcpy(dns6, &c->gw6, sizeof(*dns6));
+					memcpy(dns6, &c->ip6.gw, sizeof(*dns6));
 				}
 				dns6++;
 				memset(dns6, 0, sizeof(*dns6));
@@ -485,7 +485,7 @@ static void get_dns(struct ctx *c)
 	close(fd);
 
 out:
-	if (!dns_set && dns4 == c->dns4 && dns6 == c->dns6)
+	if (!dns_set && dns4 == c->ip4.dns && dns6 == c->ip6.dns)
 		warn("Couldn't get any nameserver address");
 }
 
@@ -612,12 +612,14 @@ static int conf_ns_opt(struct ctx *c,
 
 /**
  * conf_ip4() - Verify or detect IPv4 support, get relevant addresses
- * @c:		Execution context
  * @ifi:	Host interface to attempt (0 to determine one)
+ * @ip4:	IPv4 context (will be written)
+ * @mac:	MAC address to use (written if unset)
  *
  * Return:	Interface index for IPv4, or 0 on failure.
  */
-static unsigned int conf_ip4(struct ctx *c, unsigned int ifi)
+static unsigned int conf_ip4(unsigned int ifi,
+			     struct ip4_ctx *ip4, unsigned char *mac)
 {
 	if (!ifi)
 		ifi = nl_get_ext_if(AF_INET);
@@ -627,33 +629,33 @@ static unsigned int conf_ip4(struct ctx *c, unsigned int ifi)
 		return 0;
 	}
 
-	if (!c->gw4)
-		nl_route(0, ifi, AF_INET, &c->gw4);
+	if (!ip4->gw)
+		nl_route(0, ifi, AF_INET, &ip4->gw);
 
-	if (!c->addr4) {
+	if (!ip4->addr) {
 		int mask_len = 0;
 
-		nl_addr(0, ifi, AF_INET, &c->addr4, &mask_len, NULL);
-		c->mask4 = htonl(0xffffffff << (32 - mask_len));
+		nl_addr(0, ifi, AF_INET, &ip4->addr, &mask_len, NULL);
+		ip4->mask = htonl(0xffffffff << (32 - mask_len));
 	}
 
-	if (!c->mask4) {
-		if (IN_CLASSA(ntohl(c->addr4)))
-			c->mask4 = htonl(IN_CLASSA_NET);
-		else if (IN_CLASSB(ntohl(c->addr4)))
-			c->mask4 = htonl(IN_CLASSB_NET);
-		else if (IN_CLASSC(ntohl(c->addr4)))
-			c->mask4 = htonl(IN_CLASSC_NET);
+	if (!ip4->mask) {
+		if (IN_CLASSA(ntohl(ip4->addr)))
+			ip4->mask = htonl(IN_CLASSA_NET);
+		else if (IN_CLASSB(ntohl(ip4->addr)))
+			ip4->mask = htonl(IN_CLASSB_NET);
+		else if (IN_CLASSC(ntohl(ip4->addr)))
+			ip4->mask = htonl(IN_CLASSC_NET);
 		else
-			c->mask4 = 0xffffffff;
+			ip4->mask = 0xffffffff;
 	}
 
-	memcpy(&c->addr4_seen, &c->addr4, sizeof(c->addr4_seen));
+	memcpy(&ip4->addr_seen, &ip4->addr, sizeof(ip4->addr_seen));
 
-	if (MAC_IS_ZERO(c->mac))
-		nl_link(0, ifi, c->mac, 0, 0);
+	if (MAC_IS_ZERO(mac))
+		nl_link(0, ifi, mac, 0, 0);
 
-	if (!c->gw4 || !c->addr4 || MAC_IS_ZERO(c->mac))
+	if (!ip4->gw || !ip4->addr || MAC_IS_ZERO(mac))
 		return 0;
 
 	return ifi;
@@ -661,12 +663,14 @@ static unsigned int conf_ip4(struct ctx *c, unsigned int ifi)
 
 /**
  * conf_ip6() - Verify or detect IPv6 support, get relevant addresses
- * @c:		Execution context
  * @ifi:	Host interface to attempt (0 to determine one)
+ * @ip6:	IPv6 context (will be written)
+ * @mac:	MAC address to use (written if unset)
  *
  * Return:	Interface index for IPv6, or 0 on failure.
  */
-static unsigned int conf_ip6(struct ctx *c, unsigned int ifi)
+static unsigned int conf_ip6(unsigned int ifi,
+			     struct ip6_ctx *ip6, unsigned char *mac)
 {
 	int prefix_len = 0;
 
@@ -678,23 +682,23 @@ static unsigned int conf_ip6(struct ctx *c, unsigned int ifi)
 		return 0;
 	}
 
-	if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6))
-		nl_route(0, ifi, AF_INET6, &c->gw6);
+	if (IN6_IS_ADDR_UNSPECIFIED(&ip6->gw))
+		nl_route(0, ifi, AF_INET6, &ip6->gw);
 
 	nl_addr(0, ifi, AF_INET6,
-		IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ? &c->addr6 : NULL,
-		&prefix_len, &c->addr6_ll);
+		IN6_IS_ADDR_UNSPECIFIED(&ip6->addr) ? &ip6->addr : NULL,
+		&prefix_len, &ip6->addr_ll);
 
-	memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr6));
-	memcpy(&c->addr6_ll_seen, &c->addr6_ll, sizeof(c->addr6_ll));
+	memcpy(&ip6->addr_seen, &ip6->addr, sizeof(ip6->addr));
+	memcpy(&ip6->addr_ll_seen, &ip6->addr_ll, sizeof(ip6->addr_ll));
 
-	if (MAC_IS_ZERO(c->mac))
-		nl_link(0, ifi, c->mac, 0, 0);
+	if (MAC_IS_ZERO(mac))
+		nl_link(0, ifi, mac, 0, 0);
 
-	if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6) ||
-	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ||
-	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6_ll) ||
-	    MAC_IS_ZERO(c->mac))
+	if (IN6_IS_ADDR_UNSPECIFIED(&ip6->gw) ||
+	    IN6_IS_ADDR_UNSPECIFIED(&ip6->addr) ||
+	    IN6_IS_ADDR_UNSPECIFIED(&ip6->addr_ll) ||
+	    MAC_IS_ZERO(mac))
 		return 0;
 
 	return ifi;
@@ -899,17 +903,17 @@ static void conf_print(const struct ctx *c)
 		if (!c->no_dhcp) {
 			info("DHCP:");
 			info("    assign: %s",
-			     inet_ntop(AF_INET, &c->addr4, buf4, sizeof(buf4)));
+			     inet_ntop(AF_INET, &c->ip4.addr, buf4, sizeof(buf4)));
 			info("    mask: %s",
-			     inet_ntop(AF_INET, &c->mask4, buf4, sizeof(buf4)));
+			     inet_ntop(AF_INET, &c->ip4.mask, buf4, sizeof(buf4)));
 			info("    router: %s",
-			     inet_ntop(AF_INET, &c->gw4,   buf4, sizeof(buf4)));
+			     inet_ntop(AF_INET, &c->ip4.gw,   buf4, sizeof(buf4)));
 		}
 
-		for (i = 0; c->dns4[i]; i++) {
+		for (i = 0; c->ip4.dns[i]; i++) {
 			if (!i)
 				info("DNS:");
-			inet_ntop(AF_INET, &c->dns4[i], buf4, sizeof(buf4));
+			inet_ntop(AF_INET, &c->ip4.dns[i], buf4, sizeof(buf4));
 			info("    %s", buf4);
 		}
 
@@ -933,17 +937,17 @@ static void conf_print(const struct ctx *c)
 			goto dns6;
 
 		info("    assign: %s",
-		     inet_ntop(AF_INET6, &c->addr6, buf6, sizeof(buf6)));
+		     inet_ntop(AF_INET6, &c->ip6.addr, buf6, sizeof(buf6)));
 		info("    router: %s",
-		     inet_ntop(AF_INET6, &c->gw6,   buf6, sizeof(buf6)));
+		     inet_ntop(AF_INET6, &c->ip6.gw,   buf6, sizeof(buf6)));
 		info("    our link-local: %s",
-		     inet_ntop(AF_INET6, &c->addr6_ll, buf6, sizeof(buf6)));
+		     inet_ntop(AF_INET6, &c->ip6.addr_ll, buf6, sizeof(buf6)));
 
 dns6:
-		for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[i]); i++) {
+		for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns[i]); i++) {
 			if (!i)
 				info("DNS:");
-			inet_ntop(AF_INET6, &c->dns6[i], buf6, sizeof(buf6));
+			inet_ntop(AF_INET6, &c->ip6.dns[i], buf6, sizeof(buf6));
 			info("    %s", buf6);
 		}
 
@@ -1065,10 +1069,10 @@ void conf(struct ctx *c, int argc, char **argv)
 	enum conf_port_type tcp_tap = 0, tcp_init = 0;
 	enum conf_port_type udp_tap = 0, udp_init = 0;
 	bool v4_only = false, v6_only = false;
+	struct in6_addr *dns6 = c->ip6.dns;
 	struct fqdn *dnss = c->dns_search;
-	struct in6_addr *dns6 = c->dns6;
+	uint32_t *dns4 = c->ip4.dns;
 	int name, ret, mask, b, i;
-	uint32_t *dns4 = c->dns4;
 	unsigned int ifi = 0;
 
 	if (c->mode == MODE_PASTA)
@@ -1167,17 +1171,17 @@ void conf(struct ctx *c, int argc, char **argv)
 			c->no_dhcp_dns_search = 1;
 			break;
 		case 9:
-			if (IN6_IS_ADDR_UNSPECIFIED(&c->dns6_fwd)	&&
-			    inet_pton(AF_INET6, optarg, &c->dns6_fwd)	&&
-			    !IN6_IS_ADDR_UNSPECIFIED(&c->dns6_fwd)	&&
-			    !IN6_IS_ADDR_LOOPBACK(&c->dns6_fwd))
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_fwd)	&&
+			    inet_pton(AF_INET6, optarg, &c->ip6.dns_fwd) &&
+			    !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_fwd)	&&
+			    !IN6_IS_ADDR_LOOPBACK(&c->ip6.dns_fwd))
 				break;
 
-			if (c->dns4_fwd == INADDR_ANY			&&
-			    inet_pton(AF_INET, optarg, &c->dns4_fwd)	&&
-			    c->dns4_fwd != INADDR_ANY			&&
-			    c->dns4_fwd != INADDR_BROADCAST		&&
-			    c->dns4_fwd != INADDR_LOOPBACK)
+			if (c->ip4.dns_fwd == INADDR_ANY		&&
+			    inet_pton(AF_INET, optarg, &c->ip4.dns_fwd)	&&
+			    c->ip4.dns_fwd != INADDR_ANY		&&
+			    c->ip4.dns_fwd != INADDR_BROADCAST		&&
+			    c->ip4.dns_fwd != INADDR_LOOPBACK)
 				break;
 
 			err("Invalid DNS forwarding address: %s", optarg);
@@ -1334,34 +1338,34 @@ void conf(struct ctx *c, int argc, char **argv)
 			}
 			break;
 		case 'a':
-			if (IN6_IS_ADDR_UNSPECIFIED(&c->addr6)		&&
-			    inet_pton(AF_INET6, optarg, &c->addr6)	&&
-			    !IN6_IS_ADDR_UNSPECIFIED(&c->addr6)		&&
-			    !IN6_IS_ADDR_LOOPBACK(&c->addr6)		&&
-			    !IN6_IS_ADDR_V4MAPPED(&c->addr6)		&&
-			    !IN6_IS_ADDR_V4COMPAT(&c->addr6)		&&
-			    !IN6_IS_ADDR_MULTICAST(&c->addr6))
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr)	&&
+			    inet_pton(AF_INET6, optarg, &c->ip6.addr)	&&
+			    !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr)	&&
+			    !IN6_IS_ADDR_LOOPBACK(&c->ip6.addr)		&&
+			    !IN6_IS_ADDR_V4MAPPED(&c->ip6.addr)		&&
+			    !IN6_IS_ADDR_V4COMPAT(&c->ip6.addr)		&&
+			    !IN6_IS_ADDR_MULTICAST(&c->ip6.addr))
 				break;
 
-			if (c->addr4 == INADDR_ANY			&&
-			    inet_pton(AF_INET, optarg, &c->addr4)	&&
-			    c->addr4 != INADDR_ANY			&&
-			    c->addr4 != INADDR_BROADCAST		&&
-			    c->addr4 != INADDR_LOOPBACK			&&
-			    !IN_MULTICAST(c->addr4))
+			if (c->ip4.addr == INADDR_ANY			&&
+			    inet_pton(AF_INET, optarg, &c->ip4.addr)	&&
+			    c->ip4.addr != INADDR_ANY			&&
+			    c->ip4.addr != INADDR_BROADCAST		&&
+			    c->ip4.addr != INADDR_LOOPBACK		&&
+			    !IN_MULTICAST(c->ip4.addr))
 				break;
 
 			err("Invalid address: %s", optarg);
 			usage(argv[0]);
 			break;
 		case 'n':
-			if (inet_pton(AF_INET, optarg, &c->mask4))
+			if (inet_pton(AF_INET, optarg, &c->ip4.mask))
 				break;
 
 			errno = 0;
 			mask = strtol(optarg, NULL, 0);
 			if (mask > 0 && mask <= 32 && !errno) {
-				c->mask4 = htonl(0xffffffff << (32 - mask));
+				c->ip4.mask = htonl(0xffffffff << (32 - mask));
 				break;
 			}
 
@@ -1380,17 +1384,17 @@ void conf(struct ctx *c, int argc, char **argv)
 			}
 			break;
 		case 'g':
-			if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6)		&&
-			    inet_pton(AF_INET6, optarg, &c->gw6)	&&
-			    !IN6_IS_ADDR_UNSPECIFIED(&c->gw6)		&&
-			    !IN6_IS_ADDR_LOOPBACK(&c->gw6))
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.gw)		&&
+			    inet_pton(AF_INET6, optarg, &c->ip6.gw)	&&
+			    !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.gw)	&&
+			    !IN6_IS_ADDR_LOOPBACK(&c->ip6.gw))
 				break;
 
-			if (c->gw4 == INADDR_ANY			&&
-			    inet_pton(AF_INET, optarg, &c->gw4)		&&
-			    c->gw4 != INADDR_ANY			&&
-			    c->gw4 != INADDR_BROADCAST			&&
-			    c->gw4 != INADDR_LOOPBACK)
+			if (c->ip4.gw == INADDR_ANY			&&
+			    inet_pton(AF_INET, optarg, &c->ip4.gw)	&&
+			    c->ip4.gw != INADDR_ANY			&&
+			    c->ip4.gw != INADDR_BROADCAST		&&
+			    c->ip4.gw != INADDR_LOOPBACK)
 				break;
 
 			err("Invalid gateway address: %s", optarg);
@@ -1410,7 +1414,7 @@ void conf(struct ctx *c, int argc, char **argv)
 			break;
 		case 'D':
 			if (c->no_dns ||
-			    (!optarg && (dns4 - c->dns4 || dns6 - c->dns6))) {
+			    (!optarg && (dns4 - c->ip4.dns || dns6 - c->ip6.dns))) {
 				err("Empty and non-empty DNS options given");
 				usage(argv[0]);
 			}
@@ -1420,13 +1424,13 @@ void conf(struct ctx *c, int argc, char **argv)
 				break;
 			}
 
-			if (dns4 - &c->dns4[0] < ARRAY_SIZE(c->dns4) &&
+			if (dns4 - &c->ip4.dns[0] < ARRAY_SIZE(c->ip4.dns) &&
 			    inet_pton(AF_INET, optarg, dns4)) {
 				dns4++;
 				break;
 			}
 
-			if (dns6 - &c->dns6[0] < ARRAY_SIZE(c->dns6) &&
+			if (dns6 - &c->ip6.dns[0] < ARRAY_SIZE(c->ip6.dns) &&
 			    inet_pton(AF_INET6, optarg, dns6)) {
 				dns6++;
 				break;
@@ -1511,9 +1515,9 @@ void conf(struct ctx *c, int argc, char **argv)
 		usage(argv[0]);
 	}
 	if (!v6_only)
-		c->ifi4 = conf_ip4(c, ifi);
+		c->ifi4 = conf_ip4(ifi, &c->ip4, c->mac);
 	if (!v4_only)
-		c->ifi6 = conf_ip6(c, ifi);
+		c->ifi6 = conf_ip6(ifi, &c->ip6, c->mac);
 	if (!c->ifi4 && !c->ifi6) {
 		err("External interface not usable");
 		exit(EXIT_FAILURE);

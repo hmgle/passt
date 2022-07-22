@@ -278,8 +278,8 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 		if (bind_addr) {
 			addr6.sin6_addr = *(struct in6_addr *)bind_addr;
 
-			if (!memcmp(bind_addr, &c->addr6_ll,
-			    sizeof(c->addr6_ll)))
+			if (!memcmp(bind_addr, &c->ip6.addr_ll,
+			    sizeof(c->ip6.addr_ll)))
 				addr6.sin6_scope_id = c->ifi6;
 		} else {
 			addr6.sin6_addr = in6addr_any;

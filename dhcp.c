@@ -332,20 +332,20 @@ int dhcp(const struct ctx *c, const struct pool *p)
 	     m->chaddr[0], m->chaddr[1], m->chaddr[2],
 	     m->chaddr[3], m->chaddr[4], m->chaddr[5]);
 
-	m->yiaddr = c->addr4;
-	memcpy(opts[1].s,  &c->mask4, sizeof(c->mask4));
-	memcpy(opts[3].s,  &c->gw4,   sizeof(c->gw4));
-	memcpy(opts[54].s, &c->gw4,   sizeof(c->gw4));
+	m->yiaddr = c->ip4.addr;
+	memcpy(opts[1].s,  &c->ip4.mask, sizeof(c->ip4.mask));
+	memcpy(opts[3].s,  &c->ip4.gw,   sizeof(c->ip4.gw));
+	memcpy(opts[54].s, &c->ip4.gw,   sizeof(c->ip4.gw));
 
 	/* If the gateway is not on the assigned subnet, send an option 121
 	 * (Classless Static Routing) adding a dummy route to it.
 	 */
-	if ((c->addr4 & c->mask4) != (c->gw4 & c->mask4)) {
+	if ((c->ip4.addr & c->ip4.mask) != (c->ip4.gw & c->ip4.mask)) {
 		/* a.b.c.d/32:0.0.0.0, 0:a.b.c.d */
 		opts[121].slen = 14;
 		opts[121].s[0] = 32;
-		memcpy(opts[121].s + 1,  &c->gw4, sizeof(c->gw4));
-		memcpy(opts[121].s + 10, &c->gw4, sizeof(c->gw4));
+		memcpy(opts[121].s + 1,  &c->ip4.gw, sizeof(c->ip4.gw));
+		memcpy(opts[121].s + 10, &c->ip4.gw, sizeof(c->ip4.gw));
 	}
 
 	if (c->mtu != -1) {
@@ -354,8 +354,8 @@ int dhcp(const struct ctx *c, const struct pool *p)
 		opts[26].s[1] = c->mtu % 256;
 	}
 
-	for (i = 0, opts[6].slen = 0; !c->no_dhcp_dns && c->dns4[i]; i++) {
-		((uint32_t *)opts[6].s)[i] = c->dns4[i];
+	for (i = 0, opts[6].slen = 0; !c->no_dhcp_dns && c->ip4.dns[i]; i++) {
+		((uint32_t *)opts[6].s)[i] = c->ip4.dns[i];
 		opts[6].slen += sizeof(uint32_t);
 	}
 
@@ -368,8 +368,8 @@ int dhcp(const struct ctx *c, const struct pool *p)
 	uh->dest = htons(68);
 
 	iph->tot_len = htons(len += sizeof(*iph));
-	iph->daddr = c->addr4;
-	iph->saddr = c->gw4;
+	iph->daddr = c->ip4.addr;
+	iph->saddr = c->ip4.gw;
 	iph->check = 0;
 	iph->check = csum_unaligned(iph, (intptr_t)(iph->ihl * 4), 0);
 

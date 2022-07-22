@@ -95,6 +95,44 @@ enum passt_modes {
 };
 
 /**
+ * struct ip4_ctx - IPv4 execution context
+ * @addr:		IPv4 address for external, routable interface
+ * @addr_seen:		Latest IPv4 address seen as source from tap
+ * @mask:		IPv4 netmask, network order
+ * @gw:			Default IPv4 gateway, network order
+ * @dns:		IPv4 DNS addresses, zero-terminated, network order
+ * @dns_fwd:		Address forwarded (UDP) to first IPv4 DNS, network order
+ */
+struct ip4_ctx {
+	uint32_t addr;
+	uint32_t addr_seen;
+	uint32_t mask;
+	uint32_t gw;
+	uint32_t dns[MAXNS + 1];
+	uint32_t dns_fwd;
+};
+
+/**
+ * struct ip6_ctx - IPv6 execution context
+ * @addr:		IPv6 address for external, routable interface
+ * @addr_ll:		Link-local IPv6 address on external, routable interface
+ * @addr_seen:		Latest IPv6 global/site address seen as source from tap
+ * @addr_ll_seen:	Latest IPv6 link-local address seen as source from tap
+ * @gw:			Default IPv6 gateway
+ * @dns:		IPv6 DNS addresses, zero-terminated
+ * @dns_fwd:		Address forwarded (UDP) to first IPv6 DNS, network order
+ */
+struct ip6_ctx {
+	struct in6_addr addr;
+	struct in6_addr addr_ll;
+	struct in6_addr addr_seen;
+	struct in6_addr addr_ll_seen;
+	struct in6_addr gw;
+	struct in6_addr dns[MAXNS + 1];
+	struct in6_addr dns_fwd;
+};
+
+/**
  * struct ctx - Execution context
  * @mode:		Operation mode, qemu/UNIX domain socket or namespace/tap
  * @debug:		Enable debug mode
@@ -122,21 +160,10 @@ enum passt_modes {
  * @mac:		Host MAC address
  * @mac_guest:		MAC address of guest or namespace, seen or configured
  * @ifi4:		Index of routable interface for IPv4, 0 if IPv4 disabled
- * @addr4:		IPv4 address for external, routable interface
- * @addr4_seen:		Latest IPv4 address seen as source from tap
- * @mask4:		IPv4 netmask, network order
- * @gw4:		Default IPv4 gateway, network order
- * @dns4:		IPv4 DNS addresses, zero-terminated, network order
- * @dns4_fwd:		Address forwarded (UDP) to first IPv4 DNS, network order
+ * @ip:			IPv4 configuration
  * @dns_search:		DNS search list
  * @ifi6:		Index of routable interface for IPv6, 0 if IPv6 disabled
- * @addr6:		IPv6 address for external, routable interface
- * @addr6_ll:		Link-local IPv6 address on external, routable interface
- * @addr6_seen:		Latest IPv6 global/site address seen as source from tap
- * @addr6_ll_seen:	Latest IPv6 link-local address seen as source from tap
- * @gw6:		Default IPv6 gateway
- * @dns6:		IPv6 DNS addresses, zero-terminated
- * @dns6_fwd:		Address forwarded (UDP) to first IPv6 DNS, network order
+ * @ip6:		IPv6 configuration
  * @pasta_ifn:		Name of namespace interface for pasta
  * @pasta_ifn:		Index of namespace interface for pasta
  * @pasta_conf_ns:	Configure namespace interface after creating it
@@ -192,23 +219,12 @@ struct ctx {
 	unsigned char mac_guest[ETH_ALEN];
 
 	unsigned int ifi4;
-	uint32_t addr4;
-	uint32_t addr4_seen;
-	uint32_t mask4;
-	uint32_t gw4;
-	uint32_t dns4[MAXNS + 1];
-	uint32_t dns4_fwd;
+	struct ip4_ctx ip4;
 
 	struct fqdn dns_search[MAXDNSRCH];
 
 	unsigned int ifi6;
-	struct in6_addr addr6;
-	struct in6_addr addr6_ll;
-	struct in6_addr addr6_seen;
-	struct in6_addr addr6_ll_seen;
-	struct in6_addr gw6;
-	struct in6_addr dns6[MAXNS + 1];
-	struct in6_addr dns6_fwd;
+	struct ip6_ctx ip6;
 
 	char pasta_ifn[IF_NAMESIZE];
 	unsigned int pasta_ifi;

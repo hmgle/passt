@@ -390,7 +390,7 @@ static size_t dhcpv6_dns_fill(const struct ctx *c, char *buf, int offset)
 	if (c->no_dhcp_dns)
 		goto search;
 
-	for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[i]); i++) {
+	for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns[i]); i++) {
 		if (!i) {
 			srv = (struct opt_dns_servers *)(buf + offset);
 			offset += sizeof(struct opt_hdr);
@@ -398,7 +398,7 @@ static size_t dhcpv6_dns_fill(const struct ctx *c, char *buf, int offset)
 			srv->hdr.l = 0;
 		}
 
-		memcpy(&srv->addr[i], &c->dns6[i], sizeof(srv->addr[i]));
+		memcpy(&srv->addr[i], &c->ip6.dns[i], sizeof(srv->addr[i]));
 		srv->hdr.l += sizeof(srv->addr[i]);
 		offset += sizeof(srv->addr[i]);
 	}
@@ -473,12 +473,12 @@ int dhcpv6(struct ctx *c, const struct pool *p,
 	if (mlen + sizeof(*uh) != ntohs(uh->len) || mlen < sizeof(*mh))
 		return -1;
 
-	c->addr6_ll_seen = *saddr;
+	c->ip6.addr_ll_seen = *saddr;
 
-	if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
-		src = &c->gw6;
+	if (IN6_IS_ADDR_LINKLOCAL(&c->ip6.gw))
+		src = &c->ip6.gw;
 	else
-		src = &c->addr6_ll;
+		src = &c->ip6.addr_ll;
 
 	mh = packet_get(p, 0, sizeof(*uh), sizeof(*mh), NULL);
 	if (!mh)
@@ -508,7 +508,7 @@ int dhcpv6(struct ctx *c, const struct pool *p,
 		if (mh->type == TYPE_CONFIRM && server_id)
 			return -1;
 
-		if ((bad_ia = dhcpv6_ia_notonlink(p, &c->addr6))) {
+		if ((bad_ia = dhcpv6_ia_notonlink(p, &c->ip6.addr))) {
 			info("DHCPv6: received CONFIRM with inappropriate IA,"
 			     " sending NotOnLink status in REPLY");
 
@@ -580,7 +580,7 @@ int dhcpv6(struct ctx *c, const struct pool *p,
 	resp.hdr.xid = mh->xid;
 
 	tap_ip_send(c, src, IPPROTO_UDP, (char *)&resp, n, mh->xid);
-	c->addr6_seen = c->addr6;
+	c->ip6.addr_seen = c->ip6.addr;
 
 	return 1;
 }
@@ -602,5 +602,5 @@ void dhcpv6_init(const struct ctx *c)
 	memcpy(resp.server_id.duid_lladdr,		c->mac, sizeof(c->mac));
 	memcpy(resp_not_on_link.server_id.duid_lladdr,	c->mac, sizeof(c->mac));
 
-	resp.ia_addr.addr	= c->addr6;
+	resp.ia_addr.addr	= c->ip6.addr;
 }

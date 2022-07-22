@@ -107,7 +107,7 @@ int ndp(struct ctx *c, const struct icmp6hdr *ih,
 		p += 4;
 		*(uint32_t *)p = htonl(3600);	/* preferred lifetime */
 		p += 8;
-		memcpy(p, &c->addr6, 8);	/* prefix */
+		memcpy(p, &c->ip6.addr, 8);	/* prefix */
 		p += 16;
 
 		if (c->mtu != -1) {
@@ -121,7 +121,7 @@ int ndp(struct ctx *c, const struct icmp6hdr *ih,
 		if (c->no_dhcp_dns)
 			goto dns_done;
 
-		for (n = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->dns6[n]); n++);
+		for (n = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns[n]); n++);
 		if (n) {
 			*p++ = 25;				/* RDNSS */
 			*p++ = 1 + 2 * n;			/* length */
@@ -130,7 +130,7 @@ int ndp(struct ctx *c, const struct icmp6hdr *ih,
 			p += 4;
 
 			for (i = 0; i < n; i++) {
-				memcpy(p, &c->dns6[i], 16);	/* address */
+				memcpy(p, &c->ip6.dns[i], 16);	/* address */
 				p += 16;
 			}
 
@@ -177,15 +177,15 @@ dns_done:
 	len = (uintptr_t)p - (uintptr_t)ihr - sizeof(*ihr);
 
 	if (IN6_IS_ADDR_LINKLOCAL(saddr))
-		c->addr6_ll_seen = *saddr;
+		c->ip6.addr_ll_seen = *saddr;
 	else
-		c->addr6_seen = *saddr;
+		c->ip6.addr_seen = *saddr;
 
 	ip6hr->daddr = *saddr;
-	if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
-		ip6hr->saddr = c->gw6;
+	if (IN6_IS_ADDR_LINKLOCAL(&c->ip6.gw))
+		ip6hr->saddr = c->ip6.gw;
 	else
-		ip6hr->saddr = c->addr6_ll;
+		ip6hr->saddr = c->ip6.addr_ll;
 
 	ip6hr->payload_len = htons(sizeof(*ihr) + len);
 	ip6hr->hop_limit = IPPROTO_ICMPV6;

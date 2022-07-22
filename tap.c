@@ -130,7 +130,7 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 		iph->frag_off = 0;
 		iph->ttl = 255;
 		iph->protocol = proto;
-		iph->daddr = c->addr4_seen;
+		iph->daddr = c->ip4.addr_seen;
 		memcpy(&iph->saddr, &src->s6_addr[12], 4);
 
 		iph->check = 0;
@@ -165,9 +165,9 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 
 		ip6h->saddr = *src;
 		if (IN6_IS_ADDR_LINKLOCAL(src))
-			ip6h->daddr = c->addr6_ll_seen;
+			ip6h->daddr = c->ip6.addr_ll_seen;
 		else
-			ip6h->daddr = c->addr6_seen;
+			ip6h->daddr = c->ip6.addr_seen;
 
 		memcpy(data, in, len);
 
@@ -354,9 +354,9 @@ resume:
 
 		l4_len = l3_len - hlen;
 
-		if (iph->saddr && c->addr4_seen != iph->saddr) {
-			c->addr4_seen = iph->saddr;
-			proto_update_l2_buf(NULL, NULL, &c->addr4_seen);
+		if (iph->saddr && c->ip4.addr_seen != iph->saddr) {
+			c->ip4.addr_seen = iph->saddr;
+			proto_update_l2_buf(NULL, NULL, &c->ip4.addr_seen);
 		}
 
 		l4h = packet_get(in, i, sizeof(*eh) + hlen, l4_len, NULL);
@@ -504,13 +504,13 @@ resume:
 			continue;
 
 		if (IN6_IS_ADDR_LINKLOCAL(saddr)) {
-			c->addr6_ll_seen = *saddr;
+			c->ip6.addr_ll_seen = *saddr;
 
-			if (IN6_IS_ADDR_UNSPECIFIED(&c->addr6_seen)) {
-				c->addr6_seen = *saddr;
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr_seen)) {
+				c->ip6.addr_seen = *saddr;
 			}
 		} else {
-			c->addr6_seen = *saddr;
+			c->ip6.addr_seen = *saddr;
 		}
 
 		if (proto == IPPROTO_ICMPV6) {
@@ -545,7 +545,7 @@ resume:
 				continue;
 		}
 
-		*saddr = c->addr6;
+		*saddr = c->ip6.addr;
 
 		if (proto != IPPROTO_TCP && proto != IPPROTO_UDP) {
 			tap_packet_debug(NULL, ip6h, NULL, proto, NULL, 1);

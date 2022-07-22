@@ -1700,9 +1700,9 @@ do {									\
 		b->ip6h.payload_len = htons(plen + sizeof(struct tcphdr));
 		b->ip6h.saddr = conn->a.a6;
 		if (IN6_IS_ADDR_LINKLOCAL(&b->ip6h.saddr))
-			b->ip6h.daddr = c->addr6_ll_seen;
+			b->ip6h.daddr = c->ip6.addr_ll_seen;
 		else
-			b->ip6h.daddr = c->addr6_seen;
+			b->ip6h.daddr = c->ip6.addr_seen;
 
 		memset(b->ip6h.flow_lbl, 0, 3);
 
@@ -1723,7 +1723,7 @@ do {									\
 		ip_len = plen + sizeof(struct iphdr) + sizeof(struct tcphdr);
 		b->iph.tot_len = htons(ip_len);
 		b->iph.saddr = conn->a.a4.a.s_addr;
-		b->iph.daddr = c->addr4_seen;
+		b->iph.daddr = c->ip4.addr_seen;
 
 		if (check)
 			b->iph.check = *check;
@@ -2069,7 +2069,7 @@ static uint32_t tcp_seq_init(const struct ctx *c, int af, const void *addr,
 		} __attribute__((__packed__)) in = {
 			.src = *(struct in_addr *)addr,
 			.srcport = srcport,
-			.dst = { c->addr4 },
+			.dst = { c->ip4.addr },
 			.dstport = dstport,
 		};
 
@@ -2083,7 +2083,7 @@ static uint32_t tcp_seq_init(const struct ctx *c, int af, const void *addr,
 		} __attribute__((__packed__)) in = {
 			.src = *(struct in6_addr *)addr,
 			.srcport = srcport,
-			.dst = c->addr6,
+			.dst = c->ip6.addr,
 			.dstport = dstport,
 		};
 
@@ -2197,16 +2197,16 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 		return;
 
 	if (!c->no_map_gw) {
-		if (af == AF_INET && addr4.sin_addr.s_addr == c->gw4)
+		if (af == AF_INET && addr4.sin_addr.s_addr == c->ip4.gw)
 			addr4.sin_addr.s_addr	= htonl(INADDR_LOOPBACK);
-		if (af == AF_INET6 && IN6_ARE_ADDR_EQUAL(addr, &c->gw6))
+		if (af == AF_INET6 && IN6_ARE_ADDR_EQUAL(addr, &c->ip6.gw))
 			addr6.sin6_addr		= in6addr_loopback;
 	}
 
 	if (af == AF_INET6 && IN6_IS_ADDR_LINKLOCAL(&addr6.sin6_addr)) {
 		struct sockaddr_in6 addr6_ll = {
 			.sin6_family = AF_INET6,
-			.sin6_addr = c->addr6_ll,
+			.sin6_addr = c->ip6.addr_ll,
 			.sin6_scope_id = c->ifi6,
 		};
 		if (bind(s, (struct sockaddr *)&addr6_ll, sizeof(addr6_ll))) {
@@ -2894,14 +2894,14 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		memcpy(&sa6, &sa, sizeof(sa6));
 
 		if (IN6_IS_ADDR_LOOPBACK(&sa6.sin6_addr) ||
-		    IN6_ARE_ADDR_EQUAL(&sa6.sin6_addr, &c->addr6_seen) ||
-		    IN6_ARE_ADDR_EQUAL(&sa6.sin6_addr, &c->addr6)) {
+		    IN6_ARE_ADDR_EQUAL(&sa6.sin6_addr, &c->ip6.addr_seen) ||
+		    IN6_ARE_ADDR_EQUAL(&sa6.sin6_addr, &c->ip6.addr)) {
 			struct in6_addr *src;
 
-			if (IN6_IS_ADDR_LINKLOCAL(&c->gw6))
-				src = &c->gw6;
+			if (IN6_IS_ADDR_LINKLOCAL(&c->ip6.gw))
+				src = &c->ip6.gw;
 			else
-				src = &c->addr6_ll;
+				src = &c->ip6.addr_ll;
 
 			memcpy(&sa6.sin6_addr, src, sizeof(*src));
 		}
@@ -2928,8 +2928,8 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		memset(&conn->a.a4.one, 0xff, sizeof(conn->a.a4.one));
 
 		if (s_addr >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
-		    s_addr == INADDR_ANY || htonl(s_addr) == c->addr4_seen)
-			s_addr = ntohl(c->gw4);
+		    s_addr == INADDR_ANY || htonl(s_addr) == c->ip4.addr_seen)
+			s_addr = ntohl(c->ip4.gw);
 
 		s_addr = htonl(s_addr);
 		memcpy(&conn->a.a4.a, &s_addr, sizeof(conn->a.a4.a));
@@ -3118,7 +3118,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 
 	if (af == AF_INET || af == AF_UNSPEC) {
 		if (!addr && c->mode == MODE_PASTA)
-			bind_addr = &c->addr4;
+			bind_addr = &c->ip4.addr;
 		else
 			bind_addr = addr;
 
@@ -3159,7 +3159,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 
 	if (af == AF_INET6 || af == AF_UNSPEC) {
 		if (!addr && c->mode == MODE_PASTA)
-			bind_addr = &c->addr6;
+			bind_addr = &c->ip6.addr;
 		else
 			bind_addr = addr;
 
