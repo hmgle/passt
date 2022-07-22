@@ -672,7 +672,7 @@ static void conf_ip(struct ctx *c)
 
 		memcpy(&c->addr4_seen, &c->addr4, sizeof(c->addr4_seen));
 
-		if (!memcmp(c->mac, MAC_ZERO, ETH_ALEN))
+		if (MAC_IS_ZERO(c->mac))
 			nl_link(0, c->ifi4, c->mac, 0, 0);
 	}
 
@@ -691,17 +691,20 @@ static void conf_ip(struct ctx *c)
 
 		memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr6));
 		memcpy(&c->addr6_ll_seen, &c->addr6_ll, sizeof(c->addr6_ll));
+
+		if (MAC_IS_ZERO(c->mac))
+			nl_link(0, c->ifi6, c->mac, 0, 0);
 	}
 
-	if (!c->gw4 || !c->addr4 ||
-	    !memcmp(c->mac, ((uint8_t [ETH_ALEN]){ 0 }), ETH_ALEN))
+	if (!c->gw4 || !c->addr4 || MAC_IS_ZERO(c->mac))
 		v4 = IP_VERSION_DISABLED;
 	else
 		v4 = IP_VERSION_ENABLED;
 
 	if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6) ||
 	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ||
-	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6_ll))
+	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6_ll) ||
+	    MAC_IS_ZERO(c->mac))
 		v6 = IP_VERSION_DISABLED;
 	else
 		v6 = IP_VERSION_ENABLED;
@@ -905,12 +908,12 @@ static void conf_print(const struct ctx *c)
 	if (c->mode == MODE_PASTA)
 		info("Namespace interface: %s", c->pasta_ifn);
 
-	if (c->v4) {
-		info("ARP:");
-		info("    address: %02x:%02x:%02x:%02x:%02x:%02x",
-		     c->mac[0], c->mac[1], c->mac[2],
-		     c->mac[3], c->mac[4], c->mac[5]);
+	info("MAC:");
+	info("    host: %02x:%02x:%02x:%02x:%02x:%02x",
+	     c->mac[0], c->mac[1], c->mac[2],
+	     c->mac[3], c->mac[4], c->mac[5]);
 
+	if (c->v4) {
 		if (!c->no_dhcp) {
 			info("DHCP:");
 			info("    assign: %s",
