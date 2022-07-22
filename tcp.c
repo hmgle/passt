@@ -3252,7 +3252,7 @@ static int tcp_sock_refill(void *arg)
 		p6 = init_sock_pool6;
 	}
 
-	for (i = 0; a->c->v4 && i < TCP_SOCK_POOL_SIZE; i++, p4++) {
+	for (i = 0; a->c->ifi4 && i < TCP_SOCK_POOL_SIZE; i++, p4++) {
 		if (*p4 >= 0)
 			break;
 
@@ -3267,7 +3267,7 @@ static int tcp_sock_refill(void *arg)
 			tcp_sock_set_bufsize(a->c, *p4);
 	}
 
-	for (i = 0; a->c->v6 && i < TCP_SOCK_POOL_SIZE; i++, p6++) {
+	for (i = 0; a->c->ifi6 && i < TCP_SOCK_POOL_SIZE; i++, p6++) {
 		if (*p6 >= 0)
 			break;
 
@@ -3327,10 +3327,10 @@ int tcp_init(struct ctx *c)
 	for (i = 0; i < ARRAY_SIZE(tcp_l2_mh); i++)
 		tcp_l2_mh[i] = (struct mmsghdr) { .msg_hdr.msg_iovlen = 1 };
 
-	if (c->v4)
+	if (c->ifi4)
 		tcp_sock4_iov_init();
 
-	if (c->v6)
+	if (c->ifi6)
 		tcp_sock6_iov_init();
 
 	memset(init_sock_pool4,		0xff,	sizeof(init_sock_pool4));
@@ -3431,8 +3431,8 @@ static int tcp_port_rebind(void *arg)
 			if (bitmap_isset(a->c->tcp.port_to_tap, port))
 				continue;
 
-			if ((a->c->v4 && tcp_sock_ns[port][V4] == -1) ||
-			    (a->c->v6 && tcp_sock_ns[port][V6] == -1))
+			if ((a->c->ifi4 && tcp_sock_ns[port][V4] == -1) ||
+			    (a->c->ifi6 && tcp_sock_ns[port][V6] == -1))
 				tcp_sock_init(a->c, 1, AF_UNSPEC, NULL, port);
 		}
 	} else {
@@ -3464,8 +3464,8 @@ static int tcp_port_rebind(void *arg)
 			if (bitmap_isset(a->c->tcp.port_to_init, port))
 				continue;
 
-			if ((a->c->v4 && tcp_sock_init_ext[port][V4] == -1) ||
-			    (a->c->v6 && tcp_sock_init_ext[port][V6] == -1))
+			if ((a->c->ifi4 && tcp_sock_init_ext[port][V4] == -1) ||
+			    (a->c->ifi6 && tcp_sock_init_ext[port][V6] == -1))
 				tcp_sock_init(a->c, 0, AF_UNSPEC, NULL, port);
 		}
 	}
@@ -3512,8 +3512,8 @@ void tcp_timer(struct ctx *c, const struct timespec *ts)
 	tcp_sock_refill(&refill_arg);
 	if (c->mode == MODE_PASTA) {
 		refill_arg.ns = 1;
-		if ((c->v4 && ns_sock_pool4[TCP_SOCK_POOL_TSH] < 0) ||
-		    (c->v6 && ns_sock_pool6[TCP_SOCK_POOL_TSH] < 0))
+		if ((c->ifi4 && ns_sock_pool4[TCP_SOCK_POOL_TSH] < 0) ||
+		    (c->ifi6 && ns_sock_pool6[TCP_SOCK_POOL_TSH] < 0))
 			NS_CALL(tcp_sock_refill, &refill_arg);
 
 		tcp_splice_timer(c);

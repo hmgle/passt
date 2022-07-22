@@ -365,10 +365,10 @@ int main(int argc, char **argv)
 
 	proto_update_l2_buf(c.mac_guest, c.mac, &c.addr4);
 
-	if (c.v4 && !c.no_dhcp)
+	if (c.ifi4 && !c.no_dhcp)
 		dhcp_init();
 
-	if (c.v6 && !c.no_dhcpv6)
+	if (c.ifi6 && !c.no_dhcpv6)
 		dhcpv6_init(&c);
 
 	if (c.debug)

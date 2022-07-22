@@ -411,8 +411,8 @@ static void get_dns(struct ctx *c)
 	int line_len;
 	char *line, *p, *end;
 
-	dns4_set = !c->v4  || !!*dns4;
-	dns6_set = !c->v6  || !IN6_IS_ADDR_UNSPECIFIED(dns6);
+	dns4_set = !c->ifi4 || !!*dns4;
+	dns6_set = !c->ifi6 || !IN6_IS_ADDR_UNSPECIFIED(dns6);
 	dnss_set = !!*s->n || c->no_dns_search;
 	dns_set = (dns4_set && dns6_set) || c->no_dns;
 
@@ -611,87 +611,93 @@ static int conf_ns_opt(struct ctx *c,
 }
 
 /**
- * conf_ip() - Verify or detect IPv4/IPv6 support, get relevant addresses
+ * conf_ip4() - Verify or detect IPv4 support, get relevant addresses
  * @c:		Execution context
+ * @ifi:	Host interface to attempt (0 to determine one)
+ *
+ * Return:	Interface index for IPv4, or 0 on failure.
  */
-static void conf_ip(struct ctx *c)
+static unsigned int conf_ip4(struct ctx *c, unsigned int ifi)
 {
-	if (c->v4) {
-		if (!c->ifi4)
-			c->ifi4 = nl_get_ext_if(AF_INET);
-		if (!c->ifi4) {
-			warn("No external routable interface for IPv4");
-			c->v4 = 0;
-		}
+	if (!ifi)
+		ifi = nl_get_ext_if(AF_INET);
+
+	if (!ifi) {
+		warn("No external routable interface for IPv4");
+		return 0;
 	}
 
-	if (c->v6) {
-		if (!c->ifi6)
-			c->ifi6 = nl_get_ext_if(AF_INET6);
-		if (!c->ifi6) {
-			warn("No external routable interface for IPv6");
-			c->v6 = 0;
-		}
+	if (!c->gw4)
+		nl_route(0, ifi, AF_INET, &c->gw4);
+
+	if (!c->addr4) {
+		int mask_len = 0;
+
+		nl_addr(0, ifi, AF_INET, &c->addr4, &mask_len, NULL);
+		c->mask4 = htonl(0xffffffff << (32 - mask_len));
 	}
 
-	if (c->v4) {
-		if (!c->gw4)
-			nl_route(0, c->ifi4, AF_INET, &c->gw4);
-
-		if (!c->addr4) {
-			int mask_len = 0;
-
-			nl_addr(0, c->ifi4, AF_INET, &c->addr4, &mask_len, NULL);
-			c->mask4 = htonl(0xffffffff << (32 - mask_len));
-		}
-
-		if (!c->mask4) {
-			if (IN_CLASSA(ntohl(c->addr4)))
-				c->mask4 = htonl(IN_CLASSA_NET);
-			else if (IN_CLASSB(ntohl(c->addr4)))
-				c->mask4 = htonl(IN_CLASSB_NET);
-			else if (IN_CLASSC(ntohl(c->addr4)))
-				c->mask4 = htonl(IN_CLASSC_NET);
-			else
-				c->mask4 = 0xffffffff;
-		}
-
-		memcpy(&c->addr4_seen, &c->addr4, sizeof(c->addr4_seen));
-
-		if (MAC_IS_ZERO(c->mac))
-			nl_link(0, c->ifi4, c->mac, 0, 0);
+	if (!c->mask4) {
+		if (IN_CLASSA(ntohl(c->addr4)))
+			c->mask4 = htonl(IN_CLASSA_NET);
+		else if (IN_CLASSB(ntohl(c->addr4)))
+			c->mask4 = htonl(IN_CLASSB_NET);
+		else if (IN_CLASSC(ntohl(c->addr4)))
+			c->mask4 = htonl(IN_CLASSC_NET);
+		else
+			c->mask4 = 0xffffffff;
 	}
 
-	if (c->v6) {
-		int prefix_len = 0;
+	memcpy(&c->addr4_seen, &c->addr4, sizeof(c->addr4_seen));
 
-		if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6))
-			nl_route(0, c->ifi6, AF_INET6, &c->gw6);
-
-		nl_addr(0, c->ifi6, AF_INET6,
-			IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ? &c->addr6 : NULL,
-			&prefix_len, &c->addr6_ll);
-
-		memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr6));
-		memcpy(&c->addr6_ll_seen, &c->addr6_ll, sizeof(c->addr6_ll));
-
-		if (MAC_IS_ZERO(c->mac))
-			nl_link(0, c->ifi6, c->mac, 0, 0);
-	}
+	if (MAC_IS_ZERO(c->mac))
+		nl_link(0, ifi, c->mac, 0, 0);
 
 	if (!c->gw4 || !c->addr4 || MAC_IS_ZERO(c->mac))
-		c->v4 = 0;
+		return 0;
+
+	return ifi;
+}
+
+/**
+ * conf_ip6() - Verify or detect IPv6 support, get relevant addresses
+ * @c:		Execution context
+ * @ifi:	Host interface to attempt (0 to determine one)
+ *
+ * Return:	Interface index for IPv6, or 0 on failure.
+ */
+static unsigned int conf_ip6(struct ctx *c, unsigned int ifi)
+{
+	int prefix_len = 0;
+
+	if (!ifi)
+		ifi = nl_get_ext_if(AF_INET6);
+
+	if (!ifi) {
+		warn("No external routable interface for IPv6");
+		return 0;
+	}
+
+	if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6))
+		nl_route(0, ifi, AF_INET6, &c->gw6);
+
+	nl_addr(0, ifi, AF_INET6,
+		IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ? &c->addr6 : NULL,
+		&prefix_len, &c->addr6_ll);
+
+	memcpy(&c->addr6_seen, &c->addr6, sizeof(c->addr6));
+	memcpy(&c->addr6_ll_seen, &c->addr6_ll, sizeof(c->addr6_ll));
+
+	if (MAC_IS_ZERO(c->mac))
+		nl_link(0, ifi, c->mac, 0, 0);
 
 	if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6) ||
 	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ||
 	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6_ll) ||
 	    MAC_IS_ZERO(c->mac))
-		c->v6 = 0;
+		return 0;
 
-	if (!c->v4 && !c->v6) {
-		err("External interface not usable");
-		exit(EXIT_FAILURE);
-	}
+	return ifi;
 }
 
 /**
@@ -889,7 +895,7 @@ static void conf_print(const struct ctx *c)
 	     c->mac[0], c->mac[1], c->mac[2],
 	     c->mac[3], c->mac[4], c->mac[5]);
 
-	if (c->v4) {
+	if (c->ifi4) {
 		if (!c->no_dhcp) {
 			info("DHCP:");
 			info("    assign: %s",
@@ -914,7 +920,7 @@ static void conf_print(const struct ctx *c)
 		}
 	}
 
-	if (c->v6) {
+	if (c->ifi6) {
 		char buf6[INET6_ADDRSTRLEN];
 
 		if (!c->no_ndp && !c->no_dhcpv6)
@@ -1063,6 +1069,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	struct in6_addr *dns6 = c->dns6;
 	int name, ret, mask, b, i;
 	uint32_t *dns4 = c->dns4;
+	unsigned int ifi = 0;
 
 	if (c->mode == MODE_PASTA)
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
@@ -1390,12 +1397,12 @@ void conf(struct ctx *c, int argc, char **argv)
 			usage(argv[0]);
 			break;
 		case 'i':
-			if (c->ifi4 || c->ifi6) {
+			if (ifi) {
 				err("Redundant interface: %s", optarg);
 				usage(argv[0]);
 			}
 
-			if (!(c->ifi4 = c->ifi6 = if_nametoindex(optarg))) {
+			if (!(ifi = if_nametoindex(optarg))) {
 				err("Invalid interface name %s: %s", optarg,
 				    strerror(errno));
 				usage(argv[0]);
@@ -1503,9 +1510,14 @@ void conf(struct ctx *c, int argc, char **argv)
 		err("Options ipv4-only and ipv6-only are mutually exclusive");
 		usage(argv[0]);
 	}
-	c->v4 = !v6_only;
-	c->v6 = !v4_only;
-	conf_ip(c);
+	if (!v6_only)
+		c->ifi4 = conf_ip4(c, ifi);
+	if (!v4_only)
+		c->ifi6 = conf_ip6(c, ifi);
+	if (!c->ifi4 && !c->ifi6) {
+		err("External interface not usable");
+		exit(EXIT_FAILURE);
+	}
 
 	/* Now we can process port configuration options */
 	optind = 1;
@@ -1542,10 +1554,10 @@ void conf(struct ctx *c, int argc, char **argv)
 		}
 	} while (name != -1);
 
-	if (!c->v4)
+	if (!c->ifi4)
 		c->no_dhcp = 1;
 
-	if (!c->v6) {
+	if (!c->ifi6) {
 		c->no_ndp = 1;
 		c->no_dhcpv6 = 1;
 	}

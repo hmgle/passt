@@ -318,7 +318,7 @@ static int tap4_handler(struct ctx *c, const struct pool *in,
 	unsigned int i, j, seq_count;
 	struct tap4_l4_t *seq;
 
-	if (!c->v4 || !in->count)
+	if (!c->ifi4 || !in->count)
 		return in->count;
 
 	i = 0;
@@ -471,7 +471,7 @@ static int tap6_handler(struct ctx *c, const struct pool *in,
 	unsigned int i, j, seq_count = 0;
 	struct tap6_l4_t *seq;
 
-	if (!c->v6 || !in->count)
+	if (!c->ifi6 || !in->count)
 		return in->count;
 
 	i = 0;

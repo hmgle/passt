@@ -121,8 +121,7 @@ enum passt_modes {
  * @fd_tap:		File descriptor for AF_UNIX socket or tuntap device
  * @mac:		Host MAC address
  * @mac_guest:		MAC address of guest or namespace, seen or configured
- * @v4:			Enable IPv4 transport
- * @ifi4:		Index of routable interface for IPv4
+ * @ifi4:		Index of routable interface for IPv4, 0 if IPv4 disabled
  * @addr4:		IPv4 address for external, routable interface
  * @addr4_seen:		Latest IPv4 address seen as source from tap
  * @mask4:		IPv4 netmask, network order
@@ -130,8 +129,7 @@ enum passt_modes {
  * @dns4:		IPv4 DNS addresses, zero-terminated, network order
  * @dns4_fwd:		Address forwarded (UDP) to first IPv4 DNS, network order
  * @dns_search:		DNS search list
- * @v6:			Enable IPv6 transport
- * @ifi6:		Index of routable interface for IPv6
+ * @ifi6:		Index of routable interface for IPv6, 0 if IPv6 disabled
  * @addr6:		IPv6 address for external, routable interface
  * @addr6_ll:		Link-local IPv6 address on external, routable interface
  * @addr6_seen:		Latest IPv6 global/site address seen as source from tap
@@ -193,7 +191,6 @@ struct ctx {
 	unsigned char mac[ETH_ALEN];
 	unsigned char mac_guest[ETH_ALEN];
 
-	int v4;
 	unsigned int ifi4;
 	uint32_t addr4;
 	uint32_t addr4_seen;
@@ -204,7 +201,6 @@ struct ctx {
 
 	struct fqdn dns_search[MAXDNSRCH];
 
-	int v6;
 	unsigned int ifi6;
 	struct in6_addr addr6;
 	struct in6_addr addr6_ll;

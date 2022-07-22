@@ -1266,10 +1266,10 @@ static void udp_splice_iov_init(void)
  */
 int udp_init(const struct ctx *c)
 {
-	if (c->v4)
+	if (c->ifi4)
 		udp_sock4_iov_init();
 
-	if (c->v6)
+	if (c->ifi6)
 		udp_sock6_iov_init();
 
 	if (c->mode == MODE_PASTA) {
@@ -1341,7 +1341,7 @@ void udp_timer(struct ctx *c, const struct timespec *ts)
 	unsigned int i;
 	long *word, tmp;
 
-	if (!c->v4)
+	if (!c->ifi4)
 		v6 = 1;
 v6:
 	for (t = 0; t < UDP_ACT_TYPE_MAX; t++) {
@@ -1356,7 +1356,7 @@ v6:
 		}
 	}
 
-	if (!v6 && c->v6) {
+	if (!v6 && c->ifi6) {
 		v6 = 1;
 		goto v6;
 	}
