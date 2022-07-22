@@ -74,12 +74,6 @@ void trace_init(int enable);
 #define V6		1
 #define IP_VERSIONS	2
 
-enum {
-	IP_VERSION_DISABLED = 0,
-	IP_VERSION_ENABLED,
-	IP_VERSION_PROBE,
-};
-
 #define ARRAY_SIZE(a)		((int)(sizeof(a) / sizeof((a)[0])))
 
 #define IN_INTERVAL(a, b, x)	((x) >= (a) && (x) <= (b))

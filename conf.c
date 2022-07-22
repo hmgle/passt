@@ -26,6 +26,7 @@
 #include <pwd.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <time.h>
@@ -615,40 +616,25 @@ static int conf_ns_opt(struct ctx *c,
  */
 static void conf_ip(struct ctx *c)
 {
-	int v4, v6;
-
 	if (c->v4) {
-		c->v4		= IP_VERSION_ENABLED;
-		v4		= IP_VERSION_PROBE;
-		v6 = c->v6	= IP_VERSION_DISABLED;
-	} else if (c->v6) {
-		c->v6		= IP_VERSION_ENABLED;
-		v6		= IP_VERSION_PROBE;
-		v4 = c->v4	= IP_VERSION_DISABLED;
-	} else {
-		c->v4 = c->v6	= IP_VERSION_ENABLED;
-		v4 = v6		= IP_VERSION_PROBE;
-	}
-
-	if (v4 != IP_VERSION_DISABLED) {
 		if (!c->ifi4)
 			c->ifi4 = nl_get_ext_if(AF_INET);
 		if (!c->ifi4) {
 			warn("No external routable interface for IPv4");
-			v4 = IP_VERSION_DISABLED;
+			c->v4 = 0;
 		}
 	}
 
-	if (v6 != IP_VERSION_DISABLED) {
+	if (c->v6) {
 		if (!c->ifi6)
 			c->ifi6 = nl_get_ext_if(AF_INET6);
 		if (!c->ifi6) {
 			warn("No external routable interface for IPv6");
-			v6 = IP_VERSION_DISABLED;
+			c->v6 = 0;
 		}
 	}
 
-	if (v4 != IP_VERSION_DISABLED) {
+	if (c->v4) {
 		if (!c->gw4)
 			nl_route(0, c->ifi4, AF_INET, &c->gw4);
 
@@ -676,7 +662,7 @@ static void conf_ip(struct ctx *c)
 			nl_link(0, c->ifi4, c->mac, 0, 0);
 	}
 
-	if (v6 != IP_VERSION_DISABLED) {
+	if (c->v6) {
 		int prefix_len = 0;
 
 		if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6))
@@ -694,25 +680,18 @@ static void conf_ip(struct ctx *c)
 	}
 
 	if (!c->gw4 || !c->addr4 || MAC_IS_ZERO(c->mac))
-		v4 = IP_VERSION_DISABLED;
-	else
-		v4 = IP_VERSION_ENABLED;
+		c->v4 = 0;
 
 	if (IN6_IS_ADDR_UNSPECIFIED(&c->gw6) ||
 	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6) ||
 	    IN6_IS_ADDR_UNSPECIFIED(&c->addr6_ll) ||
 	    MAC_IS_ZERO(c->mac))
-		v6 = IP_VERSION_DISABLED;
-	else
-		v6 = IP_VERSION_ENABLED;
+		c->v6 = 0;
 
-	if ((v4 == IP_VERSION_DISABLED) && (v6 == IP_VERSION_DISABLED)) {
+	if (!c->v4 && !c->v6) {
 		err("External interface not usable");
 		exit(EXIT_FAILURE);
 	}
-
-	c->v4 = v4;
-	c->v6 = v6;
 }
 
 /**
@@ -1054,8 +1033,8 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"no-ndp",	no_argument,		&c->no_ndp,	1 },
 		{"no-ra",	no_argument,		&c->no_ra,	1 },
 		{"no-map-gw",	no_argument,		&c->no_map_gw,	1 },
-		{"ipv4-only",	no_argument,		&c->v4,		'4' },
-		{"ipv6-only",	no_argument,		&c->v6,		'6' },
+		{"ipv4-only",	no_argument,		NULL,		'4' },
+		{"ipv6-only",	no_argument,		NULL,		'6' },
 		{"tcp-ports",	required_argument,	NULL,		't' },
 		{"udp-ports",	required_argument,	NULL,		'u' },
 		{"tcp-ns",	required_argument,	NULL,		'T' },
@@ -1079,6 +1058,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	char nsdir[PATH_MAX] = { 0 }, userns[PATH_MAX] = { 0 };
 	enum conf_port_type tcp_tap = 0, tcp_init = 0;
 	enum conf_port_type udp_tap = 0, udp_init = 0;
+	bool v4_only = false, v6_only = false;
 	struct fqdn *dnss = c->dns_search;
 	struct in6_addr *dns6 = c->dns6;
 	int name, ret, mask, b, i;
@@ -1474,10 +1454,10 @@ void conf(struct ctx *c, int argc, char **argv)
 			usage(argv[0]);
 			break;
 		case '4':
-			c->v4 = 1;
+			v4_only = true;
 			break;
 		case '6':
-			c->v6 = 1;
+			v6_only = true;
 			break;
 		case 't':
 		case 'u':
@@ -1508,11 +1488,6 @@ void conf(struct ctx *c, int argc, char **argv)
 		usage(argv[0]);
 	}
 
-	if (c->v4 && c->v6) {
-		err("Options ipv4-only and ipv6-only are mutually exclusive");
-		usage(argv[0]);
-	}
-
 	if (c->pasta_conf_ns)
 		c->no_ra = 1;
 
@@ -1524,6 +1499,12 @@ void conf(struct ctx *c, int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
+	if (v4_only && v6_only) {
+		err("Options ipv4-only and ipv6-only are mutually exclusive");
+		usage(argv[0]);
+	}
+	c->v4 = !v6_only;
+	c->v6 = !v4_only;
 	conf_ip(c);
 
 	/* Now we can process port configuration options */
