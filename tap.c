@@ -794,6 +794,12 @@ static void tap_sock_unix_init(struct ctx *c)
 		exit(EXIT_FAILURE);
 	}
 
+	/* In passt mode, we don't know the guest's MAC until it sends
+	 * us packets.  Use the broadcast address so our first packets
+	 * will reach it.
+	 */
+	memset(&c->mac_guest, 0xff, sizeof(c->mac_guest));
+
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
 		char *path = addr.sun_path;
 

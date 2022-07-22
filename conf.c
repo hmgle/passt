@@ -676,9 +676,6 @@ static void conf_ip(struct ctx *c)
 			nl_link(0, c->ifi4, c->mac, 0, 0);
 	}
 
-	if (c->mode == MODE_PASST)
-		memset(&c->mac_guest, 0xff, sizeof(c->mac_guest));
-
 	if (v6 != IP_VERSION_DISABLED) {
 		int prefix_len = 0;
 
