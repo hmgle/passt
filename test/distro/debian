@@ -184,10 +184,19 @@ sleep	1
 hostb	reset
 
 
+# HACK: We need some additional space to install gcc-12 on 'sid' images for
+# amd64 and aarch64, but if we use virt-resize to call resize2fs in the
+# preparation step, partitions will be rearranged and we would also need to
+# adjust boot parameters. Instead, resize the images offline first, and expand
+# partitions and filesystems online, later.
+
 test	Debian GNU/Linux sid (experimental), amd64
 
+host	qemu-img resize __BASEPATH__/prepared-debian-sid-nocloud-amd64-daily.qcow2 4G
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-amd64-daily.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
+host	growpart /dev/sda 1
+host	resize2fs -p /dev/sda1
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
 
@@ -202,8 +211,11 @@ sleep	1
 
 test	Debian GNU/Linux sid (experimental), aarch64
 
+host	qemu-img resize __BASEPATH__/prepared-debian-sid-nocloud-arm64-daily.qcow2 4G
 host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-arm64-daily.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
+host	growpart /dev/vda 1
+host	resize2fs -p /dev/vda1
 host	apt-get update
 host	apt-get -y install make gcc netcat-openbsd
 
