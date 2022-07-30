@@ -138,8 +138,8 @@ Assign IPv4 \fIaddr\fR via DHCP (\fByiaddr\fR), or \fIaddr\fR via DHCPv6 (option
 for an IPv6 \fIaddr\fR.
 This option can be specified zero (for defaults) to two times (once for IPv4,
 once for IPv6).
-By default, assigned IPv4 and IPv6 addresses are taken from the host interface
-with the first default route.
+By default, assigned IPv4 and IPv6 addresses are taken from the host interfaces
+with the first default route for the corresponding IP version.
 
 .TP
 .BR \-n ", " \-\-netmask " " \fImask
@@ -153,8 +153,8 @@ according to the CIDR block of the assigned address (RFC 4632).
 .BR \-M ", " \-\-mac-addr " " \fIaddr
 Use source MAC address \fIaddr\fR when communicating to the guest or to the
 target namespace.
-Default is to use the MAC address of the interface with the first default route
-on the host.
+Default is to use the MAC address of the interface with the first IPv4 default
+route on the host.
 
 .TP
 .BR \-g ", " \-\-gateway " " \fIaddr
@@ -163,7 +163,7 @@ Assign IPv4 \fIaddr\fR as default gateway via DHCP (option 3), or IPv6
 This option can be specified zero (for defaults) to two times (once for IPv4,
 once for IPv6).
 By default, IPv4 and IPv6 addresses are taken from the host interface with the
-first default route.
+first default route for the corresponding IP version.
 
 Note: these addresses are also used as source address for packets directed to
 the guest or to the target namespace having a loopback or local source address,
@@ -173,7 +173,8 @@ to allow mapping of local traffic to guest and target namespace. See the
 .TP
 .BR \-i ", " \-\-interface " " \fIname
 Use host interface \fIname\fR to derive addresses and routes.
-Default is to use the interface with the first default route.
+Default is to use the interfaces with the first default routes for each IP
+version.
 
 .TP
 .BR \-D ", " \-\-dns " " \fIaddr
