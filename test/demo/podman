@@ -32,7 +32,7 @@ say	, patch it
 sleep	1
 host	cp ../contrib/podman/0001-libpod-Add-pasta-networking-mode.patch __TEMPDIR__/podman
 host	cd __TEMPDIR__/podman
-host	git am 0001-libpod-Add-pasta-networking-mode.patch
+host	git am -3 0001-libpod-Add-pasta-networking-mode.patch
 sleep	1
 
 say	, and build it.
