@@ -537,6 +537,10 @@ See also the [test logs](/builds/latest/test/).
 
             make pkgs
 
+    * or use one of the unofficial
+      [repositories](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) for
+      CentOS Stream, EPEL, Fedora, Mageia and OpenSUSE Tumbleweed
+
 * have a look at the _man_ page for synopsis and options:
 
         man ./passt.1
@@ -580,6 +584,10 @@ See also the [test logs](/builds/latest/test/).
       available there. These binaries and packages are simply built with:
 
             make pkgs
+
+    * or use one of the unofficial
+      [repositories](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) for
+      CentOS Stream, EPEL, Fedora, Mageia and OpenSUSE Tumbleweed
 
 * have a look at the _man_ page for synopsis and options:
 
