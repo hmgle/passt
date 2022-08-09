@@ -1,7 +1,7 @@
 #! /bin/sh -e
 
 IMG="$1"
-PASST_FILES="$(echo ../*.c ../*.h ../*.sh ../*.1 ../Makefile)"
+PASST_FILES="$(echo ../*.c ../*.h ../*.sh ../*.1 ../Makefile ../README.md)"
 
 virt-edit -a $IMG /lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --autologin root -8 --keep-baud 115200,38400,9600 %I $TERM/g'
 

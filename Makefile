@@ -90,7 +90,7 @@ else
 BIN := passt pasta qrap
 endif
 
-all: $(BIN) $(MANPAGES)
+all: $(BIN) $(MANPAGES) docs
 
 static: CFLAGS += -static -DGLIBC_NO_STATIC_NSS
 static: clean all
@@ -123,12 +123,14 @@ valgrind: all
 clean:
 	$(RM) $(BIN) *.o seccomp.h pasta.1 \
 		passt.tar passt.tar.gz *.deb *.rpm \
-		passt.pid
+		passt.pid README.plain.md
 
-install: $(BIN) $(MANPAGES)
+install: $(BIN) $(MANPAGES) docs
 	mkdir -p $(DESTDIR)$(prefix)/bin $(DESTDIR)$(prefix)/share/man/man1
 	cp -d $(BIN) $(DESTDIR)$(prefix)/bin
 	cp -d $(MANPAGES) $(DESTDIR)$(prefix)/share/man/man1
+	mkdir -p $(DESTDIR)$(prefix)/share/doc/passt
+	cp -d README.plain.md $(DESTDIR)$(prefix)/share/doc/passt/README.md
 
 uninstall:
 	$(RM) $(BIN:%=$(DESTDIR)$(prefix)/bin/%)
@@ -146,6 +148,28 @@ pkgs: static
 	fakeroot alien --to-rpm --target=$(shell uname -m) \
 		--description="User-mode networking for VMs and namespaces" \
 		-k --version=g$(shell git rev-parse --short HEAD) passt.tar.gz
+
+# TODO: This hack makes a "plain" Markdown version of README.md that can be
+# reasonably shipped as documentation file, while the current README.md is
+# definitely intended for web browser consumption. It should probably work the
+# other way around: the web version should be obtained by adding HTML and
+# JavaScript portions to a plain Markdown, instead. However, cgit needs to use
+# a file in the git tree. Find a better way around this.
+docs: README.md
+	@(								\
+		skip=0;							\
+		while read l; do					\
+			case $$l in					\
+			"## Demo")	exit 0		;;		\
+			"<!"*)				;;		\
+			"</"*)		skip=1		;;		\
+			"<"*)		skip=2		;;		\
+			esac;						\
+									\
+			[ $$skip -eq 0 ]	&& echo "$$l";		\
+			[ $$skip -eq 1 ]	&& skip=0;		\
+		done < README.md;					\
+	) > README.plain.md
 
 # Checkers currently disabled for clang-tidy:
 # - llvmlibc-restrict-system-libc-headers
