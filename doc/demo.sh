@@ -4,122 +4,244 @@
 #
 # PASST - Plug A Simple Socket Transport
 #
-# demo.sh - Set up namespaces, addresses and routes to show PASST functionality
+# demo.sh - Set up namespace with pasta, start qemu and passt, step by step
 #
-# Copyright (c) 2020-2021 Red Hat GmbH
+# Copyright (c) 2020-2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-get_token() {
-	IFS=' 	'
-	__next=0
-	for __token in ${@}; do
-		[ ${__next} -eq 2 ] && echo "${__token}" && return
-		[ "${__token}" = "${1}" ] && __next=$((__next + 1))
-	done
-	unset IFS
+# mbuto_profile() - Profile for https://mbuto.sh/, sourced, return after setting
+mbuto_profile() {
+	PROGS="${PROGS:-ash,dash,bash ip mount ls ln chmod insmod mkdir sleep
+	       lsmod modprobe find grep mknod mv rm umount iperf3 dhclient cat
+	       hostname chown socat dd strace ping killall sysctl wget,curl}"
+
+	KMODS="${KMODS:- virtio_net virtio_pci}"
+
+	LINKS="${LINKS:-
+		 ash,dash,bash		/init
+		 ash,dash,bash		/bin/sh}"
+
+	DIRS="${DIRS} /tmp /sbin /var/log /var/run /var/lib"
+
+	# shellcheck disable=SC2016
+	FIXUP="${FIXUP}"'
+		cat > /sbin/dhclient-script << EOF
+#!/bin/sh
+
+[ -n "\${new_interface_mtu}" ]       && ip link set dev \${interface} mtu \${new_interface_mtu}
+
+[ -n "\${new_ip_address}" ]          && ip addr add \${new_ip_address}/\${new_subnet_mask} dev \${interface}
+[ -n "\${new_routers}" ]             && for r in \${new_routers}; do ip route add default via \${r} dev \${interface}; done
+[ -n "\${new_domain_name_servers}" ] && for d in \${new_domain_name_servers}; do echo "nameserver \${d}" >> /etc/resolv.conf; done
+[ -n "\${new_domain_name}" ]         && echo "search \${new_domain_name}" >> /etc/resolf.conf
+[ -n "\${new_domain_search}" ]       && (printf "search"; for d in \${new_domain_search}; do printf " %s" "\${d}"; done; printf "\n") >> /etc/resolv.conf
+[ -n "\${new_ip6_address}" ]         && ip addr add \${new_ip6_address}/\${new_ip6_prefixlen} dev \${interface}
+[ -n "\${new_dhcp6_name_servers}" ]  && for d in \${new_dhcp6_name_servers}; do echo "nameserver \${d}%\${interface}" >> /etc/resolv.conf; done
+[ -n "\${new_dhcp6_domain_search}" ] && (printf "search"; for d in \${new_dhcp6_domain_search}; do printf " %s" "\${d}"; done; printf "\n") >> /etc/resolv.conf
+[ -n "\${new_host_name}" ]           && hostname "\${new_host_name}"
+exit 0
+EOF
+
+		chmod 755 /sbin/dhclient-script
+
+		mkdir -p /etc/dhcp
+		echo "timeout 3;" > /etc/dhcp/dhclient.conf
+
+		ln -s /sbin /usr/sbin
+		:> /etc/fstab
+
+		echo
+		echo "The guest is up and running. Networking is not configured yet:"
+		echo
+		echo "$ ip address show"
+		echo
+		ip address show
+		echo
+		echo "...the next step will take care of that."
+		read x
+
+		echo "$ ip link set dev eth0 up"
+		ip link set dev eth0 up
+		sleep 3
+		echo "$ /sbin/dhclient -4 -1"
+		/sbin/dhclient -4 -1
+		sleep 2
+		echo "$ /sbin/dhclient -6 -1"
+		/sbin/dhclient -6 -1
+		sleep 2
+		echo
+		echo "$ ip address show"
+		ip address show
+		echo
+		echo "$ ip route show"
+		ip route show
+		echo
+		echo "...done."
+		read x
+
+		echo "Checking connectivity..."
+		echo
+		echo "$ wget --no-check-certificate https://passt.top/ || curl -k https://passt.top/"
+		wget --no-check-certificate https://passt.top/ || curl -k https://passt.top/
+		echo "...done."
+		read x
+
+		echo "An interactive shell will start now. When you are done,"
+		echo "use ^C to terminate the guest and exit the demo."
+		echo
+
+		sh +m
+'
 }
 
-ipv6_dev() { get_token "dev" $(ip -o -6 route show default | grep via); }
-ipv6_devaddr() { get_token "inet6" $(ip -o -6 addr show dev "${1}" scope global); }
-ipv6_ll_addr() { get_token "inet6" $(ip -o -6 addr show dev "${1}" scope link); }
-ipv6_mask() { echo ${1#*/}; }
-ipv6_mangle() {
-	IFS=':'
-	__c=0
-	for __16b in ${1%%/*}; do
-		if [ ${__c} -lt 7 ]; then
-			printf "${__16b}:"
-		else
-			printf "%04x\n" $((0xabc0 + ${2})) && break
-		fi
-		__c=$((__c + 1))
-	done
-	unset IFS
+[ "${0##*/}" = "mbuto" ] && mbuto_profile && return 0
+
+# cmd() - Show command being executed, then run it
+# $@: Command and arguments
+cmd() {
+	echo "$" "$@"
+	"$@"
 }
 
-ndp_setup() {
-	sysctl -w net.ipv6.conf.all.proxy_ndp=1
-	ip -6 neigh add proxy "${1}" dev "$(ipv6_dev)"
-
-	for i in `seq 1 63`; do
-		__neigh="$(ipv6_mangle ${1} ${i})"
-		if [ "${__neigh}" != "${1}" ]; then
-			ip -6 neigh add proxy "${__neigh}" dev "${2}"
-		fi
-	done
+# next() - Go to next step once a key is pressed, sets $KEY
+next() {
+	KEY="$(dd ibs=1 count=1 2>/dev/null)"
+	echo
 }
 
-ns_idx=0
-for i in `seq 1 63`; do
-	ns="passt_${i}"
-	ns_idx=${i}
+# cleanup() - Terminate pasta and passt, clean up, restore TTY settings
+cleanup() {
+	[ -f "${DEMO_DIR}/pasta.pid" ] && kill "$(cat "${DEMO_DIR}/pasta.pid")"
+	[ -f "${DEMO_DIR}/passt.pid" ] && kill "$(cat "${DEMO_DIR}/passt.pid")"
+	rm -rf "${DEMO_DIR}" 2>/dev/null
+	[ -n "${STTY_BACKUP}" ] && stty "${STTY_BACKUP}"
+}
 
-	busy=0
-	for p in $(pidof passt); do
-		[ "$(ip netns identify ${p})" = "${ns}" ] && busy=1 && break
-	done
-	[ ${busy} -eq 0 ] && break
-done
+# start_pasta_delayed() - Start pasta once $DEMO_DIR/pasta.wait is gone
+start_pasta_delayed() {
+	trap '' EXIT
+	while [ -d "${DEMO_DIR}/pasta.wait" ]; do sleep 1; done
+	cmd pasta --config-net -P "${DEMO_DIR}/pasta.pid" \
+		"$(cat "${DEMO_DIR}/shell.pid")"
+	echo
+	echo "...pasta is running."
+	exit 0
+}
 
-[ ${busy} -ne 0 ] && echo "Couldn't create namespace" && exit 1
+# into_ns() - Entry point and demo script to run inside new namespace
+into_ns() {
+	echo "We're in the new namespace now."
+	next
 
-ip netns del "${ns}" 2>/dev/null || :
-ip netns add "${ns}"
-ip link del "veth_${ns}" 2>/dev/null || :
-ip link add "veth_${ns}" up netns "${ns}" type veth peer name "veth_${ns}"
-ip link set dev "veth_${ns}" up
-ip link set dev "veth_${ns}" mtu 65535
-ip -n "${ns}" link set dev "veth_${ns}" mtu 65535
-ip -n "${ns}" link set dev lo up
+	echo "Networking is not configured yet:"
+	echo
+	cmd ip link show
+	echo
+	cmd ip address show
+	next
 
-ipv4_main="192.0.2.$(((ns_idx - 1) * 4 + 1))"
-ipv4_ns="192.0.2.$(((ns_idx - 1) * 4 + 2))"
+	echo "Let's run pasta(1) to configure networking and connect this"
+	echo "namespace. Note that we'll run pasta(1) from outside this"
+	echo "namespace, because it needs to implement the connection between"
+	echo "this namespace and the initial (\"outer\") one."
+	next
 
-ip -n "${ns}" addr add "${ipv4_ns}/30" dev "veth_${ns}"
-ip addr add "${ipv4_main}/30" dev "veth_${ns}"
-ip -n "${ns}" route add default via "${ipv4_main}"
+	echo "$$" > "${DEMO_DIR}/shell.pid"
+	rmdir "${DEMO_DIR}/pasta.wait"
+	next
 
-sysctl -w net.ipv4.ip_forward=1
-nft delete table "${ns}_nat" 2>/dev/null || :
-nft add table "${ns}_nat"
-nft add chain "${ns}_nat" postrouting '{ type nat hook postrouting priority -100 ; }'
-nft add rule "${ns}_nat" postrouting ip saddr "${ipv4_ns}" masquerade
+	echo "Back to the new namespace, networking is configured:"
+	echo
+	cmd ip link show
+	echo
+	cmd ip address show
+	next
 
-ipv6_addr="$(ipv6_devaddr "$(ipv6_dev)")"
-if [ -n "${ipv6_addr}" ]; then
-	ipv6_passt="$(ipv6_mangle "${ipv6_addr}" ${ns_idx})"
-	ndp_setup "${ipv6_passt}" "veth_${ns}"
-	ip -n "${ns}" addr add "${ipv6_passt}/$(ipv6_mask "${ipv6_addr}")" dev "veth_${ns}"
-	ip addr add "${ipv6_addr}" dev "veth_${ns}"
-	ip route add "${ipv6_passt}" dev "veth_${ns}"
-	passt_ll="$(ipv6_ll_addr "veth_${ns}")"
-	main_ll="$(get_token "link/ether" $(ip -o link show "veth_${ns}"))"
-	ip neigh add "${passt_ll%%/*}" dev "veth_${ns}" lladdr "${main_ll}"
-	ip -n "${ns}" route add default via "${passt_ll%%/*}" dev "veth_${ns}"
+	echo "and we can now start passt(1), to connect this namespace to a"
+	echo "virtual machine. If you want to start a shell in this namespace,"
+	echo "press 's' now. Exiting the shell will resume the script."
+	next
+	[ "${KEY}" = "s" ] && ${SHELL}
 
-	sysctl -w net.ipv6.conf.all.forwarding=1
-else
-	ipv6_passt=
-fi
+	cmd passt -P "${DEMO_DIR}/passt.pid"
+	echo
+	echo "...passt is running."
+	next
 
-ethtool -K "veth_${ns}" tx off
-ip netns exec "${ns}" ethtool -K "veth_${ns}" tx off
-ip netns exec "${ns}" sysctl -w net.ipv4.ping_group_range="0 2147483647"
+	__arch="$(uname -m)"
+	case ${__arch} in
+	x86_64)
+		__arch_supported=1
+		__qemu_arch="qemu-system-x86_64 -M pc,accel=kvm:tcg"
+		;;
+	*)
+		__arch_supported=0
+		;;
+	esac
 
+	if [ "${__arch_supported}" -eq 1 ]; then
+		echo "We're ready to start a virtual machine now. This script"
+		echo "can download and use mbuto (https://mbuto.sh/) to build a"
+		echo "basic initramfs image. Otherwise, press 's' to skip this"
+		echo "step, and start an existing virtual machine yourself."
+		echo "You'll need to use the qrap(1) wrapper, with qemu options"
+		echo "as reported above."
 
-sysctl -w net.core.rmem_max=16777216
-sysctl -w net.core.wmem_max=16777216
-sysctl -w net.core.rmem_default=16777216
-sysctl -w net.core.wmem_default=16777216
-sysctl -w net.ipv4.tcp_rmem="16777216 131072 16777216"
-sysctl -w net.ipv4.tcp_wmem="16777216 131072 16777216"
+		next
+	else
+		echo "This script doesn't know, yet, how to run a virtual"
+		echo "machine on your architecture (${__arch}). Please start an"
+		echo "existing virtual machine yourself, using the qrap(1)"
+		echo "wrapper, with qemu options as reported above."
+		echo
+	fi
 
-echo
-echo "Namespace ${ns} set up, addresses:"
-echo "    ${ipv4_ns}"
-echo "    ${ipv6_passt}"
-echo
-echo "Starting passt..."
-echo
+	if [ "${__arch_supported}" -eq 0 ] || [ "${KEY}" = "s" ]; then
+		echo "Start a virtual machine now. Pressing any key here will"
+		echo "terminate passt and pasta, and clean up."
+		next
 
-ip netns exec "${ns}" ./passt -f -e -t all -u all
+		exit 0
+	fi
+
+	cmd git -C "${DEMO_DIR}" clone git://mbuto.sh/mbuto
+	echo
+	cmd "${DEMO_DIR}/mbuto/mbuto" \
+		-p "$(realpath "${0}")" -f "${DEMO_DIR}/demo.img"
+	echo
+	echo "The guest image is ready. The next step will start the guest."
+	echo "Use ^C to terminate it."
+	next
+
+	cmd qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg		    \
+		-smp "$(nproc)" -m 1024					    \
+		-nographic -serial stdio -nodefaults -no-reboot -vga none   \
+		-initrd "${DEMO_DIR}/demo.img"				    \
+		-kernel "/boot/vmlinuz-$(uname -r)" -append "console=ttyS0" \
+		-net socket,fd=5 -net nic,model=virtio || :
+}
+
+STTY_BACKUP="$(stty -g)"
+stty -icanon
+
+trap cleanup EXIT INT
+[ "${1}" = "into_ns" ] && into_ns && exit 0
+
+DEMO_DIR="$(mktemp -d)"
+mkdir "${DEMO_DIR}/pasta.wait"
+
+echo "This script sets up a network and user namespace using pasta(1), then"
+echo "starts a virtual machine in it, connected via passt(1), pausing at every"
+echo "step. Press any key to go to the next step."
+next
+
+echo "Let's create the network and user namespace, first. This could be done"
+echo "with pasta(1) itself (just issue \`pasta\`), but for the sake of this"
+echo "script we'll create it first with unshare(1), and run the next steps"
+echo "of this script from there."
+next
+
+start_pasta_delayed &
+DEMO_DIR="${DEMO_DIR}" cmd unshare -rUn "${0}" into_ns
+
+exit 0

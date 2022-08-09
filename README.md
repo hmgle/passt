@@ -541,24 +541,10 @@ See also the [test logs](/builds/latest/test/).
 
         man ./passt.1
 
-* run the demo script, that creates a network namespace called `passt`, sets up
-  sets up a _veth_ pair and and addresses, together with NAT for IPv4 and NDP
-  proxying for IPv6, then starts _passt_ in the network namespace:
+* run the demo script, that detaches user and network namespaces, configures the
+  new network namespace using `pasta`, starts `passt` and, optionally, `qemu`:
 
         doc/demo.sh
-
-* from the same network namespace, start qemu. At the moment, qemu doesn't
-  support UNIX domain sockets for the `socket` back-end. Two alternatives:
-
-    * use the _qrap_ wrapper, which maps a tap socket descriptor to _passt_'s
-      UNIX domain socket, for example:
-
-            ip netns exec passt ./qrap 5 qemu-system-x86_64 ... -net socket,fd=5 -net nic,model=virtio ...
-
-    * or patch qemu with [this patch](/passt/tree/qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch)
-      and start it like this:
-
-            qemu-system-x86_64 ... -net socket,connect=/tmp/passt.socket -net nic,model=virtio
 
 * alternatively, you can use libvirt, with [this patch](/passt/tree/libvirt/0001-conf-Introduce-support-for-UNIX-domain-socket-as-qem.patch),
   to start qemu (with the patch mentioned above), with this kind of network
@@ -612,6 +598,17 @@ See also the [test logs](/builds/latest/test/).
     and, optionally:
 
         dhclient -6
+
+    * alternatively, start pasta as:
+
+            ./pasta --config-net
+
+        to let pasta configure networking in the namespace by itself, using
+        `netlink`
+
+    * ...or run the demo script:
+
+        doc/demo.sh
 
 * and that's it, you should now have TCP connections, UDP, and ICMP/ICMPv6
   echo working from/to the namespace for IPv4 and IPv6
