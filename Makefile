@@ -131,10 +131,14 @@ install: $(BIN) $(MANPAGES) docs
 	cp -d $(MANPAGES) $(DESTDIR)$(prefix)/share/man/man1
 	mkdir -p $(DESTDIR)$(prefix)/share/doc/passt
 	cp -d README.plain.md $(DESTDIR)$(prefix)/share/doc/passt/README.md
+	cp -d doc/demo.sh $(DESTDIR)$(prefix)/share/doc/passt
 
 uninstall:
 	$(RM) $(BIN:%=$(DESTDIR)$(prefix)/bin/%)
 	$(RM) $(MANPAGES:%=$(DESTDIR)$(prefix)/share/man/man1/%)
+	$(RM) $(DESTDIR)$(prefix)/share/doc/passt/README.md
+	$(RM) $(DESTDIR)$(prefix)/share/doc/passt/demo.sh
+	-rmdir $(DESTDIR)$(prefix)/share/doc/passt
 
 pkgs: static
 	tar cf passt.tar -P --xform 's//\/usr\/bin\//' $(BIN)
