@@ -73,7 +73,8 @@ semodule -r pasta 2>/dev/null || :
 
 %files
 %license LICENSES/{AGPL-3.0-or-later.txt,BSD-3-Clause.txt}
-%doc README.md
+%doc %{_docdir}/passt/README.md
+%doc %{_docdir}/passt/demo.sh
 %{_bindir}/passt
 %{_bindir}/pasta
 %{_bindir}/qrap
@@ -88,7 +89,6 @@ semodule -r pasta 2>/dev/null || :
 %endif
 
 %files selinux
-%doc README.md
 %{_datadir}/selinux/packages/%{name}/passt.pp
 %{_datadir}/selinux/packages/%{name}/pasta.pp
 
