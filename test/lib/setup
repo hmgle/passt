@@ -23,6 +23,11 @@ setup_build() {
 	layout_host
 }
 
+# setup_distro() - Set up pane layout for distro tests
+setup_distro() {
+	layout_host
+}
+
 # setup_passt() - Start qemu and passt
 setup_passt() {
 	layout_passt
@@ -279,6 +284,16 @@ setup_two_guests() {
 		" -netdev socket,fd=5,id=hostnet0"
 	pane_status GUEST_1
 	pane_status GUEST_2
+}
+
+# teardown_build() - Nothing to do, yet
+teardown_build() {
+    :
+}
+
+# teardown_distro() - Nothing to do, yet
+teardown_distro() {
+    :
 }
 
 # teardown_passt() - Kill qemu, remove passt PID file

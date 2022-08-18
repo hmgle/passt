@@ -63,10 +63,14 @@ run() {
 	test build/all
 	test build/cppcheck
 	test build/clang_tidy
+	teardown build
+
+	setup distro
 	test distro/debian
 	test distro/fedora
 	test distro/opensuse
 	test distro/ubuntu
+	teardown distro
 
 	setup pasta
 	test ndp/pasta
