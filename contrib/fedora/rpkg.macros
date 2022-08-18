@@ -15,6 +15,10 @@ function git_version {
 	printf "0.git.%s.%s" "$(date -u -I | tr - _)" "$(git rev-parse --short HEAD)"
 }
 
+function git_head {
+	git rev-parse HEAD
+}
+
 function passt_git_changelog_entry {
 	__from="${2}"
 	__to="${1}"

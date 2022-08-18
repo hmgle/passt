@@ -18,7 +18,7 @@ Summary:	User-mode networking daemons for virtual machines and namespaces
 License:	AGPLv3+ and BSD
 Group:		System Environment/Daemons
 URL:		https://passt.top/
-Source:		https://passt.top/passt/snapshot/passt-HEAD.tar.xz
+Source:		https://passt.top/passt/snapshot/passt-{{{ git_head }}}.tar.xz
 
 BuildRequires:	gcc, make, checkpolicy, selinux-policy-devel
 
@@ -43,7 +43,7 @@ Requires(preun): policycoreutils, %{name}
 This package adds SELinux enforcement to passt(1) and pasta(1).
 
 %prep
-%setup -q -n passt-HEAD
+%setup -q -n passt-{{{ git_head }}}
 
 %build
 export CFLAGS="%{optflags}"
