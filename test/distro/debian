@@ -18,12 +18,12 @@ htools	cat kill qemu-system-x86_64 qemu-system-aarch64 qemu-system-ppc64
 def	distro_quick_pasta_test
 host	export SHELL="/bin/dash"
 host	dash
-host	(nc -w1 -6 -l -p 10000 > /tmp/init_msg; echo "from_init" | nc -q0 ::1 9999) &
+host	(socat -u TCP6-LISTEN:10000 OPEN:/tmp/init_msg,create,trunc; echo "from_init" | socat -u STDIN TCP6:[::1]:9999) &
 hostb	./pasta
 sleep	1
-host	nc -w1 -6 -l -p 9999 > /tmp/ns_msg &
+host	socat -u TCP6-LISTEN:9999 OPEN:/tmp/ns_msg,create,trunc &
 sleep	2
-host	echo "from_ns" | nc -q0 ::1 10000
+host	echo "from_ns" | socat -u STDIN TCP6:[::1]:10000
 sleep	2
 host	echo
 sleep	1
@@ -47,7 +47,7 @@ host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial 
 host	PS1='$ '
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits" make
@@ -68,7 +68,7 @@ host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial 
 host	PS1='$ '
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -86,7 +86,7 @@ host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial 
 host	PS1='$ '
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -104,7 +104,7 @@ host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios _
 host	PS1='$ '
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -122,7 +122,7 @@ host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefau
 host	PS1='$ '
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -140,7 +140,7 @@ test	Debian GNU/Linux 11 (bullseye, stable), amd64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-nocloud-amd64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -156,7 +156,7 @@ test	Debian GNU/Linux 11 (bullseye, stable), aarch64
 host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-generic-arm64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -172,7 +172,7 @@ test	Debian GNU/Linux 11 (bullseye, stable), ppc64le
 host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-generic-ppc64el.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -198,7 +198,7 @@ sleep	2
 host	growpart /dev/sda 1
 host	resize2fs -p /dev/sda1
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -217,7 +217,7 @@ sleep	2
 host	growpart /dev/vda 1
 host	resize2fs -p /dev/vda1
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -233,7 +233,7 @@ test	Debian GNU/Linux sid (experimental), ppc64le
 host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-ppc64el-daily.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make

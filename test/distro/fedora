@@ -16,13 +16,13 @@ htools	cat kill qemu-system-x86_64
 
 # Quick pasta test: send message from init to ns, and from ns to init
 def	distro_quick_pasta_test
-host	(ncat -6 -l ::1 10000 > /tmp/init_msg; echo "from_init" | ncat ::1 9999) &
+host	(socat -u TCP6-LISTEN:10000,bind=[::1] OPEN:/tmp/init_msg,create,trunc; echo "from_init" | socat -u STDIN TCP6:[::1]:9999) &
 hostb	./pasta
 sleep	1
 host	PS1='$ '
-host	ncat -6 -l ::1 9999 > /tmp/ns_msg &
+host	socat -u TCP6-LISTEN:9999,bind=[::1] OPEN:/tmp/ns_msg,create,trunc &
 sleep	2
-host	echo "from_ns" | ncat ::1 10000
+host	echo "from_ns" | socat -u STDIN TCP6:[::1]:10000
 sleep	2
 host	echo
 sleep	1
@@ -37,14 +37,14 @@ endef
 # Bracketed paste mode off, needed from Fedora 34
 def	distro_quick_pasta_test_fedora34
 host	bind 'set enable-bracketed-paste off'
-host	(ncat -6 -l ::1 10000 > /tmp/init_msg; echo "from_init" | ncat -6 ::1 9999) &
+host	(socat -u TCP6-LISTEN:10000,bind=[::1] OPEN:/tmp/init_msg,create,trunc; echo "from_init" | socat -u STDIN TCP6:[::1]:9999) &
 hostb	./pasta
 sleep	1
 host	PS1='$ '
 host	bind 'set enable-bracketed-paste off'
-host	ncat -6 -l ::1 9999 > /tmp/ns_msg &
+host	socat -u TCP6-LISTEN:9999,bind=[::1] OPEN:/tmp/ns_msg,create,trunc &
 sleep	2
-host	echo "from_ns" | ncat -6 ::1 10000
+host	echo "from_ns" | socat -u STDIN TCP6:[::1]:10000
 sleep	2
 host	echo
 hout	NS_MSG cat /tmp/ns_msg
@@ -65,7 +65,7 @@ test	Fedora 26, x86_64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-26-1.5.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -85,7 +85,7 @@ test	Fedora 27, x86_64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-27-1.6.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -102,7 +102,7 @@ test	Fedora 28, x86_64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-28-1.1.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -119,7 +119,7 @@ test	Fedora 28, aarch64
 host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-28-1.1.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -139,7 +139,7 @@ test	Fedora 29, x86_64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-29-1.2.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -156,7 +156,7 @@ test	Fedora 29, aarch64
 host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-29-1.2.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -176,7 +176,7 @@ test	Fedora 30, x86_64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-30-1.2.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -193,7 +193,7 @@ test	Fedora 30, aarch64
 host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-30-1.2.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -213,7 +213,7 @@ test	Fedora 31, x86_64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-31-1.9.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -230,7 +230,7 @@ test	Fedora 31, aarch64
 host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-31-1.9.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -250,7 +250,7 @@ test	Fedora 32, x86_64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-32-1.6.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -267,7 +267,7 @@ test	Fedora 32, aarch64
 host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-32-1.6.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -287,7 +287,7 @@ test	Fedora 33, x86_64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-33-1.2.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -304,7 +304,7 @@ test	Fedora 33, aarch64
 host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-33-1.2.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -324,7 +324,7 @@ test	Fedora 34, x86_64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-34-1.2.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -341,7 +341,7 @@ test	Fedora 34, aarch64
 host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-34-1.2.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -361,7 +361,7 @@ test	Fedora 35, x86_64
 host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-35-1.2.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?
@@ -378,7 +378,7 @@ test	Fedora 35, aarch64
 host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-35-1.2.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
-host	yum -y install make gcc nmap-ncat
+host	yum -y install make gcc socat
 
 host	make clean
 hout	RET CFLAGS="-Werror" make; echo $?

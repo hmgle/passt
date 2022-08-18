@@ -16,6 +16,26 @@ htools	qemu-img virt-edit guestfish cat kill qemu-system-x86_64 qemu-system-ppc6
 
 # Quick pasta test: send message from init to ns, and from ns to init
 def	distro_quick_pasta_test
+host	(socat -u TCP6-LISTEN:10000 OPEN:/tmp/init_msg,create,trunc; echo "from_init" | socat -u STDIN TCP6:[::1]:9999) &
+hostb	./pasta
+sleep	1
+host	PS1='$ '
+host	socat -u TCP6-LISTEN:9999 OPEN:/tmp/ns_msg,create,trunc &
+sleep	2
+host	echo "from_ns" | socat -u STDIN TCP6:[::1]:10000
+sleep	2
+host	echo
+sleep	1
+hout	NS_MSG cat /tmp/ns_msg
+check	[ __NS_MSG__ = "from_init" ]
+hostb	exit
+host	echo
+hout	INIT_MSG cat /tmp/init_msg
+check	[ __INIT_MSG__ = "from_ns" ]
+endef
+
+# Quick pasta test: netcat-openbsd version for Ubuntu 16.04 ppc64
+def	distro_quick_pasta_test_netcat
 host	(nc -w1 -6 -l -p 10000 > /tmp/init_msg; echo "from_init" | nc -q0 ::1 9999) &
 hostb	./pasta
 sleep	1
@@ -59,7 +79,7 @@ host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial 
 host	PS1='$ '
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits" make
@@ -92,7 +112,7 @@ host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial 
 host	PS1='$ '
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits -Wno-sign-compare" make
@@ -122,7 +142,7 @@ host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefau
 host	PS1='$ '
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits -Wno-sign-compare" make
@@ -145,12 +165,14 @@ host	dhclient -4
 # Skip apt-get update here: some updates to xenial-updates around 2022-01-30
 # broke dependencies for libc6 and gcc-5 -- note that powerpc is not officially
 # supported on this version
+
+# socat not available: install netcat-openbsd and run the test with it
 host	apt-get -y install make gcc netcat-openbsd
 
 host	make clean
 host	CFLAGS="-Werror" make
 
-distro_quick_pasta_test
+distro_quick_pasta_test_netcat
 
 hint
 sleep	1
@@ -169,7 +191,7 @@ host	apt-get -y remove needrestart snapd
 host	dhclient -4
 sleep	2
 host	apt-get update
-host	apt-get -y install make gcc netcat-openbsd
+host	apt-get -y install make gcc socat
 
 host	make clean
 host	CFLAGS="-Werror" make

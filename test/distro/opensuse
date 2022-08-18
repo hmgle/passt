@@ -16,13 +16,13 @@ htools	qemu-img virt-edit guestfish head sed cat kill qemu-system-x86_64 qemu-sy
 
 # Quick pasta test: send message from init to ns, and from ns to init
 def	distro_quick_pasta_test
-host	(nc -6 -l -p 10000 > /tmp/init_msg; echo "from_init" | nc -N ::1 9999) &
+host	(socat -u TCP6-LISTEN:10000 OPEN:/tmp/init_msg,create,trunc; echo "from_init" | socat -u STDIN TCP6:[::1]:9999) &
 hostb	./pasta
 sleep	1
 host	PS1='$ '
-host	nc -6 -l -p 9999 > /tmp/ns_msg &
+host	socat -u TCP6-LISTEN:9999 OPEN:/tmp/ns_msg,create,trunc &
 sleep	2
-host	echo "from_ns" | nc -N ::1 10000
+host	echo "from_ns" | socat -u STDIN TCP6:[::1]:10000
 sleep	2
 host	echo
 sleep	1
@@ -57,7 +57,7 @@ host	ip link set eth0 up
 sleep	2
 host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
 # zypper sometimes segfaults, hence the retries
-host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
+host	for i in $(seq 1 10); do zypper install -y gcc make socat && break; done; echo
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -85,7 +85,7 @@ host	ip link set eth0 up
 sleep	2
 host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
 # zypper sometimes segfaults, hence the retries
-host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
+host	for i in $(seq 1 10); do zypper install -y gcc make socat && break; done; echo
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -112,7 +112,7 @@ host	ip link set eth0 up
 sleep	2
 host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
 # zypper sometimes segfaults, hence the retries
-host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
+host	for i in $(seq 1 10); do zypper install -y gcc make socat && break; done; echo
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -137,7 +137,7 @@ sleep	10
 host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i enp0s1
 sleep	10
 # No segfaults ever seen with this
-host	zypper install -y gcc make netcat-openbsd; echo
+host	zypper install -y gcc make socat; echo
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -165,7 +165,7 @@ host	ip link set eth0 up
 sleep	10
 host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i eth0
 sleep	10
-host	zypper install -y gcc make netcat-openbsd; echo
+host	zypper install -y gcc make socat; echo
 
 host	make clean
 host	CFLAGS="-Werror" make
@@ -192,7 +192,7 @@ host	ip link set ens2 up
 sleep	2
 host	echo "DNSSERVERS='__DNS6__'" | netconfig modify -s dns_resolver -i ens2
 # zypper sometimes segfaults, hence the retries
-host	for i in $(seq 1 10); do zypper install -y gcc make netcat-openbsd && break; done; echo
+host	for i in $(seq 1 10); do zypper install -y gcc make socat && break; done; echo
 
 host	make clean
 host	CFLAGS="-Werror" make
