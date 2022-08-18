@@ -78,14 +78,14 @@ semodule -r pasta 2>/dev/null || :
 %{_bindir}/passt
 %{_bindir}/pasta
 %{_bindir}/qrap
-%{_mandir}/man1/passt.1.*
-%{_mandir}/man1/pasta.1.*
-%{_mandir}/man1/qrap.1.*
+%{_mandir}/man1/passt.1*
+%{_mandir}/man1/pasta.1*
+%{_mandir}/man1/qrap.1*
 %ifarch x86_64
 %{_bindir}/passt.avx2
-%{_mandir}/man1/passt.avx2.1.*
+%{_mandir}/man1/passt.avx2.1*
 %{_bindir}/pasta.avx2
-%{_mandir}/man1/pasta.avx2.1.*
+%{_mandir}/man1/pasta.avx2.1*
 %endif
 
 %files selinux
