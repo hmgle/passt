@@ -18,7 +18,6 @@ Summary:	User-mode networking daemons for virtual machines and namespaces
 License:	AGPLv3+ and BSD
 Group:		System Environment/Daemons
 URL:		https://passt.top/
-VCS:		git://passt.top/passt
 Source:		https://passt.top/passt/snapshot/passt-HEAD.tar.xz
 
 BuildRequires:	gcc, make, checkpolicy, selinux-policy-devel
