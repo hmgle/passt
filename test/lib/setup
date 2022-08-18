@@ -60,7 +60,8 @@ setup_passt() {
 		' -append "console=ttyS0 mitigations=off apparmor=0 '	   \
 		'virtio-net.napi_tx=1"'					   \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"  \
-		" -netdev socket,fd=5,id=hostnet0"
+		" -netdev socket,fd=5,id=hostnet0"			   \
+		' -pidfile passt_qemu.pid'
 	pane_status GUEST
 
 	# Set things up to reduce problems parsing host command output
@@ -178,7 +179,8 @@ setup_passt_in_ns() {
 		' -append "console=ttyS0 mitigations=off apparmor=0 '	   \
 		'virtio-net.napi_tx=1"'					   \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=524288" \
-		" -netdev socket,fd=5,id=hostnet0"
+		" -netdev socket,fd=5,id=hostnet0"			   \
+		' -pidfile passt_in_ns_qemu.pid'
 	pane_status GUEST
 
 	# Set things up to reduce problems parsing host command output
@@ -271,7 +273,8 @@ setup_two_guests() {
 		' -append "console=ttyS0 mitigations=off apparmor=0 '	     \
 		'virtio-net.napi_tx=1"'					     \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
-		" -netdev socket,fd=5,id=hostnet0"
+		" -netdev socket,fd=5,id=hostnet0"			     \
+		' -pidfile two_guests_qemu_1.pid'
 	pane_run GUEST_2 './qrap 5 qemu-system-$(uname -m)'                  \
 		' -M accel=kvm:tcg'                                          \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                      \
@@ -281,7 +284,8 @@ setup_two_guests() {
 		' -append "console=ttyS0 mitigations=off apparmor=0 '	     \
 		'virtio-net.napi_tx=1"'					     \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
-		" -netdev socket,fd=5,id=hostnet0"
+		" -netdev socket,fd=5,id=hostnet0"			     \
+		' -pidfile two_guests_qemu_2.pid'
 	pane_status GUEST_1
 	pane_status GUEST_2
 }
@@ -298,7 +302,7 @@ teardown_distro() {
 
 # teardown_passt() - Kill qemu, remove passt PID file
 teardown_passt() {
-	tmux send-keys -t ${PANE_GUEST} "C-c"
+	kill $(cat passt_qemu.pid)
 	pane_wait GUEST
 	rm passt.pid
 }
@@ -311,7 +315,7 @@ teardown_pasta() {
 
 # teardown_passt_in_ns() - Exit namespace, kill qemu and pasta, remove pid file
 teardown_passt_in_ns() {
-	tmux send-keys -t ${PANE_GUEST} "C-c"
+	kill $(cat passt_in_ns_qemu.pid)
 	pane_wait GUEST
 	tmux send-keys -t ${PANE_GUEST} "C-d"
 
@@ -326,11 +330,11 @@ teardown_passt_in_ns() {
 
 # teardown_two_guests() - Exit namespaces, kill qemu processes, passt and pasta
 teardown_two_guests() {
-	tmux send-keys -t ${PANE_GUEST_1} "C-c"
+	kill $(cat two_guests_qemu_1.pid)
 	pane_wait GUEST_1
 	tmux send-keys -t ${PANE_GUEST_1} "C-d"
 
-	tmux send-keys -t ${PANE_GUEST_2} "C-c"
+	kill $(cat two_guests_qemu_2.pid)
 	pane_wait GUEST_2
 	tmux send-keys -t ${PANE_GUEST_2} "C-d"
 
