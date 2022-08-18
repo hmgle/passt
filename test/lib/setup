@@ -98,7 +98,7 @@ setup_pasta() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	pane_run PASST "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 ${__target_pid}"
+	pane_run PASST "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 -P passt.pid ${__target_pid}"
 	sleep 1
 }
 
@@ -305,8 +305,6 @@ teardown_passt() {
 
 # teardown_passt() - Exit namespace, kill pasta process
 teardown_pasta() {
-	tmux send-keys -t ${PANE_PASST} "C-c"
-	pane_wait PASST
 	tmux send-keys -t ${PANE_NS} "C-d"
 	pane_wait NS
 }

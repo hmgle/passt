@@ -6,8 +6,8 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# test/shutdown/passt - Shut down passt and check exit code (will detect
-#                       valgrind errors amongst others)
+# test/shutdown/passt - Shut down passt (or pasta) and check exit code (will
+#                       detect valgrind errors amongst others)
 #
 # Copyright (c) 2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>

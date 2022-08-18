@@ -77,6 +77,7 @@ run() {
 	test dhcp/pasta
 	test tcp/pasta
 	test udp/pasta
+	test shutdown/passt
 	teardown pasta
 
 	setup passt
