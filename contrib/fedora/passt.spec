@@ -34,6 +34,7 @@ namespace, without the need to create further interfaces on the host, hence not
 requiring any capabilities or privileges.
 
 %package    selinux
+BuildArch:  noarch
 Summary:    SELinux support for passt and pasta
 Requires:   %{name} = %{version}
 Requires(post): policycoreutils, %{name}
