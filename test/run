@@ -161,6 +161,8 @@ demo() {
 [ "$(basename "${0}")" = "run_demo" ] && DEMO=1
 
 if [ "${1}" = "from_term" ]; then
+	exec > ${LOGDIR}/script.log 2>&1
+	[ ${DEBUG} -eq 1 ] && set -x
 	cd ..
 	if [ ${DEMO} -eq 1 ]; then
 		demo
