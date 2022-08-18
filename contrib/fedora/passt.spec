@@ -93,4 +93,4 @@ semodule -r pasta 2>/dev/null || :
 %{_datadir}/selinux/packages/%{name}/pasta.pp
 
 %changelog
-{{{ git_dir_changelog }}}
+{{{ passt_git_changelog }}}

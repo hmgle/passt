@@ -14,3 +14,37 @@
 function git_version {
 	printf "0.git.%s.%s" "$(date -u -I | tr - _)" "$(git rev-parse --short HEAD)"
 }
+
+function passt_git_changelog_entry {
+	__from="${2}"
+	__to="${1}"
+
+	[ -z "${__from}" ] && __from="$(git rev-list --max-parents=0 HEAD)"
+
+	__date="$(git log --pretty="format:%cI" "${__to}" -1)"
+	__author="$(git log -1 --pretty="format:%an <%ae>" ${__to} -- contrib/fedora)"
+
+	printf "* %s %s - %s\n" "$(date "+%a %b %e %Y" -d "${__date}")" "${__author}" "0.git.${1}-0"
+
+	IFS='
+'
+	for l in $(git log ${__from}..${__to} --pretty=format:"- %s" -- contrib/fedora); do
+		printf "%s%s\n" '-' "${l#*:}"
+	done
+	unset IFS
+
+	printf "%s Upstream changes: https://passt.top/passt/log/?qt=range&q=%s..%s\n\n" '-' "${__from}" "${__to}"
+}
+
+function passt_git_changelog_pairs {
+	while [ -n "${2}" ]; do
+		passt_git_changelog_entry "${1}" "${2}"
+		shift 2
+	done
+
+	passt_git_changelog_entry "${1}" ""
+}
+
+function passt_git_changelog {
+	passt_git_changelog_pairs $((git tag --sort="-v:refname"|tail -n+2; git tag --sort="-v:refname") | sort -r)
+}
