@@ -6,15 +6,12 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# test/build/clang_tidy - Run source through clang-tidy(1) linter
+# test/build/cppcheck - Run source through cppcheck(1) linter
 #
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-htools	clang-tidy cppcheck
-
-test	Run clang-tidy
-host	make clang-tidy
+htools	cppcheck
 
 test	Run cppcheck
 host	make cppcheck

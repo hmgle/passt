@@ -61,7 +61,8 @@ run() {
 
 	setup build
 	test build/all
-	test build/static_checkers
+	test build/cppcheck
+	test build/clang_tidy
 	test distro/debian
 	test distro/fedora
 	test distro/opensuse
