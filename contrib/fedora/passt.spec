@@ -47,7 +47,7 @@ This package adds SELinux enforcement to passt(1) and pasta(1).
 %setup -q -n passt-{{{ git_head }}}
 
 %build
-export CFLAGS="%{optflags}"
+%set_build_flags
 %make_build
 
 %install
