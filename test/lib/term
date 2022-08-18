@@ -13,10 +13,6 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-# Commands of X terminals for "CI" and "demo" runs
-DEMO_XTERM="cool-retro-term --verbose --workdir"
-CI_XTERM="mate-terminal --hide-menubar --profile=passt_ci --working-directory"
-
 STATUS_FILE=
 STATUS_FILE_NTESTS=
 STATUS_FILE_INDEX=0
