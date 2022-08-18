@@ -6,3 +6,7 @@ QEMU_EFI.fd
 *.qcow2
 *.raw
 *.raw.xz
+*.uncut
+*.start
+*.stop
+*.js
