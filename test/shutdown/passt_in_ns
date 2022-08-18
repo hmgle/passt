@@ -6,16 +6,17 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# test/valgrind/passt - Terminate passt and check valgrind exit code
+# test/shutdown/passt_in_ns - Shut down passt and check exit code (will detect
+#                             valgrind errors amongst others)
 #
 # Copyright (c) 2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-test	valgrind: exit code
+test	shutdown: exit code
 
-hout	PASST_PID cat passt.pid
-host	kill __PASST_PID__
+nsout	PASST_PID cat passt.pid
+ns	kill __PASST_PID__
 sleep	1
 
-pout	VALGRIND_EXIT echo $?
-check	[ "__VALGRIND_EXIT__" = "0" ]
+pout	EXIT echo $?
+check	[ "__EXIT__" = "0" ]

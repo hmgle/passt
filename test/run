@@ -84,7 +84,7 @@ run() {
 	test dhcp/passt
 	test tcp/passt
 	test udp/passt
-	test valgrind/passt
+	test shutdown/passt
 	teardown passt
 
 	VALGRIND=1
@@ -94,7 +94,7 @@ run() {
 	test icmp/passt_in_ns
 	test tcp/passt_in_ns
 	test udp/passt_in_ns
-	test valgrind/passt_in_ns
+	test shutdown/passt_in_ns
 	teardown passt_in_ns
 
 	VALGRIND=0
@@ -105,6 +105,7 @@ run() {
 	test perf/passt_udp
 	test perf/pasta_tcp
 	test perf/pasta_udp
+	test shutdown/passt_in_ns
 	teardown passt_in_ns
 
 	setup two_guests
