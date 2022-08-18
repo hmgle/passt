@@ -13,7 +13,7 @@
 
 Name:		passt
 Version:	{{{ git_version }}}
-Release:	0%{?dist}
+Release:	1%{?dist}
 Summary:	User-mode networking daemons for virtual machines and namespaces
 License:	AGPLv3+ and BSD
 Group:		System Environment/Daemons
