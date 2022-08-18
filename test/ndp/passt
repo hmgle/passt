@@ -17,7 +17,7 @@ htools	ip jq sipcalc grep cut
 test	Interface name
 gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 guest	ip link set dev __IFNAME__ up && sleep 2
-hout	HOST_IFNAME6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").dev'
+hout	HOST_IFNAME6 ip -j -6 route show|jq -rM '[.[] | select(.dst == "default").dev] | .[0]'
 check	[ -n "__IFNAME__" ]
 
 test	SLAAC: prefix
@@ -29,5 +29,5 @@ check	[ "__PREFIX6__" = "__HOST_PREFIX6__" ]
 
 test	SLAAC: route
 gout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
-hout	HOST_GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	HOST_GW6 ip -j -6 route show|jq -rM '[.[] | select(.dst == "default").gateway] | .[0]'
 check	[ __GW6__ = __HOST_GW6__ ]

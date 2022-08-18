@@ -26,7 +26,7 @@ check	[ __ADDR__ = __HOST_ADDR__ ]
 
 test	DHCP: route
 nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
-hout	HOST_GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	HOST_GW ip -j -4 route show|jq -rM '[.[] | select(.dst == "default").gateway] | .[0]'
 check	[ __GW__ = __HOST_GW__ ]
 
 test	DHCP: MTU
@@ -42,5 +42,5 @@ check	[ __ADDR6__ = __HOST_ADDR6__ ]
 
 test	DHCPv6: route
 nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
-hout	HOST_GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	HOST_GW6 ip -j -6 route show|jq -rM '[.[] | select(.dst == "default").gateway] | .[0]'
 check	[ __GW6__ = __HOST_GW6__ ]

@@ -29,5 +29,5 @@ check	[ "__PREFIX6__" = "__HOST_PREFIX6__" ]
 
 test	SLAAC: route
 nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
-hout	HOST_GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	HOST_GW6 ip -j -6 route show|jq -rM '[.[] | select(.dst == "default").gateway] | .[0]'
 check	[ __GW6__ = __HOST_GW6__ ]
