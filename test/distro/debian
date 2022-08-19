@@ -197,6 +197,7 @@ host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial 
 sleep	2
 host	growpart /dev/sda 1
 host	resize2fs -p /dev/sda1
+host	export DEBIAN_FRONTEND=noninteractive
 host	apt-get update
 host	apt-get -y install make gcc socat
 
@@ -216,6 +217,7 @@ host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios _
 sleep	2
 host	growpart /dev/vda 1
 host	resize2fs -p /dev/vda1
+host	export DEBIAN_FRONTEND=noninteractive
 host	apt-get update
 host	apt-get -y install make gcc socat
 
@@ -232,6 +234,7 @@ test	Debian GNU/Linux sid (experimental), ppc64le
 
 host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-ppc64el-daily.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
 sleep	2
+host	export DEBIAN_FRONTEND=noninteractive
 host	apt-get update
 host	apt-get -y install make gcc socat
 
