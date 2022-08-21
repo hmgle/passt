@@ -82,7 +82,13 @@ ifeq ($(shell :|$(CC) -fstack-protector-strong -S -xc - -o - >/dev/null 2>&1; ec
 	CFLAGS += -fstack-protector-strong
 endif
 
-prefix ?= /usr/local
+prefix		?= /usr/local
+exec_prefix	?= $(prefix)
+bindir		?= $(exec_prefix)/bin
+datarootdir	?= $(prefix)/share
+docdir		?= $(datarootdir)/doc/passt
+mandir		?= $(datarootdir)/man
+man1dir		?= $(mandir)/man1
 
 ifeq ($(TARGET_ARCH),X86_64)
 BIN := passt passt.avx2 pasta pasta.avx2 qrap
@@ -126,19 +132,19 @@ clean:
 		passt.pid README.plain.md
 
 install: $(BIN) $(MANPAGES) docs
-	mkdir -p $(DESTDIR)$(prefix)/bin $(DESTDIR)$(prefix)/share/man/man1
-	cp -d $(BIN) $(DESTDIR)$(prefix)/bin
-	cp -d $(MANPAGES) $(DESTDIR)$(prefix)/share/man/man1
-	mkdir -p $(DESTDIR)$(prefix)/share/doc/passt
-	cp -d README.plain.md $(DESTDIR)$(prefix)/share/doc/passt/README.md
-	cp -d doc/demo.sh $(DESTDIR)$(prefix)/share/doc/passt
+	mkdir -p $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir)
+	cp -d $(BIN) $(DESTDIR)$(bindir)
+	cp -d $(MANPAGES) $(DESTDIR)$(man1dir)
+	mkdir -p $(DESTDIR)$(docdir)
+	cp -d README.plain.md $(DESTDIR)$(docdir)/README.md
+	cp -d doc/demo.sh $(DESTDIR)$(docdir)
 
 uninstall:
 	$(RM) $(BIN:%=$(DESTDIR)$(prefix)/bin/%)
-	$(RM) $(MANPAGES:%=$(DESTDIR)$(prefix)/share/man/man1/%)
-	$(RM) $(DESTDIR)$(prefix)/share/doc/passt/README.md
-	$(RM) $(DESTDIR)$(prefix)/share/doc/passt/demo.sh
-	-rmdir $(DESTDIR)$(prefix)/share/doc/passt
+	$(RM) $(MANPAGES:%=$(DESTDIR)$(man1dir)/%)
+	$(RM) $(DESTDIR)$(docdir)/README.md
+	$(RM) $(DESTDIR)$(docdir)/demo.sh
+	-rmdir $(DESTDIR)$(docdir)
 
 pkgs: static
 	tar cf passt.tar -P --xform 's//\/usr\/bin\//' $(BIN)
