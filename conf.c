@@ -1269,7 +1269,7 @@ void conf(struct ctx *c, int argc, char **argv)
 
 			ret = snprintf(c->sock_path, UNIX_SOCK_MAX - 1, "%s",
 				       optarg);
-			if (ret <= 0 || ret >= (int)sizeof(c->pcap)) {
+			if (ret <= 0 || ret >= (int)sizeof(c->sock_path)) {
 				err("Invalid socket path: %s", optarg);
 				usage(argv[0]);
 			}
