@@ -223,7 +223,7 @@ void pasta_ns_conf(struct ctx *c)
  */
 int pasta_netns_quit_init(struct ctx *c)
 {
-	int flags = O_NONBLOCK | (c->foreground ? O_CLOEXEC : 0);
+	int flags = O_NONBLOCK | O_CLOEXEC;
 	struct epoll_event ev = { .events = EPOLLIN };
 	int inotify_fd;
 

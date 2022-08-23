@@ -562,18 +562,14 @@ static int conf_ns_opt(struct ctx *c,
 				continue;
 		}
 
-		/* Don't pass O_CLOEXEC here: ns_enter() needs those files */
 		if (!c->netns_only) {
 			if (*conf_userns)
-				/* NOLINTNEXTLINE(android-cloexec-open) */
-				ufd = open(conf_userns, O_RDONLY);
+				ufd = open(conf_userns, O_RDONLY | O_CLOEXEC);
 			else if (*userns)
-				/* NOLINTNEXTLINE(android-cloexec-open) */
-				ufd = open(userns, O_RDONLY);
+				ufd = open(userns, O_RDONLY | O_CLOEXEC);
 		}
 
-		/* NOLINTNEXTLINE(android-cloexec-open) */
-		nfd = open(netns, O_RDONLY);
+		nfd = open(netns, O_RDONLY | O_CLOEXEC);
 
 		if (nfd == -1 || (ufd == -1 && !c->netns_only)) {
 			if (nfd >= 0)

@@ -329,8 +329,7 @@ int main(int argc, char **argv)
 
 	__setlogmask(LOG_MASK(LOG_EMERG));
 
-	/* NOLINTNEXTLINE(android-cloexec-epoll-create1): forking in a moment */
-	c.epollfd = epoll_create1(0);
+	c.epollfd = epoll_create1(EPOLL_CLOEXEC);
 	if (c.epollfd == -1) {
 		perror("epoll_create1");
 		exit(EXIT_FAILURE);
@@ -381,8 +380,7 @@ int main(int argc, char **argv)
 	pcap_init(&c);
 
 	if (!c.foreground) {
-		/* NOLINTNEXTLINE(android-cloexec-open): see __daemon() */
-		if ((devnull_fd = open("/dev/null", O_RDWR)) < 0) {
+		if ((devnull_fd = open("/dev/null", O_RDWR | O_CLOEXEC)) < 0) {
 			perror("/dev/null open");
 			exit(EXIT_FAILURE);
 		}
