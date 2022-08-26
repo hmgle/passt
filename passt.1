@@ -171,7 +171,7 @@ version.
 Use \fIaddr\fR (IPv4 or IPv6) for DHCP, DHCPv6, NDP or DNS forwarding, as
 configured (see options \fB--no-dhcp-dns\fR, \fB--dhcp-dns\fR,
 \fB--dns-forward\fR) instead of reading addresses from \fI/etc/resolv.conf\fR.
-This option can be specified multiple times, and a single, empty option disables
+This option can be specified multiple times.  Specifying \fB-D none\fR disables
 usage of DNS addresses altogether.
 
 .TP
@@ -186,8 +186,9 @@ This option can be specified zero to two times (once for IPv4, once for IPv6).
 .BR \-S ", " \-\-search " " \fIlist
 Use space-separated \fIlist\fR for DHCP, DHCPv6, and NDP purposes, instead of
 reading entries from \fI/etc/resolv.conf\fR. See options \fB--no-dhcp-search\fR
-and \fB--dhcp-search\fR. A single, empty option disables the DNS domain search
-list altogether.
+and \fB--dhcp-search\fR. \fB--search none\fR disables the DNS domain search
+list altogether (if you need to search a domain called "none" you can use
+\fB--search none.\fR).
 
 .TP
 .BR \-\-no-dhcp-dns " " \fIaddr

@@ -1022,8 +1022,8 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"mac-addr",	required_argument,	NULL,		'M' },
 		{"gateway",	required_argument,	NULL,		'g' },
 		{"interface",	required_argument,	NULL,		'i' },
-		{"dns",		optional_argument,	NULL,		'D' },
-		{"search",	optional_argument,	NULL,		'S' },
+		{"dns",		required_argument,	NULL,		'D' },
+		{"search",	required_argument,	NULL,		'S' },
 		{"no-tcp",	no_argument,		&c->no_tcp,	1 },
 		{"no-udp",	no_argument,		&c->no_udp,	1 },
 		{"no-icmp",	no_argument,		&c->no_icmp,	1 },
@@ -1076,16 +1076,6 @@ void conf(struct ctx *c, int argc, char **argv)
 			optstring = "dqfehI:p::P:m:a:n:M:g:i:D::S::46t:u:T:U:";
 
 		name = getopt_long(argc, argv, optstring, options, NULL);
-
-		if ((name == 'D' || name == 'S') && !optarg &&
-		    optind < argc && *argv[optind] && *argv[optind] != '-') {
-			if (c->mode == MODE_PASTA) {
-				if (conf_ns_opt(c, nsdir, userns, argv[optind]))
-					optarg = argv[optind++];
-			} else {
-				optarg = argv[optind++];
-			}
-		}
 
 		switch (name) {
 		case -1:
@@ -1397,15 +1387,24 @@ void conf(struct ctx *c, int argc, char **argv)
 			}
 			break;
 		case 'D':
-			if (c->no_dns ||
-			    (!optarg && (dns4 - c->ip4.dns || dns6 - c->ip6.dns))) {
-				err("Empty and non-empty DNS options given");
-				usage(argv[0]);
-			}
+			if (!strcmp(optarg, "none")) {
+				if (c->no_dns) {
+					err("Redundant DNS options");
+					usage(argv[0]);
+				}
 
-			if (!optarg) {
+				if (dns4 - c->ip4.dns || dns6 - c->ip6.dns) {
+					err("Conflicting DNS options");
+					usage(argv[0]);
+				}
+
 				c->no_dns = 1;
 				break;
+			}
+
+			if (c->no_dns) {
+				err("Conflicting DNS options");
+				usage(argv[0]);
 			}
 
 			if (dns4 - &c->ip4.dns[0] < ARRAY_SIZE(c->ip4.dns) &&
@@ -1424,15 +1423,24 @@ void conf(struct ctx *c, int argc, char **argv)
 			usage(argv[0]);
 			break;
 		case 'S':
-			if (c->no_dns_search ||
-			    (!optarg && dnss != c->dns_search)) {
-				err("Empty and non-empty DNS search given");
-				usage(argv[0]);
-			}
+			if (!strcmp(optarg, "none")) {
+				if (c->no_dns_search) {
+					err("Redundant DNS search options");
+					usage(argv[0]);
+				}
 
-			if (!optarg) {
+				if (dnss != c->dns_search) {
+					err("Conflicting DNS search options");
+					usage(argv[0]);
+				}
+
 				c->no_dns_search = 1;
 				break;
+			}
+
+			if (c->no_dns_search) {
+				err("Conflicting DNS search options");
+				usage(argv[0]);
 			}
 
 			if (dnss - c->dns_search < ARRAY_SIZE(c->dns_search)) {
