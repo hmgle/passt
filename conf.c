@@ -602,6 +602,7 @@ static int conf_ns_opt(struct ctx *c,
 
 	c->netns_only = netns_only_reset;
 
+	err("Namespace %s not found", optarg);
 	return -ENOENT;
 }
 
@@ -1464,8 +1465,6 @@ void conf(struct ctx *c, int argc, char **argv)
 
 	if (c->mode == MODE_PASTA && optind + 1 == argc) {
 		ret = conf_ns_opt(c, userns, argv[optind]);
-		if (ret == -ENOENT)
-			err("Namespace %s not found", argv[optind]);
 		if (ret < 0)
 			usage(argv[0]);
 	} else if (c->mode == MODE_PASTA && *userns && optind == argc) {
