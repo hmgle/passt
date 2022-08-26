@@ -510,14 +510,13 @@ static int conf_ns_check(void *arg)
 /**
  * conf_ns_opt() - Open network, user namespaces descriptors from configuration
  * @c:			Execution context
- * @nsdir:		--nsrun-dir argument, can be an empty string
  * @conf_userns:	--userns argument, can be an empty string
  * @optarg:		PID, path or name of namespace
  *
  * Return: 0 on success, negative error code otherwise
  */
 static int conf_ns_opt(struct ctx *c,
-		       char *nsdir, const char *conf_userns, const char *optarg)
+		       const char *conf_userns, const char *optarg)
 {
 	int ufd = -1, nfd = -1, try, ret, netns_only_reset = c->netns_only;
 	char userns[PATH_MAX] = { 0 }, netns[PATH_MAX];
@@ -557,7 +556,7 @@ static int conf_ns_opt(struct ctx *c,
 				continue;
 		} else if (try == 2) {
 			ret = snprintf(netns, PATH_MAX, "%s/%s",
-				 *nsdir ? nsdir : NETNS_RUN_DIR, optarg);
+				       NETNS_RUN_DIR, optarg);
 			if (ret <= 0 || ret > (int)sizeof(netns))
 				continue;
 		}
@@ -859,8 +858,6 @@ pasta_opts:
 	info(   "  --userns NSPATH 	Target user namespace to join");
 	info(   "  --netns-only		Don't join existing user namespace");
 	info(   "    implied if PATH or NAME are given without --userns");
-	info(   "  --nsrun-dir		Directory for nsfs mountpoints");
-	info(   "    default: " NETNS_RUN_DIR);
 	info(   "  --config-net		Configure tap interface in namespace");
 	info(   "  --ns-mac-addr ADDR	Set MAC address on tap interface");
 
@@ -1040,7 +1037,6 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"udp-ns",	required_argument,	NULL,		'U' },
 		{"userns",	required_argument,	NULL,		2 },
 		{"netns-only",	no_argument,		&c->netns_only,	1 },
-		{"nsrun-dir",	required_argument,	NULL,		3 },
 		{"config-net",	no_argument,		&c->pasta_conf_ns, 1 },
 		{"ns-mac-addr",	required_argument,	NULL,		4 },
 		{"dhcp-dns",	no_argument,		NULL,		5 },
@@ -1054,7 +1050,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
-	char nsdir[PATH_MAX] = { 0 }, userns[PATH_MAX] = { 0 };
+	char userns[PATH_MAX] = { 0 };
 	enum conf_port_type tcp_tap = 0, tcp_init = 0;
 	enum conf_port_type udp_tap = 0, udp_init = 0;
 	bool v4_only = false, v6_only = false;
@@ -1090,18 +1086,6 @@ void conf(struct ctx *c, int argc, char **argv)
 			ret = snprintf(userns, sizeof(userns), "%s", optarg);
 			if (ret <= 0 || ret >= (int)sizeof(userns)) {
 				err("Invalid userns: %s", optarg);
-				usage(argv[0]);
-			}
-			break;
-		case 3:
-			if (c->mode != MODE_PASTA) {
-				err("--nsrun-dir is for pasta mode only");
-				usage(argv[0]);
-			}
-
-			ret = snprintf(nsdir, sizeof(nsdir), "%s", optarg);
-			if (ret <= 0 || ret >= (int)sizeof(nsdir)) {
-				err("Invalid nsrun-dir: %s", optarg);
 				usage(argv[0]);
 			}
 			break;
@@ -1479,7 +1463,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	check_root(c);
 
 	if (c->mode == MODE_PASTA && optind + 1 == argc) {
-		ret = conf_ns_opt(c, nsdir, userns, argv[optind]);
+		ret = conf_ns_opt(c, userns, argv[optind]);
 		if (ret == -ENOENT)
 			err("Namespace %s not found", argv[optind]);
 		if (ret < 0)
