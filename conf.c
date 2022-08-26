@@ -737,14 +737,7 @@ static void usage(const char *name)
 		     UNIX_SOCK_PATH, 1);
 	}
 
-	info(   "  -p, --pcap [FILE]	Log tap-facing traffic to pcap file");
-	info(   "    if FILE is not given, log to:");
-
-	if (strstr(name, "pasta"))
-		info("      /tmp/pasta_ISO8601-TIMESTAMP_PID.pcap");
-	else
-		info("      /tmp/passt_ISO8601-TIMESTAMP_PID.pcap");
-
+	info(   "  -p, --pcap FILE	Log tap-facing traffic to pcap file");
 	info(   "  -P, --pid FILE	Write own PID to the given file");
 	info(   "  -m, --mtu MTU	Assign MTU via DHCP/NDP");
 	info(   "    a zero value disables assignment");
@@ -1021,7 +1014,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"help",	no_argument,		NULL,		'h' },
 		{"socket",	required_argument,	NULL,		's' },
 		{"ns-ifname",	required_argument,	NULL,		'I' },
-		{"pcap",	optional_argument,	NULL,		'p' },
+		{"pcap",	required_argument,	NULL,		'p' },
 		{"pid",		required_argument,	NULL,		'P' },
 		{"mtu",		required_argument,	NULL,		'm' },
 		{"address",	required_argument,	NULL,		'a' },
@@ -1084,7 +1077,7 @@ void conf(struct ctx *c, int argc, char **argv)
 
 		name = getopt_long(argc, argv, optstring, options, NULL);
 
-		if ((name == 'p' || name == 'D' || name == 'S') && !optarg &&
+		if ((name == 'D' || name == 'S') && !optarg &&
 		    optind < argc && *argv[optind] && *argv[optind] != '-') {
 			if (c->mode == MODE_PASTA) {
 				if (conf_ns_opt(c, nsdir, userns, argv[optind]))
@@ -1287,11 +1280,6 @@ void conf(struct ctx *c, int argc, char **argv)
 			if (*c->pcap) {
 				err("Multiple --pcap options given");
 				usage(argv[0]);
-			}
-
-			if (!optarg) {
-				*c->pcap = 1;
-				break;
 			}
 
 			ret = snprintf(c->pcap, sizeof(c->pcap), "%s", optarg);

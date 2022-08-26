@@ -31,11 +31,6 @@
 #include "util.h"
 #include "passt.h"
 
-#define PCAP_PREFIX		"/tmp/passt_"
-#define PCAP_PREFIX_PASTA	"/tmp/pasta_"
-#define PCAP_ISO8601_FORMAT	"%FT%H:%M:%SZ"
-#define PCAP_ISO8601_STR	"YYYY-MM-ddTHH:mm:ssZ"
-
 #define PCAP_VERSION_MINOR 4
 
 static int pcap_fd = -1;
@@ -171,35 +166,12 @@ fail:
 void pcap_init(struct ctx *c)
 {
 	int flags = O_WRONLY | O_CREAT | O_TRUNC;
-	struct timeval tv;
 
 	if (pcap_fd != -1)
 		return;
 
 	if (!*c->pcap)
 		return;
-
-	if (*c->pcap == 1) {
-		char name[] = PCAP_PREFIX PCAP_ISO8601_STR STR(UINT_MAX)
-			      ".pcap";
-		struct tm *tm;
-
-		if (c->mode == MODE_PASTA)
-			memcpy(name, PCAP_PREFIX_PASTA,
-			       sizeof(PCAP_PREFIX_PASTA));
-
-		gettimeofday(&tv, NULL);
-		tm = localtime(&tv.tv_sec);
-		strftime(name + strlen(PCAP_PREFIX),
-			 sizeof(PCAP_ISO8601_STR) - 1, PCAP_ISO8601_FORMAT, tm);
-
-		snprintf(name + strlen(PCAP_PREFIX) + strlen(PCAP_ISO8601_STR),
-			 sizeof(name) - strlen(PCAP_PREFIX) -
-					strlen(PCAP_ISO8601_STR),
-			 "_%i.pcap", getpid());
-
-		strncpy(c->pcap, name, PATH_MAX);
-	}
 
 	flags |= c->foreground ? O_CLOEXEC : 0;
 	pcap_fd = open(c->pcap, flags, S_IRUSR | S_IWUSR);

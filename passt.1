@@ -111,16 +111,6 @@ Display a help message and exit.
 Capture tap-facing (that is, guest-side or namespace-side) network packets to
 \fIfile\fR in \fBpcap\fR format.
 
-If \fIfile\fR is not given, capture packets to
-
-	\fB/tmp/passt_\fIISO8601-timestamp\fR_\fIPID\fB.pcap\fR
-
-in \fBpasst\fR mode and to
-
-	\fB/tmp/pasta_\fIISO8601-timestamp\fR_\fIPID\fB.pcap\fR
-
-in \fBpasta\fR mode, where \fIPID\fR is the ID of the running process.
-
 .TP
 .BR \-P ", " \-\-pid " " \fIfile
 Write own PID to \fIfile\fR once initialisation is done, before forking to
