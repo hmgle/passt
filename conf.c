@@ -490,6 +490,51 @@ out:
 }
 
 /**
+ * conf_ns_opt() - Parse non-option argument to namespace paths
+ * @userns:	buffer of size PATH_MAX, initially contains --userns
+ *		argument (may be empty), updated with userns path
+ * @netns:	buffer of size PATH_MAX, updated with netns path
+ * @arg:	PID, path or name of network namespace
+ *
+ * Return: 0 on success, negative error code otherwise
+ */
+static int conf_ns_opt(char *userns, char *netns, const char *arg)
+{
+	char *endptr;
+	long pidval;
+	int ret;
+
+	pidval = strtol(arg, &endptr, 10);
+	if (!*endptr) {
+		/* Looks like a pid */
+		if (pidval < 0 || pidval > INT_MAX) {
+			err("Invalid PID %s", arg);
+			return -EINVAL;
+		}
+
+		snprintf(netns, PATH_MAX, "/proc/%ld/ns/net", pidval);
+		if (!*userns)
+			snprintf(userns, PATH_MAX, "/proc/%ld/ns/user", pidval);
+		return 0;
+	}
+
+	if (!strchr(arg, '/')) {
+		/* looks like a netns name */
+		ret = snprintf(netns, PATH_MAX, "%s/%s", NETNS_RUN_DIR, arg);
+	} else {
+		/* otherwise assume it's a netns path */
+		ret = snprintf(netns, PATH_MAX, "%s", arg);
+	}
+
+	if (ret <= 0 || ret > PATH_MAX) {
+		err("Network namespace name/path %s too long");
+		return -E2BIG;
+	}
+
+	return 0;
+}
+
+/**
  * conf_ns_check() - Check if we can enter configured namespaces
  * @arg:	Execution context
  *
@@ -508,102 +553,58 @@ static int conf_ns_check(void *arg)
 }
 
 /**
- * conf_ns_opt() - Open network, user namespaces descriptors from configuration
- * @c:			Execution context
- * @conf_userns:	--userns argument, can be an empty string
- * @optarg:		PID, path or name of namespace
+ * conf_ns_open() - Open network, user namespaces descriptors from configuration
+ * @c:		Execution context
+ * @userns:	--userns argument, can be an empty string
+ * @netns:	network namespace path
  *
  * Return: 0 on success, negative error code otherwise
  */
-static int conf_ns_opt(struct ctx *c,
-		       const char *conf_userns, const char *optarg)
+static int conf_ns_open(struct ctx *c, const char *userns, const char *netns)
 {
-	int ufd = -1, nfd = -1, try, ret, netns_only_reset = c->netns_only;
-	char userns[PATH_MAX] = { 0 }, netns[PATH_MAX];
-	char *endptr;
-	long pid_arg;
-	pid_t pid;
+	int ufd = -1, nfd = -1;
 
-	if (c->netns_only && *conf_userns) {
+	if (c->netns_only && *userns) {
 		err("Both --userns and --netns-only given");
 		return -EINVAL;
 	}
 
-	/* It might be a PID, a netns path, or a netns name */
-	for (try = 0; try < 3; try++) {
-		if (try == 0) {
-			pid_arg = strtol(optarg, &endptr, 10);
-			if (*endptr || pid_arg < 0 || pid_arg > INT_MAX)
-				continue;
+	nfd = open(netns, O_RDONLY | O_CLOEXEC);
+	if (nfd < 0) {
+		err("Couldn't open network namespace %s", netns);
+		return -ENOENT;
+	}
 
-			pid = pid_arg;
-
-			if (!*conf_userns && !c->netns_only) {
-				ret = snprintf(userns, PATH_MAX,
-					       "/proc/%i/ns/user", pid);
-				if (ret <= 0 || ret > (int)sizeof(userns))
-					continue;
-			}
-			ret = snprintf(netns, PATH_MAX, "/proc/%i/ns/net", pid);
-			if (ret <= 0 || ret > (int)sizeof(netns))
-				continue;
-		} else if (try == 1) {
-			if (!*conf_userns)
-				c->netns_only = 1;
-
-			ret = snprintf(netns, PATH_MAX, "%s", optarg);
-			if (ret <= 0 || ret > (int)sizeof(userns))
-				continue;
-		} else if (try == 2) {
-			ret = snprintf(netns, PATH_MAX, "%s/%s",
-				       NETNS_RUN_DIR, optarg);
-			if (ret <= 0 || ret > (int)sizeof(netns))
-				continue;
-		}
-
-		if (!c->netns_only) {
-			if (*conf_userns)
-				ufd = open(conf_userns, O_RDONLY | O_CLOEXEC);
-			else if (*userns)
-				ufd = open(userns, O_RDONLY | O_CLOEXEC);
-		}
-
-		nfd = open(netns, O_RDONLY | O_CLOEXEC);
-
-		if (nfd == -1 || (ufd == -1 && !c->netns_only)) {
-			if (nfd >= 0)
-				close(nfd);
-
-			if (ufd >= 0)
-				close(ufd);
-
-			continue;
-		}
-
-		c->pasta_netns_fd = nfd;
-		c->pasta_userns_fd = ufd;
-
-		NS_CALL(conf_ns_check, c);
-
-		if (c->pasta_netns_fd >= 0) {
-			char buf[PATH_MAX];
-
-			if (try == 0 || c->no_netns_quit)
-				return 0;
-
-			strncpy(buf, netns, PATH_MAX);
-			strncpy(c->netns_base, basename(buf), PATH_MAX - 1);
-			strncpy(buf, netns, PATH_MAX);
-			strncpy(c->netns_dir, dirname(buf), PATH_MAX - 1);
-
-			return 0;
+	if (!c->netns_only && *userns) {
+		ufd = open(userns, O_RDONLY | O_CLOEXEC);
+		if (ufd < 0) {
+			close(nfd);
+			err("Couldn't open user namespace %s", userns);
+			return -ENOENT;
 		}
 	}
 
-	c->netns_only = netns_only_reset;
+	c->pasta_netns_fd = nfd;
+	c->pasta_userns_fd = ufd;
+	c->netns_only = !*userns;
 
-	err("Namespace %s not found", optarg);
-	return -ENOENT;
+	NS_CALL(conf_ns_check, c);
+
+	if (c->pasta_netns_fd < 0) {
+		err("Couldn't switch to pasta namespaces");
+		return -ENOENT;
+	}
+
+	if (!c->no_netns_quit) {
+		char buf[PATH_MAX];
+
+		strncpy(buf, netns, PATH_MAX);
+		strncpy(c->netns_base, basename(buf), PATH_MAX - 1);
+		strncpy(buf, netns, PATH_MAX);
+		strncpy(c->netns_dir, dirname(buf), PATH_MAX - 1);
+	}
+
+	return 0;
 }
 
 /**
@@ -1051,7 +1052,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
-	char userns[PATH_MAX] = { 0 };
+	char userns[PATH_MAX] = { 0 }, netns[PATH_MAX] = { 0 };
 	enum conf_port_type tcp_tap = 0, tcp_init = 0;
 	enum conf_port_type udp_tap = 0, udp_init = 0;
 	bool v4_only = false, v6_only = false;
@@ -1464,7 +1465,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	check_root(c);
 
 	if (c->mode == MODE_PASTA && optind + 1 == argc) {
-		ret = conf_ns_opt(c, userns, argv[optind]);
+		ret = conf_ns_opt(userns, netns, argv[optind]);
 		if (ret < 0)
 			usage(argv[0]);
 	} else if (c->mode == MODE_PASTA && *userns && optind == argc) {
@@ -1477,8 +1478,15 @@ void conf(struct ctx *c, int argc, char **argv)
 	if (c->pasta_conf_ns)
 		c->no_ra = 1;
 
-	if (c->mode == MODE_PASTA && c->pasta_netns_fd == -1)
-		pasta_start_ns(c);
+	if (c->mode == MODE_PASTA) {
+		if (*netns) {
+			ret = conf_ns_open(c, userns, netns);
+			if (ret < 0)
+				usage(argv[0]);
+		} else {
+			pasta_start_ns(c);
+		}
+	}
 
 	if (nl_sock_init(c)) {
 		err("Failed to get netlink socket");
