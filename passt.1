@@ -15,7 +15,10 @@
 [\fIOPTION\fR]...
 .br
 .B pasta
-[\fIOPTION\fR]... [\fIPID\fR]
+[\fIOPTION\fR]... [\fICOMMAND\fR [\fIARG\fR]...]
+.br
+.B pasta
+[\fIOPTION\fR]... \fIPID\fR
 .br
 .B pasta
 [\fIOPTION\fR]... \fB--netns\fR [\fIPATH\fR|\fINAME\fR]
@@ -62,10 +65,11 @@ or with the \fBqrap\fR(1) wrapper.
 equivalent functionality to network namespaces, as the one offered by
 \fBpasst\fR for virtual machines.
 
-If PID or --netns are given, \fBpasta\fR associates to an existing user and
-network namespace. Otherwise, \fBpasta\fR creates a new user and network
-namespace, and spawns an interactive shell within this context. A \fItap\fR
-device within the network namespace is created to provide network connectivity.
+If PID or --netns are given, \fBpasta\fR associates to an existing
+user and network namespace. Otherwise, \fBpasta\fR creates a new user
+and network namespace, and spawns the given command or a default shell
+within this context. A \fItap\fR device within the network namespace
+is created to provide network connectivity.
 
 For local TCP and UDP traffic only, \fBpasta\fR also implements a bypass path
 directly mapping Layer-4 sockets between \fIinit\fR and target namespaces,

@@ -108,6 +108,7 @@ netns:
 struct pasta_setup_ns_arg {
 	struct ctx *c;
 	int euid;
+	char **argv;
 };
 
 /**
@@ -119,7 +120,6 @@ struct pasta_setup_ns_arg {
 static int pasta_setup_ns(void *arg)
 {
 	struct pasta_setup_ns_arg *a = (struct pasta_setup_ns_arg *)arg;
-	char *shell;
 
 	if (!a->c->netns_only) {
 		char buf[BUFSIZ];
@@ -139,28 +139,41 @@ static int pasta_setup_ns(void *arg)
 	FWRITE("/proc/sys/net/ipv4/ping_group_range", "0 0",
 	       "Cannot set ping_group_range, ICMP requests might fail");
 
-	shell = getenv("SHELL") ? getenv("SHELL") : "/bin/sh";
-	if (strstr(shell, "/bash"))
-		execve(shell, ((char *[]) { shell, "-l", NULL }), environ);
-	else
-		execve(shell, ((char *[]) { shell, NULL }), environ);
+	execvp(a->argv[0], a->argv);
 
-	perror("execve");
+	perror("execvp");
 	exit(EXIT_FAILURE);
 }
 
 /**
- * pasta_start_ns() - Fork shell in new namespace if target ns is not given
+ * pasta_start_ns() - Fork command in new namespace if target ns is not given
  * @c:		Execution context
+ * @argc:	Number of arguments for spawned command
+ * @argv:	Command to spawn and arguments
  */
-void pasta_start_ns(struct ctx *c)
+void pasta_start_ns(struct ctx *c, int argc, char *argv[])
 {
-	struct pasta_setup_ns_arg arg = { .c = c, .euid = geteuid() };
+	struct pasta_setup_ns_arg arg = {
+		.c = c,
+		.euid = geteuid(),
+		.argv = argv,
+	};
+	char *shell = getenv("SHELL") ? getenv("SHELL") : "/bin/sh";
+	char *sh_argv[] = { shell, NULL };
+	char *bash_argv[] = { shell, "-l", NULL };
 	char ns_fn_stack[NS_FN_STACK_SIZE];
 
 	c->foreground = 1;
 	if (!c->debug)
 		c->quiet = 1;
+
+	if (argc == 0) {
+		if (strstr(shell, "/bash")) {
+			arg.argv = bash_argv;
+		} else {
+			arg.argv = sh_argv;
+		}
+	}
 
 	pasta_child_pid = clone(pasta_setup_ns,
 				ns_fn_stack + sizeof(ns_fn_stack) / 2,

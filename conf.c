@@ -550,7 +550,8 @@ static int conf_ns_pid(char *userns, char *netns, const char *arg)
 		return 0;
 	}
 
-	return -EINVAL;
+	/* Not a PID, later code will treat as a command */
+	return 0;
 }
 
 /**
@@ -1498,14 +1499,18 @@ void conf(struct ctx *c, int argc, char **argv)
 
 	check_root(c);
 
-	if (c->mode == MODE_PASTA && optind + 1 == argc) {
-		ret = conf_ns_pid(userns, netns, argv[optind]);
-		if (ret < 0)
+	if (c->mode == MODE_PASTA) {
+		if (*netns && optind != argc) {
+			err("Both --netns and PID or command given");
 			usage(argv[0]);
-	} else if (c->mode == MODE_PASTA && *userns
-		   && !*netns && optind == argc) {
-		err("--userns requires --netns or PID");
-		usage(argv[0]);
+		} else if (optind + 1 == argc) {
+			ret = conf_ns_pid(userns, netns, argv[optind]);
+			if (ret < 0)
+				usage(argv[0]);
+		} else if (*userns && !*netns && optind == argc) {
+			err("--userns requires --netns or PID");
+			usage(argv[0]);
+		}
 	} else if (optind != argc) {
 		usage(argv[0]);
 	}
@@ -1519,7 +1524,11 @@ void conf(struct ctx *c, int argc, char **argv)
 			if (ret < 0)
 				usage(argv[0]);
 		} else {
-			pasta_start_ns(c);
+			if (*userns) {
+				err("Both --userns and command given");
+				usage(argv[0]);
+			}
+			pasta_start_ns(c, argc - optind, argv + optind);
 		}
 	}
 
