@@ -15,7 +15,10 @@
 [\fIOPTION\fR]...
 .br
 .B pasta
-[\fIOPTION\fR]... [\fIPID\fR|\fIPATH\fR|\fINAME\fR]
+[\fIOPTION\fR]... [\fIPID\fR]
+.br
+.B pasta
+[\fIOPTION\fR]... \fB--netns\fR [\fIPATH\fR|\fINAME\fR]
 
 .SH DESCRIPTION
 
@@ -59,7 +62,7 @@ or with the \fBqrap\fR(1) wrapper.
 equivalent functionality to network namespaces, as the one offered by
 \fBpasst\fR for virtual machines.
 
-If PID, PATH or NAME are given, \fBpasta\fR associates to an existing user and
+If PID or --netns are given, \fBpasta\fR associates to an existing user and
 network namespace. Otherwise, \fBpasta\fR creates a new user and network
 namespace, and spawns an interactive shell within this context. A \fItap\fR
 device within the network namespace is created to provide network connectivity.
@@ -445,7 +448,14 @@ Default is \fBauto\fR.
 Target user namespace to join, as a path. If PID is given, without this option,
 the user namespace will be the one of the corresponding process.
 
-This option requires PID, PATH or NAME to be specified.
+This option requires --netns or a PID to be specified.
+
+.TP
+.BR \-\-netns " " \fIspec
+Target network namespace to join, as a path or a name.  A name is treated as
+with \fBip-netns(8)\fR as equivalent to a path in \fI/run/netns\fR.
+
+This option can't be specified with a PID.
 
 .TP
 .BR \-\-netns-only

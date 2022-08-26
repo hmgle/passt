@@ -490,33 +490,15 @@ out:
 }
 
 /**
- * conf_ns_opt() - Parse non-option argument to namespace paths
- * @userns:	buffer of size PATH_MAX, initially contains --userns
- *		argument (may be empty), updated with userns path
+ * conf_netns() - Parse --netns option
  * @netns:	buffer of size PATH_MAX, updated with netns path
- * @arg:	PID, path or name of network namespace
+ * @arg:	--netns argument
  *
  * Return: 0 on success, negative error code otherwise
  */
-static int conf_ns_opt(char *userns, char *netns, const char *arg)
+static int conf_netns(char *netns, const char *arg)
 {
-	char *endptr;
-	long pidval;
 	int ret;
-
-	pidval = strtol(arg, &endptr, 10);
-	if (!*endptr) {
-		/* Looks like a pid */
-		if (pidval < 0 || pidval > INT_MAX) {
-			err("Invalid PID %s", arg);
-			return -EINVAL;
-		}
-
-		snprintf(netns, PATH_MAX, "/proc/%ld/ns/net", pidval);
-		if (!*userns)
-			snprintf(userns, PATH_MAX, "/proc/%ld/ns/user", pidval);
-		return 0;
-	}
 
 	if (!strchr(arg, '/')) {
 		/* looks like a netns name */
@@ -532,6 +514,43 @@ static int conf_ns_opt(char *userns, char *netns, const char *arg)
 	}
 
 	return 0;
+}
+
+/**
+ * conf_ns_pid() - Parse non-option argument as a PID
+ * @userns:	buffer of size PATH_MAX, initially contains --userns
+ *		argument (may be empty), updated with userns path
+ * @netns:	buffer of size PATH_MAX, initial contains --netns
+ *		argument (may be empty), updated with netns path
+ * @arg:	PID of network namespace
+ *
+ * Return: 0 on success, negative error code otherwise
+ */
+static int conf_ns_pid(char *userns, char *netns, const char *arg)
+{
+	char *endptr;
+	long pidval;
+
+	if (*netns) {
+		err("Both --netns and PID given");
+		return -EINVAL;
+	}
+
+	pidval = strtol(arg, &endptr, 10);
+	if (!*endptr) {
+		/* Looks like a pid */
+		if (pidval < 0 || pidval > INT_MAX) {
+			err("Invalid PID %s", arg);
+			return -EINVAL;
+		}
+
+		snprintf(netns, PATH_MAX, "/proc/%ld/ns/net", pidval);
+		if (!*userns)
+			snprintf(userns, PATH_MAX, "/proc/%ld/ns/user", pidval);
+		return 0;
+	}
+
+	return -EINVAL;
 }
 
 /**
@@ -708,10 +727,13 @@ static unsigned int conf_ip6(unsigned int ifi,
 static void usage(const char *name)
 {
 	if (strstr(name, "pasta")) {
-		info("Usage: %s [OPTION]... [PID|PATH|NAME]", name);
+		info("Usage: %s [OPTION]... [COMMAND] [ARGS]...", name);
+		info("       %s [OPTION]... PID", name);
+		info("       %s [OPTION]... --netns [PATH|NAME]", name);
 		info("");
-		info("Without PID|PATH|NAME, run the default shell in a new");
-		info("network and user namespace, and connect it via pasta.");
+		info("Without PID or --netns, run the given command or a");
+		info("default shell in a new network and user namespace, and");
+		info("connect it via pasta.");
 	} else {
 		info("Usage: %s [OPTION]...", name);
 	}
@@ -858,6 +880,7 @@ pasta_opts:
 	info(   "    SPEC is as described above");
 	info(   "    default: auto");
 	info(   "  --userns NSPATH 	Target user namespace to join");
+	info(   "  --netns PATH|NAME	Target network namespace to join");
 	info(   "  --netns-only		Don't join existing user namespace");
 	info(   "    implied if PATH or NAME are given without --userns");
 	info(   "  --config-net		Configure tap interface in namespace");
@@ -1038,6 +1061,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"tcp-ns",	required_argument,	NULL,		'T' },
 		{"udp-ns",	required_argument,	NULL,		'U' },
 		{"userns",	required_argument,	NULL,		2 },
+		{"netns",	required_argument,	NULL,		3 },
 		{"netns-only",	no_argument,		&c->netns_only,	1 },
 		{"config-net",	no_argument,		&c->pasta_conf_ns, 1 },
 		{"ns-mac-addr",	required_argument,	NULL,		4 },
@@ -1090,6 +1114,16 @@ void conf(struct ctx *c, int argc, char **argv)
 				err("Invalid userns: %s", optarg);
 				usage(argv[0]);
 			}
+			break;
+		case 3:
+			if (c->mode != MODE_PASTA) {
+				err("--netns is for pasta mode only");
+				usage(argv[0]);
+			}
+
+			ret = conf_netns(netns, optarg);
+			if (ret < 0)
+				usage(argv[0]);
 			break;
 		case 4:
 			if (c->mode != MODE_PASTA) {
@@ -1465,11 +1499,12 @@ void conf(struct ctx *c, int argc, char **argv)
 	check_root(c);
 
 	if (c->mode == MODE_PASTA && optind + 1 == argc) {
-		ret = conf_ns_opt(userns, netns, argv[optind]);
+		ret = conf_ns_pid(userns, netns, argv[optind]);
 		if (ret < 0)
 			usage(argv[0]);
-	} else if (c->mode == MODE_PASTA && *userns && optind == argc) {
-		err("--userns requires PID, PATH or NAME");
+	} else if (c->mode == MODE_PASTA && *userns
+		   && !*netns && optind == argc) {
+		err("--userns requires --netns or PID");
 		usage(argv[0]);
 	} else if (optind != argc) {
 		usage(argv[0]);
