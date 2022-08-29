@@ -34,7 +34,7 @@ requiring any capabilities or privileges.
 %package    selinux
 BuildArch:  noarch
 Summary:    SELinux support for passt and pasta
-Requires:   %{name} = %{version}
+Requires:   %{name} = %{version}-%{release}
 Requires(post): policycoreutils, %{name}
 Requires(preun): policycoreutils, %{name}
 
