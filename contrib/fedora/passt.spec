@@ -49,11 +49,7 @@ This package adds SELinux enforcement to passt(1) and pasta(1).
 %make_build
 
 %install
-%if 0%{?suse_version} > 910
-%make_install DESTDIR=%{buildroot} prefix=%{_prefix} docdir=%{_prefix}/share/doc/packages/passt
-%else
-%make_install DESTDIR=%{buildroot} prefix=%{_prefix}
-%endif
+%make_install DESTDIR=%{buildroot} prefix=%{_prefix} bindir=%{_bindir} mandir=%{_mandir} docdir=%{_docdir}/passt
 %ifarch x86_64
 ln -sr %{buildroot}%{_mandir}/man1/passt.1 %{buildroot}%{_mandir}/man1/passt.avx2.1
 ln -sr %{buildroot}%{_mandir}/man1/pasta.1 %{buildroot}%{_mandir}/man1/pasta.avx2.1
