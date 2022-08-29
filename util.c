@@ -525,7 +525,7 @@ void check_root(struct ctx *c)
 #endif
 	}
 
-	if (!setgid(c->gid) && !setuid(c->uid))
+	if (!setgroups(0, NULL) && !setgid(c->gid) && !setuid(c->uid))
 		return;
 
 	fprintf(stderr, "Can't change user/group, exiting");
