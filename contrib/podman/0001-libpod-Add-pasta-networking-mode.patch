@@ -1,4 +1,4 @@
-From 27b0bf3a0ad6c57c7713aef1ded8cad6d4cd4d4a Mon Sep 17 00:00:00 2001
+From 9f61d4107f7cce5fb4157e18c67fad9c135d7b9f Mon Sep 17 00:00:00 2001
 From: Stefano Brivio <sbrivio@redhat.com>
 Date: Mon, 2 May 2022 16:12:07 +0200
 Subject: [PATCH] libpod: Add pasta networking mode
@@ -41,25 +41,25 @@ Signed-off-by: Stefano Brivio <sbrivio@redhat.com>
 SPDX-FileCopyrightText: 2021-2022 Red Hat GmbH <sbrivio@redhat.com>
 SPDX-License-Identifier: Apache-2.0
 
- docs/source/markdown/podman-create.1.md     |  48 ++++++++-
- docs/source/markdown/podman-pod-create.1.md |  44 ++++++++
- docs/source/markdown/podman-run.1.md        |  49 ++++++++-
- docs/source/markdown/podman.1.md            |   6 +-
- libpod/networking_linux.go                  |   6 +-
- libpod/networking_pasta.go                  | 107 ++++++++++++++++++++
- pkg/namespaces/namespaces.go                |   6 ++
- pkg/specgen/generate/namespaces.go          |  10 ++
- pkg/specgen/generate/pod_create.go          |   6 ++
- pkg/specgen/namespaces.go                   |  16 ++-
- pkg/specgen/podspecgen.go                   |   2 +-
+ docs/source/markdown/podman-create.1.md.in    |  48 +++++++-
+ .../source/markdown/podman-pod-create.1.md.in |  44 +++++++
+ docs/source/markdown/podman-run.1.md.in       |  49 +++++++-
+ docs/source/markdown/podman.1.md              |   6 +-
+ libpod/networking_linux.go                    |   6 +-
+ libpod/networking_pasta.go                    | 107 ++++++++++++++++++
+ pkg/namespaces/namespaces.go                  |   6 +
+ pkg/specgen/generate/namespaces.go            |  10 ++
+ pkg/specgen/generate/pod_create.go            |   6 +
+ pkg/specgen/namespaces.go                     |  16 ++-
+ pkg/specgen/podspecgen.go                     |   2 +-
  11 files changed, 286 insertions(+), 14 deletions(-)
  create mode 100644 libpod/networking_pasta.go
 
-diff --git a/docs/source/markdown/podman-create.1.md b/docs/source/markdown/podman-create.1.md
-index b3e707e45..03a754e4c 100644
---- a/docs/source/markdown/podman-create.1.md
-+++ b/docs/source/markdown/podman-create.1.md
-@@ -717,10 +717,15 @@ Valid _mode_ values are:
+diff --git a/docs/source/markdown/podman-create.1.md.in b/docs/source/markdown/podman-create.1.md.in
+index 0a880951d..287dbc4a4 100644
+--- a/docs/source/markdown/podman-create.1.md.in
++++ b/docs/source/markdown/podman-create.1.md.in
+@@ -394,10 +394,15 @@ Valid _mode_ values are:
    - **interface_name**: Specify a name for the created network interface inside the container.
  
    For example to set a static ipv4 address and a static mac address, use `--network bridge:ip=10.88.0.10,mac=44:33:22:11:00:99`.
@@ -75,7 +75,7 @@ index b3e707e45..03a754e4c 100644
  - **ns:**_path_: Path to a network namespace to join.
  - **private**: Create a new namespace for the container. This will use the **bridge** mode for rootful containers and **slirp4netns** for rootless ones.
  - **slirp4netns[:OPTIONS,...]**: use **slirp4netns**(1) to create a user network stack. This is the default for rootless containers. It is possible to specify these additional options, they can also be set with `network_cmd_options` in containers.conf:
-@@ -736,6 +741,40 @@ Valid _mode_ values are:
+@@ -413,6 +418,40 @@ Valid _mode_ values are:
    Note: Rootlesskit changes the source IP address of incoming packets to an IP address in the container network namespace, usually `10.0.2.100`. If your application requires the real source IP address, e.g. web server logs, use the slirp4netns port handler. The rootlesskit port handler is also used for rootless containers when connected to user-defined networks.
    - **port_handler=slirp4netns**: Use the slirp4netns port forwarding, it is slower than rootlesskit but preserves the correct source IP address. This port handler cannot be used for user-defined networks.
  
@@ -113,10 +113,10 @@ index b3e707e45..03a754e4c 100644
 +    host, using the loopback interface instead of the tap interface for improved
 +    performance
 +
- #### **--network-alias**=*alias*
+ @@option network-alias
  
- Add a network-scoped alias for the container, setting the alias for all networks that the container joins. To set a
-@@ -1595,8 +1634,9 @@ In order for users to run rootless, there must be an entry for their username in
+ @@option no-healthcheck
+@@ -1018,8 +1057,9 @@ In order for users to run rootless, there must be an entry for their username in
  
  Rootless Podman works better if the fuse-overlayfs and slirp4netns packages are installed.
  The fuse-overlayfs package provides a userspace overlay storage driver, otherwise users need to use
@@ -128,7 +128,7 @@ index b3e707e45..03a754e4c 100644
  
  ## ENVIRONMENT
  
-@@ -1645,7 +1685,9 @@ page.
+@@ -1068,7 +1108,9 @@ page.
  NOTE: Use the environment variable `TMPDIR` to change the temporary storage location of downloaded container images. Podman defaults to use `/var/tmp`.
  
  ## SEE ALSO
@@ -139,11 +139,11 @@ index b3e707e45..03a754e4c 100644
  
  ## HISTORY
  October 2017, converted from Docker documentation to Podman by Dan Walsh for Podman `<dwalsh@redhat.com>`
-diff --git a/docs/source/markdown/podman-pod-create.1.md b/docs/source/markdown/podman-pod-create.1.md
-index 7b63ac51d..03174d1a6 100644
---- a/docs/source/markdown/podman-pod-create.1.md
-+++ b/docs/source/markdown/podman-pod-create.1.md
-@@ -263,10 +263,15 @@ Valid _mode_ values are:
+diff --git a/docs/source/markdown/podman-pod-create.1.md.in b/docs/source/markdown/podman-pod-create.1.md.in
+index 702780c65..609a5aee5 100644
+--- a/docs/source/markdown/podman-pod-create.1.md.in
++++ b/docs/source/markdown/podman-pod-create.1.md.in
+@@ -181,10 +181,15 @@ Valid _mode_ values are:
    - **interface_name**: Specify a name for the created network interface inside the container.
  
    For example to set a static ipv4 address and a static mac address, use `--network bridge:ip=10.88.0.10,mac=44:33:22:11:00:99`.
@@ -159,7 +159,7 @@ index 7b63ac51d..03174d1a6 100644
  - **ns:**_path_: Path to a network namespace to join.
  - **private**: Create a new namespace for the container. This will use the **bridge** mode for rootful containers and **slirp4netns** for rootless ones.
  - **slirp4netns[:OPTIONS,...]**: use **slirp4netns**(1) to create a user network stack. This is the default for rootless containers. It is possible to specify these additional options, they can also be set with `network_cmd_options` in containers.conf:
-@@ -282,6 +287,43 @@ Valid _mode_ values are:
+@@ -200,6 +205,43 @@ Valid _mode_ values are:
    Note: Rootlesskit changes the source IP address of incoming packets to an IP address in the container network namespace, usually `10.0.2.100`. If your application requires the real source IP address, e.g. web server logs, use the slirp4netns port handler. The rootlesskit port handler is also used for rootless containers when connected to user-defined networks.
    - **port_handler=slirp4netns**: Use the slirp4netns port forwarding, it is slower than rootlesskit but preserves the correct source IP address. This port handler cannot be used for user-defined networks.
  
@@ -200,10 +200,10 @@ index 7b63ac51d..03174d1a6 100644
 +    host, using the loopback interface instead of the tap interface for improved
 +    performance
 +
- #### **--network-alias**=*alias*
+ @@option network-alias
  
- Add a network-scoped alias for the pod, setting the alias for all networks that the container joins. To set a
-@@ -672,6 +714,8 @@ $ podman pod create --network slirp4netns:outbound_addr=127.0.0.1,allow_host_loo
+ @@option no-hosts
+@@ -561,6 +603,8 @@ $ podman pod create --network slirp4netns:outbound_addr=127.0.0.1,allow_host_loo
  
  $ podman pod create --network slirp4netns:cidr=192.168.0.0/24
  
@@ -212,11 +212,11 @@ index 7b63ac51d..03174d1a6 100644
  $ podman pod create --network net1:ip=10.89.1.5 --network net2:ip=10.89.10.10
  ```
  
-diff --git a/docs/source/markdown/podman-run.1.md b/docs/source/markdown/podman-run.1.md
-index 8c889f0a5..0ad667fc2 100644
---- a/docs/source/markdown/podman-run.1.md
-+++ b/docs/source/markdown/podman-run.1.md
-@@ -734,10 +734,15 @@ Valid _mode_ values are:
+diff --git a/docs/source/markdown/podman-run.1.md.in b/docs/source/markdown/podman-run.1.md.in
+index 6798c65da..06dfa0745 100644
+--- a/docs/source/markdown/podman-run.1.md.in
++++ b/docs/source/markdown/podman-run.1.md.in
+@@ -409,10 +409,15 @@ Valid _mode_ values are:
    - **interface_name**: Specify a name for the created network interface inside the container.
  
    For example to set a static ipv4 address and a static mac address, use `--network bridge:ip=10.88.0.10,mac=44:33:22:11:00:99`.
@@ -232,7 +232,7 @@ index 8c889f0a5..0ad667fc2 100644
  - **ns:**_path_: Path to a network namespace to join.
  - **private**: Create a new namespace for the container. This will use the **bridge** mode for rootful containers and **slirp4netns** for rootless ones.
  - **slirp4netns[:OPTIONS,...]**: use **slirp4netns**(1) to create a user network stack. This is the default for rootless containers. It is possible to specify these additional options, they can also be set with `network_cmd_options` in containers.conf:
-@@ -753,6 +758,43 @@ Valid _mode_ values are:
+@@ -428,6 +433,43 @@ Valid _mode_ values are:
    Note: Rootlesskit changes the source IP address of incoming packets to an IP address in the container network namespace, usually `10.0.2.100`. If your application requires the real source IP address, e.g. web server logs, use the slirp4netns port handler. The rootlesskit port handler is also used for rootless containers when connected to user-defined networks.
    - **port_handler=slirp4netns**: Use the slirp4netns port forwarding, it is slower than rootlesskit but preserves the correct source IP address. This port handler cannot be used for user-defined networks.
  
@@ -273,10 +273,10 @@ index 8c889f0a5..0ad667fc2 100644
 +    host, using the loopback interface instead of the tap interface for improved
 +    performance
 +
- #### **--network-alias**=*alias*
+ @@option network-alias
  
- Add a network-scoped alias for the container, setting the alias for all networks that the container joins. To set a
-@@ -1967,8 +2009,9 @@ In order for users to run rootless, there must be an entry for their username in
+ @@option no-healthcheck
+@@ -1383,8 +1425,9 @@ In order for users to run rootless, there must be an entry for their username in
  
  Rootless Podman works better if the fuse-overlayfs and slirp4netns packages are installed.
  The **fuse-overlayfs** package provides a userspace overlay storage driver, otherwise users need to use
@@ -288,7 +288,7 @@ index 8c889f0a5..0ad667fc2 100644
  
  ## ENVIRONMENT
  
-@@ -2015,7 +2058,7 @@ page.
+@@ -1431,7 +1474,7 @@ page.
  NOTE: Use the environment variable `TMPDIR` to change the temporary storage location of downloaded container images. Podman defaults to use `/var/tmp`.
  
  ## SEE ALSO
@@ -298,7 +298,7 @@ index 8c889f0a5..0ad667fc2 100644
  ## HISTORY
  September 2018, updated by Kunal Kushwaha `<kushwaha_kunal_v7@lab.ntt.co.jp>`
 diff --git a/docs/source/markdown/podman.1.md b/docs/source/markdown/podman.1.md
-index 4c019ae97..4c09d4bee 100644
+index d1192b6d2..a79a56253 100644
 --- a/docs/source/markdown/podman.1.md
 +++ b/docs/source/markdown/podman.1.md
 @@ -88,7 +88,7 @@ Set libpod namespace. Namespaces are used to separate groups of containers and p
@@ -310,7 +310,7 @@ index 4c019ae97..4c09d4bee 100644
  
  #### **--network-config-dir**=*directory*
  
-@@ -415,7 +415,7 @@ See the `subuid(5)` and `subgid(5)` man pages for more information.
+@@ -421,7 +421,7 @@ See the `subuid(5)` and `subgid(5)` man pages for more information.
  
  Images are pulled under `XDG_DATA_HOME` when specified, otherwise in the home directory of the user under `.local/share/containers/storage`.
  
@@ -319,7 +319,7 @@ index 4c019ae97..4c09d4bee 100644
  
  In certain environments like HPC (High Performance Computing), users cannot take advantage of the additional UIDs and GIDs from the /etc/subuid and /etc/subgid systems.  However, in this environment, rootless Podman can operate with a single UID.  To make this work, set the `ignore_chown_errors` option in the /etc/containers/storage.conf or in ~/.config/containers/storage.conf files. This option tells Podman when pulling an image to ignore chown errors when attempting to change a file in a container image to match the non-root UID in the image. This means all files get saved as the user's UID. Note this could cause issues when running the container.
  
-@@ -428,7 +428,7 @@ The Network File System (NFS) and other distributed file systems (for example: L
+@@ -434,7 +434,7 @@ The Network File System (NFS) and other distributed file systems (for example: L
  For more information, please refer to the [Podman Troubleshooting Page](https://github.com/containers/podman/blob/main/troubleshooting.md).
  
  ## SEE ALSO
@@ -329,7 +329,7 @@ index 4c019ae97..4c09d4bee 100644
  ## HISTORY
  Dec 2016, Originally compiled by Dan Walsh <dwalsh@redhat.com>
 diff --git a/libpod/networking_linux.go b/libpod/networking_linux.go
-index c05796768..5c1f0ea35 100644
+index c10c3c0b2..0f0c1213c 100644
 --- a/libpod/networking_linux.go
 +++ b/libpod/networking_linux.go
 @@ -640,6 +640,9 @@ func (r *Runtime) configureNetNS(ctr *Container, ctrNS ns.NetNS) (status map[str
@@ -511,10 +511,10 @@ index f0d4e9153..2c4b40509 100644
  		portMappings, expose, err := createPortMappings(s, imageData)
  		if err != nil {
 diff --git a/pkg/specgen/generate/pod_create.go b/pkg/specgen/generate/pod_create.go
-index 4e6362c9b..fa8a01c84 100644
+index d6063b9a0..be94fb251 100644
 --- a/pkg/specgen/generate/pod_create.go
 +++ b/pkg/specgen/generate/pod_create.go
-@@ -200,6 +200,12 @@ func MapSpec(p *specgen.PodSpecGenerator) (*specgen.SpecGenerator, error) {
+@@ -201,6 +201,12 @@ func MapSpec(p *specgen.PodSpecGenerator) (*specgen.SpecGenerator, error) {
  			p.InfraContainerSpec.NetworkOptions = p.NetworkOptions
  			p.InfraContainerSpec.NetNS.NSMode = specgen.Slirp
  		}
