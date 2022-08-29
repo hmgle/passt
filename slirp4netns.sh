@@ -121,7 +121,7 @@ opt() {
 
 # start() - Start pasta
 start() {
-	${PASTA} ${PASTA_OPTS} ${PORT_ARGS} ${ns_spec}
+	${PASTA} ${PASTA_OPTS} ${PORT_ARGS} --netns ${ns_spec}
 	[ ${RFD} -ne 0 ] && echo "1" >&${RFD} || :
 }
 

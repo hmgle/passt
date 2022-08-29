@@ -1,4 +1,4 @@
-From 9f61d4107f7cce5fb4157e18c67fad9c135d7b9f Mon Sep 17 00:00:00 2001
+From 321b58cf7e9eadb6073c286ed6709747770f5964 Mon Sep 17 00:00:00 2001
 From: Stefano Brivio <sbrivio@redhat.com>
 Date: Mon, 2 May 2022 16:12:07 +0200
 Subject: [PATCH] libpod: Add pasta networking mode
@@ -354,7 +354,7 @@ index c10c3c0b2..0f0c1213c 100644
  	}
 diff --git a/libpod/networking_pasta.go b/libpod/networking_pasta.go
 new file mode 100644
-index 000000000..66f81cbfc
+index 000000000..f179c803a
 --- /dev/null
 +++ b/libpod/networking_pasta.go
 @@ -0,0 +1,107 @@
@@ -452,7 +452,7 @@ index 000000000..66f81cbfc
 +		cmdArgs = append(cmdArgs, "-U", "none")
 +	}
 +
-+	cmdArgs = append(cmdArgs, netns.Path())
++	cmdArgs = append(cmdArgs, "--netns", netns.Path())
 +
 +	logrus.Debugf("pasta arguments: %s", strings.Join(cmdArgs, " "))
 +
