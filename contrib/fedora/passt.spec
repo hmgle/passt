@@ -7,6 +7,8 @@
 # Copyright (c) 2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
+%global git_hash {{{ git_head }}}
+
 Name:		passt
 Version:	{{{ git_version }}}
 Release:	1%{?dist}
@@ -14,7 +16,7 @@ Summary:	User-mode networking daemons for virtual machines and namespaces
 License:	AGPLv3+ and BSD
 Group:		System Environment/Daemons
 URL:		https://passt.top/
-Source:		https://passt.top/passt/snapshot/passt-{{{ git_head }}}.tar.xz
+Source:		https://passt.top/passt/snapshot/passt-%{git_hash}.tar.xz
 
 BuildRequires:	gcc, make, checkpolicy, selinux-policy-devel
 
@@ -40,7 +42,7 @@ Requires(preun): policycoreutils, %{name}
 This package adds SELinux enforcement to passt(1) and pasta(1).
 
 %prep
-%setup -q -n passt-{{{ git_head }}}
+%setup -q -n passt-%{git_hash}
 
 %build
 %set_build_flags
