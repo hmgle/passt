@@ -12,7 +12,10 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 function git_version {
-	printf "0.git.%s.%s" "$(date -u -I | tr - _)" "$(git rev-parse --short HEAD)"
+	__commit="$(git rev-parse --short "${1:-HEAD}")"
+	__date="$(git log --pretty="format:%cI" "${__commit}" -1)"
+
+	printf "0^%s.g%s" "$(date -uI -d "${__date}" | tr -d -)" "${__commit}"
 }
 
 function git_head {
@@ -28,7 +31,7 @@ function passt_git_changelog_entry {
 	__date="$(git log --pretty="format:%cI" "${__to}" -1)"
 	__author="$(git log -1 --pretty="format:%an <%ae>" ${__to} -- contrib/fedora)"
 
-	printf "* %s %s - %s\n" "$(date "+%a %b %e %Y" -d "${__date}")" "${__author}" "0.git.${1}-0"
+	printf "* %s %s - %s\n" "$(date "+%a %b %e %Y" -d "${__date}")" "${__author}" "$(git_version "${__to}")-1"
 
 	IFS='
 '
