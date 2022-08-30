@@ -47,6 +47,22 @@ Virtual machine images are built during test executions using
 [mbuto](https://mbuto.lameexcu.se/), the shell script is sourced via _git_
 as needed, so there's no need to actually install it.
 
+### Kernel parameters
+
+Performance tests use iperf3 with rather large TCP receiving and sending
+windows, to decrease the likelihood of iperf3 itself becoming the bottleneck.
+These values need to be allowed by the kernel of the host running the tests.
+Example for /etc/sysctl.conf:
+
+  net.core.rmem_max = 134217728
+  net.core.wmem_max = 134217728
+
+Further, the passt demo uses perf(1), relying on hardware events for performance
+counters, to display syscall overhead. The kernel needs to allow unprivileged
+users to access these events. Suggested entry for /etc/sysctl.conf:
+
+  kernel.perf_event_paranoid = -1
+
 ### Special requirements for continuous integration and demo modes
 
 Running the test suite as continuous integration or demo modes will record the
