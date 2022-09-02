@@ -6,5 +6,5 @@
 /qrap
 /pasta.1
 /seccomp.h
-/passt.pid
+/*.pid
 README.plain.md
