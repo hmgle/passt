@@ -49,7 +49,7 @@ This package adds SELinux enforcement to passt(1) and pasta(1).
 %make_build
 
 %install
-%make_install DESTDIR=%{buildroot} prefix=%{_prefix} bindir=%{_bindir} mandir=%{_mandir} docdir=%{_docdir}/passt
+%make_install DESTDIR=%{buildroot} prefix=%{_prefix} bindir=%{_bindir} mandir=%{_mandir} docdir=%{_docdir}/%{name}
 %ifarch x86_64
 ln -sr %{buildroot}%{_mandir}/man1/passt.1 %{buildroot}%{_mandir}/man1/passt.avx2.1
 ln -sr %{buildroot}%{_mandir}/man1/pasta.1 %{buildroot}%{_mandir}/man1/pasta.avx2.1
@@ -71,8 +71,9 @@ semodule -r pasta 2>/dev/null || :
 
 %files
 %license LICENSES/{AGPL-3.0-or-later.txt,BSD-3-Clause.txt}
-%doc %{_docdir}/passt/README.md
-%doc %{_docdir}/passt/demo.sh
+%dir %{_docdir}/%{name}
+%doc %{_docdir}/%{name}/README.md
+%doc %{_docdir}/%{name}/demo.sh
 %{_bindir}/passt
 %{_bindir}/pasta
 %{_bindir}/qrap
@@ -87,6 +88,7 @@ semodule -r pasta 2>/dev/null || :
 %endif
 
 %files selinux
+%dir %{_datadir}/selinux/packages/%{name}
 %{_datadir}/selinux/packages/%{name}/passt.pp
 %{_datadir}/selinux/packages/%{name}/pasta.pp
 
