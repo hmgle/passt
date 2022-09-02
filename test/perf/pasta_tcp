@@ -23,7 +23,9 @@ ns	sysctl -w net.ipv4.tcp_timestamps=0
 
 set	THREADS 2
 set	STREAMS 2
-set	OPTS -Z -w 4M -l 1M -P __STREAMS__ -i1 -t30 -O5 --pacing-timer 10000
+set	TIME 30
+hout	OMIT echo __TIME__ / 6 | bc -l
+set	OPTS -Z -w 4M -l 1M -P __STREAMS__ -i1 -O__OMIT__ --pacing-timer 10000
 
 hout	FREQ_PROCFS (echo "scale=1"; sed -n 's/cpu MHz.*: \([0-9]*\)\..*$/(\1+10^2\/2)\/10^3/p' /proc/cpuinfo) | bc -l | head -n1
 hout	FREQ_CPUFREQ (echo "scale=1"; printf '( %i + 10^5 / 2 ) / 10^6\n' $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) ) | bc -l
@@ -38,17 +40,17 @@ th	MTU 1500B 4000B 16384B 65535B
 
 tr	TCP throughput over IPv6: ns to host
 ns	ip link set dev lo mtu 1500
-iperf3	BW ns host ::1 100${i}3 __THREADS__ __OPTS__
+iperf3	BW ns host ::1 100${i}3 __THREADS__ __TIME__ __OPTS__
 bw	__BW__ 15.0 20.0
 ns	ip link set dev lo mtu 4000
-iperf3c	ns ::1 100${i}3 __THREADS__ __OPTS__
+iperf3c	ns ::1 100${i}3 __THREADS__ __TIME__ __OPTS__
 iperf3s	BW host 100${i}3 __THREADS__
 bw	__BW__ 15.0 20.0
 ns	ip link set dev lo mtu 16384
-iperf3	BW ns host ::1 100${i}3 __THREADS__ __OPTS__
+iperf3	BW ns host ::1 100${i}3 __THREADS__ __TIME__ __OPTS__
 bw	__BW__ 15.0 20.0
 ns	ip link set dev lo mtu 65535
-iperf3	BW ns host ::1 100${i}3 __THREADS__ __OPTS__
+iperf3	BW ns host ::1 100${i}3 __THREADS__ __TIME__ __OPTS__
 bw	__BW__ 15.0 20.0
 
 tl	TCP RR latency over IPv6: ns to host
@@ -72,16 +74,16 @@ lat	__LAT__ 500 350
 
 tr	TCP throughput over IPv4: ns to host
 ns	ip link set dev lo mtu 1500
-iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __OPTS__
+iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __TIME__ __OPTS__
 bw	__BW__ 15.0 20.0
 ns	ip link set dev lo mtu 4000
-iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __OPTS__
+iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __TIME__ __OPTS__
 bw	__BW__ 15.0 20.0
 ns	ip link set dev lo mtu 16384
-iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __OPTS__
+iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __TIME__ __OPTS__
 bw	__BW__ 15.0 20.0
 ns	ip link set dev lo mtu 65535
-iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __OPTS__
+iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __TIME__ __OPTS__
 bw	__BW__ 15.0 20.0
 
 tl	TCP RR latency over IPv4: ns to host
@@ -107,7 +109,7 @@ tr	TCP throughput over IPv6: host to ns
 bw	-
 bw	-
 bw	-
-iperf3	BW host ns ::1 100${i}2 __THREADS__ __OPTS__
+iperf3	BW host ns ::1 100${i}2 __THREADS__ __TIME__ __OPTS__
 bw	__BW__ 15.0 20.0
 
 tl	TCP RR latency over IPv6: host to ns
@@ -133,7 +135,7 @@ tr	TCP throughput over IPv4: host to ns
 bw	-
 bw	-
 bw	-
-iperf3	BW host ns 127.0.0.1 100${i}2 __THREADS__ __OPTS__
+iperf3	BW host ns 127.0.0.1 100${i}2 __THREADS__ __TIME__ __OPTS__
 bw	__BW__ 15.0 20.0
 
 tl	TCP RR latency over IPv4: host to ns
@@ -165,7 +167,7 @@ nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
 nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 set	THREADS 1
 set	STREAMS 2
-set	OPTS -Z -P __STREAMS__ -i1 -t30 -O5 --pacing-timer 100000
+set	OPTS -Z -P __STREAMS__ -i1 -O__OMIT__ --pacing-timer 100000
 
 info	Throughput in Gbps, latency in µs, one thread at __FREQ__ GHz, __STREAMS__ streams
 report	pasta tap_tcp __THREADS__ __FREQ__
@@ -175,16 +177,16 @@ th	MTU 1500B 4000B 16384B 65520B
 
 tr	TCP throughput over IPv6: ns to host
 ns	ip link set dev __IFNAME__ mtu 1500
-iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -w 512k
+iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -w 512k
 bw	__BW__ 0.2 0.4
 ns	ip link set dev __IFNAME__ mtu 4000
-iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -w 1M
+iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -w 1M
 bw	__BW__ 0.3 0.5
 ns	ip link set dev __IFNAME__ mtu 16384
-iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -w 8M
+iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -w 8M
 bw	__BW__ 1.5 2.0
 ns	ip link set dev __IFNAME__ mtu 65520
-iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -w 8M
+iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -w 8M
 bw	__BW__ 2.0 2.5
 
 tl	TCP RR latency over IPv6: ns to host
@@ -208,16 +210,16 @@ lat	__LAT__ 1500 500
 
 tr	TCP throughput over IPv4: ns to host
 ns	ip link set dev __IFNAME__ mtu 1500
-iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __OPTS__ -w 512k
+iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -w 512k
 bw	__BW__ 0.2 0.4
 ns	ip link set dev __IFNAME__ mtu 4000
-iperf3s	BW ns host __GW__ 100${i}3 __THREADS__ __OPTS__ -w 1M
+iperf3s	BW ns host __GW__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -w 1M
 bw	__BW__ 0.3 0.5
 ns	ip link set dev __IFNAME__ mtu 16384
-iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __OPTS__ -w 8M
+iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -w 8M
 bw	__BW__ 1.5 2.0
 ns	ip link set dev __IFNAME__ mtu 65520
-iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __OPTS__ -w 8M
+iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -w 8M
 bw	__BW__ 2.0 2.5
 
 tl	TCP RR latency over IPv4: ns to host

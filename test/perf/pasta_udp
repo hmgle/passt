@@ -22,7 +22,8 @@ hout	FREQ [ -n "__FREQ_CPUFREQ__" ] && echo __FREQ_CPUFREQ__ || echo __FREQ_PROC
 
 set	THREADS 1
 set	STREAMS 4
-set	OPTS -u -i1 -t30 -P __STREAMS__
+set	TIME 30
+set	OPTS -u -i1 -P __STREAMS__
 
 info	Throughput in Gbps, latency in µs, one thread at __FREQ__ GHz, __STREAMS__ streams
 
@@ -33,16 +34,16 @@ th	MTU 1500B 4000B 16384B 65535B
 
 tr	UDP throughput over IPv6: ns to host
 ns	ip link set dev lo mtu 1500
-iperf3	BW ns host ::1 100${i}3 __THREADS__ __OPTS__ -b 3G
+iperf3	BW ns host ::1 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 3G
 bw	__BW__ 1.0 1.5
 ns	ip link set dev lo mtu 4000
-iperf3	BW ns host ::1 100${i}3 __THREADS__ __OPTS__ -b 3G
+iperf3	BW ns host ::1 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 3G
 bw	__BW__ 1.2 1.8
 ns	ip link set dev lo mtu 16384
-iperf3	BW ns host ::1 100${i}3 __THREADS__ __OPTS__ -b 10G
+iperf3	BW ns host ::1 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 10G
 bw	__BW__ 5.0 6.0
 ns	ip link set dev lo mtu 65535
-iperf3	BW ns host ::1 100${i}3 __THREADS__ __OPTS__ -b 15G
+iperf3	BW ns host ::1 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 15G
 bw	__BW__ 7.0 9.0
 
 tl	UDP RR latency over IPv6: ns to host
@@ -57,16 +58,16 @@ lat	__LAT__ 200 150
 
 tr	UDP throughput over IPv4: ns to host
 ns	ip link set dev lo mtu 1500
-iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __OPTS__ -b 3G
+iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 3G
 bw	__BW__ 1.0 1.5
 ns	ip link set dev lo mtu 4000
-iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __OPTS__ -b 3G
+iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 3G
 bw	__BW__ 1.2 1.8
 ns	ip link set dev lo mtu 16384
-iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __OPTS__ -b 10G
+iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 10G
 bw	__BW__ 5.0 6.0
 ns	ip link set dev lo mtu 65535
-iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __OPTS__ -b 15G
+iperf3	BW ns host 127.0.0.1 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 15G
 bw	__BW__ 7.0 9.0
 
 tl	UDP RR latency over IPv4: ns to host
@@ -83,9 +84,9 @@ tr	UDP throughput over IPv6: host to ns
 bw	-
 bw	-
 bw	-
-#iperf3c	host ::1 100${i}2 __THREADS__ __OPTS__ -b 15G
+#iperf3c	host ::1 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 15G
 #iperf3s	BW ns 100${i}2 __THREADS__
-iperf3	BW host ns ::1 100${i}2 __THREADS__ __OPTS__ -b 15G
+iperf3	BW host ns ::1 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 15G
 bw	__BW__ 7.0 9.0
 
 tl	UDP RR latency over IPv6: host to ns
@@ -102,9 +103,9 @@ tr	UDP throughput over IPv4: host to ns
 bw	-
 bw	-
 bw	-
-#iperf3c	host 127.0.0.1 100${i}2 __THREADS__ __OPTS__ -b 15G
+#iperf3c	host 127.0.0.1 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 15G
 #iperf3s	BW ns 100${i}2 __THREADS__
-iperf3	BW host ns 127.0.0.1 100${i}2 __THREADS__ __OPTS__ -b 15G
+iperf3	BW host ns 127.0.0.1 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 15G
 bw	__BW__ 7.0 9.0
 
 tl	UDP RR latency over IPv4: host to ns
@@ -133,16 +134,16 @@ th	MTU 1500B 4000B 16384B 65520B
 
 tr	UDP throughput over IPv6: ns to host
 ns	ip link set dev __IFNAME__ mtu 1500
-iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -b 2G
+iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 2G
 bw	__BW__ 0.3 0.5
 ns	ip link set dev __IFNAME__ mtu 4000
-iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -b 3G
+iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 3G
 bw	__BW__ 0.5 0.8
 ns	ip link set dev __IFNAME__ mtu 16384
-iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -b 4G
+iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 4G
 bw	__BW__ 3.0 4.0
 ns	ip link set dev __IFNAME__ mtu 65520
-iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __OPTS__ -b 6G
+iperf3	BW ns host __GW6__%__IFNAME__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 6G
 bw	__BW__ 6.0 7.0
 
 tl	UDP RR latency over IPv6: ns to host
@@ -157,16 +158,16 @@ lat	__LAT__ 200 150
 
 tr	UDP throughput over IPv4: ns to host
 ns	ip link set dev __IFNAME__ mtu 1500
-iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __OPTS__ -b 2G
+iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 2G
 bw	__BW__ 0.3 0.5
 ns	ip link set dev __IFNAME__ mtu 4000
-iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __OPTS__ -b 3G
+iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 3G
 bw	__BW__ 0.5 0.8
 ns	ip link set dev __IFNAME__ mtu 16384
-iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __OPTS__ -b 4G
+iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 4G
 bw	__BW__ 3.0 4.0
 ns	ip link set dev __IFNAME__ mtu 65520
-iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __OPTS__ -b 6G
+iperf3	BW ns host __GW__ 100${i}3 __THREADS__ __TIME__ __OPTS__ -b 6G
 bw	__BW__ 6.0 7.0
 
 tl	UDP RR latency over IPv4: ns to host

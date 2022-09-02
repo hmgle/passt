@@ -20,6 +20,7 @@
 # $4:	Destination name or address for client
 # $5:	Port number, ${i} is translated to process index
 # $6:	Number of processes to run in parallel
+# $7:	Run time, in seconds
 # $@:	Client options
 test_iperf3() {
 	__var="${1}"; shift
@@ -28,6 +29,7 @@ test_iperf3() {
 	__dest="${1}"; shift
 	__port="${1}"; shift
 	__procs="$((${1} - 1))"; shift
+	__time="${1}"; shift
 
 	pane_run "${__spane}" 'for i in $(seq 0 '${__procs}'); do'	\
 		':> s${i}.bw; done'
@@ -42,8 +44,8 @@ test_iperf3() {
 		sleep 2
 		pane_run "${__cpane}" 'for i in $(seq 0 '${__procs}');'	\
 			 'do ( iperf3 -c '"${__dest}"' -p '"${__port}"	\
-			 "${@}" ' -T s${i} & echo $! > c${i}.pid & ); done'
-		sleep 40
+			 '-t'${__time} "${@}" ' -T s${i} & echo $! > c${i}.pid & ); done'
+		sleep $(echo ${__time} + 10 | bc -l)
 		pane_run "${__cpane}" 'for i in $(seq 0 '${__procs}'); do'\
 			 'kill -INT $(cat c${i}.pid) 2>/dev/null; done'
 	) &
@@ -57,7 +59,7 @@ test_iperf3() {
 			'done'
 	else
 		pane_run "${__spane}" 'for i in $(seq 0 '${__procs}');'	\
-			'do ( ( iperf3 -s1J -i 30 -p '"${__port}"	\
+			'do ( ( iperf3 -s1J -i '${__time}' -p '"${__port}"	\
 			'& echo $! > s${i}.pid ) 2>/dev/null'		\
 			'| jq -rM ".intervals[0].sum.bits_per_second"'	\
 			'> s${i}.bw & );'				\
@@ -65,7 +67,7 @@ test_iperf3() {
 	fi
 
 	pane_status "${__spane}"
-	sleep 45
+	sleep $(echo ${__time} + 15 | bc -l)
 	pane_run "${__spane}" 'for i in $(seq 0 '${__procs}'); do'	\
 		 'kill -INT $(cat s${i}.pid) 2>/dev/null; done'
 	sleep 4
