@@ -35,8 +35,11 @@ requiring any capabilities or privileges.
 BuildArch:  noarch
 Summary:    SELinux support for passt and pasta
 Requires:   %{name} = %{version}-%{release}
-Requires(post): policycoreutils, %{name}
-Requires(preun): policycoreutils, %{name}
+Requires:   selinux-policy
+Requires(post): %{name}
+Requires(post): policycoreutils
+Requires(preun): %{name}
+Requires(preun): policycoreutils
 
 %description selinux
 This package adds SELinux enforcement to passt(1) and pasta(1).
