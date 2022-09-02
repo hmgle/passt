@@ -31,54 +31,40 @@ test_iperf3() {
 	__procs="$((${1} - 1))"; shift
 	__time="${1}"; shift
 
-	pane_run "${__spane}" 'for i in $(seq 0 '${__procs}'); do'	\
-		':> s${i}.bw; done'
+	pane_run "${__spane}" 						\
+		 '('							\
+		 '	for i in $(seq 0 '${__procs}'); do'		\
+		 '		iperf3 -s1J -p'${__port}' -i'${__time}	\
+		 '		   > s${i}.json &'			\
+		 '	done;'						\
+		 '	wait'						\
+		 ')'
+
+	pane_run "${__cpane}" 						\
+		 '('							\
+		 '	for i in $(seq 0 '${__procs}'); do'		\
+		 '		iperf3 -c '${__dest}' -p '${__port}	\
+		 '		  -t'${__time}' -T s${i} '"${@}"' &'	\
+		 '	done;'						\
+		 '	wait'						\
+		 ')'
+
+	pane_status "${__cpane}"
 	pane_status "${__spane}"
 
-	__udp=0
+	__jval=".end.sum_received.bits_per_second"
 	for __opt in ${@}; do
-	    [ "${__opt}" = "-u" ] && __udp=1
+		# UDP test
+		[ "${__opt}" = "-u" ] && __jval=".intervals[0].sum.bits_per_second"
 	done
 
-	(
-		sleep 2
-		pane_run "${__cpane}" 'for i in $(seq 0 '${__procs}');'	\
-			 'do ( iperf3 -c '"${__dest}"' -p '"${__port}"	\
-			 '-t'${__time} "${@}" ' -T s${i} & echo $! > c${i}.pid & ); done'
-		sleep $(echo ${__time} + 10 | bc -l)
-		pane_run "${__cpane}" 'for i in $(seq 0 '${__procs}'); do'\
-			 'kill -INT $(cat c${i}.pid) 2>/dev/null; done'
-	) &
-
-	if [ ${__udp} -eq 0 ]; then
-		pane_run "${__spane}" 'for i in $(seq 0 '${__procs}');'	\
-			'do ( ( iperf3 -s1J -p '"${__port}"		\
-			'& echo $! > s${i}.pid ) 2>/dev/null'		\
-			'| jq -rM ".end.sum_received.bits_per_second"'	\
-			'> s${i}.bw & );'				\
-			'done'
-	else
-		pane_run "${__spane}" 'for i in $(seq 0 '${__procs}');'	\
-			'do ( ( iperf3 -s1J -i '${__time}' -p '"${__port}"	\
-			'& echo $! > s${i}.pid ) 2>/dev/null'		\
-			'| jq -rM ".intervals[0].sum.bits_per_second"'	\
-			'> s${i}.bw & );'				\
-			'done'
-	fi
-
-	pane_status "${__spane}"
-	sleep $(echo ${__time} + 15 | bc -l)
-	pane_run "${__spane}" 'for i in $(seq 0 '${__procs}'); do'	\
-		 'kill -INT $(cat s${i}.pid) 2>/dev/null; done'
-	sleep 4
-	pane_wait "${__spane}"
-	pane_run "${__spane}" '(cat s*.bw |'				\
-		'sed '"'"'s/\(.*\)/\1\+/g'"'"' |'			\
-		'tr -d "\n"; echo 0) | bc -l'
+	pane_run "${__spane}"						\
+		 'cat s*.json | jq -rMs "map('${__jval}') | add"'
 	pane_wait "${__spane}"
 	__bw="$(pane_parse "${__spane}")"
-	pane_run "${__spane}" 'for i in $(seq 0 '${__procs}'); do'	\
-		'rm -f [cs]${i}.bw [cs]${i}.pid; done'
+
+	pane_run "${__spane}"						\
+		'for i in $(seq 0 '${__procs}'); do rm s${i}.json; done'
 	pane_status "${__spane}"
 
 	TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__var}__" "${__bw}" )"
