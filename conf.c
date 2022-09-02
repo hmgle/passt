@@ -1094,9 +1094,9 @@ void conf(struct ctx *c, int argc, char **argv)
 		const char *optstring;
 
 		if (c->mode == MODE_PASST)
-			optstring = "dqfehs:p::P:m:a:n:M:g:i:D::S::46t:u:";
+			optstring = "dqfehs:p:P:m:a:n:M:g:i:D:S:46t:u:";
 		else
-			optstring = "dqfehI:p::P:m:a:n:M:g:i:D::S::46t:u:T:U:";
+			optstring = "dqfehI:p:P:m:a:n:M:g:i:D:S:46t:u:T:U:";
 
 		name = getopt_long(argc, argv, optstring, options, NULL);
 
