@@ -13,74 +13,73 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-# test_iperf3() - Ugly helper for iperf3c/iperf3s directives
-# $1:	Role: client or server
-# $2:	Pane name, can be lowercase
-# $3:	Destination name or address for client
-# $4:	Port number, ${i} is translated to process index
-# $5:	Number of processes to run in parallel
-# $@:	Options
+# test_iperf3() - Ugly helper for iperf3 directive
+# $1:	Variable name: to put the measure bandwidth into
+# $2:	Source/client pane name, can be lowercase
+# $3:	Destination/server pane name, can be lowercase
+# $4:	Destination name or address for client
+# $5:	Port number, ${i} is translated to process index
+# $6:	Number of processes to run in parallel
+# $@:	Client options
 test_iperf3() {
-	__role="${1}"; shift
-	__pane="$(echo "${1}" | tr [a-z] [A-Z])"; shift
-	[ "${__role}" = "client" ] && __dest="${1}" && shift || __dest=""
+	__var="${1}"; shift
+	__cpane="$(echo "${1}" | tr [a-z] [A-Z])"; shift
+	__spane="$(echo "${1}" | tr [a-z] [A-Z])"; shift
+	__dest="${1}"; shift
 	__port="${1}"; shift
 	__procs="$((${1} - 1))"; shift
 
-	[ "${__role}" = "server" ] && __role_opt="-c" || __role_opt="-s1J"
-
-	if [ ${__role} = "client" ]; then
-		UDP_CLIENT=0
-		for __opt in ${@}; do
-			[ "${__opt}" = "-u" ] && UDP_CLIENT=1
-		done
-		
-		(
-		sleep 2
-		pane_run "${__pane}" 'for i in $(seq 0 '${__procs}');'	\
-			'do ( iperf3 -c '"${__dest}"' -p '"${__port}"	\
-			"${@}" ' -T s${i} & echo $! > c${i}.pid & ); done'
-		sleep 40
-		pane_run "${__pane}" 'for i in $(seq 0 '${__procs}'); do'\
-			 'kill -INT $(cat c${i}.pid) 2>/dev/null; done'
-		) &
-		return
-	fi
-
-	pane_run "${__pane}" 'for i in $(seq 0 '${__procs}'); do'	\
+	pane_run "${__spane}" 'for i in $(seq 0 '${__procs}'); do'	\
 		':> s${i}.bw; done'
-	pane_status "${__pane}"
+	pane_status "${__spane}"
 
-	if [ ${UDP_CLIENT} -eq 0 ]; then
-		pane_run "${__pane}" 'for i in $(seq 0 '${__procs}');'	\
-			'do ( ( iperf3 -s1J -p '"${__port} ${@}"	\
+	__udp=0
+	for __opt in ${@}; do
+	    [ "${__opt}" = "-u" ] && __udp=1
+	done
+
+	(
+		sleep 2
+		pane_run "${__cpane}" 'for i in $(seq 0 '${__procs}');'	\
+			 'do ( iperf3 -c '"${__dest}"' -p '"${__port}"	\
+			 "${@}" ' -T s${i} & echo $! > c${i}.pid & ); done'
+		sleep 40
+		pane_run "${__cpane}" 'for i in $(seq 0 '${__procs}'); do'\
+			 'kill -INT $(cat c${i}.pid) 2>/dev/null; done'
+	) &
+
+	if [ ${__udp} -eq 0 ]; then
+		pane_run "${__spane}" 'for i in $(seq 0 '${__procs}');'	\
+			'do ( ( iperf3 -s1J -p '"${__port}"		\
 			'& echo $! > s${i}.pid ) 2>/dev/null'		\
 			'| jq -rM ".end.sum_received.bits_per_second"'	\
 			'> s${i}.bw & );'				\
 			'done'
 	else
-		pane_run "${__pane}" 'for i in $(seq 0 '${__procs}');'	\
-			'do ( ( iperf3 -s1J -i 30 -p '"${__port} ${@}"	\
+		pane_run "${__spane}" 'for i in $(seq 0 '${__procs}');'	\
+			'do ( ( iperf3 -s1J -i 30 -p '"${__port}"	\
 			'& echo $! > s${i}.pid ) 2>/dev/null'		\
 			'| jq -rM ".intervals[0].sum.bits_per_second"'	\
 			'> s${i}.bw & );'				\
 			'done'
 	fi
 
-	pane_status "${__pane}"
+	pane_status "${__spane}"
 	sleep 45
-	pane_run "${__pane}" 'for i in $(seq 0 '${__procs}'); do'	\
+	pane_run "${__spane}" 'for i in $(seq 0 '${__procs}'); do'	\
 		 'kill -INT $(cat s${i}.pid) 2>/dev/null; done'
 	sleep 4
-	pane_wait "${__pane}"
-	pane_run "${__pane}" '(cat s*.bw |'				\
+	pane_wait "${__spane}"
+	pane_run "${__spane}" '(cat s*.bw |'				\
 		'sed '"'"'s/\(.*\)/\1\+/g'"'"' |'			\
 		'tr -d "\n"; echo 0) | bc -l'
-	pane_wait "${__pane}"
-	pane_parse "${__pane}"
-	pane_run "${__pane}" 'for i in $(seq 0 '${__procs}'); do'	\
+	pane_wait "${__spane}"
+	__bw="$(pane_parse "${__spane}")"
+	pane_run "${__spane}" 'for i in $(seq 0 '${__procs}'); do'	\
 		'rm -f [cs]${i}.bw [cs]${i}.pid; done'
-	pane_status "${__pane}"
+	pane_status "${__spane}"
+
+	TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__var}__" "${__bw}" )"
 }
 
 test_one_line() {
@@ -323,11 +322,8 @@ test_one_line() {
 	"lat")
 		table_value_latency ${__arg} || TEST_ONE_perf_nok=1
 		;;
-	"iperf3c")
-		test_iperf3 client ${__arg}
-		;;
-	"iperf3s")
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__arg%% *}__" "$(test_iperf3 server ${__arg#* })" )"
+	"iperf3")
+		test_iperf3 ${__arg}
 		;;
 	"set")
 		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__arg%% *}__" "${__arg#* }")"

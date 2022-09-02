@@ -51,23 +51,19 @@ bw	-
 bw	-
 virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 1280
-iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 2G
-iperf3s	BW ns 100${i}2 __THREADS__
+iperf3	BW guest ns __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 2G
 bw	__BW__ 0.8 1.2
 virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 1500
-iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 3G
-iperf3s	BW ns 100${i}2 __THREADS__
+iperf3	BW guest ns __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 3G
 bw	__BW__ 1.0 1.5
 virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 9000
-iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 5G
-iperf3s	BW ns 100${i}2 __THREADS__
+iperf3	BW guest ns __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 5G
 bw	__BW__ 4.0 5.0
 virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 65520
-iperf3c	guest __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 7G
-iperf3s	BW ns 100${i}2 __THREADS__
+iperf3	BW guest ns __GW6__%__IFNAME__ 100${i}2 __THREADS__ __OPTS__ -b 7G
 bw	__BW__ 4.0 5.0
 
 tl	UDP RR latency over IPv6: guest to host
@@ -84,33 +80,27 @@ lat	__LAT__ 200 150
 tr	UDP throughput over IPv4: guest to host
 virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 256
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 500M
-iperf3s	BW ns 100${i}2 __THREADS__
+iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __OPTS__ -b 500M
 bw	__BW__ 0.0 0.0
 virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 576
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 1G
-iperf3s	BW ns 100${i}2 __THREADS__
+iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __OPTS__ -b 1G
 bw	__BW__ 0.4 0.6
 virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 1280
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 2G
-iperf3s	BW ns 100${i}2 __THREADS__
+iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __OPTS__ -b 2G
 bw	__BW__ 0.8 1.2
 virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 1500
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 3G
-iperf3s	BW ns 100${i}2 __THREADS__
+iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __OPTS__ -b 3G
 bw	__BW__ 1.0 1.5
 virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 9000
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 6G
-iperf3s	BW ns 100${i}2 __THREADS__
+iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __OPTS__ -b 6G
 bw	__BW__ 4.0 5.0
 virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 65520
-iperf3c	guest __GW__ 100${i}2 __THREADS__ __OPTS__ -b 7G
-iperf3s	BW ns 100${i}2 __THREADS__
+iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __OPTS__ -b 7G
 bw	__BW__ 4.0 5.0
 
 tl	UDP RR latency over IPv4: guest to host
@@ -128,20 +118,16 @@ tr	UDP throughput over IPv6: host to guest
 bw	-
 bw	-
 ns	ip link set dev lo mtu 1280
-iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 2G
-iperf3s	BW guest 100${i}1 __THREADS__
+iperf3	BW ns guest  ::1 100${i}1 __THREADS__ __OPTS__ -b 2G
 bw	__BW__ 0.8 1.2
 ns	ip link set dev lo mtu 1500
-iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 2G
-iperf3s	BW guest 100${i}1 __THREADS__
+iperf3	BW ns guest ::1 100${i}1 __THREADS__ __OPTS__ -b 2G
 bw	__BW__ 1.0 1.5
 ns	ip link set dev lo mtu 9000
-iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 3G
-iperf3s	BW guest 100${i}1 __THREADS__
+iperf3	BW ns guest ::1 100${i}1 __THREADS__ __OPTS__ -b 3G
 bw	__BW__ 3.0 4.0
 ns	ip link set dev lo mtu 65520
-iperf3c	ns ::1 100${i}1 __THREADS__ __OPTS__ -b 3G
-iperf3s	BW guest 100${i}1 __THREADS__
+iperf3	BW ns guest ::1 100${i}1 __THREADS__ __OPTS__ -b 3G
 bw	__BW__ 3.0 4.0
 
 tl	UDP RR latency over IPv6: host to guest
@@ -158,29 +144,23 @@ ns	ip link set dev lo mtu 65535
 
 tr	UDP throughput over IPv4: host to guest
 ns	ip link set dev lo mtu 256
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 1G
-iperf3s	BW guest 100${i}1 __THREADS__
+iperf3	BW ns guest 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 1G
 bw	__BW__ 0.0 0.0
 ns	ip link set dev lo mtu 576
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 1G
-iperf3s	BW guest 100${i}1 __THREADS__
+iperf3	BW ns guest 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 1G
 bw	__BW__ 0.4 0.6
 ns	ip link set dev lo mtu 1280
 ns	ip addr add ::1 dev lo
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
-iperf3s	BW guest 100${i}1 __THREADS__
+iperf3	BW ns guest 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
 bw	__BW__ 0.8 1.2
 ns	ip link set dev lo mtu 1500
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
-iperf3s	BW guest 100${i}1 __THREADS__
+iperf3	BW ns guest 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
 bw	__BW__ 1.0 1.5
 ns	ip link set dev lo mtu 9000
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
-iperf3s	BW guest 100${i}1 __THREADS__
+iperf3	BW ns guest 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
 bw	__BW__ 3.0 4.0
 ns	ip link set dev lo mtu 65520
-iperf3c	ns 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
-iperf3s	BW guest 100${i}1 __THREADS__
+iperf3	BW ns guest 127.0.0.1 100${i}1 __THREADS__ __OPTS__ -b 3G
 bw	__BW__ 3.0 4.0
 
 tl	UDP RR latency over IPv4: host to guest
