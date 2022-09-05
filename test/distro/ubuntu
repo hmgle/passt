@@ -54,6 +54,11 @@ hout	INIT_MSG cat /tmp/init_msg
 check	[ __INIT_MSG__ = "from_ns" ]
 endef
 
+# With systemd-resolved and TCG, DNS might take a while to work
+def	dns_ready_wait
+host	r=10; while [ \${r} -gt 0 ]; do host ubuntu.com && break; sleep 5; r=\$((r - 1)); done
+endef
+
 # Start passt, set common variables
 hostb	./passt -P __PIDFILE__ &
 sleep	1
@@ -185,11 +190,10 @@ test	Ubuntu 22.04 (Jammy Jellyfish), s390x
 
 host	./qrap 5 qemu-system-s390x -m 2048 -smp 2 -serial stdio -nodefaults -nographic __BASEPATH__/prepared-jammy-server-cloudimg-s390x.img -net socket,fd=5 -net nic,model=virtio -device virtio-rng-ccw -snapshot
 
-host	service systemd-resolved stop
 host	export DEBIAN_FRONTEND=noninteractive
 host	apt-get -y remove needrestart snapd
 host	dhclient -4
-sleep	2
+dns_ready_wait
 host	apt-get update
 host	apt-get -y install make gcc socat
 
