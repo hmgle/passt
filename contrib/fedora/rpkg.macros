@@ -36,7 +36,7 @@ function passt_git_changelog_entry {
 	IFS='
 '
 	for l in $(git log ${__from}..${__to} --pretty=format:"- %s" -- contrib/fedora); do
-		printf "%s%s\n" '-' "${l#*:}"
+		printf "%s%s\n" '-' "${l#*:}" | sed s/%/%%/g
 	done
 	unset IFS
 
