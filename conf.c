@@ -561,11 +561,6 @@ static int conf_pasta_ns(int *netns_only, char *userns, char *netns,
 		}
 	}
 
-	if (*userns && !*netns) {
-		err("--userns requires --netns or PID");
-		return -EINVAL;
-	}
-
 	/* Attaching to a netns/PID, with no userns given */
 	if (*netns && !*userns)
 		*netns_only = 1;
