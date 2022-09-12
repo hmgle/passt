@@ -56,9 +56,12 @@ DOWNLOAD_ASSETS = mbuto \
 	$(DEBIAN_IMGS) $(FEDORA_IMGS) $(OPENSUSE_IMGS) $(UBUNTU_IMGS)
 LOCAL_ASSETS = mbuto.img QEMU_EFI.fd \
 	$(DEBIAN_IMGS:%=prepared-%) $(FEDORA_IMGS:%=prepared-%) \
-	$(UBUNTU_NEW_IMGS:%=prepared-%)
+	$(UBUNTU_NEW_IMGS:%=prepared-%) \
+	nsholder
 
 ASSETS = $(DOWNLOAD_ASSETS) $(LOCAL_ASSETS)
+
+CFLAGS = -Wall -Werror
 
 assets: $(ASSETS)
 
@@ -67,6 +70,9 @@ mbuto:
 
 mbuto.img: passt.mbuto mbuto
 	./mbuto/mbuto -p ./$< -c lz4 -f $@
+
+nsholder: nsholder.c
+	$(CC) $(CFLAGS) -o $@ $^
 
 QEMU_EFI.fd:
 	./find-arm64-firmware.sh $@

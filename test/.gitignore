@@ -10,3 +10,4 @@ QEMU_EFI.fd
 *.start
 *.stop
 *.js
+nsholder
