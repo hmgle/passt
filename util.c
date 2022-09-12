@@ -485,7 +485,7 @@ void drop_caps(void)
 /**
  * check_root() - Check if root in init ns, exit if we can't drop to user
  */
-void check_root(struct ctx *c)
+void check_root(uid_t *uid, gid_t *gid)
 {
 	const char root_uid_map[] = "         0          0 4294967295";
 	struct passwd *pw;
@@ -506,7 +506,7 @@ void check_root(struct ctx *c)
 
 	close(fd);
 
-	if (!c->uid) {
+	if (!*uid) {
 		fprintf(stderr, "Don't run as root. Changing to nobody...\n");
 #ifndef GLIBC_NO_STATIC_NSS
 		pw = getpwnam("nobody");
@@ -515,17 +515,17 @@ void check_root(struct ctx *c)
 			exit(EXIT_FAILURE);
 		}
 
-		c->uid = pw->pw_uid;
-		c->gid = pw->pw_gid;
+		*uid = pw->pw_uid;
+		*gid = pw->pw_gid;
 #else
 		(void)pw;
 
 		/* Common value for 'nobody', not really specified */
-		c->uid = c->gid = 65534;
+		*uid = *gid = 65534;
 #endif
 	}
 
-	if (!setgroups(0, NULL) && !setgid(c->gid) && !setuid(c->uid))
+	if (!setgroups(0, NULL) && !setgid(*gid) && !setuid(*uid))
 		return;
 
 	fprintf(stderr, "Can't change user/group, exiting");

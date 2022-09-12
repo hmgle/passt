@@ -1086,6 +1086,8 @@ void conf(struct ctx *c, int argc, char **argv)
 	uint32_t *dns4 = c->ip4.dns;
 	int name, ret, mask, b, i;
 	unsigned int ifi = 0;
+	uid_t uid = 0;
+	gid_t gid = 0;
 
 	if (c->mode == MODE_PASTA)
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
@@ -1208,12 +1210,12 @@ void conf(struct ctx *c, int argc, char **argv)
 			c->trace = c->debug = c->foreground = 1;
 			break;
 		case 12:
-			if (c->uid || c->gid) {
+			if (uid || gid) {
 				err("Multiple --runas options given");
 				usage(argv[0]);
 			}
 
-			if (conf_runas(optarg, &c->uid, &c->gid)) {
+			if (conf_runas(optarg, &uid, &gid)) {
 				err("Invalid --runas option: %s", optarg);
 				usage(argv[0]);
 			}
@@ -1497,7 +1499,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		}
 	} while (name != -1);
 
-	check_root(c);
+	check_root(&uid, &gid);
 
 	if (c->mode == MODE_PASTA) {
 		if (*netns && optind != argc) {

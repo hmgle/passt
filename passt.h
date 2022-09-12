@@ -144,8 +144,6 @@ struct ip6_ctx {
  * @sock_path:		Path for UNIX domain socket
  * @pcap:		Path for packet capture file
  * @pid_file:		Path to PID file, empty string if not configured
- * @uid:		UID we should drop to, if started as root
- * @gid:		GID we should drop to, if started as root
  * @pasta_netns_fd:	File descriptor for network namespace in pasta mode
  * @pasta_userns_fd:	Descriptor for user namespace to join, -1 once joined
  * @netns_only:		In pasta mode, don't join or create a user namespace
@@ -197,9 +195,6 @@ struct ctx {
 	char sock_path[UNIX_PATH_MAX];
 	char pcap[PATH_MAX];
 	char pid_file[PATH_MAX];
-
-	uid_t uid;
-	uid_t gid;
 
 	int pasta_netns_fd;
 	int pasta_userns_fd;
