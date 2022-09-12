@@ -464,11 +464,6 @@ void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
  */
 int ns_enter(const struct ctx *c)
 {
-	if (!c->netns_only &&
-	    c->pasta_userns_fd != -1 &&
-	    setns(c->pasta_userns_fd, CLONE_NEWUSER))
-		exit(EXIT_FAILURE);
-
 	if (setns(c->pasta_netns_fd, CLONE_NEWNET))
 		exit(EXIT_FAILURE);
 

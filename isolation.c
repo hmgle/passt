@@ -20,6 +20,7 @@
 #include <limits.h>
 #include <pwd.h>
 #include <sched.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,14 +60,19 @@ void drop_caps(void)
 }
 
 /**
- * drop_root() - Switch to given UID and GID
- * @uid:	User ID to switch to
- * @gid:	Group ID to switch to
+ * isolate_user() - Switch to final UID/GID and move into userns
+ * @uid:	User ID to run as (in original userns)
+ * @gid:	Group ID to run as (in original userns)
+ * @use_userns:	Whether to join or create a userns
+ * @userns:	userns path to enter, may be empty
  */
-void drop_root(uid_t uid, gid_t gid)
+void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 {
+	char nsmap[BUFSIZ];
+
+	/* First set our UID & GID in the original namespace */
 	if (setgroups(0, NULL)) {
-		/* If we don't start with CAP_SETGID, this will EPERM */
+		/* If we don't have CAP_SETGID, this will EPERM */
 		if (errno != EPERM) {
 			err("Can't drop supplementary groups: %s",
 			    strerror(errno));
@@ -74,11 +80,57 @@ void drop_root(uid_t uid, gid_t gid)
 		}
 	}
 
-	if (!setgid(gid) && !setuid(uid))
+	if (setgid(gid) != 0) {
+		err("Can't set GID to %u: %s", gid, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	if (setuid(uid) != 0) {
+		err("Can't set UID to %u: %s", uid, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	/* If we're told not to use a userns, nothing more to do */
+	if (!use_userns)
 		return;
 
-	err("Can't change user/group, exiting");
-	exit(EXIT_FAILURE);
+	/* Otherwise, if given a userns, join it */
+	if (*userns) {
+		int ufd;
+
+		ufd = open(userns, O_RDONLY | O_CLOEXEC);
+		if (ufd < 0) {
+			err("Couldn't open user namespace %s: %s",
+			    userns, strerror(errno));
+			exit(EXIT_FAILURE);
+		}
+
+		if (setns(ufd, CLONE_NEWUSER) != 0) {
+			err("Couldn't enter user namespace %s: %s",
+			    userns, strerror(errno));
+			exit(EXIT_FAILURE);
+		}
+
+		close(ufd);
+
+		return;
+	}
+
+	/* Otherwise, create our own userns */
+	if (unshare(CLONE_NEWUSER) != 0) {
+		err("Couldn't create user namespace: %s", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	/* Configure user and group mappings */
+	snprintf(nsmap, BUFSIZ, "0 %u 1", uid);
+	FWRITE("/proc/self/uid_map", nsmap, "Cannot set uid_map in namespace");
+
+	FWRITE("/proc/self/setgroups", "deny",
+	       "Cannot write to setgroups in namespace");
+
+	snprintf(nsmap, BUFSIZ, "0 %u 1", gid);
+	FWRITE("/proc/self/gid_map", nsmap, "Cannot set gid_map in namespace");
 }
 
 /**
@@ -89,15 +141,6 @@ void drop_root(uid_t uid, gid_t gid)
 int sandbox(struct ctx *c)
 {
 	int flags = CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
-
-	if (!c->netns_only) {
-		if (c->pasta_userns_fd == -1)
-			flags |= CLONE_NEWUSER;
-		else
-			setns(c->pasta_userns_fd, CLONE_NEWUSER);
-	}
-
-	c->pasta_userns_fd = -1;
 
 	/* If we run in foreground, we have no chance to actually move to a new
 	 * PID namespace. For passt, use CLONE_NEWPID anyway, in case somebody

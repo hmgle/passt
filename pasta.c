@@ -23,6 +23,7 @@
 #include <libgen.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <syslog.h>
@@ -83,16 +84,6 @@ static int pasta_wait_for_ns(void *arg)
 	int flags = O_RDONLY | O_CLOEXEC;
 	char ns[PATH_MAX];
 
-	if (c->netns_only)
-		goto netns;
-
-	snprintf(ns, PATH_MAX, "/proc/%i/ns/user", pasta_child_pid);
-	do
-		while ((c->pasta_userns_fd = open(ns, flags)) < 0);
-	while (setns(c->pasta_userns_fd, CLONE_NEWUSER) &&
-	       !close(c->pasta_userns_fd));
-
-netns:
 	snprintf(ns, PATH_MAX, "/proc/%i/ns/net", pasta_child_pid);
 	do
 		while ((c->pasta_netns_fd = open(ns, flags)) < 0);
@@ -112,25 +103,23 @@ static int ns_check(void *arg)
 {
 	struct ctx *c = (struct ctx *)arg;
 
-	if ((!c->netns_only && setns(c->pasta_userns_fd, CLONE_NEWUSER)) ||
-	    setns(c->pasta_netns_fd, CLONE_NEWNET))
-		c->pasta_userns_fd = c->pasta_netns_fd = -1;
+	if (setns(c->pasta_netns_fd, CLONE_NEWNET))
+		c->pasta_netns_fd = -1;
 
 	return 0;
 
 }
 
 /**
- * pasta_open_ns() - Open network, user namespaces descriptors
+ * pasta_open_ns() - Open network namespace descriptors
  * @c:		Execution context
- * @userns:	--userns argument, can be an empty string
  * @netns:	network namespace path
  *
  * Return: 0 on success, negative error code otherwise
  */
-void pasta_open_ns(struct ctx *c, const char *userns, const char *netns)
+void pasta_open_ns(struct ctx *c, const char *netns)
 {
-	int ufd = -1, nfd = -1;
+	int nfd = -1;
 
 	nfd = open(netns, O_RDONLY | O_CLOEXEC);
 	if (nfd < 0) {
@@ -138,17 +127,7 @@ void pasta_open_ns(struct ctx *c, const char *userns, const char *netns)
 		exit(EXIT_FAILURE);
 	}
 
-	if (!c->netns_only && *userns) {
-		ufd = open(userns, O_RDONLY | O_CLOEXEC);
-		if (ufd < 0) {
-			close(nfd);
-			err("Couldn't open user namespace %s", userns);
-			exit(EXIT_FAILURE);
-		}
-	}
-
 	c->pasta_netns_fd = nfd;
-	c->pasta_userns_fd = ufd;
 
 	NS_CALL(ns_check, c);
 
@@ -169,12 +148,9 @@ void pasta_open_ns(struct ctx *c, const char *userns, const char *netns)
 
 /**
  * struct pasta_setup_ns_arg - Argument for pasta_setup_ns()
- * @c:		Execution context
- * @euid:	Effective UID of caller
+ * @argv:	Command and arguments to run
  */
 struct pasta_setup_ns_arg {
-	struct ctx *c;
-	int euid;
 	char **argv;
 };
 
@@ -187,21 +163,6 @@ struct pasta_setup_ns_arg {
 static int pasta_setup_ns(void *arg)
 {
 	struct pasta_setup_ns_arg *a = (struct pasta_setup_ns_arg *)arg;
-
-	if (!a->c->netns_only) {
-		char buf[BUFSIZ];
-
-		snprintf(buf, BUFSIZ, "%i %i %i", 0, a->euid, 1);
-
-		FWRITE("/proc/self/uid_map", buf,
-		       "Cannot set uid_map in namespace");
-
-		FWRITE("/proc/self/setgroups", "deny",
-		       "Cannot write to setgroups in namespace");
-
-		FWRITE("/proc/self/gid_map", buf,
-		       "Cannot set gid_map in namespace");
-	}
 
 	FWRITE("/proc/sys/net/ipv4/ping_group_range", "0 0",
 	       "Cannot set ping_group_range, ICMP requests might fail");
@@ -221,8 +182,6 @@ static int pasta_setup_ns(void *arg)
 void pasta_start_ns(struct ctx *c, int argc, char *argv[])
 {
 	struct pasta_setup_ns_arg arg = {
-		.c = c,
-		.euid = geteuid(),
 		.argv = argv,
 	};
 	char *shell = getenv("SHELL") ? getenv("SHELL") : "/bin/sh";
@@ -244,7 +203,6 @@ void pasta_start_ns(struct ctx *c, int argc, char *argv[])
 
 	pasta_child_pid = clone(pasta_setup_ns,
 				ns_fn_stack + sizeof(ns_fn_stack) / 2,
-				(c->netns_only ? 0 : CLONE_NEWUSER) |
 				CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWNET |
 				CLONE_NEWUTS,
 				(void *)&arg);

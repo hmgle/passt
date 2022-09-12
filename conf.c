@@ -1043,6 +1043,7 @@ static int conf_ugid(const char *runas, uid_t *uid, gid_t *gid)
  */
 void conf(struct ctx *c, int argc, char **argv)
 {
+	int netns_only = 0;
 	struct option options[] = {
 		{"debug",	no_argument,		NULL,		'd' },
 		{"quiet",	no_argument,		NULL,		'q' },
@@ -1077,7 +1078,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"udp-ns",	required_argument,	NULL,		'U' },
 		{"userns",	required_argument,	NULL,		2 },
 		{"netns",	required_argument,	NULL,		3 },
-		{"netns-only",	no_argument,		&c->netns_only,	1 },
+		{"netns-only",	no_argument,		&netns_only,	1 },
 		{"config-net",	no_argument,		&c->pasta_conf_ns, 1 },
 		{"ns-mac-addr",	required_argument,	NULL,		4 },
 		{"dhcp-dns",	no_argument,		NULL,		5 },
@@ -1515,22 +1516,22 @@ void conf(struct ctx *c, int argc, char **argv)
 	if (ret)
 		usage(argv[0]);
 
-	drop_root(uid, gid);
-
 	if (c->mode == MODE_PASTA) {
-		if (conf_pasta_ns(&c->netns_only, userns, netns,
+		if (conf_pasta_ns(&netns_only, userns, netns,
 				  optind, argc, argv) < 0)
 			usage(argv[0]);
 	} else if (optind != argc) {
 		usage(argv[0]);
 	}
 
+	isolate_user(uid, gid, !netns_only, userns);
+
 	if (c->pasta_conf_ns)
 		c->no_ra = 1;
 
 	if (c->mode == MODE_PASTA) {
 		if (*netns) {
-			pasta_open_ns(c, userns, netns);
+			pasta_open_ns(c, netns);
 		} else {
 			pasta_start_ns(c, argc - optind, argv + optind);
 		}

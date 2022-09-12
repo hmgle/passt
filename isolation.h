@@ -8,7 +8,7 @@
 #define ISOLATION_H
 
 void drop_caps(void);
-void drop_root(uid_t uid, gid_t gid);
+void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns);
 int sandbox(struct ctx *c);
 void seccomp(const struct ctx *c);
 

@@ -145,8 +145,6 @@ struct ip6_ctx {
  * @pcap:		Path for packet capture file
  * @pid_file:		Path to PID file, empty string if not configured
  * @pasta_netns_fd:	File descriptor for network namespace in pasta mode
- * @pasta_userns_fd:	Descriptor for user namespace to join, -1 once joined
- * @netns_only:		In pasta mode, don't join or create a user namespace
  * @no_netns_quit:	In pasta mode, don't exit if fs-bound namespace is gone
  * @netns_base:		Base name for fs-bound namespace, if any, in pasta mode
  * @netns_dir:		Directory of fs-bound namespace, if any, in pasta mode
@@ -197,8 +195,6 @@ struct ctx {
 	char pid_file[PATH_MAX];
 
 	int pasta_netns_fd;
-	int pasta_userns_fd;
-	int netns_only;
 
 	int no_netns_quit;
 	char netns_base[PATH_MAX];

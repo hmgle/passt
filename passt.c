@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <netdb.h>
@@ -185,7 +186,7 @@ int main(int argc, char **argv)
 
 	drop_caps();
 
-	c.pasta_userns_fd = c.pasta_netns_fd = c.fd_tap = c.fd_tap_listen = -1;
+	c.pasta_netns_fd = c.fd_tap = c.fd_tap_listen = -1;
 
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
