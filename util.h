@@ -235,6 +235,7 @@ void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
 			uint8_t *map, uint8_t *exclude);
 void drop_caps(void);
 void check_root(uid_t *uid, gid_t *gid);
+void drop_root(uid_t uid, gid_t gid);
 int ns_enter(const struct ctx *c);
 void write_pidfile(int fd, pid_t pid);
 int __daemon(int pidfile_fd, int devnull_fd);

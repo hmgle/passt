@@ -104,9 +104,10 @@ terminal, and to both system logger and standard error otherwise.
 
 .TP
 .BR \-\-runas " " \fIUID\fR|\fIUID:GID\fR|\fILOGIN\fR|\fILOGIN:GROUP\fR
-If started as root, change to given UID and corresponding group if UID is given,
+Attempt to change to given UID and corresponding group if UID is given,
 or to given UID and given GID if both are given. Alternatively, login name, or
-login name and group name can be passed.
+login name and group name can be passed. This requires privileges (either
+initial effective UID 0 or CAP_SETUID capability) to work.
 Default is to change to user \fInobody\fR if started as root.
 
 .TP

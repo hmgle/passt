@@ -747,8 +747,8 @@ static void usage(const char *name)
 	info(   "    default: run in background if started from a TTY");
 	info(   "  -e, --stderr		Log to stderr too");
 	info(   "    default: log to system logger only if started from a TTY");
-	info(   "  --runas UID|UID:GID 	Use given UID, GID if started as root");
-	info(   "    UID and GID can be numeric, or login and group names");
+	info(   "  --runas UID|UID:GID 	Run as given UID, GID, which can be");
+	info(   "    numeric, or login and group names");
 	info(   "    default: drop to user \"nobody\"");
 	info(   "  -h, --help		Display this help message and exit");
 
@@ -1500,6 +1500,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	} while (name != -1);
 
 	check_root(&uid, &gid);
+	drop_root(uid, gid);
 
 	if (c->mode == MODE_PASTA) {
 		if (*netns && optind != argc) {

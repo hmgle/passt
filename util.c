@@ -492,7 +492,13 @@ void check_root(uid_t *uid, gid_t *gid)
 	char buf[BUFSIZ];
 	int fd;
 
-	if (getuid() && geteuid())
+	if (!*uid)
+		*uid = geteuid();
+
+	if (!*gid)
+		*gid = getegid();
+
+	if (*uid)
 		return;
 
 	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0)
@@ -524,11 +530,28 @@ void check_root(uid_t *uid, gid_t *gid)
 		*uid = *gid = 65534;
 #endif
 	}
+}
 
-	if (!setgroups(0, NULL) && !setgid(*gid) && !setuid(*uid))
+/**
+ * drop_root() - Switch to given UID and GID
+ * @uid:	User ID to switch to
+ * @gid:	Group ID to switch to
+ */
+void drop_root(uid_t uid, gid_t gid)
+{
+	if (setgroups(0, NULL)) {
+		/* If we don't start with CAP_SETGID, this will EPERM */
+		if (errno != EPERM) {
+			err("Can't drop supplementary groups: %s",
+			    strerror(errno));
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	if (!setgid(gid) && !setuid(uid))
 		return;
 
-	fprintf(stderr, "Can't change user/group, exiting");
+	err("Can't change user/group, exiting");
 	exit(EXIT_FAILURE);
 }
 
