@@ -172,23 +172,16 @@ layout_two_guests() {
 
 	get_info_cols
 
-	tmux pipe-pane -O -t ${PANE_GUEST_1} "cat >> ${LOGDIR}/pane_guest_1.log"
-	tmux select-pane -t ${PANE_GUEST_1} -T "guest #1 in namespace #1"
-
-	tmux pipe-pane -O -t ${PANE_GUEST_2} "cat >> ${LOGDIR}/pane_guest_2.log"
-	tmux select-pane -t ${PANE_GUEST_2} -T "guest #2 in namespace #2"
+	pane_watch_contexts ${PANE_GUEST_1} "guest #1 in namespace #1" qemu_1 guest_1
+	pane_watch_contexts ${PANE_GUEST_2} "guest #2 in namespace #2" qemu_2 guest_2
 
 	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
 	pane_watch_contexts ${PANE_HOST} host host
-
-	tmux pipe-pane -O -t ${PANE_PASST_1} "cat >> ${LOGDIR}/pane_passt_1.log"
-	tmux select-pane -t ${PANE_PASST_1} -T "passt #1 in namespace #1"
-
-	tmux pipe-pane -O -t ${PANE_PASST_2} "cat >> ${LOGDIR}/pane_passt_2.log"
-	tmux select-pane -t ${PANE_PASST_2} -T "passt #2 in namespace #2"
+	pane_watch_contexts ${PANE_PASST_1} "passt #1 in namespace #1" pasta_1 passt_1
+	pane_watch_contexts ${PANE_PASST_2} "passt #2 in namespace #2" pasta_2 passt_2
 
 	info_layout "two guests, two passt instances, in namespaces"
 

@@ -188,6 +188,8 @@ setup_passt_in_ns() {
 # setup_two_guests() - Set up two namespace, run qemu and passt in both of them
 setup_two_guests() {
 	context_setup_host host
+	context_setup_host pasta_1
+	context_setup_host pasta_2
 
 	layout_two_guests
 
@@ -201,66 +203,49 @@ setup_two_guests() {
 	#  10004            | as server |  to init  |  to guest  |  to ns #2
 	#  10005            |           |           |  as server |  to ns #2
 
-	__pid1_file="$(mktemp)"
-	__pid2_file="$(mktemp)"
-
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
-	pane_run PASST_1 "./pasta ${__opts} -P ${__pid1_file} -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004"
+	context_run_bg pasta_1 "./pasta ${__opts} -P pasta_1.pid -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004 ${NSHOLDER} ns1.hold hold"
+	__ns1_pid=$(${NSHOLDER} ns1.hold pid)
+	context_setup_nsenter passt_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
-	pane_run PASST_2 "./pasta ${__opts} -P ${__pid2_file} -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001"
+	context_run_bg pasta_2 "./pasta ${__opts} -P pasta_2.pid -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001 ${NSHOLDER} ns2.hold hold"
+	__ns2_pid=$(${NSHOLDER} ns2.hold pid)
+	context_setup_nsenter passt_2 -U -n -p --preserve-credentials -t ${__ns2_pid}
 
-	sleep 1
-	pane_run PASST_1 ''
-	pane_run PASST_2 ''
+	context_setup_nsenter qemu_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
+	context_setup_nsenter qemu_2 -U -n -p --preserve-credentials -t ${__ns2_pid}
 
-	pane_status PASST_1
-	pane_status PASST_2
-	__pasta1_pid="$(cat "${__pid1_file}")"
-	__ns1_pid="$(cat /proc/${__pasta1_pid}/task/${__pasta1_pid}/children | cut -f1 -d' ')"
-	rm "${__pid1_file}"
-	__pasta2_pid="$(cat "${__pid2_file}")"
-	__ns2_pid="$(cat /proc/${__pasta2_pid}/task/${__pasta2_pid}/children | cut -f1 -d' ')"
-	rm "${__pid2_file}"
+	__ifname="$(context_run qemu_1 "ip -j link show | jq -rM '.[] | select(.link_type == \"ether\").ifname'")"
 
-	pane_run GUEST_1 "nsenter -t ${__ns1_pid} -U -n --preserve-credentials"
-	pane_run GUEST_2 "nsenter -t ${__ns2_pid} -U -n --preserve-credentials"
-
-	pane_run PASST_1 "ip -j link show | jq -rM '.[] | select(.link_type == \"ether\").ifname'"
-	pane_wait PASST_1
-	__ifname="$(pane_parse PASST_1)"
-
-	pane_run GUEST_1 "/sbin/dhclient -4 --no-pid ${__ifname}"
-	pane_run GUEST_2 "/sbin/dhclient -4 --no-pid ${__ifname}"
-	pane_status GUEST_1
-	pane_status GUEST_2
-	sleep 2
-	pane_run GUEST_1 "/sbin/dhclient -6 --no-pid ${__ifname}"
-	pane_run GUEST_2 "/sbin/dhclient -6 --no-pid ${__ifname}"
-	pane_status GUEST_1
-	pane_status GUEST_2
+	context_run qemu_1 "/sbin/dhclient -4 --no-pid ${__ifname}"
+	context_run qemu_2 "/sbin/dhclient -4 --no-pid ${__ifname}"
+	context_run qemu_1 "/sbin/dhclient -6 --no-pid ${__ifname}"
+	context_run qemu_2 "/sbin/dhclient -6 --no-pid ${__ifname}"
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	pane_run PASST_1 "./passt -f ${__opts} -t 10001 -u 10001"
+	context_run_bg passt_1 "./passt -P passt_1.pid -f ${__opts} -t 10001 -u 10001"
 	sleep 1
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
-	pane_run PASST_2 "./passt -f ${__opts} -t 10004 -u 10004"
 
-	pane_run GUEST_1 './qrap 5 qemu-system-$(uname -m)'                  \
+	context_run_bg passt_2 "./passt -P passt_2.pid -f ${__opts} -t 10004 -u 10004"
+
+	GUEST_1_CID=94557
+	context_run_bg qemu_1 './qrap 5 qemu-system-$(uname -m)'             \
 		' -M accel=kvm:tcg'                                          \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                      \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			     \
@@ -270,8 +255,11 @@ setup_two_guests() {
 		'virtio-net.napi_tx=1"'					     \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
 		" -netdev socket,fd=5,id=hostnet0"			     \
-		' -pidfile two_guests_qemu_1.pid'
-	pane_run GUEST_2 './qrap 5 qemu-system-$(uname -m)'                  \
+		' -pidfile two_guests_qemu_1.pid'			     \
+		" -device vhost-vsock-pci,guest-cid=$GUEST_1_CID"
+
+	GUEST_2_CID=94558
+	context_run_bg qemu_2 './qrap 5 qemu-system-$(uname -m)'             \
 		' -M accel=kvm:tcg'                                          \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                      \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			     \
@@ -281,9 +269,11 @@ setup_two_guests() {
 		'virtio-net.napi_tx=1"'					     \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
 		" -netdev socket,fd=5,id=hostnet0"			     \
-		' -pidfile two_guests_qemu_2.pid'
-	pane_status GUEST_1
-	pane_status GUEST_2
+		' -pidfile two_guests_qemu_2.pid'			     \
+		" -device vhost-vsock-pci,guest-cid=$GUEST_2_CID"
+
+	context_setup_guest guest_1 ${GUEST_1_CID}
+	context_setup_guest guest_2 ${GUEST_2_CID}
 }
 
 # teardown_context_watch() - Remove contexts and stop panes watching them
@@ -348,28 +338,29 @@ teardown_passt_in_ns() {
 
 # teardown_two_guests() - Exit namespaces, kill qemu processes, passt and pasta
 teardown_two_guests() {
-	kill $(cat two_guests_qemu_1.pid)
-	pane_wait GUEST_1
-	tmux send-keys -t ${PANE_GUEST_1} "C-d"
+	__ns1_pid=$(${NSHOLDER} ns1.hold pid)
+	__ns2_pid=$(${NSHOLDER} ns2.hold pid)
+	nsenter -U -p --preserve-credentials -t ${__ns1_pid} kill $(cat two_guests_qemu_1.pid)
+	nsenter -U -p --preserve-credentials -t ${__ns2_pid} kill $(cat two_guests_qemu_2.pid)
+	context_wait qemu_1
+	context_wait qemu_2
 
-	kill $(cat two_guests_qemu_2.pid)
-	pane_wait GUEST_2
-	tmux send-keys -t ${PANE_GUEST_2} "C-d"
+	nsenter -U -p --preserve-credentials -t ${__ns1_pid} kill $(cat passt_1.pid)
+	nsenter -U -p --preserve-credentials -t ${__ns2_pid} kill $(cat passt_2.pid)
+	context_wait passt_1
+	context_wait passt_2
+	${NSHOLDER} ns1.hold stop
+	${NSHOLDER} ns2.hold stop
+	context_wait pasta_1
+	context_wait pasta_2
 
-	tmux send-keys -t ${PANE_PASST_1} "C-c"
-	pane_wait PASST_1
-	tmux send-keys -t ${PANE_PASST_1} "C-d"
-
-	tmux send-keys -t ${PANE_PASST_2} "C-c"
-	pane_wait PASST_2
-	tmux send-keys -t ${PANE_PASST_2} "C-d"
-
-	pane_wait GUEST_1
-	pane_wait GUEST_2
-	pane_wait PASST_1
-	pane_wait PASST_2
+	rm -f passt_[12].pid pasta_[12].pid
 
 	teardown_context_watch ${PANE_HOST} host
+	teardown_context_watch ${PANE_GUEST_1} qemu_1 guest_1
+	teardown_context_watch ${PANE_GUEST_2} qemu_2 guest_2
+	teardown_context_watch ${PANE_PASST_1} pasta_1 passt_1
+	teardown_context_watch ${PANE_PASST_2} pasta_2 passt_2
 }
 
 # teardown_demo_passt() - Exit namespace, kill qemu, passt and pasta
