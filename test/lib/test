@@ -15,8 +15,8 @@
 
 # test_iperf3() - Ugly helper for iperf3 directive
 # $1:	Variable name: to put the measure bandwidth into
-# $2:	Source/client pane name, can be lowercase
-# $3:	Destination/server pane name, can be lowercase
+# $2:	Source/client context
+# $3:	Destination/server context
 # $4:	Destination name or address for client
 # $5:	Port number, ${i} is translated to process index
 # $6:	Number of processes to run in parallel
@@ -24,14 +24,14 @@
 # $@:	Client options
 test_iperf3() {
 	__var="${1}"; shift
-	__cpane="$(echo "${1}" | tr [a-z] [A-Z])"; shift
-	__spane="$(echo "${1}" | tr [a-z] [A-Z])"; shift
+	__cctx="${1}"; shift
+	__sctx="${1}"; shift
 	__dest="${1}"; shift
 	__port="${1}"; shift
 	__procs="$((${1} - 1))"; shift
 	__time="${1}"; shift
 
-	pane_run "${__spane}" 						\
+	pane_or_context_run_bg "${__sctx}" 				\
 		 '('							\
 		 '	for i in $(seq 0 '${__procs}'); do'		\
 		 '		iperf3 -s1J -p'${__port}' -i'${__time}	\
@@ -40,7 +40,9 @@ test_iperf3() {
 		 '	wait'						\
 		 ')'
 
-	pane_run "${__cpane}" 						\
+	sleep 1		# Wait for server to be ready
+
+	pane_or_context_run "${__cctx}" 				\
 		 '('							\
 		 '	for i in $(seq 0 '${__procs}'); do'		\
 		 '		iperf3 -c '${__dest}' -p '${__port}	\
@@ -49,8 +51,7 @@ test_iperf3() {
 		 '	wait'						\
 		 ')'
 
-	pane_status "${__cpane}"
-	pane_status "${__spane}"
+	pane_or_context_wait "${__sctx}"
 
 	__jval=".end.sum_received.bits_per_second"
 	for __opt in ${@}; do
@@ -58,14 +59,10 @@ test_iperf3() {
 		[ "${__opt}" = "-u" ] && __jval=".intervals[0].sum.bits_per_second"
 	done
 
-	pane_run "${__spane}"						\
-		 'cat s*.json | jq -rMs "map('${__jval}') | add"'
-	pane_wait "${__spane}"
-	__bw="$(pane_parse "${__spane}")"
-
-	pane_run "${__spane}"						\
+	__bw=$(pane_or_context_output "${__sctx}"			\
+		 'cat s*.json | jq -rMs "map('${__jval}') | add"')
+	pane_or_context_run "${__sctx}"					\
 		'for i in $(seq 0 '${__procs}'); do rm s${i}.json; done'
-	pane_status "${__spane}"
 
 	TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__var}__" "${__bw}" )"
 }
@@ -122,155 +119,134 @@ test_one_line() {
 		TEST_ONE_perf_nok=0
 		;;
 	"host")
-		pane_run HOST "${__arg}"
-		pane_status HOST || TEST_ONE_nok=1
+		pane_or_context_run host "${__arg}" || TEST_ONE_nok=1
 		;;
 	"hostb")
-		pane_run HOST "${__arg}"
+		pane_or_context_run_bg host "${__arg}"
 		;;
 	"hostw")
-		pane_status HOST || TEST_ONE_nok=1
+		pane_or_context_wait host || TEST_ONE_nok=1
 		;;
 	"hint")
 		tmux send-keys -t ${PANE_HOST} "C-c"
 		;;
 	"htools")
-		pane_run HOST 'which '"${__arg}"' >/dev/null'
-		pane_status HOST || TEST_ONE_skip=1
+		pane_or_context_run host 'which '"${__arg}"' >/dev/null' || TEST_ONE_skip=1
 		;;
 	"passt")
-		pane_run PASST "${__arg}"
-		pane_status PASST || TEST_ONE_nok=1
+		pane_or_context_run passt "${__arg}" || TEST_ONE_nok=1
 		;;
 	"passtb")
-		pane_run PASST "${__arg}"
+		pane_or_context_run_bg passt "${__arg}"
 		;;
 	"passtw")
-		pane_status PASST || TEST_ONE_nok=1
+		pane_or_context_wait passt || TEST_ONE_nok=1
 		;;
 	"pout")
 		__varname="${__arg%% *}"
-		pane_run PASST "${__arg#* }"
-		pane_wait PASST
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse PASST)")"
+		__output="$(pane_or_context_output passt "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
 		;;
 	"guest")
-		pane_run GUEST "${__arg}"
-		pane_status GUEST || TEST_ONE_nok=1
+		pane_or_context_run guest "${__arg}" || TEST_ONE_nok=1
 		;;
 	"guestb")
-		pane_run GUEST "${__arg}"
+		pane_or_context_run_bg guest "${__arg}"
 		;;
 	"guestw")
-		pane_status GUEST || TEST_ONE_nok=1
+		pane_or_context_wait guest || TEST_ONE_nok=1
 		;;
 	"guest1")
-		pane_run GUEST_1 "${__arg}"
-		pane_status GUEST_1 || TEST_ONE_nok=1
+		pane_or_context_run guest_1 "${__arg}" || TEST_ONE_nok=1
 		;;
 	"guest1b")
-		pane_run GUEST_1 "${__arg}"
+		pane_or_context_run_bg guest_1 "${__arg}"
 		;;
 	"guest1w")
-		pane_status GUEST_1 || TEST_ONE_nok=1
+		pane_or_context_wait guest_1 || TEST_ONE_nok=1
 		;;
 	"gtools")
-		pane_run GUEST 'which '"${__arg}"' >/dev/null'
-		pane_status GUEST || TEST_ONE_skip=1
+		pane_or_context_run guest 'which '"${__arg}"' >/dev/null' || TEST_ONE_skip=1
 		;;
 	"g1tools")
-		pane_run GUEST_1 'which '"${__arg}"' >/dev/null'
-		pane_status GUEST_1 || TEST_ONE_skip=1
+		pane_or_context_run guest_1 'which '"${__arg}"' >/dev/null' || TEST_ONE_skip=1
 		;;
 	"g2tools")
-		pane_run GUEST_2 'which '"${__arg}"' >/dev/null'
-		pane_status GUEST_2 || TEST_ONE_skip=1
+		pane_or_context_run guest_2 'which '"${__arg}"' >/dev/null' || TEST_ONE_skip=1
 		;;
 	"guest2")
-		pane_run GUEST_2 "${__arg}"
-		pane_status GUEST_2 || TEST_ONE_nok=1
+		pane_or_context_run guest_2 "${__arg}" || TEST_ONE_nok=1
 		;;
 	"guest2b")
-		pane_run GUEST_2 "${__arg}"
+		pane_or_context_run_bg guest_2 "${__arg}"
 		;;
 	"guest2w")
-		pane_status GUEST_2 || TEST_ONE_nok=1
+		pane_or_context_wait guest_2 || TEST_ONE_nok=1
 		;;
 	"ns")
-		pane_run NS "${__arg}"
-		pane_status NS || TEST_ONE_nok=1
+		pane_or_context_run ns "${__arg}" || TEST_ONE_nok=1
 		;;
 	"ns1")
-		pane_run NS1 "${__arg}"
-		pane_status NS1 || TEST_ONE_nok=1
+		pane_or_context_run ns1 "${__arg}" || TEST_ONE_nok=1
 		;;
 	"ns2")
-		pane_run NS2 "${__arg}"
-		pane_status NS2 || TEST_ONE_nok=1
+		pane_or_context_run ns2 "${__arg}" || TEST_ONE_nok=1
 		;;
 	"nsb")
-		pane_run NS "${__arg}"
+		pane_or_context_run_bg ns "${__arg}"
 		;;
 	"ns1b")
-		pane_run NS1 "${__arg}"
+		pane_or_context_run_bg ns1 "${__arg}"
 		;;
 	"ns2b")
-		pane_run NS2 "${__arg}"
+		pane_or_context_run_bg ns2 "${__arg}"
 		;;
 	"nsw")
-		pane_status NS || TEST_ONE_nok=1
+		pane_or_context_wait ns || TEST_ONE_nok=1
 		;;
 	"ns1w")
-		pane_status NS1 || TEST_ONE_nok=1
+		pane_or_context_wait ns1 || TEST_ONE_nok=1
 		;;
 	"ns2w")
-		pane_status NS2 || TEST_ONE_nok=1
+		pane_or_context_wait ns2 || TEST_ONE_nok=1
 		;;
 	"nstools")
-		pane_run NS 'which '"${__arg}"' >/dev/null'
-		pane_status NS || TEST_ONE_skip=1
+		pane_or_context_run ns 'which '"${__arg}"' >/dev/null' || TEST_ONE_skip=1
 		;;
 	"gout")
 		__varname="${__arg%% *}"
-		pane_run GUEST "${__arg#* }"
-		pane_wait GUEST
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse GUEST)")"
+		__output="$(pane_or_context_output guest "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
 		;;
 	"g1out")
 		__varname="${__arg%% *}"
-		pane_run GUEST_1 "${__arg#* }"
-		pane_wait GUEST_1
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse GUEST_1)")"
+		__output="$(pane_or_context_output guest_1 "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
 		;;
 	"g2out")
 		__varname="${__arg%% *}"
-		pane_run GUEST_2 "${__arg#* }"
-		pane_wait GUEST_2
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse GUEST_2)")"
+		__output="$(pane_or_context_output guest_2 "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
 		;;
 	"hout")
 		__varname="${__arg%% *}"
-		pane_run HOST "${__arg#* }"
-		pane_wait HOST
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse HOST)")"
+		__output="$(pane_or_context_output host "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
 		;;
 	"nsout")
 		__varname="${__arg%% *}"
-		pane_run NS "${__arg#* }"
-		pane_wait NS
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse NS)")"
+		__output="$(pane_or_context_output ns "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
 		;;
 	"ns1out")
 		__varname="${__arg%% *}"
-		pane_run NS1 "${__arg#* }"
-		pane_wait NS1
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse NS1)")"
+		__output="$(pane_or_context_output ns1 "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
 		;;
 	"ns2out")
 		__varname="${__arg%% *}"
-		pane_run NS2 "${__arg#* }"
-		pane_wait NS2
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "$(pane_parse NS2)")"
+		__output="$(pane_or_context_output ns2 "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
 		;;
 	"check")
 		info_check "${__arg}"

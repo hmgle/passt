@@ -259,6 +259,69 @@ pane_watch_contexts() {
 	cmd_write ${__pane_number} "${__cmd}"
 }
 
+# pane_or_context_run() - Issue a command in given context or pane
+# $1:	Context or lower-case pane name
+# $@:	Command to issue
+pane_or_context_run() {
+	__name="${1}"
+	shift
+	if context_exists "${__name}"; then
+		context_run "${__name}" "$@" >/dev/null 2>&1
+	else
+		__uc="$(echo "${__name}" | tr [a-z] [A-Z])"
+		pane_run "${__uc}" "$@"
+		pane_status "${__uc}"
+	fi
+}
+
+# pane_or_context_run_bg() - Issue a background command in given context or pane
+# $1:	Context or lower-case pane name
+# $@:	Command to issue
+pane_or_context_run_bg() {
+	__name="${1}"
+	shift
+	if context_exists "${__name}"; then
+		context_run_bg "${__name}" "$@" >/dev/null 2>&1
+	else
+		__uc="$(echo "${__name}" | tr [a-z] [A-Z])"
+		pane_run "${__uc}" "$@"
+	fi
+}
+
+# pane_or_context_output() - Get output from a command in a context or pane
+# $1:	Context or lower-case pane name
+# $@:	Command to issue
+pane_or_context_output() {
+	__name="${1}"
+	shift
+	if context_exists "${__name}"; then
+		__output=$(context_run "${__name}" "$@" 2>/dev/null)
+		if [ -z "${__output}" ]; then
+			echo "@EMPTY@"
+		else
+			echo "${__output}"
+		fi
+	else
+		__uc="$(echo "${__name}" | tr [a-z] [A-Z])"
+		pane_run "${__uc}" "$@"
+		pane_wait "${__uc}"
+		pane_parse "${__uc}"
+	fi
+}
+
+# pane_or_context_wait() - Wait for a command to be done in a context or pane
+# $1:	Context or lower-case pane name
+pane_or_context_wait() {
+	__name="${1}"
+	shift
+	if context_exists "${__name}"; then
+		context_wait "${__name}"
+	else
+		__uc="$(echo "${__name}" | tr [a-z] [A-Z])"
+		pane_wait "${__uc}"
+	fi
+}
+
 # status_file_end() - Display and log messages when tests from one file are done
 status_file_end() {
 	[ -z "${STATUS_FILE}" ] && return
