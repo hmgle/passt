@@ -1054,8 +1054,12 @@ static int conf_ugid(const char *runas, uid_t *uid, gid_t *gid)
 		return 0;
 
 	/* ...or at least not root in the init namespace... */
-	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0)
-		return 0;
+	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0) {
+		ret = -errno;
+		err("Can't determine if we're in init namespace: %s",
+		    strerror(-ret));
+		return ret;
+	}
 
 	if (read(fd, buf, BUFSIZ) != sizeof(root_uid_map) ||
 	    strncmp(buf, root_uid_map, sizeof(root_uid_map) - 1)) {
