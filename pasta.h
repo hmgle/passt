@@ -6,6 +6,7 @@
 #ifndef PASTA_H
 #define PASTA_H
 
+void pasta_open_ns(struct ctx *c, const char *userns, const char *netns);
 void pasta_start_ns(struct ctx *c, int argc, char *argv[]);
 void pasta_ns_conf(struct ctx *c);
 void pasta_child_handler(int signal);

@@ -20,7 +20,6 @@
 #include <sched.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <libgen.h>
 #include <limits.h>
 #include <grp.h>
 #include <pwd.h>
@@ -570,73 +569,6 @@ static int conf_pasta_ns(int *netns_only, char *userns, char *netns,
 	/* Attaching to a netns/PID, with no userns given */
 	if (*netns && !*userns)
 		*netns_only = 1;
-
-	return 0;
-}
-
-/**
- * conf_ns_check() - Check if we can enter configured namespaces
- * @arg:	Execution context
- *
- * Return: 0
- */
-static int conf_ns_check(void *arg)
-{
-	struct ctx *c = (struct ctx *)arg;
-
-	if ((!c->netns_only && setns(c->pasta_userns_fd, CLONE_NEWUSER)) ||
-	    setns(c->pasta_netns_fd, CLONE_NEWNET))
-		c->pasta_userns_fd = c->pasta_netns_fd = -1;
-
-	return 0;
-
-}
-
-/**
- * conf_ns_open() - Open network, user namespaces descriptors from configuration
- * @c:		Execution context
- * @userns:	--userns argument, can be an empty string
- * @netns:	network namespace path
- *
- * Return: 0 on success, negative error code otherwise
- */
-static int conf_ns_open(struct ctx *c, const char *userns, const char *netns)
-{
-	int ufd = -1, nfd = -1;
-
-	nfd = open(netns, O_RDONLY | O_CLOEXEC);
-	if (nfd < 0) {
-		err("Couldn't open network namespace %s", netns);
-		return -ENOENT;
-	}
-
-	if (!c->netns_only && *userns) {
-		ufd = open(userns, O_RDONLY | O_CLOEXEC);
-		if (ufd < 0) {
-			close(nfd);
-			err("Couldn't open user namespace %s", userns);
-			return -ENOENT;
-		}
-	}
-
-	c->pasta_netns_fd = nfd;
-	c->pasta_userns_fd = ufd;
-
-	NS_CALL(conf_ns_check, c);
-
-	if (c->pasta_netns_fd < 0) {
-		err("Couldn't switch to pasta namespaces");
-		return -ENOENT;
-	}
-
-	if (!c->no_netns_quit) {
-		char buf[PATH_MAX];
-
-		strncpy(buf, netns, PATH_MAX);
-		strncpy(c->netns_base, basename(buf), PATH_MAX - 1);
-		strncpy(buf, netns, PATH_MAX);
-		strncpy(c->netns_dir, dirname(buf), PATH_MAX - 1);
-	}
 
 	return 0;
 }
@@ -1598,9 +1530,7 @@ void conf(struct ctx *c, int argc, char **argv)
 
 	if (c->mode == MODE_PASTA) {
 		if (*netns) {
-			ret = conf_ns_open(c, userns, netns);
-			if (ret < 0)
-				usage(argv[0]);
+			pasta_open_ns(c, userns, netns);
 		} else {
 			pasta_start_ns(c, argc - optind, argv + optind);
 		}

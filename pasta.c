@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <libgen.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -99,6 +100,71 @@ netns:
 	       !close(c->pasta_netns_fd));
 
 	return 0;
+}
+
+/**
+ * ns_check() - Check if we can enter configured namespaces
+ * @arg:	Execution context
+ *
+ * Return: 0
+ */
+static int ns_check(void *arg)
+{
+	struct ctx *c = (struct ctx *)arg;
+
+	if ((!c->netns_only && setns(c->pasta_userns_fd, CLONE_NEWUSER)) ||
+	    setns(c->pasta_netns_fd, CLONE_NEWNET))
+		c->pasta_userns_fd = c->pasta_netns_fd = -1;
+
+	return 0;
+
+}
+
+/**
+ * pasta_open_ns() - Open network, user namespaces descriptors
+ * @c:		Execution context
+ * @userns:	--userns argument, can be an empty string
+ * @netns:	network namespace path
+ *
+ * Return: 0 on success, negative error code otherwise
+ */
+void pasta_open_ns(struct ctx *c, const char *userns, const char *netns)
+{
+	int ufd = -1, nfd = -1;
+
+	nfd = open(netns, O_RDONLY | O_CLOEXEC);
+	if (nfd < 0) {
+		err("Couldn't open network namespace %s", netns);
+		exit(EXIT_FAILURE);
+	}
+
+	if (!c->netns_only && *userns) {
+		ufd = open(userns, O_RDONLY | O_CLOEXEC);
+		if (ufd < 0) {
+			close(nfd);
+			err("Couldn't open user namespace %s", userns);
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	c->pasta_netns_fd = nfd;
+	c->pasta_userns_fd = ufd;
+
+	NS_CALL(ns_check, c);
+
+	if (c->pasta_netns_fd < 0) {
+		err("Couldn't switch to pasta namespaces");
+		exit(EXIT_FAILURE);
+	}
+
+	if (!c->no_netns_quit) {
+		char buf[PATH_MAX] = { 0 };
+
+		strncpy(buf, netns, PATH_MAX - 1);
+		strncpy(c->netns_base, basename(buf), PATH_MAX - 1);
+		strncpy(buf, netns, PATH_MAX - 1);
+		strncpy(c->netns_dir, dirname(buf), PATH_MAX - 1);
+	}
 }
 
 /**
