@@ -13,13 +13,32 @@
 # Copyright Red Hat
 # Author: David Gibson <david@gibson.dropbear.id.au>
 
+# context_setup_common() - Create outline of a new context
+# $1:	Context name
+context_setup_common() {
+	__name="$1"
+	__prefix="${LOGDIR}/context_${__name}"
+	echo -n "${__name}$ " > "${__prefix}.log"
+}
+
 # context_setup_host() - Create a new context for running commands on the host
 # $1:	Context name
 context_setup_host() {
 	__name="$1"
 	__prefix="${LOGDIR}/context_${__name}"
+	context_setup_common "${__name}"
 	echo sh -c > "${__prefix}.enter"
-	echo -n "${__name}$ " > "${__prefix}.log"
+}
+
+# context_setup_nsenter() - Create a new context for running commands in a namespace
+# $1:	Context name
+# $2:	Namespace PID
+context_setup_nsenter() {
+	__name="$1"
+	shift
+	__prefix="${LOGDIR}/context_${__name}"
+	context_setup_common "${__name}"
+	echo "nsenter $@ sh -c" > "${__prefix}.enter"
 }
 
 # context_teardown() - Remove a context (leave log files intact)

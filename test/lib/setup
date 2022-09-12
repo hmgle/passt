@@ -17,6 +17,7 @@ INITRAMFS="${BASEPATH}/mbuto.img"
 VCPUS="$( [ $(nproc) -ge 8 ] && echo 6 || echo $(( $(nproc) / 2 + 1 )) )"
 __mem_kib="$(sed -n 's/MemTotal:[ ]*\([0-9]*\) kB/\1/p' /proc/meminfo)"
 VMEM="$((${__mem_kib} / 1024 / 4))"
+NSHOLDER="${BASEPATH}/nsholder"
 
 # setup_build() - Set up pane layout for build tests
 setup_build() {
@@ -72,17 +73,14 @@ setup_passt() {
 setup_pasta() {
 	context_setup_host host
 	context_setup_host passt
+	context_setup_host unshare
 
 	layout_pasta
 
-	pane_run NS 'echo $$'
-	pane_wait NS
-	__tty_pid="$(pane_parse NS)"
+	context_run_bg unshare "unshare -rUnpf ${NSHOLDER} ns.hold hold"
+	__target_pid=$(${NSHOLDER} ns.hold pid)
 
-	pane_run NS "unshare -rUnpf /bin/sh"
-	pane_status NS
-
-	__target_pid=$(pstree -p ${__tty_pid} | sed -n 's/.*(\([0-9].*\))$/\1/p')
+	context_setup_nsenter ns -U -n -p --preserve-credentials -t ${__target_pid}
 
 	# Ports:
 	#
@@ -318,11 +316,12 @@ teardown_passt() {
 
 # teardown_passt() - Exit namespace, kill pasta process
 teardown_pasta() {
-	tmux send-keys -t ${PANE_NS} "C-d"
-	pane_wait NS
+	${NSHOLDER} ns.hold stop
+	context_wait unshare
 
 	teardown_context_watch ${PANE_HOST} host
 	teardown_context_watch ${PANE_PASST} passt
+	teardown_context_watch ${PANE_NS} unshare ns
 }
 
 # teardown_passt_in_ns() - Exit namespace, kill qemu and pasta, remove pid file

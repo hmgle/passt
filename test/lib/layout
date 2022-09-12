@@ -61,15 +61,13 @@ layout_pasta() {
 
 	get_info_cols
 
-	tmux pipe-pane -O -t ${PANE_NS} "cat >> ${LOGDIR}/pane_ns.log"
-	tmux select-pane -t ${PANE_NS} -T "namespace"
-
 	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
 	pane_watch_contexts ${PANE_HOST} host host
 	pane_watch_contexts ${PANE_PASST} pasta passt
+	pane_watch_contexts ${PANE_NS} "namespace" unshare ns
 
 	info_layout "single pasta instance with namespace"
 
