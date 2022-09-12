@@ -1,0 +1,80 @@
+#! /bin/sh
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/context - Run commands in different contexts (host, guest, namespace etc.)
+#
+# Copyright Red Hat
+# Author: David Gibson <david@gibson.dropbear.id.au>
+
+# context_setup_host() - Create a new context for running commands on the host
+# $1:	Context name
+context_setup_host() {
+	__name="$1"
+	__prefix="${LOGDIR}/context_${__name}"
+	echo sh -c > "${__prefix}.enter"
+	echo -n "${__name}$ " > "${__prefix}.log"
+}
+
+# context_teardown() - Remove a context (leave log files intact)
+# $1:	Context name
+context_teardown() {
+	__name="$1"
+	__prefix="${LOGDIR}/context_${__name}"
+	rm -f "${__prefix}.enter"
+}
+
+# context_exists() - Test if a context currently exists
+# $1:	Context name
+context_exists() {
+	__name="$1"
+	__prefix="${LOGDIR}/context_${__name}"
+	[ -f "${__prefix}.enter" ]
+}
+
+# context_run() - Run a shell command in a context, and wait for it to finish
+# $1:	Context name
+# $*:	Command to start
+context_run() {
+	__name="$1"
+	__prefix="${LOGDIR}/context_${__name}"
+	__enter="$(cat "${__prefix}.enter")"
+	shift
+	echo "$*" >> "${__prefix}.log"
+	mkfifo "${__prefix}.stdout" "${__prefix}.stderr"
+	tee -a "${__prefix}.log" < "${__prefix}.stdout" &
+	tee -a "${__prefix}.log" < "${__prefix}.stderr" >&2 &
+	${__enter} "$*" >> "${__prefix}.stdout" 2>> "${__prefix}.stderr"
+	rc=$?
+	rm "${__prefix}.stdout" "${__prefix}.stderr"
+	[ ${DEBUG} -eq 1 ] && echo "[Exit code: $rc]" >> "${__prefix}.log"
+	echo -n "${__name}$ " >> "${__prefix}.log"
+	return $rc
+}
+
+# context_run_bg() - Start a shell command in a context
+# $1:	Context name
+# $*:	Command to start
+context_run_bg() {
+	__name="$1"
+	__prefix="${LOGDIR}/context_${__name}"
+	context_run "$@" &
+	echo $! > "${__prefix}.pid"
+}
+
+# context_wait() - Wait for background command in a context to complete
+# $1:	Context name
+# Returns the status of the completed command
+context_wait() {
+	__name="$1"
+	__prefix="${LOGDIR}/context_${__name}"
+	__pid=$(cat "${__prefix}.pid")
+	rm "${__prefix}.pid"
+	wait ${__pid}
+}
