@@ -20,6 +20,8 @@ VMEM="$((${__mem_kib} / 1024 / 4))"
 
 # setup_build() - Set up pane layout for build tests
 setup_build() {
+	context_setup_host host
+
 	layout_host
 }
 
@@ -30,6 +32,8 @@ setup_distro() {
 
 # setup_passt() - Start qemu and passt
 setup_passt() {
+	context_setup_host host
+
 	layout_passt
 
 	# Ports:
@@ -63,17 +67,12 @@ setup_passt() {
 		" -netdev socket,fd=5,id=hostnet0"			   \
 		' -pidfile passt_qemu.pid'
 	pane_status GUEST
-
-	# Set things up to reduce problems parsing host command output
-	pane_run HOST "PS1='$ '"
-	pane_wait HOST
-	# Non-bash shells will fail this, but also don't need it, so ignore errors
-	pane_run HOST "bind 'set enable-bracketed-paste off'"
-	pane_wait HOST
 }
 
 # setup_pasta() - Create a network and user namespace, connect pasta to it
 setup_pasta() {
+	context_setup_host host
+
 	layout_pasta
 
 	pane_run NS 'echo $$'
@@ -105,6 +104,8 @@ setup_pasta() {
 
 # setup_passt_in_ns() - Set up namespace (with pasta), run qemu and passt into it
 setup_passt_in_ns() {
+	context_setup_host host
+
 	layout_passt_in_pasta
 
 	# Ports:
@@ -182,17 +183,12 @@ setup_passt_in_ns() {
 		" -netdev socket,fd=5,id=hostnet0"			   \
 		' -pidfile passt_in_ns_qemu.pid'
 	pane_status GUEST
-
-	# Set things up to reduce problems parsing host command output
-	pane_run HOST "PS1='$ '"
-	pane_wait HOST
-	# Non-bash shells will fail this, but also don't need it, so ignore errors
-	pane_run HOST "bind 'set enable-bracketed-paste off'"
-	pane_wait HOST
 }
 
 # setup_two_guests() - Set up two namespace, run qemu and passt in both of them
 setup_two_guests() {
+	context_setup_host host
+
 	layout_two_guests
 
 	# Ports:
@@ -290,9 +286,21 @@ setup_two_guests() {
 	pane_status GUEST_2
 }
 
+# teardown_context_watch() - Remove contexts and stop panes watching them
+# $1:	Pane number watching
+# $@:	Context names
+teardown_context_watch() {
+	__pane="$1"
+	shift
+	for __c; do
+		context_teardown "${__c}"
+	done
+	tmux send-keys -t ${__pane} "C-c"
+}
+
 # teardown_build() - Nothing to do, yet
 teardown_build() {
-    :
+	teardown_context_watch ${PANE_HOST} host
 }
 
 # teardown_distro() - Nothing to do, yet
@@ -303,14 +311,19 @@ teardown_distro() {
 # teardown_passt() - Kill qemu, remove passt PID file
 teardown_passt() {
 	kill $(cat passt_qemu.pid)
+
 	pane_wait GUEST
 	rm passt.pid
+
+	teardown_context_watch ${PANE_HOST} host
 }
 
 # teardown_passt() - Exit namespace, kill pasta process
 teardown_pasta() {
 	tmux send-keys -t ${PANE_NS} "C-d"
 	pane_wait NS
+
+	teardown_context_watch ${PANE_HOST} host
 }
 
 # teardown_passt_in_ns() - Exit namespace, kill qemu and pasta, remove pid file
@@ -326,6 +339,8 @@ teardown_passt_in_ns() {
 	pane_wait PASST
 
 	rm passt.pid
+
+	teardown_context_watch ${PANE_HOST} host
 }
 
 # teardown_two_guests() - Exit namespaces, kill qemu processes, passt and pasta
@@ -350,6 +365,8 @@ teardown_two_guests() {
 	pane_wait GUEST_2
 	pane_wait PASST_1
 	pane_wait PASST_2
+
+	teardown_context_watch ${PANE_HOST} host
 }
 
 # teardown_demo_passt() - Exit namespace, kill qemu, passt and pasta

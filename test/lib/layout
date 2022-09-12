@@ -31,8 +31,12 @@ layout_host() {
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
-	tmux pipe-pane -O -t ${PANE_HOST} "cat >> ${LOGDIR}/pane_host.log"
-	tmux select-pane -t ${PANE_HOST} -T "host"
+	if context_exists host; then
+	    pane_watch_contexts 0 host host
+	else
+	    tmux pipe-pane -O -t ${PANE_HOST} "cat >> ${LOGDIR}/pane_host.log"
+	    tmux select-pane -t ${PANE_HOST} -T "host"
+	fi
 
 	info_layout "host commands only"
 
@@ -64,8 +68,7 @@ layout_pasta() {
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
-	tmux pipe-pane -O -t ${PANE_HOST} "cat >> ${LOGDIR}/pane_host.log"
-	tmux select-pane -t ${PANE_HOST} -T "host"
+	pane_watch_contexts ${PANE_HOST} host host
 
 	tmux pipe-pane -O -t ${PANE_PASST} "cat >> ${LOGDIR}/pane_passt.log"
 	tmux select-pane -t ${PANE_PASST} -T "pasta"
@@ -100,8 +103,7 @@ layout_passt() {
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
-	tmux pipe-pane -O -t ${PANE_HOST} "cat >> ${LOGDIR}/pane_host.log"
-	tmux select-pane -t ${PANE_HOST} -T "host"
+	pane_watch_contexts ${PANE_HOST} host host
 
 	tmux pipe-pane -O -t ${PANE_PASST} "cat >> ${LOGDIR}/pane_passt.log"
 	tmux select-pane -t ${PANE_PASST} -T "passt"
@@ -141,8 +143,7 @@ layout_passt_in_pasta() {
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
-	tmux pipe-pane -O -t ${PANE_HOST} "cat >> ${LOGDIR}/pane_host.log"
-	tmux select-pane -t ${PANE_HOST} -T "host"
+	pane_watch_contexts ${PANE_HOST} host host
 
 	tmux pipe-pane -O -t ${PANE_PASST} "cat >> ${LOGDIR}/pane_passt.log"
 	tmux select-pane -t ${PANE_PASST} -T "passt in pasta (namespace)"
@@ -189,8 +190,7 @@ layout_two_guests() {
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
-	tmux pipe-pane -O -t ${PANE_HOST} "cat >> ${LOGDIR}/pane_host.log"
-	tmux select-pane -t ${PANE_HOST} -T "host"
+	pane_watch_contexts ${PANE_HOST} host host
 
 	tmux pipe-pane -O -t ${PANE_PASST_1} "cat >> ${LOGDIR}/pane_passt_1.log"
 	tmux select-pane -t ${PANE_PASST_1} -T "passt #1 in namespace #1"
