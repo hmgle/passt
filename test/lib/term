@@ -241,6 +241,24 @@ pane_status() {
 	return ${__status}
 }
 
+# pane_watch_context() - Set up pane to watch commands executing in context(s)
+# $1:	Pane number
+# $2:	Description (for pane label)
+# $@:	Context name or names
+pane_watch_contexts() {
+	__pane_number="${1}"
+	__desc="${2}"
+	shift 2
+	__name="${2}"
+
+	tmux select-pane -t ${__pane_number} -T "${__desc}"
+	__cmd="tail -f --retry"
+	for c; do
+		__cmd="${__cmd} ${LOGDIR}/context_${c}.log"
+	done
+	cmd_write ${__pane_number} "${__cmd}"
+}
+
 # status_file_end() - Display and log messages when tests from one file are done
 status_file_end() {
 	[ -z "${STATUS_FILE}" ] && return
