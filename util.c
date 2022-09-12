@@ -13,30 +13,17 @@
  */
 
 #include <sched.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stddef.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <net/ethernet.h>
-#include <net/if.h>
-#include <netinet/tcp.h>
-#include <netinet/udp.h>
 #include <sys/epoll.h>
-#include <sys/prctl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <syslog.h>
 #include <stdarg.h>
 #include <string.h>
 #include <time.h>
 #include <errno.h>
-#include <pwd.h>
-#include <grp.h>
-
-#include <linux/capability.h>
 
 #include "util.h"
 #include "passt.h"
@@ -465,44 +452,6 @@ void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
 		else
 			bitmap_set(map, port);
 	}
-}
-
-/**
- * drop_caps() - Drop capabilities we might have except for CAP_NET_BIND_SERVICE
- */
-void drop_caps(void)
-{
-	int i;
-
-	for (i = 0; i < 64; i++) {
-		if (i == CAP_NET_BIND_SERVICE)
-			continue;
-
-		prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
-	}
-}
-
-/**
- * drop_root() - Switch to given UID and GID
- * @uid:	User ID to switch to
- * @gid:	Group ID to switch to
- */
-void drop_root(uid_t uid, gid_t gid)
-{
-	if (setgroups(0, NULL)) {
-		/* If we don't start with CAP_SETGID, this will EPERM */
-		if (errno != EPERM) {
-			err("Can't drop supplementary groups: %s",
-			    strerror(errno));
-			exit(EXIT_FAILURE);
-		}
-	}
-
-	if (!setgid(gid) && !setuid(uid))
-		return;
-
-	err("Can't change user/group, exiting");
-	exit(EXIT_FAILURE);
 }
 
 /**

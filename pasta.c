@@ -40,6 +40,7 @@
 
 #include "util.h"
 #include "passt.h"
+#include "isolation.h"
 #include "netlink.h"
 
 /* PID of child, in case we created a namespace */

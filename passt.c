@@ -19,51 +19,25 @@
  * created in a separate network namespace).
  */
 
-#include <sched.h>
-#include <stdio.h>
 #include <sys/epoll.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
-#include <sys/uio.h>
-#include <sys/syscall.h>
-#include <sys/wait.h>
-#include <sys/mount.h>
-#include <netinet/ip.h>
-#include <net/ethernet.h>
-#include <libgen.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <net/if.h>
 #include <netdb.h>
 #include <string.h>
 #include <errno.h>
 #include <time.h>
 #include <syslog.h>
-#include <sys/stat.h>
 #include <sys/prctl.h>
-#include <stddef.h>
-#include <netinet/udp.h>
-#include <netinet/tcp.h>
 #include <netinet/if_ether.h>
 
-#include <linux/seccomp.h>
-#include <linux/audit.h>
-#include <linux/filter.h>
-#include <linux/icmpv6.h>
-
 #include "util.h"
-#include "seccomp.h"
 #include "passt.h"
 #include "dhcp.h"
 #include "dhcpv6.h"
-#include "icmp.h"
-#include "tcp.h"
-#include "udp.h"
+#include "isolation.h"
 #include "pcap.h"
 #include "tap.h"
 #include "conf.h"
@@ -164,91 +138,6 @@ void proto_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 {
 	tcp_update_l2_buf(eth_d, eth_s, ip_da);
 	udp_update_l2_buf(eth_d, eth_s, ip_da);
-}
-
-/**
- * seccomp() - Set up seccomp filters depending on mode, won't return on failure
- * @c:		Execution context
- */
-static void seccomp(const struct ctx *c)
-{
-	struct sock_fprog prog;
-
-	if (c->mode == MODE_PASST) {
-		prog.len = (unsigned short)ARRAY_SIZE(filter_passt);
-		prog.filter = filter_passt;
-	} else {
-		prog.len = (unsigned short)ARRAY_SIZE(filter_pasta);
-		prog.filter = filter_pasta;
-	}
-
-	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) ||
-	    prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)) {
-		perror("prctl");
-		exit(EXIT_FAILURE);
-	}
-}
-
-/**
- * sandbox() - Unshare IPC, mount, PID, UTS, and user namespaces, "unmount" root
- *
- * Return: negative error code on failure, zero on success
- */
-static int sandbox(struct ctx *c)
-{
-	int flags = CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
-
-	if (!c->netns_only) {
-		if (c->pasta_userns_fd == -1)
-			flags |= CLONE_NEWUSER;
-		else
-			setns(c->pasta_userns_fd, CLONE_NEWUSER);
-	}
-
-	c->pasta_userns_fd = -1;
-
-	/* If we run in foreground, we have no chance to actually move to a new
-	 * PID namespace. For passt, use CLONE_NEWPID anyway, in case somebody
-	 * ever gets around seccomp profiles -- there's no harm in passing it.
-	 */
-	if (!c->foreground || c->mode == MODE_PASST)
-		flags |= CLONE_NEWPID;
-
-	if (unshare(flags)) {
-		perror("unshare");
-		return -errno;
-	}
-
-	if (mount("", "/", "", MS_UNBINDABLE | MS_REC, NULL)) {
-		perror("mount /");
-		return -errno;
-	}
-
-	if (mount("", TMPDIR, "tmpfs",
-		  MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_RDONLY,
-		  "nr_inodes=2,nr_blocks=0")) {
-		perror("mount tmpfs");
-		return -errno;
-	}
-
-	if (chdir(TMPDIR)) {
-		perror("chdir");
-		return -errno;
-	}
-
-	if (syscall(SYS_pivot_root, ".", ".")) {
-		perror("pivot_root");
-		return -errno;
-	}
-
-	if (umount2(".", MNT_DETACH | UMOUNT_NOFOLLOW)) {
-		perror("umount2");
-		return -errno;
-	}
-
-	drop_caps();	/* Relative to the new user namespace this time. */
-
-	return 0;
 }
 
 /**
