@@ -17,6 +17,4 @@ test	shutdown: exit code
 hout	PASST_PID cat passt.pid
 host	kill __PASST_PID__
 sleep	1
-
-pout	EXIT echo $?
-check	[ "__EXIT__" = "0" ]
+passtw

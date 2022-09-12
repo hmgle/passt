@@ -69,9 +69,7 @@ layout_pasta() {
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
 	pane_watch_contexts ${PANE_HOST} host host
-
-	tmux pipe-pane -O -t ${PANE_PASST} "cat >> ${LOGDIR}/pane_passt.log"
-	tmux select-pane -t ${PANE_PASST} -T "pasta"
+	pane_watch_contexts ${PANE_PASST} pasta passt
 
 	info_layout "single pasta instance with namespace"
 
@@ -104,9 +102,7 @@ layout_passt() {
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
 	pane_watch_contexts ${PANE_HOST} host host
-
-	tmux pipe-pane -O -t ${PANE_PASST} "cat >> ${LOGDIR}/pane_passt.log"
-	tmux select-pane -t ${PANE_PASST} -T "passt"
+	pane_watch_contexts ${PANE_PASST} passt passt
 
 	info_layout "single passt instance with guest"
 

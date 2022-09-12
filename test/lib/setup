@@ -33,6 +33,7 @@ setup_distro() {
 # setup_passt() - Start qemu and passt
 setup_passt() {
 	context_setup_host host
+	context_setup_host passt
 
 	layout_passt
 
@@ -48,11 +49,9 @@ setup_passt() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	pane_run PASST "make clean"
-	pane_status PASST
-	pane_run PASST "make valgrind"
-	pane_status PASST
-	pane_run PASST "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt ${__opts} -f -t 10001 -u 10001 -P passt.pid"
+	context_run passt "make clean"
+	context_run passt "make valgrind"
+	context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt ${__opts} -f -t 10001 -u 10001 -P passt.pid"
 	sleep 5
 
 	pane_run GUEST './qrap 5 qemu-system-$(uname -m)'                  \
@@ -72,6 +71,7 @@ setup_passt() {
 # setup_pasta() - Create a network and user namespace, connect pasta to it
 setup_pasta() {
 	context_setup_host host
+	context_setup_host passt
 
 	layout_pasta
 
@@ -82,9 +82,7 @@ setup_pasta() {
 	pane_run NS "unshare -rUnpf /bin/sh"
 	pane_status NS
 
-	pane_run PASST "pstree -p ${__tty_pid} | sed -n 's/.*(\([0-9].*\))$/\1/p'"
-	pane_wait PASST
-	__target_pid="$(pane_parse PASST)"
+	__target_pid=$(pstree -p ${__tty_pid} | sed -n 's/.*(\([0-9].*\))$/\1/p')
 
 	# Ports:
 	#
@@ -98,7 +96,7 @@ setup_pasta() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	pane_run PASST "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 -P passt.pid ${__target_pid}"
+	context_run_bg passt "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 -P passt.pid ${__target_pid}"
 	sleep 1
 }
 
@@ -311,11 +309,11 @@ teardown_distro() {
 # teardown_passt() - Kill qemu, remove passt PID file
 teardown_passt() {
 	kill $(cat passt_qemu.pid)
-
 	pane_wait GUEST
 	rm passt.pid
 
 	teardown_context_watch ${PANE_HOST} host
+	teardown_context_watch ${PANE_PASST} passt
 }
 
 # teardown_passt() - Exit namespace, kill pasta process
@@ -324,6 +322,7 @@ teardown_pasta() {
 	pane_wait NS
 
 	teardown_context_watch ${PANE_HOST} host
+	teardown_context_watch ${PANE_PASST} passt
 }
 
 # teardown_passt_in_ns() - Exit namespace, kill qemu and pasta, remove pid file
