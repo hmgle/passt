@@ -105,6 +105,7 @@ setup_pasta() {
 # setup_passt_in_ns() - Set up namespace (with pasta), run qemu and passt into it
 setup_passt_in_ns() {
 	context_setup_host host
+	context_setup_host pasta
 
 	layout_passt_in_pasta
 
@@ -127,28 +128,18 @@ setup_passt_in_ns() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	__pid_file="$(mktemp)"
-	pane_run PASST "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P ${__pid_file}"
+	context_run_bg pasta "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P pasta.pid ${NSHOLDER} ns.hold hold"
 	sleep 1
-	pane_run PASST ''
-	pane_status PASST
-	__pasta_pid="$(cat "${__pid_file}")"
-	__ns_pid="$(cat /proc/${__pasta_pid}/task/${__pasta_pid}/children | cut -f1 -d' ')"
-	rm "${__pid_file}"
+	__ns_pid=$(${NSHOLDER} ns.hold pid)
 
-	pane_run GUEST "nsenter -t ${__ns_pid} -U -n --preserve-credentials"
-	pane_run NS "nsenter -t ${__ns_pid} -U -n -p --preserve-credentials"
-	pane_status GUEST
-	pane_status NS
+	context_setup_nsenter qemu "-t ${__ns_pid} -U -n -p --preserve-credentials"
+	context_setup_nsenter ns "-t ${__ns_pid} -U -n -p --preserve-credentials"
+	context_setup_nsenter passt "-t ${__ns_pid} -U -n -p --preserve-credentials"
 
-	pane_run NS "ip -j link show | jq -rM '.[] | select(.link_type == \"ether\").ifname'"
-	pane_wait NS
-	__ifname="$(pane_parse NS)"
-	pane_run NS "/sbin/dhclient -4 --no-pid ${__ifname}"
-	pane_status NS
+	__ifname=$(context_run ns "ip -j link show | jq -rM '.[] | select(.link_type == \"ether\").ifname'")
+	context_run ns "/sbin/dhclient -4 --no-pid ${__ifname}"
 	sleep 2
-	pane_run NS "/sbin/dhclient -6 --no-pid ${__ifname}"
-	pane_status NS
+	context_run ns "/sbin/dhclient -6 --no-pid ${__ifname}"
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_in_pasta.pcap"
@@ -156,21 +147,18 @@ setup_passt_in_ns() {
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
 	if [ ${VALGRIND} -eq 1 ]; then
-		pane_run PASST "make clean"
-		pane_status PASST
-		pane_run PASST "make valgrind"
-		pane_status PASST
-		pane_run PASST "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P passt.pid"
+		context_run passt "make clean"
+		context_run passt "make valgrind"
+		context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P passt.pid"
 	else
-		pane_run PASST "make clean"
-		pane_status PASST
-		pane_run PASST "make"
-		pane_status PASST
-		pane_run PASST "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P passt.pid"
+		context_run passt "make clean"
+		context_run passt "make"
+		context_run_bg passt "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P passt.pid"
 	fi
 	sleep 5
 
-	pane_run GUEST './qrap 5 qemu-system-$(uname -m)'                  \
+	GUEST_CID=94557
+	context_run_bg qemu './qrap 5 qemu-system-$(uname -m)'                \
 		' -machine accel=kvm'                                      \
 		' -M accel=kvm:tcg'                                        \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                    \
@@ -181,8 +169,10 @@ setup_passt_in_ns() {
 		'virtio-net.napi_tx=1"'					   \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=524288" \
 		" -netdev socket,fd=5,id=hostnet0"			   \
-		' -pidfile passt_in_ns_qemu.pid'
-	pane_status GUEST
+		' -pidfile passt_in_ns_qemu.pid'			   \
+		" -device vhost-vsock-pci,guest-cid=$GUEST_CID"
+
+	context_setup_guest guest $GUEST_CID
 }
 
 # setup_two_guests() - Set up two namespace, run qemu and passt in both of them
@@ -321,19 +311,18 @@ teardown_pasta() {
 
 # teardown_passt_in_ns() - Exit namespace, kill qemu and pasta, remove pid file
 teardown_passt_in_ns() {
-	kill $(cat passt_in_ns_qemu.pid)
-	pane_wait GUEST
-	tmux send-keys -t ${PANE_GUEST} "C-d"
+	context_run ns kill $(cat passt_in_ns_qemu.pid)
+	context_wait qemu
 
-	tmux send-keys -t ${PANE_PASST} "C-d"
+	${NSHOLDER} ns.hold stop
+	context_wait pasta
 
-	pane_wait GUEST
-	pane_wait NS
-	pane_wait PASST
-
-	rm passt.pid
+	rm passt.pid pasta.pid
 
 	teardown_context_watch ${PANE_HOST} host
+	teardown_context_watch ${PANE_PASST} pasta passt
+	teardown_context_watch ${PANE_NS} ns
+	teardown_context_watch ${PANE_GUEST} qemu guest
 }
 
 # teardown_two_guests() - Exit namespaces, kill qemu processes, passt and pasta

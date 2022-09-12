@@ -125,11 +125,8 @@ layout_passt_in_pasta() {
 
 	get_info_cols
 
-	tmux pipe-pane -O -t ${PANE_GUEST} "cat >> ${LOGDIR}/pane_guest.log"
-	tmux select-pane -t ${PANE_GUEST} -T "guest"
-
-	tmux pipe-pane -O -t ${PANE_NS} "cat >> ${LOGDIR}/pane_ns.log"
-	tmux select-pane -t ${PANE_NS} -T "namespace"
+	pane_watch_contexts ${PANE_GUEST} "guest" qemu guest
+	pane_watch_contexts ${PANE_NS} "namespace" ns
 
 	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
@@ -137,8 +134,7 @@ layout_passt_in_pasta() {
 
 	pane_watch_contexts ${PANE_HOST} host host
 
-	tmux pipe-pane -O -t ${PANE_PASST} "cat >> ${LOGDIR}/pane_passt.log"
-	tmux select-pane -t ${PANE_PASST} -T "passt in pasta (namespace)"
+	pane_watch_contexts ${PANE_PASST} "passt in pasta (namespace)" pasta passt
 
 	info_layout "passt and guest in namespace, connected by pasta"
 

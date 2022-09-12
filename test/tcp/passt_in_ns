@@ -66,6 +66,7 @@ check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv4: ns to guest (using loopback address): big transfer
 guestb	socat -u TCP4-LISTEN:10001 OPEN:test_big.bin,create,trunc
+sleep	1
 ns	socat -u OPEN:__TEMP_NS_BIG__ TCP4:127.0.0.1:10001
 guestw
 gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
