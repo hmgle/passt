@@ -35,6 +35,7 @@ setup_distro() {
 setup_passt() {
 	context_setup_host host
 	context_setup_host passt
+	context_setup_host qemu
 
 	layout_passt
 
@@ -55,7 +56,8 @@ setup_passt() {
 	context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt ${__opts} -f -t 10001 -u 10001 -P passt.pid"
 	sleep 5
 
-	pane_run GUEST './qrap 5 qemu-system-$(uname -m)'                  \
+	GUEST_CID=94557
+	context_run_bg qemu './qrap 5 qemu-system-$(uname -m)'		   \
 		' -machine accel=kvm'                                      \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                    \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
@@ -65,8 +67,10 @@ setup_passt() {
 		'virtio-net.napi_tx=1"'					   \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"  \
 		" -netdev socket,fd=5,id=hostnet0"			   \
-		' -pidfile passt_qemu.pid'
-	pane_status GUEST
+		" -pidfile passt_qemu.pid"				   \
+		" -device vhost-vsock-pci,guest-cid=$GUEST_CID"
+
+	context_setup_guest guest $GUEST_CID
 }
 
 # setup_pasta() - Create a network and user namespace, connect pasta to it
@@ -307,11 +311,12 @@ teardown_distro() {
 # teardown_passt() - Kill qemu, remove passt PID file
 teardown_passt() {
 	kill $(cat passt_qemu.pid)
-	pane_wait GUEST
+
 	rm passt.pid
 
 	teardown_context_watch ${PANE_HOST} host
 	teardown_context_watch ${PANE_PASST} passt
+	teardown_context_watch ${PANE_GUEST} qemu guest
 }
 
 # teardown_passt() - Exit namespace, kill pasta process

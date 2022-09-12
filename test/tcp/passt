@@ -17,6 +17,7 @@ htools	dd socat ip jq md5sum cut
 test	TCP/IPv4: host to guest: big transfer
 temp	TEMP_BIG
 guestb	socat -u TCP4-LISTEN:10001,reuseaddr OPEN:test_big.bin,create,trunc
+sleep	1
 host	dd if=/dev/urandom bs=1M count=10 > __TEMP_BIG__
 host	socat -u OPEN:__TEMP_BIG__ TCP4:127.0.0.1:10001
 guestw
@@ -35,6 +36,7 @@ check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
 test	TCP/IPv4: host to guest: small transfer
 temp	TEMP_SMALL
 guestb	socat -u TCP4-LISTEN:10001,reuseaddr OPEN:test_small.bin,create,trunc
+sleep	1
 host	dd if=/dev/urandom bs=2k count=1 > __TEMP_SMALL__
 host	socat -u OPEN:__TEMP_SMALL__ TCP4:127.0.0.1:10001
 guestw

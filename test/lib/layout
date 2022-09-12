@@ -92,15 +92,13 @@ layout_passt() {
 
 	get_info_cols
 
-	tmux pipe-pane -O -t ${PANE_GUEST} "cat >> ${LOGDIR}/pane_guest.log"
-	tmux select-pane -t ${PANE_GUEST} -T "guest"
-
 	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
 	pane_watch_contexts ${PANE_HOST} host host
 	pane_watch_contexts ${PANE_PASST} passt passt
+	pane_watch_contexts ${PANE_GUEST} guest qemu guest
 
 	info_layout "single passt instance with guest"
 

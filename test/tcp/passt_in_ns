@@ -18,6 +18,7 @@ nstools	socat ip jq md5sum cut
 test	TCP/IPv4: host to guest: big transfer
 temp	TEMP_BIG
 guestb	socat -u TCP4-LISTEN:10001 OPEN:test_big.bin,create,trunc
+sleep	1
 host	dd if=/dev/urandom bs=1M count=10 of=__TEMP_BIG__
 host	socat -u OPEN:__TEMP_BIG__ TCP4:127.0.0.1:10001
 guestw
@@ -82,6 +83,7 @@ check	[ "__GUEST_MD5_BIG__" = "__MD5_BIG__" ]
 test	TCP/IPv4: host to guest: small transfer
 temp	TEMP_SMALL
 guestb	socat -u TCP4-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
 host	dd if=/dev/urandom bs=2k count=100 of=__TEMP_SMALL__
 host	socat -u OPEN:__TEMP_SMALL__ TCP4:127.0.0.1:10001
 guestw
@@ -129,6 +131,7 @@ check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv4: ns to guest (using loopback address): small transfer
 guestb	socat -u TCP4-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
 ns	socat -u OPEN:__TEMP_NS_SMALL__ TCP4:127.0.0.1:10001
 guestw
 gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
@@ -136,6 +139,7 @@ check	[ "__GUEST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv4: ns to guest (using namespace address): small transfer
 guestb	socat -u TCP4-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
 ns	socat -u OPEN:__TEMP_NS_SMALL__ TCP4:__ADDR__:10001
 guestw
 gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
@@ -143,6 +147,7 @@ check	[ "__GUEST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv6: host to guest: big transfer
 guestb	socat -u TCP6-LISTEN:10001 OPEN:test_big.bin,create,trunc
+sleep	1
 host	socat -u OPEN:__TEMP_BIG__ TCP6:[::1]:10001
 guestw
 gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
@@ -188,6 +193,7 @@ check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv6: ns to guest (using loopback address): big transfer
 guestb	socat -u TCP6-LISTEN:10001 OPEN:test_big.bin,create,trunc
+sleep	1
 ns	socat -u OPEN:__TEMP_NS_BIG__ TCP6:[::1]:10001
 guestw
 gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
@@ -203,6 +209,7 @@ check	[ "__GUEST_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv6: host to guest: small transfer
 guestb	socat -u TCP6-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
 host	socat -u OPEN:__TEMP_SMALL__ TCP6:[::1]:10001
 guestw
 gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
@@ -248,6 +255,7 @@ check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv6: ns to guest (using loopback address): small transfer
 guestb	socat -u TCP6-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
 ns	socat -u OPEN:__TEMP_NS_SMALL__ TCP6:[::1]:10001
 guestw
 gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1

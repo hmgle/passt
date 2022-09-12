@@ -57,7 +57,7 @@ DOWNLOAD_ASSETS = mbuto \
 LOCAL_ASSETS = mbuto.img QEMU_EFI.fd \
 	$(DEBIAN_IMGS:%=prepared-%) $(FEDORA_IMGS:%=prepared-%) \
 	$(UBUNTU_NEW_IMGS:%=prepared-%) \
-	nsholder
+	nsholder guest-key guest-key.pub
 
 ASSETS = $(DOWNLOAD_ASSETS) $(LOCAL_ASSETS)
 
@@ -68,7 +68,10 @@ assets: $(ASSETS)
 mbuto:
 	git clone git://mbuto.sh/mbuto
 
-mbuto.img: passt.mbuto mbuto
+guest-key guest-key.pub:
+	ssh-keygen -f guest-key -N ''
+
+mbuto.img: passt.mbuto mbuto guest-key.pub
 	./mbuto/mbuto -p ./$< -c lz4 -f $@
 
 nsholder: nsholder.c

@@ -41,12 +41,38 @@ context_setup_nsenter() {
 	echo "nsenter $@ sh -c" > "${__prefix}.enter"
 }
 
+# context_setup_guest() - Create a new context for running commands in a guest
+# $1:        Context name
+# $2:        CID to use for vsock
+context_setup_guest() {
+	__name="$1"
+	__cid="$2"
+	__prefix="${LOGDIR}/context_${__name}"
+	context_setup_common "${__name}"
+
+	cat > "${__prefix}.ssh" <<EOF
+Host ${__name}
+	User root
+	UserKnownHostsFile ${__prefix}.hosts
+	StrictHostKeyChecking no
+	IdentityFile ${BASEPATH}/guest-key
+	IdentityAgent none
+	ProxyCommand socat - VSOCK-CONNECT:${__cid}:22
+EOF
+	echo "ssh -F ${__prefix}.ssh ${__name}" > "${__prefix}.enter"
+
+	# Wait for the guest to be booted and accepting connections
+	while ! ssh -F "${__prefix}.ssh" "${__name}" :; do
+		sleep 0.1
+	done
+}
+
 # context_teardown() - Remove a context (leave log files intact)
 # $1:	Context name
 context_teardown() {
 	__name="$1"
 	__prefix="${LOGDIR}/context_${__name}"
-	rm -f "${__prefix}.enter"
+	rm -f "${__prefix}.enter" "${__prefix}.ssh" "${__prefix}.hosts"
 }
 
 # context_exists() - Test if a context currently exists

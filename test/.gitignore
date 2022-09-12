@@ -11,3 +11,5 @@ QEMU_EFI.fd
 *.stop
 *.js
 nsholder
+guest-key
+guest-key.pub

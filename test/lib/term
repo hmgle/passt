@@ -266,7 +266,8 @@ pane_or_context_run() {
 	__name="${1}"
 	shift
 	if context_exists "${__name}"; then
-		context_run "${__name}" "$@" >/dev/null 2>&1
+		# Redirect stdin to stop ssh from eating the test instructions file we have on stdin
+		context_run "${__name}" "$@" >/dev/null 2>&1 < /dev/null
 	else
 		__uc="$(echo "${__name}" | tr [a-z] [A-Z])"
 		pane_run "${__uc}" "$@"
@@ -281,7 +282,8 @@ pane_or_context_run_bg() {
 	__name="${1}"
 	shift
 	if context_exists "${__name}"; then
-		context_run_bg "${__name}" "$@" >/dev/null 2>&1
+		# Redirect stdin to stop ssh from eating the test instructions file we have on stdin
+		context_run_bg "${__name}" "$@" >/dev/null 2>&1 < /dev/null
 	else
 		__uc="$(echo "${__name}" | tr [a-z] [A-Z])"
 		pane_run "${__uc}" "$@"
@@ -295,7 +297,8 @@ pane_or_context_output() {
 	__name="${1}"
 	shift
 	if context_exists "${__name}"; then
-		__output=$(context_run "${__name}" "$@" 2>/dev/null)
+		# Redirect stdin to stop ssh from eating the test instructions file we have on stdin
+		__output=$(context_run "${__name}" "$@" 2>/dev/null </dev/null)
 		if [ -z "${__output}" ]; then
 			echo "@EMPTY@"
 		else
