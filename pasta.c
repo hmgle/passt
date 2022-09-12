@@ -244,8 +244,8 @@ void pasta_start_ns(struct ctx *c, int argc, char *argv[])
 
 	pasta_child_pid = clone(pasta_setup_ns,
 				ns_fn_stack + sizeof(ns_fn_stack) / 2,
-				(c->netns_only ? 0 : CLONE_NEWNET) |
-				CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWUSER |
+				(c->netns_only ? 0 : CLONE_NEWUSER) |
+				CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWNET |
 				CLONE_NEWUTS,
 				(void *)&arg);
 
