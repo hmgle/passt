@@ -491,13 +491,13 @@ out:
 }
 
 /**
- * conf_netns() - Parse --netns option
+ * conf_netns_opt() - Parse --netns option
  * @netns:	buffer of size PATH_MAX, updated with netns path
  * @arg:	--netns argument
  *
  * Return: 0 on success, negative error code otherwise
  */
-static int conf_netns(char *netns, const char *arg)
+static int conf_netns_opt(char *netns, const char *arg)
 {
 	int ret;
 
@@ -518,40 +518,59 @@ static int conf_netns(char *netns, const char *arg)
 }
 
 /**
- * conf_ns_pid() - Parse non-option argument as a PID
+ * conf_pasta_ns() - Validate all pasta namespace options
+ * @netns_only:	Don't use userns, may be updated
  * @userns:	buffer of size PATH_MAX, initially contains --userns
  *		argument (may be empty), updated with userns path
  * @netns:	buffer of size PATH_MAX, initial contains --netns
  *		argument (may be empty), updated with netns path
- * @arg:	PID of network namespace
+ * @optind:	Index of first non-option argument
+ * @argc:	Number of arguments
+ * @argv:	Command line arguments
  *
  * Return: 0 on success, negative error code otherwise
  */
-static int conf_ns_pid(char *userns, char *netns, const char *arg)
+static int conf_pasta_ns(int *netns_only, char *userns, char *netns,
+			 int optind, int argc, char *argv[])
 {
-	char *endptr;
-	long pidval;
-
-	if (*netns) {
-		err("Both --netns and PID given");
+	if (*netns_only && *userns) {
+		err("Both --userns and --netns-only given");
 		return -EINVAL;
 	}
 
-	pidval = strtol(arg, &endptr, 10);
-	if (!*endptr) {
-		/* Looks like a pid */
-		if (pidval < 0 || pidval > INT_MAX) {
-			err("Invalid PID %s", arg);
-			return -EINVAL;
-		}
-
-		snprintf(netns, PATH_MAX, "/proc/%ld/ns/net", pidval);
-		if (!*userns)
-			snprintf(userns, PATH_MAX, "/proc/%ld/ns/user", pidval);
-		return 0;
+	if (*netns && optind != argc) {
+		err("Both --netns and PID or command given");
+		return -EINVAL;
 	}
 
-	/* Not a PID, later code will treat as a command */
+	if (optind + 1 == argc) {
+		char *endptr;
+		long pidval;
+
+		pidval = strtol(argv[optind], &endptr, 10);
+		if (!*endptr) {
+			/* Looks like a pid */
+			if (pidval < 0 || pidval > INT_MAX) {
+				err("Invalid PID %s", argv[optind]);
+				return -EINVAL;
+			}
+
+			snprintf(netns, PATH_MAX, "/proc/%ld/ns/net", pidval);
+			if (!*userns)
+				snprintf(userns, PATH_MAX, "/proc/%ld/ns/user",
+					 pidval);
+		}
+	}
+
+	if (*userns && !*netns) {
+		err("--userns requires --netns or PID");
+		return -EINVAL;
+	}
+
+	/* Attaching to a netns/PID, with no userns given */
+	if (*netns && !*userns)
+		*netns_only = 1;
+
 	return 0;
 }
 
@@ -585,11 +604,6 @@ static int conf_ns_open(struct ctx *c, const char *userns, const char *netns)
 {
 	int ufd = -1, nfd = -1;
 
-	if (c->netns_only && *userns) {
-		err("Both --userns and --netns-only given");
-		return -EINVAL;
-	}
-
 	nfd = open(netns, O_RDONLY | O_CLOEXEC);
 	if (nfd < 0) {
 		err("Couldn't open network namespace %s", netns);
@@ -607,7 +621,6 @@ static int conf_ns_open(struct ctx *c, const char *userns, const char *netns)
 
 	c->pasta_netns_fd = nfd;
 	c->pasta_userns_fd = ufd;
-	c->netns_only = !*userns;
 
 	NS_CALL(conf_ns_check, c);
 
@@ -1194,7 +1207,7 @@ void conf(struct ctx *c, int argc, char **argv)
 				usage(argv[0]);
 			}
 
-			ret = conf_netns(netns, optarg);
+			ret = conf_netns_opt(netns, optarg);
 			if (ret < 0)
 				usage(argv[0]);
 			break;
@@ -1573,17 +1586,9 @@ void conf(struct ctx *c, int argc, char **argv)
 	drop_root(uid, gid);
 
 	if (c->mode == MODE_PASTA) {
-		if (*netns && optind != argc) {
-			err("Both --netns and PID or command given");
+		if (conf_pasta_ns(&c->netns_only, userns, netns,
+				  optind, argc, argv) < 0)
 			usage(argv[0]);
-		} else if (optind + 1 == argc) {
-			ret = conf_ns_pid(userns, netns, argv[optind]);
-			if (ret < 0)
-				usage(argv[0]);
-		} else if (*userns && !*netns && optind == argc) {
-			err("--userns requires --netns or PID");
-			usage(argv[0]);
-		}
 	} else if (optind != argc) {
 		usage(argv[0]);
 	}
@@ -1597,10 +1602,6 @@ void conf(struct ctx *c, int argc, char **argv)
 			if (ret < 0)
 				usage(argv[0]);
 		} else {
-			if (*userns) {
-				err("Both --userns and command given");
-				usage(argv[0]);
-			}
 			pasta_start_ns(c, argc - optind, argv + optind);
 		}
 	}
