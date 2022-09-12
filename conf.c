@@ -1022,6 +1022,70 @@ static int conf_runas(const char *opt, unsigned int *uid, unsigned int *gid)
 }
 
 /**
+ * conf_ugid() - Determine UID and GID to run as
+ * @runas:	--runas option, may be NULL
+ * @uid:	User ID, set on success
+ * @gid:	Group ID, set on success
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int conf_ugid(const char *runas, uid_t *uid, gid_t *gid)
+{
+	const char root_uid_map[] = "         0          0 4294967295";
+	struct passwd *pw;
+	char buf[BUFSIZ];
+	int ret;
+	int fd;
+
+	/* If user has specified --runas, that takes precedence... */
+	if (runas) {
+		ret = conf_runas(runas, uid, gid);
+		if (ret)
+			err("Invalid --runas option: %s", runas);
+		return ret;
+	}
+
+	/* ...otherwise default to current user and group... */
+	*uid = geteuid();
+	*gid = getegid();
+
+	/* ...as long as it's not root... */
+	if (*uid)
+		return 0;
+
+	/* ...or at least not root in the init namespace... */
+	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0)
+		return 0;
+
+	if (read(fd, buf, BUFSIZ) != sizeof(root_uid_map) ||
+	    strncmp(buf, root_uid_map, sizeof(root_uid_map) - 1)) {
+		close(fd);
+		return 0;
+	}
+
+	close(fd);
+
+	/* ...otherwise use nobody:nobody */
+	warn("Don't run as root. Changing to nobody...");
+#ifndef GLIBC_NO_STATIC_NSS
+	pw = getpwnam("nobody");
+	if (!pw) {
+		perror("getpwnam");
+		exit(EXIT_FAILURE);
+	}
+
+	*uid = pw->pw_uid;
+	*gid = pw->pw_gid;
+#else
+	(void)pw;
+
+	/* Common value for 'nobody', not really specified */
+	*uid = *gid = 65534;
+#endif
+	return 0;
+}
+
+/**
  * conf() - Process command-line arguments and set configuration
  * @c:		Execution context
  * @argc:	Argument count
@@ -1085,9 +1149,10 @@ void conf(struct ctx *c, int argc, char **argv)
 	struct fqdn *dnss = c->dns_search;
 	uint32_t *dns4 = c->ip4.dns;
 	int name, ret, mask, b, i;
+	const char *runas = NULL;
 	unsigned int ifi = 0;
-	uid_t uid = 0;
-	gid_t gid = 0;
+	uid_t uid;
+	gid_t gid;
 
 	if (c->mode == MODE_PASTA)
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
@@ -1210,15 +1275,12 @@ void conf(struct ctx *c, int argc, char **argv)
 			c->trace = c->debug = c->foreground = 1;
 			break;
 		case 12:
-			if (uid || gid) {
+			if (runas) {
 				err("Multiple --runas options given");
 				usage(argv[0]);
 			}
 
-			if (conf_runas(optarg, &uid, &gid)) {
-				err("Invalid --runas option: %s", optarg);
-				usage(argv[0]);
-			}
+			runas = optarg;
 			break;
 		case 'd':
 			if (c->debug) {
@@ -1499,7 +1561,10 @@ void conf(struct ctx *c, int argc, char **argv)
 		}
 	} while (name != -1);
 
-	check_root(&uid, &gid);
+	ret = conf_ugid(runas, &uid, &gid);
+	if (ret)
+		usage(argv[0]);
+
 	drop_root(uid, gid);
 
 	if (c->mode == MODE_PASTA) {

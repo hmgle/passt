@@ -483,56 +483,6 @@ void drop_caps(void)
 }
 
 /**
- * check_root() - Check if root in init ns, exit if we can't drop to user
- */
-void check_root(uid_t *uid, gid_t *gid)
-{
-	const char root_uid_map[] = "         0          0 4294967295";
-	struct passwd *pw;
-	char buf[BUFSIZ];
-	int fd;
-
-	if (!*uid)
-		*uid = geteuid();
-
-	if (!*gid)
-		*gid = getegid();
-
-	if (*uid)
-		return;
-
-	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0)
-		return;
-
-	if (read(fd, buf, BUFSIZ) != sizeof(root_uid_map) ||
-	    strncmp(buf, root_uid_map, sizeof(root_uid_map) - 1)) {
-		close(fd);
-		return;
-	}
-
-	close(fd);
-
-	if (!*uid) {
-		fprintf(stderr, "Don't run as root. Changing to nobody...\n");
-#ifndef GLIBC_NO_STATIC_NSS
-		pw = getpwnam("nobody");
-		if (!pw) {
-			perror("getpwnam");
-			exit(EXIT_FAILURE);
-		}
-
-		*uid = pw->pw_uid;
-		*gid = pw->pw_gid;
-#else
-		(void)pw;
-
-		/* Common value for 'nobody', not really specified */
-		*uid = *gid = 65534;
-#endif
-	}
-}
-
-/**
  * drop_root() - Switch to given UID and GID
  * @uid:	User ID to switch to
  * @gid:	Group ID to switch to
