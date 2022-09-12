@@ -45,7 +45,7 @@ check	[ "__HOST_MD5__" = "__MD5__" ]
 test	UDP/IPv4: guest to ns
 nsb	(socat -u UDP4-LISTEN:10002 STDOUT & echo $! > __SC_PID__) | tee __TEMP_NS__ | (grep -qm1 "END_OF_TEST" && kill $(cat __SC_PID__))
 guest	socat -u OPEN:test.bin UDP4:__GW__:10002
-hostw
+nsw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
 check	[ "__HOST_MD5__" = "__MD5__" ]
 
@@ -106,7 +106,7 @@ check	[ "__HOST_MD5__" = "__MD5__" ]
 test	UDP/IPv6: guest to ns
 nsb	(socat -u UDP6-LISTEN:10002 STDOUT & echo $! > __SC_PID__) | tee __TEMP_NS__ | (grep -qm1 "END_OF_TEST" && kill $(cat __SC_PID__))
 guest	socat -u OPEN:test.bin UDP6:[__GW6__%__IFNAME__]:10002
-hostw
+nsw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
 check	[ "__HOST_MD5__" = "__MD5__" ]
 

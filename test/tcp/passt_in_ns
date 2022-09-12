@@ -44,7 +44,7 @@ check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 test	TCP/IPv4: guest to ns: big transfer
 nsb	socat -u TCP4-LISTEN:10002 OPEN:__TEMP_BIG__,create,trunc
 guest	socat -u OPEN:test_big.bin TCP4:__GW__:10002
-hostw
+nsw
 hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
 check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 
@@ -108,7 +108,7 @@ check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
 test	TCP/IPv4: guest to ns: small transfer
 nsb	socat -u TCP4-LISTEN:10002 OPEN:__TEMP_SMALL__,create,trunc
 guest	socat -u OPEN:test_small.bin TCP4:__GW__:10002
-hostw
+nsw
 hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
 check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
@@ -167,7 +167,7 @@ check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 test	TCP/IPv6: guest to ns: big transfer
 nsb	socat -u TCP6-LISTEN:10002 OPEN:__TEMP_BIG__,create,trunc
 guest	socat -u OPEN:test_big.bin TCP6:[__GW6__%__IFNAME__]:10002
-hostw
+nsw
 hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
 check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 
@@ -227,7 +227,7 @@ check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
 test	TCP/IPv6: guest to ns: small transfer
 nsb	socat -u TCP6-LISTEN:10002 OPEN:__TEMP_SMALL__
 guest	socat -u OPEN:test_small.bin TCP6:[__GW6__%__IFNAME__]:10002
-hostw
+nsw
 hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
 check	[ "__HOST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
