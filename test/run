@@ -178,7 +178,6 @@ else
 	:> "${LOGFILE}"
 	trap "cleanup" EXIT
 	run_term
-	trap "" EXIT
 fi
 
 [ ${DEMO} -eq 1 ] && exit 0
