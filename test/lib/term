@@ -31,7 +31,7 @@ PR_DELAY_INIT=100 # ms
 # $@:	Message to print
 info() {
 	tmux select-pane -t ${PANE_INFO}
-	echo "${@}" >> /tmp/.passt_test_log_pipe
+	echo "${@}" >> $STATEBASE/log_pipe
 	echo "${@}" >> "${LOGFILE}"
 }
 
@@ -39,7 +39,7 @@ info() {
 # $@:	Message to print
 info_n() {
 	tmux select-pane -t ${PANE_INFO}
-	printf "${@}" >> /tmp/.passt_test_log_pipe
+	printf "${@}" >> $STATEBASE/log_pipe
 	printf "${@}" >> "${LOGFILE}"
 }
 
@@ -47,7 +47,7 @@ info_n() {
 # $@:	Message to print
 info_nolog() {
 	tmux select-pane -t ${PANE_INFO}
-	echo "${@}" >> /tmp/.passt_test_log_pipe
+	echo "${@}" >> $STATEBASE/log_pipe
 }
 
 # info_nolog() - Print message to log file
@@ -365,7 +365,7 @@ status_test_start() {
 info_check() {
 	switch_pane ${PANE_INFO}
 
-	printf "${PR_YELLOW}?${PR_NC} ${@}" >> /tmp/.passt_test_log_pipe
+	printf "${PR_YELLOW}?${PR_NC} ${@}" >> $STATEBASE/log_pipe
 	printf "? ${@}" >> "${LOGFILE}"
 }
 
@@ -373,7 +373,7 @@ info_check() {
 info_check_passed() {
 	switch_pane ${PANE_INFO}
 
-	printf "\n" >> /tmp/.passt_test_log_pipe
+	printf "\n" >> $STATEBASE/log_pipe
 	printf "\n" >> ${LOGFILE}
 }
 
@@ -381,7 +381,7 @@ info_check_passed() {
 info_check_failed() {
 	switch_pane ${PANE_INFO}
 
-	printf " ${PR_RED}!${PR_NC}\n" >> /tmp/.passt_test_log_pipe
+	printf " ${PR_RED}!${PR_NC}\n" >> $STATEBASE/log_pipe
 	printf " < failed.\n" >> "${LOGFILE}"
 }
 

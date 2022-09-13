@@ -49,13 +49,11 @@ COMMIT="$(git log --oneline --no-decorate -1)"
 # cleanup() - Remove temporary files
 cleanup() {
 	[ ${DEBUG} -eq 1 ] || rm -rf "${STATEBASE}"
-	rm -f /tmp/.passt_test_log_pipe
 }
 
 # run() - Call setup functions, run tests, handle exit from test session
 run() {
-	rm -f /tmp/.passt_test_log_pipe
-	mkfifo /tmp/.passt_test_log_pipe
+	mkfifo $STATEBASE/log_pipe
 
 	term
 	perf_init
@@ -131,8 +129,7 @@ run() {
 
 # demo() - Simpler path for demo purposes
 demo() {
-	rm -f /tmp/.passt_test_log_pipe
-	mkfifo /tmp/.passt_test_log_pipe
+	mkfifo $STATEBASE/log_pipe
 
 	FAST=0
 

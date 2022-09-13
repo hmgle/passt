@@ -27,7 +27,7 @@ layout_host() {
 
 	get_info_cols
 
-	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
@@ -61,7 +61,7 @@ layout_pasta() {
 
 	get_info_cols
 
-	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
@@ -92,7 +92,7 @@ layout_passt() {
 
 	get_info_cols
 
-	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
@@ -128,7 +128,7 @@ layout_passt_in_pasta() {
 	pane_watch_contexts ${PANE_GUEST} "guest" qemu guest
 	pane_watch_contexts ${PANE_NS} "namespace" ns
 
-	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
@@ -171,7 +171,7 @@ layout_two_guests() {
 	pane_watch_contexts ${PANE_GUEST_1} "guest #1 in namespace #1" qemu_1 guest_1
 	pane_watch_contexts ${PANE_GUEST_2} "guest #2 in namespace #2" qemu_2 guest_2
 
-	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T "test log"
 
@@ -207,7 +207,7 @@ layout_demo_pasta() {
 	tmux pipe-pane -O -t ${PANE_NS} "cat >> ${LOGDIR}/pane_ns.log"
 	tmux select-pane -t ${PANE_NS} -T "namespace"
 
-	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T ""
 
@@ -243,7 +243,7 @@ layout_demo_passt() {
 	tmux pipe-pane -O -t ${PANE_GUEST} "cat >> ${LOGDIR}/pane_guest.log"
 	tmux select-pane -t ${PANE_GUEST} -T "guest"
 
-	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T ""
 
@@ -282,7 +282,7 @@ layout_demo_podman() {
 	tmux pipe-pane -O -t ${PANE_NS2} "cat >> ${LOGDIR}/pane_ns2.log"
 	tmux select-pane -t ${PANE_NS2} -T "Podman with pasta"
 
-	tmux send-keys -l -t ${PANE_INFO} 'while cat /tmp/.passt_test_log_pipe; do :; done'
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
 	tmux send-keys -t ${PANE_INFO} -N 100 C-m
 	tmux select-pane -t ${PANE_INFO} -T ""
 
