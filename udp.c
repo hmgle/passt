@@ -1075,17 +1075,20 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		uh_send = packet_get(p, i, 0, sizeof(*uh), &len);
 		if (!uh_send)
 			return p->count;
-		if (!len)
-			continue;
-
-		m[i].iov_base = (char *)(uh_send + 1);
-		m[i].iov_len = len;
 
 		mm[i].msg_hdr.msg_name = sa;
 		mm[i].msg_hdr.msg_namelen = sl;
 
-		mm[i].msg_hdr.msg_iov = m + i;
-		mm[i].msg_hdr.msg_iovlen = 1;
+		if (len) {
+			m[i].iov_base = (char *)(uh_send + 1);
+			m[i].iov_len = len;
+
+			mm[i].msg_hdr.msg_iov = m + i;
+			mm[i].msg_hdr.msg_iovlen = 1;
+		} else {
+			mm[i].msg_hdr.msg_iov = NULL;
+			mm[i].msg_hdr.msg_iovlen = 0;
+		}
 
 		mm[i].msg_hdr.msg_control = NULL;
 		mm[i].msg_hdr.msg_controllen = 0;
