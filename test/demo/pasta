@@ -47,7 +47,7 @@ nl
 say	  without PID, it will create a namespace.
 sleep	3
 passt	cd __STATEDIR__/passt
-passtb	./pasta -P /tmp/pasta.pid
+passtb	./pasta -P pasta.pid
 sleep	3
 
 nl
@@ -56,7 +56,8 @@ say	For convenience, let's enter this namespace
 nl
 say	  from another terminal.
 sleep	3
-nsout	TARGET_PID pgrep -P $(cat /tmp/pasta.pid)
+ns	cd __STATEDIR__/passt
+nsout	TARGET_PID pgrep -P $(cat pasta.pid)
 sleep	1
 
 ns	nsenter -t __TARGET_PID__ -U -n --preserve-credentials
@@ -168,10 +169,10 @@ passt	exit
 passt	make clean
 passt	CFLAGS="-g" make
 sleep	2
-passtb	perf record -g ./pasta -P /tmp/pasta.pid
+passtb	perf record -g ./pasta -P pasta.pid
 sleep	2
 
-nsout	TARGET_PID pgrep -P $(cat /tmp/pasta.pid)
+nsout	TARGET_PID pgrep -P $(cat pasta.pid)
 sleep	1
 ns	nsenter -t __TARGET_PID__ -U -n --preserve-credentials
 sleep	5
@@ -255,7 +256,6 @@ sleep	2
 killp	PASST
 killp	HOST
 sleep	2
-ns	cd __STATEDIR__/passt
 nsb	perf report -g --max-stack 3
 sleep	10
 

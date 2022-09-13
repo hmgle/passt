@@ -69,7 +69,7 @@ say	  'pasta' demo above.
 sleep	3
 
 passt	cd __STATEDIR__/passt
-passtb	./pasta -P /tmp/pasta.pid
+passtb	./pasta -P pasta.pid
 sleep	3
 passt	/sbin/dhclient -4 --no-pid
 sleep	2
@@ -82,7 +82,8 @@ say	Now let's run 'passt' in the new namespace, and
 nl
 say	  enter this namespace from the guest terminal too.
 sleep	3
-gout	TARGET_PID pgrep -P $(cat /tmp/pasta.pid)
+guest	cd __STATEDIR__/passt
+gout	TARGET_PID pgrep -P $(cat pasta.pid)
 sleep	1
 
 passtb	./passt -f -t 5201,5203
