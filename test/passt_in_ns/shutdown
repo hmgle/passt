@@ -14,7 +14,7 @@
 
 test	shutdown: exit code
 
-nsout	PASST_PID cat passt.pid
+nsout	PASST_PID cat __STATESETUP__/passt.pid
 ns	kill __PASST_PID__
 sleep	1
 passtw

@@ -53,7 +53,7 @@ setup_passt() {
 
 	context_run passt "make clean"
 	context_run passt "make valgrind"
-	context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt ${__opts} -f -t 10001 -u 10001 -P passt.pid"
+	context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt ${__opts} -f -t 10001 -u 10001 -P ${STATESETUP}/passt.pid"
 	sleep 5
 
 	GUEST_CID=94557
@@ -67,7 +67,7 @@ setup_passt() {
 		'virtio-net.napi_tx=1"'					   \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"  \
 		" -netdev socket,fd=5,id=hostnet0"			   \
-		" -pidfile passt_qemu.pid"				   \
+		" -pidfile ${STATESETUP}/qemu.pid"			   \
 		" -device vhost-vsock-pci,guest-cid=$GUEST_CID"
 
 	context_setup_guest guest $GUEST_CID
@@ -81,8 +81,8 @@ setup_pasta() {
 
 	layout_pasta
 
-	context_run_bg unshare "unshare -rUnpf ${NSHOLDER} ns.hold hold"
-	__target_pid=$(${NSHOLDER} ns.hold pid)
+	context_run_bg unshare "unshare -rUnpf ${NSHOLDER} ${STATESETUP}/ns.hold hold"
+	__target_pid=$(${NSHOLDER} ${STATESETUP}/ns.hold pid)
 
 	context_setup_nsenter ns -U -n -p --preserve-credentials -t ${__target_pid}
 
@@ -98,7 +98,7 @@ setup_pasta() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	context_run_bg passt "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 -P passt.pid ${__target_pid}"
+	context_run_bg passt "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 -P ${STATESETUP}/passt.pid ${__target_pid}"
 	sleep 1
 }
 
@@ -128,9 +128,9 @@ setup_passt_in_ns() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	context_run_bg pasta "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P pasta.pid ${NSHOLDER} ns.hold hold"
+	context_run_bg pasta "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P ${STATESETUP}/pasta.pid ${NSHOLDER} ${STATESETUP}/ns.hold hold"
 	sleep 1
-	__ns_pid=$(${NSHOLDER} ns.hold pid)
+	__ns_pid=$(${NSHOLDER} ${STATESETUP}/ns.hold pid)
 
 	context_setup_nsenter qemu "-t ${__ns_pid} -U -n -p --preserve-credentials"
 	context_setup_nsenter ns "-t ${__ns_pid} -U -n -p --preserve-credentials"
@@ -149,11 +149,11 @@ setup_passt_in_ns() {
 	if [ ${VALGRIND} -eq 1 ]; then
 		context_run passt "make clean"
 		context_run passt "make valgrind"
-		context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P passt.pid"
+		context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P ${STATESETUP}/passt.pid"
 	else
 		context_run passt "make clean"
 		context_run passt "make"
-		context_run_bg passt "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P passt.pid"
+		context_run_bg passt "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P ${STATESETUP}/passt.pid"
 	fi
 	sleep 5
 
@@ -169,7 +169,7 @@ setup_passt_in_ns() {
 		'virtio-net.napi_tx=1"'					   \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=524288" \
 		" -netdev socket,fd=5,id=hostnet0"			   \
-		' -pidfile passt_in_ns_qemu.pid'			   \
+		" -pidfile ${STATESETUP}/qemu.pid"			   \
 		" -device vhost-vsock-pci,guest-cid=$GUEST_CID"
 
 	context_setup_guest guest $GUEST_CID
@@ -197,16 +197,16 @@ setup_two_guests() {
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
-	context_run_bg pasta_1 "./pasta ${__opts} -P pasta_1.pid -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004 ${NSHOLDER} ns1.hold hold"
-	__ns1_pid=$(${NSHOLDER} ns1.hold pid)
+	context_run_bg pasta_1 "./pasta ${__opts} -P ${STATESETUP}/pasta_1.pid -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004 ${NSHOLDER} ${STATESETUP}/ns1.hold hold"
+	__ns1_pid=$(${NSHOLDER} ${STATESETUP}/ns1.hold pid)
 	context_setup_nsenter passt_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
-	context_run_bg pasta_2 "./pasta ${__opts} -P pasta_2.pid -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001 ${NSHOLDER} ns2.hold hold"
-	__ns2_pid=$(${NSHOLDER} ns2.hold pid)
+	context_run_bg pasta_2 "./pasta ${__opts} -P ${STATESETUP}/pasta_2.pid -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001 ${NSHOLDER} ${STATESETUP}/ns2.hold hold"
+	__ns2_pid=$(${NSHOLDER} ${STATESETUP}/ns2.hold pid)
 	context_setup_nsenter passt_2 -U -n -p --preserve-credentials -t ${__ns2_pid}
 
 	context_setup_nsenter qemu_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
@@ -224,7 +224,7 @@ setup_two_guests() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	context_run_bg passt_1 "./passt -P passt_1.pid -f ${__opts} -t 10001 -u 10001"
+	context_run_bg passt_1 "./passt -P ${STATESETUP}/passt_1.pid -f ${__opts} -t 10001 -u 10001"
 	sleep 1
 
 	__opts=
@@ -232,7 +232,7 @@ setup_two_guests() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	context_run_bg passt_2 "./passt -P passt_2.pid -f ${__opts} -t 10004 -u 10004"
+	context_run_bg passt_2 "./passt -P ${STATESETUP}/passt_2.pid -f ${__opts} -t 10004 -u 10004"
 
 	GUEST_1_CID=94557
 	context_run_bg qemu_1 './qrap 5 qemu-system-$(uname -m)'             \
@@ -245,7 +245,7 @@ setup_two_guests() {
 		'virtio-net.napi_tx=1"'					     \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
 		" -netdev socket,fd=5,id=hostnet0"			     \
-		' -pidfile two_guests_qemu_1.pid'			     \
+		" -pidfile ${STATESETUP}/qemu_1.pid"			     \
 		" -device vhost-vsock-pci,guest-cid=$GUEST_1_CID"
 
 	GUEST_2_CID=94558
@@ -259,7 +259,7 @@ setup_two_guests() {
 		'virtio-net.napi_tx=1"'					     \
 		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
 		" -netdev socket,fd=5,id=hostnet0"			     \
-		' -pidfile two_guests_qemu_2.pid'			     \
+		" -pidfile ${STATESETUP}/qemu_2.pid"			     \
 		" -device vhost-vsock-pci,guest-cid=$GUEST_2_CID"
 
 	context_setup_guest guest_1 ${GUEST_1_CID}
@@ -290,9 +290,9 @@ teardown_distro() {
 
 # teardown_passt() - Kill qemu, remove passt PID file
 teardown_passt() {
-	kill $(cat passt_qemu.pid)
+	kill $(cat "${STATESETUP}/qemu.pid")
 
-	rm passt.pid
+	rm "${STATESETUP}/passt.pid"
 
 	teardown_context_watch ${PANE_HOST} host
 	teardown_context_watch ${PANE_PASST} passt
@@ -301,7 +301,7 @@ teardown_passt() {
 
 # teardown_passt() - Exit namespace, kill pasta process
 teardown_pasta() {
-	${NSHOLDER} ns.hold stop
+	${NSHOLDER} "${STATESETUP}/ns.hold" stop
 	context_wait unshare
 
 	teardown_context_watch ${PANE_HOST} host
@@ -311,13 +311,13 @@ teardown_pasta() {
 
 # teardown_passt_in_ns() - Exit namespace, kill qemu and pasta, remove pid file
 teardown_passt_in_ns() {
-	context_run ns kill $(cat passt_in_ns_qemu.pid)
+	context_run ns kill $(cat "${STATESETUP}/qemu.pid")
 	context_wait qemu
 
-	${NSHOLDER} ns.hold stop
+	${NSHOLDER} "${STATESETUP}/ns.hold" stop
 	context_wait pasta
 
-	rm passt.pid pasta.pid
+	rm "${STATESETUP}/passt.pid" "${STATESETUP}/pasta.pid"
 
 	teardown_context_watch ${PANE_HOST} host
 	teardown_context_watch ${PANE_PASST} pasta passt
@@ -327,23 +327,23 @@ teardown_passt_in_ns() {
 
 # teardown_two_guests() - Exit namespaces, kill qemu processes, passt and pasta
 teardown_two_guests() {
-	__ns1_pid=$(${NSHOLDER} ns1.hold pid)
-	__ns2_pid=$(${NSHOLDER} ns2.hold pid)
-	nsenter -U -p --preserve-credentials -t ${__ns1_pid} kill $(cat two_guests_qemu_1.pid)
-	nsenter -U -p --preserve-credentials -t ${__ns2_pid} kill $(cat two_guests_qemu_2.pid)
+	__ns1_pid=$(${NSHOLDER} "${STATESETUP}/ns1.hold" pid)
+	__ns2_pid=$(${NSHOLDER} "${STATESETUP}/ns2.hold" pid)
+	nsenter -U -p --preserve-credentials -t ${__ns1_pid} kill $(cat "${STATESETUP}/qemu_1.pid")
+	nsenter -U -p --preserve-credentials -t ${__ns2_pid} kill $(cat "${STATESETUP}/qemu_2.pid")
 	context_wait qemu_1
 	context_wait qemu_2
 
-	nsenter -U -p --preserve-credentials -t ${__ns1_pid} kill $(cat passt_1.pid)
-	nsenter -U -p --preserve-credentials -t ${__ns2_pid} kill $(cat passt_2.pid)
+	nsenter -U -p --preserve-credentials -t ${__ns1_pid} kill $(cat "${STATESETUP}/passt_1.pid")
+	nsenter -U -p --preserve-credentials -t ${__ns2_pid} kill $(cat "${STATESETUP}/passt_2.pid")
 	context_wait passt_1
 	context_wait passt_2
-	${NSHOLDER} ns1.hold stop
-	${NSHOLDER} ns2.hold stop
+	${NSHOLDER} "${STATESETUP}/ns1.hold" stop
+	${NSHOLDER} "${STATESETUP}/ns2.hold" stop
 	context_wait pasta_1
 	context_wait pasta_2
 
-	rm -f passt_[12].pid pasta_[12].pid
+	rm -f "${STATESETUP}/passt__[12].pid" "${STATESETUP}/pasta_[12].pid"
 
 	teardown_context_watch ${PANE_HOST} host
 	teardown_context_watch ${PANE_GUEST_1} qemu_1 guest_1
