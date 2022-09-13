@@ -91,10 +91,7 @@ hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
 check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv6: host to ns: small transfer
-temp	TEMP_SMALL
-temp	TEMP_NS_SMALL
 nsb	socat -u TCP6-LISTEN:10002,bind=[::1] OPEN:__TEMP_NS_SMALL__,create,trunc
-host	dd if=/dev/urandom bs=2k count=1 of=__TEMP_SMALL__
 host	socat -u OPEN:__TEMP_SMALL__ TCP6:[::1]:10002
 nsw
 hout	MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
