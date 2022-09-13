@@ -394,6 +394,8 @@ teardown_demo_podman() {
 # $*:	Suffix list of setup_*() functions to be called
 setup() {
 	for arg do
+		STATESETUP="${STATEBASE}/${arg}"
+		mkdir -p "${STATESETUP}"
 		eval setup_${arg}
 	done
 }

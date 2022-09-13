@@ -48,6 +48,7 @@ COMMIT="$(git log --oneline --no-decorate -1)"
 
 # cleanup() - Remove temporary files
 cleanup() {
+	[ ${DEBUG} -eq 1 ] || rm -rf "${STATEBASE}"
 	rm -f /tmp/.passt_test_log_pipe
 }
 
@@ -176,6 +177,7 @@ else
 	rm -rf "${LOGDIR}"
 	mkdir -p "${LOGDIR}"
 	:> "${LOGFILE}"
+	STATEBASE="$(mktemp -d --tmpdir passt-tests-XXXXXX)"
 	trap "cleanup" EXIT
 	run_term
 fi
