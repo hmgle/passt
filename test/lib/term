@@ -643,12 +643,12 @@ run_term() {
 
 	if [ ${CI} -eq 1 ]; then
 		printf '\e[8;50;240t'
-		asciinema rec --overwrite ci.uncut -c "$TMUX /bin/sh -c './ci from_term'"
-		video_postprocess ci.uncut
+		asciinema rec --overwrite "${STATEBASE}/ci.uncut" -c "$TMUX /bin/sh -c './ci from_term'"
+		video_postprocess "${STATEBASE}/ci.uncut"
 	elif [ ${DEMO} -eq 1 ]; then
 		printf '\e[8;40;130t'
-		asciinema rec --overwrite demo.uncut -c "$TMUX /bin/sh -c './run_demo from_term'"
-		video_postprocess demo.uncut
+		asciinema rec --overwrite "${STATEBASE}/demo.uncut" -c "$TMUX /bin/sh -c './run_demo from_term'"
+		video_postprocess "${STATEBASE}/demo.uncut"
 	else
 		$TMUX /bin/sh -c './run from_term'
 	fi

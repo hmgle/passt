@@ -60,7 +60,8 @@ VIDEO_LINKS_COUNT=0
 # video_append_links() - Append generic string to JavaScript links file
 video_append_links()
 {
-	printf "${@}" >> "${BASEPATH}/${VIDEO_NAME}.js"
+        __web="${LOGDIR}/web"
+	printf "${@}" >> "${__web}/${VIDEO_NAME}.js"
 }
 
 # video_append_links() - Append generic string to buffer for links
@@ -72,13 +73,14 @@ video_append_links_js()
 # video_start() - Mark start of a test in capture, record start timestamp
 video_start() {
 	VIDEO_NAME="${1}"
-
-	echo "${VIDEO_LINKS_TEMPLATE}" > "${BASEPATH}/${VIDEO_NAME}.js"
+        __web="${LOGDIR}/web"
+        mkdir -p "${__web}"
+	echo "${VIDEO_LINKS_TEMPLATE}" > "${__web}/${VIDEO_NAME}.js"
 	VIDEO_START_SECONDS=$(sed -n 's/\([0-9]*\).[0-9]* [0-9]*.[0-9]*/\1/p' /proc/uptime)
 
 	sync
-	[ ${DEMO} -eq 1 ] && tail -1 "${BASEPATH}/demo.uncut" > "${BASEPATH}/${VIDEO_NAME}.start"
-	[ ${CI} -eq 1 ] && tail -1 "${BASEPATH}/ci.uncut" > "${BASEPATH}/${VIDEO_NAME}.start"
+	[ ${DEMO} -eq 1 ] && tail -1 "${STATEBASE}/demo.uncut" > "${STATEBASE}/${VIDEO_NAME}.start"
+	[ ${CI} -eq 1 ] && tail -1 "${STATEBASE}/ci.uncut" > "${STATEBASE}/${VIDEO_NAME}.start"
 	sync
 
 	tmux refresh-client
@@ -86,34 +88,37 @@ video_start() {
 
 # video_stop() - Mark stop of a test in capture, finalise JavaScript fragments
 video_stop() {
+        __web="${LOGDIR}/web"
 	tmux refresh-client
 
 	sync
-	[ ${DEMO} -eq 1 ] && tail -1 "${BASEPATH}/demo.uncut" > "${BASEPATH}/${VIDEO_NAME}.stop"
-	[ ${CI} -eq 1 ] && tail -1 "${BASEPATH}/ci.uncut" > "${BASEPATH}/${VIDEO_NAME}.stop"
+	[ ${DEMO} -eq 1 ] && tail -1 "${STATEBASE}/demo.uncut" > "${STATEBASE}/${VIDEO_NAME}.stop"
+	[ ${CI} -eq 1 ] && tail -1 "${STATEBASE}/ci.uncut" > "${STATEBASE}/${VIDEO_NAME}.stop"
 	sync
 
-	sed -i 's/^.*$/&\\/g' "${BASEPATH}/${VIDEO_NAME}.js"
-	echo "${VIDEO_LINKS_TEMPLATE_JS}" | sed "s/__VIDEO_NAME__/${VIDEO_NAME}/g" >> "${BASEPATH}/${VIDEO_NAME}.js"
-	echo "${VIDEO_LINKS_BUF}" >> "${BASEPATH}/${VIDEO_NAME}.js"
-	echo "${VIDEO_LINKS_TEMPLATE_POST}"  | sed "s/__VIDEO_NAME__/${VIDEO_NAME}/g" >> "${BASEPATH}/${VIDEO_NAME}.js"
+	sed -i 's/^.*$/&\\/g' "${__web}/${VIDEO_NAME}.js"
+	echo "${VIDEO_LINKS_TEMPLATE_JS}" | sed "s/__VIDEO_NAME__/${VIDEO_NAME}/g" >> "${__web}/${VIDEO_NAME}.js"
+	echo "${VIDEO_LINKS_BUF}" >> "${__web}/${VIDEO_NAME}.js"
+	echo "${VIDEO_LINKS_TEMPLATE_POST}"  | sed "s/__VIDEO_NAME__/${VIDEO_NAME}/g" >> "${__web}/${VIDEO_NAME}.js"
 }
 
 # video_postprocess() - Cut terminal recordings based on .start and .stop files
 video_postprocess() {
 	IFS='
 '
+        __web="${LOGDIR}/web"
 	__cast_name=
 	for __l in $(cat ${1}); do
 		[ -z "${__header}" ] && __header="${__l}" && continue
 
 		if [ -z "${__cast_name}" ]; then
-			for __cast_cut in *.start; do
+		        for __cast_cut in "${STATEBASE}/"*.start; do
 				[ "${__l}" != "$(cat "${__cast_cut}")" ] && continue
-				__cast_name="${__cast_cut%.start}"
+				__cast_name="$(basename "${__cast_cut}")"
+                                __cast_name="${__cast_name%.start}"
 				__cast_offset=
-				__stop_line="$(cat ${__cast_name}.stop)"
-				echo "${__header}" > "${__cast_name}.cast"
+				__stop_line="$(cat "${STATEBASE}/${__cast_name}.stop")"
+				echo "${__header}" > "${__web}/${__cast_name}.cast"
 				break
 			done
 			continue
@@ -125,7 +130,7 @@ video_postprocess() {
 		__l_rest="${__l#*.}"
 		[ -z "${__cast_offset}" ] && __cast_offset=${__l_offset}
 		__l_offset=$((__l_offset - __cast_offset))
-		printf '[%s.%s\n' "${__l_offset}" "${__l_rest}" >> "${__cast_name}".cast
+		printf '[%s.%s\n' "${__l_offset}" "${__l_rest}" >> "${__web}/${__cast_name}".cast
 	done
 	unset IFS
 }
