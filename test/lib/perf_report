@@ -14,7 +14,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 PERF_LINK_COUNT=0
-PERF_JS="${BASEPATH}/perf.js"
+PERF_JS="${LOGDIR}/web/perf.js"
 
 PERF_TEMPLATE_HTML="document.write('"'
 Throughput in Gbps, latency in µs. Threads are <span style="font-family: monospace;">iperf3</span> processes, <i>passt</i> and <i>pasta</i> are currently single-threaded.<br/>
@@ -126,6 +126,7 @@ for (var i = 0; i < perf_links.length; i++) {
 
 # perf_init() - Process first part of template
 perf_init() {
+        mkdir -p "$(dirname "${PERF_JS}")"
 	echo "${PERF_TEMPLATE_HTML}" > "${PERF_JS}"
 	perf_report_sub commit "$(echo ${COMMIT} | sed "s/'/\\\'/g")"
 }

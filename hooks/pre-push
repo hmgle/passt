@@ -34,8 +34,8 @@ ssh "${USER_HOST}" 				"mkdir -p ${WEB} ${TEST} ${BIN}"
 cd test
 
 ./ci
-gzip -fk9 perf.js
-scp perf.js perf.js.gz				"${USER_HOST}:${WEB}/"
+gzip -fk9 test_logs/web/perf.js
+scp test_logs/web/perf.js test_logs/web/perf.js.gz "${USER_HOST}:${WEB}/"
 scp test_logs/* 				"${USER_HOST}:${TEST}/"
 ./run_demo
 
