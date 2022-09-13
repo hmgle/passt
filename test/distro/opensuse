@@ -11,7 +11,7 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-temp	PIDFILE
+set	PIDFILE __STATEDIR__/passt.pid
 htools	qemu-img virt-edit guestfish head sed cat kill qemu-system-x86_64 qemu-system-aarch64 xzcat tr
 
 # Quick pasta test: send message from init to ns, and from ns to init
@@ -44,7 +44,7 @@ hout	GUEST_FILES ls -1 *.c *.h *.sh passt.1 qrap.1 Makefile README.md | tr '\n' 
 
 test	OpenSUSE Leap 15.1
 
-temp	IMG
+set	IMG __STATEDIR__/opensuse-15.1-x86_64.img
 host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/openSUSE-Leap-15.1-JeOS.x86_64-kvm-and-xen.qcow2 __IMG__
 host	guestfish --rw -a __IMG__ -i rm '/usr/lib/systemd/system/systemd-journald.service'
 host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/jeos-firstboot.service
@@ -73,6 +73,7 @@ hout	PID cat __PIDFILE__
 
 test	OpenSUSE Leap 15.2
 
+set	IMG __STATEDIR__/opensuse-15.2-x86_64.img
 host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/openSUSE-Leap-15.2-JeOS.x86_64-kvm-and-xen.qcow2 __IMG__
 host	guestfish --rw -a __IMG__ -i rm '/usr/lib/systemd/system/systemd-journald.service'
 host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/jeos-firstboot.service
@@ -98,6 +99,7 @@ sleep	1
 
 test	OpenSUSE Leap 15.3
 
+set	IMG __STATEDIR__/opensuse-15.3-x86_64.img
 host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/openSUSE-Leap-15.3-JeOS.x86_64-kvm-and-xen.qcow2 __IMG__
 host	guestfish --rw -a __IMG__ -i rm '/usr/lib/systemd/system/systemd-journald.service'
 host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/jeos-firstboot.service
@@ -125,7 +127,7 @@ sleep	1
 
 test	OpenSUSE Tumbleweed aarch64
 
-temp	IMG
+set	IMG __STATEDIR__/opensuse-tumbleweed-aarch64.img
 host	xzcat __BASEPATH__/openSUSE-Tumbleweed-ARM-JeOS-efi.aarch64.raw.xz > __IMG__
 host	virt-edit -a __IMG__ -m /dev/sda3 /usr/lib/systemd/system/serial-getty@.service -e 's/ExecStart=.*/ExecStart=\/sbin\/agetty --timeout 5000 --autologin root -i -8 --keep-baud 115200,38400,9600 %I $TERM/g'
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
@@ -150,9 +152,9 @@ sleep	1
 
 test	OpenSUSE Tumbleweed armv7l
 
-temp	IMG
-temp	ZIMAGE
-temp	INITRD
+set	IMG __STATEDIR__/opensuse-tumbleweed-armv7l.img
+set	ZIMAGE __STATEDIR__/opensuse-tumbleweed-armv7l.zimage
+set	INITRD __STATEDIR__/opensuse-tumbleweed-armv7l.initrd
 host	xzcat __BASEPATH__/openSUSE-Tumbleweed-ARM-JeOS-efi.armv7l.raw.xz > __IMG__
 host	guestfish -a __IMG__ -i download /boot/zImage __ZIMAGE__
 host	guestfish -a __IMG__ -i download /boot/initrd __INITRD__
@@ -178,7 +180,7 @@ sleep	1
 
 test	OpenSUSE Tumbleweed
 
-temp	IMG
+set	IMG __STATEDIR__/opensuse-tumbleweed-x86_64.img
 host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/openSUSE-Tumbleweed-JeOS.x86_64-kvm-and-xen.qcow2 __IMG__
 host	guestfish --rw -a __IMG__ -i rm /usr/lib/systemd/system/systemd-journald.service
 host	guestfish --rw -a __IMG__ -i rm /etc/systemd/system/default.target.wants/jeos-firstboot.service

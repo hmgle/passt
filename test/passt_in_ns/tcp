@@ -16,7 +16,7 @@ htools	dd socat ip jq md5sum cut
 nstools	socat ip jq md5sum cut
 
 test	TCP/IPv4: host to guest: big transfer
-temp	TEMP_BIG
+set	TEMP_BIG __STATEDIR__/big.img
 guestb	socat -u TCP4-LISTEN:10001 OPEN:test_big.bin,create,trunc
 sleep	1
 host	dd if=/dev/urandom bs=1M count=10 of=__TEMP_BIG__
@@ -27,7 +27,7 @@ gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
 check	[ "__GUEST_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv4: host to ns: big transfer
-temp	TEMP_NS_BIG
+set	TEMP_NS_BIG __STATEDIR__/big_ns.img
 nsb	socat -u TCP4-LISTEN:10002 OPEN:__TEMP_NS_BIG__,create,trunc
 host	socat -u OPEN:__TEMP_BIG__ TCP4:127.0.0.1:10002
 nsw
@@ -82,7 +82,7 @@ gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
 check	[ "__GUEST_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv4: host to guest: small transfer
-temp	TEMP_SMALL
+set	TEMP_SMALL __STATEDIR__/small.img
 guestb	socat -u TCP4-LISTEN:10001 OPEN:test_small.bin,create,trunc
 sleep	1
 host	dd if=/dev/urandom bs=2k count=100 of=__TEMP_SMALL__
@@ -93,7 +93,7 @@ gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
 check	[ "__GUEST_MD5_SMALL__" = "__MD5_SMALL__" ]
 
 test	TCP/IPv4: host to ns: small transfer
-temp	TEMP_NS_SMALL
+set	TEMP_NS_SMALL __STATEDIR__/small_ns.img
 nsb	socat -u TCP4-LISTEN:10002 OPEN:__TEMP_NS_SMALL__,create,trunc
 host	socat -u OPEN:__TEMP_SMALL__ TCP4:127.0.0.1:10002
 nsw

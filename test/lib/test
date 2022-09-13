@@ -99,16 +99,6 @@ test_one_line() {
 		IFS= eval TEST_ONE_DEF_$TEST_ONE_in_def=
 		IFS="${__ifs}"
 		;;
-	"tempdir")
-		__tmpdir="$(mktemp -d)"
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__arg}__" "${__tmpdir}")"
-		TEST_ONE_dirclean="$(list_add "${TEST_ONE_dirclean}" "${__tmpdir}")"
-		;;
-	"temp")
-		__tmpfile="$(mktemp)"
-		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__arg}__" "${__tmpfile}")"
-		TEST_ONE_dirclean="$(list_add "${TEST_ONE_dirclean}" "${__tmpfile}")"
-		;;
 	"test")
 		[ ${TEST_ONE_perf_nok} -eq 0 ] || TEST_ONE_nok=1
 		[ ${TEST_ONE_nok} -eq 1 ] && status_test_fail

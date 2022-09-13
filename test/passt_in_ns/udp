@@ -16,8 +16,8 @@ nstools	socat tee grep cat ip jq md5sum cut
 htools	printf dd socat tee grep cat ip jq md5sum cut
 
 test	UDP/IPv4: host to guest
-temp	TEMP
-temp	SC_PID
+set	TEMP __STATEDIR__/data
+set	SC_PID __STATEDIR__/socat.pid
 guestb	(socat -u UDP4-LISTEN:10001 STDOUT & echo $! > sc.pid) | tee test.bin | (grep -qm1 "END_OF_TEST" && kill $(cat sc.pid))
 sleep	1
 host	dd if=/dev/urandom bs=1k count=5 > __TEMP__ && printf "\nEND_OF_TEST\n" >> __TEMP__
@@ -28,7 +28,7 @@ gout	GUEST_MD5 md5sum test.bin | cut -d' ' -f1
 check	[ "__GUEST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv4: host to ns
-temp	TEMP_NS
+set	TEMP_NS __STATEDIR__/data_ns
 nsb	(socat -u UDP4-LISTEN:10002 STDOUT & echo $! > __SC_PID__) | tee __TEMP_NS__ | (grep -qm1 "END_OF_TEST" && kill $(cat __SC_PID__))
 host	socat -u OPEN:__TEMP__ UDP4:127.0.0.1:10002
 nsw

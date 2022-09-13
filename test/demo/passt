@@ -20,8 +20,7 @@ sleep	3
 
 say	Let's fetch the source
 sleep	1
-tempdir	TEMPDIR
-host	cd __TEMPDIR__
+host	cd __STATEDIR__
 host	git clone git://passt.top/passt
 sleep	1
 
@@ -52,10 +51,10 @@ host	q
 nl
 nl
 say	Let's create a small initramfs image for the guest.
-guest	cd __TEMPDIR__
+guest	cd __STATEDIR__
 guest	git clone git://mbuto.sh/mbuto
 guest	cd mbuto
-guest	./mbuto -f passt.img -p __TEMPDIR__/passt/test/passt.mbuto -c lz4
+guest	./mbuto -f passt.img -p __STATEDIR__/passt/test/passt.mbuto -c lz4
 sleep	2
 
 nl
@@ -69,7 +68,7 @@ nl
 say	  'pasta' demo above.
 sleep	3
 
-passt	cd __TEMPDIR__/passt
+passt	cd __STATEDIR__/passt
 passtb	./pasta -P /tmp/pasta.pid
 sleep	3
 passt	/sbin/dhclient -4 --no-pid

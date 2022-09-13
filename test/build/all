@@ -41,22 +41,21 @@ check	[ -f passt ]
 check	[ -h pasta ]
 check	[ -f qrap ]
 
-tempdir	TEMP
-
 test	Install
-host	prefix=__TEMP__ make install
-check	[ -f __TEMP__/bin/passt ]
-check	[ -h __TEMP__/bin/pasta ]
-check	[ -f __TEMP__/bin/qrap ]
-check	man -M __TEMP__/share/man -W passt
-check	man -M __TEMP__/share/man -W pasta
-check	man -M __TEMP__/share/man -W qrap
+host	mkdir __STATEDIR__/prefix
+host	prefix=__STATEDIR__/prefix make install
+check	[ -f __STATEDIR__/prefix/bin/passt ]
+check	[ -h __STATEDIR__/prefix/bin/pasta ]
+check	[ -f __STATEDIR__/prefix/bin/qrap ]
+check	man -M __STATEDIR__/prefix/share/man -W passt
+check	man -M __STATEDIR__/prefix/share/man -W pasta
+check	man -M __STATEDIR__/prefix/share/man -W qrap
 
 test	Uninstall
-host	prefix=__TEMP__ make uninstall
-check	! [ -f __TEMP__/bin/passt ]
-check	! [ -h __TEMP__/bin/pasta ]
-check	! [ -f __TEMP__/bin/qrap ]
-check	! man -M __TEMP__/share/man -W passt 2>/dev/null
-check	! man -M __TEMP__/share/man -W pasta 2>/dev/null
-check	! man -M __TEMP__/share/man -W qrap 2>/dev/null
+host	prefix=__STATEDIR__/prefix make uninstall
+check	! [ -f __STATEDIR__/prefix/bin/passt ]
+check	! [ -h __STATEDIR__/prefix/bin/pasta ]
+check	! [ -f __STATEDIR__/prefix/bin/qrap ]
+check	! man -M __STATEDIR__/prefix/share/man -W passt 2>/dev/null
+check	! man -M __STATEDIR__/prefix/share/man -W pasta 2>/dev/null
+check	! man -M __STATEDIR__/prefix/share/man -W qrap 2>/dev/null

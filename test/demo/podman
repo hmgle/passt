@@ -24,14 +24,13 @@ sleep	3
 
 say	Let's fetch Podman
 sleep	1
-tempdir	TEMPDIR
-host	git -C __TEMPDIR__ clone https://github.com/containers/podman.git
+host	git -C __STATEDIR__ clone https://github.com/containers/podman.git
 sleep	1
 
 say	, patch it
 sleep	1
-host	cp ../contrib/podman/0001-libpod-Add-pasta-networking-mode.patch __TEMPDIR__/podman
-host	cd __TEMPDIR__/podman
+host	cp ../contrib/podman/0001-libpod-Add-pasta-networking-mode.patch __STATEDIR__/podman
+host	cd __STATEDIR__/podman
 host	git am -3 0001-libpod-Add-pasta-networking-mode.patch
 sleep	1
 
@@ -54,7 +53,7 @@ nl
 say	Let's start a container with it
 sleep	1
 
-ns1	cd __TEMPDIR__/podman
+ns1	cd __STATEDIR__/podman
 ns1b	./bin/podman run --rm -ti alpine sh
 sleep	2
 
@@ -64,7 +63,7 @@ say	and one with
 em	pasta
 say	 instead.
 
-ns2	cd __TEMPDIR__/podman
+ns2	cd __STATEDIR__/podman
 ns2b	./bin/podman run --net=pasta --rm -ti alpine sh
 sleep	2
 

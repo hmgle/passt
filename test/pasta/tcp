@@ -15,8 +15,8 @@ htools	dd socat ip jq md5sum cut
 nstools	socat ip jq md5sum cut
 
 test	TCP/IPv4: host to ns: big transfer
-temp	TEMP_BIG
-temp	TEMP_NS_BIG
+set	TEMP_BIG __STATEDIR__/big
+set	TEMP_NS_BIG __STATEDIR__/big_ns
 nsb	socat -u TCP4-LISTEN:10002,bind=127.0.0.1 OPEN:__TEMP_NS_BIG__,create,trunc
 host	dd if=/dev/urandom bs=1M count=10 of=__TEMP_BIG__
 host	socat -u OPEN:__TEMP_BIG__ TCP4:127.0.0.1:10002
@@ -41,8 +41,8 @@ hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
 check	[ "__HOST_MD5_BIG__" = "__MD5_BIG__" ]
 
 test	TCP/IPv4: host to ns: small transfer
-temp	TEMP_SMALL
-temp	TEMP_NS_SMALL
+set	TEMP_SMALL __STATEDIR__/small
+set	TEMP_NS_SMALL __STATEDIR__/small_ns
 nsb	socat -u TCP4-LISTEN:10002,bind=127.0.0.1 OPEN:__TEMP_NS_SMALL__,create,trunc
 host	dd if=/dev/urandom bs=2k count=1 of=__TEMP_SMALL__
 host	socat OPEN:__TEMP_SMALL__ TCP4:127.0.0.1:10002

@@ -20,8 +20,7 @@ sleep	3
 
 say	Let's fetch the source
 sleep	1
-tempdir	TEMPDIR
-host	cd __TEMPDIR__
+host	cd __STATEDIR__
 host	git clone git://passt.top/passt
 sleep	1
 
@@ -47,7 +46,7 @@ sleep	10
 nl
 say	  without PID, it will create a namespace.
 sleep	3
-passt	cd __TEMPDIR__/passt
+passt	cd __STATEDIR__/passt
 passtb	./pasta -P /tmp/pasta.pid
 sleep	3
 
@@ -140,13 +139,12 @@ say	 can also take packet captures.
 sleep	3
 passt	exit
 sleep	2
-temp	TEMP
-passtb	./pasta -p __TEMP__.pcap
+passtb	./pasta -p __STATEDIR__/demo_pasta.pcap
 sleep	2
 passt	
 passt	/sbin/dhclient -4 --no-pid
 sleep	2
-hostb	tshark -r __TEMP__.pcap
+hostb	tshark -r __STATEDIR__/demo_pasta.pcap
 sleep	5
 
 nl
@@ -257,7 +255,7 @@ sleep	2
 killp	PASST
 killp	HOST
 sleep	2
-ns	cd __TEMPDIR__/passt
+ns	cd __STATEDIR__/passt
 nsb	perf report -g --max-stack 3
 sleep	10
 

@@ -11,7 +11,7 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-temp	PIDFILE
+set	PIDFILE __STATEDIR__/passt.pid
 htools	qemu-img virt-edit guestfish cat kill qemu-system-x86_64 qemu-system-ppc64 qemu-system-s390x
 
 # Quick pasta test: send message from init to ns, and from ns to init
@@ -68,7 +68,7 @@ hout	GUEST_FILES ls -1 *.c *.h *.sh passt.1 qrap.1 Makefile README.md | tr '\n' 
 
 test	Ubuntu 14.04.5 LTS (Trusty Tahr), amd64
 
-temp	IMG
+set	IMG __STATEDIR__/ubuntu-14.04-amd64.img
 host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/trusty-server-cloudimg-amd64-disk1.img __IMG__
 host	virt-edit -a __IMG__ /etc/init/ttyS0.conf -e 's/\/getty/\/getty --autologin root/'
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-config.conf
@@ -101,7 +101,7 @@ hout	PID cat __PIDFILE__
 
 test	Ubuntu 14.04.5 LTS (Trusty Tahr), i386
 
-temp	IMG
+set	IMG __STATEDIR__/ubuntu-14.04-i386.img
 host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/trusty-server-cloudimg-i386-disk1.img __IMG__
 host	virt-edit -a __IMG__ /etc/init/ttyS0.conf -e 's/\/getty/\/getty --autologin root/'
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-config.conf
@@ -131,7 +131,7 @@ sleep	1
 
 test	Ubuntu 14.04.5 LTS (Trusty Tahr), ppc64le
 
-temp	IMG
+set	IMG __STATEDIR__/ubuntu-14.04-ppc64le.img
 host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/trusty-server-cloudimg-ppc64el-disk1.img __IMG__
 host	virt-edit -a __IMG__ /etc/init/hvc0.conf -e 's/\/getty/\/getty --autologin root/'
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-config.conf
