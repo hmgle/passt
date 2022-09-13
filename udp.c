@@ -968,7 +968,7 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		    const struct pool *p, const struct timespec *now)
 {
-	struct mmsghdr mm[UIO_MAXIOV] = { 0 };
+	struct mmsghdr mm[UIO_MAXIOV];
 	struct iovec m[UIO_MAXIOV];
 	struct sockaddr_in6 s_in6;
 	struct sockaddr_in s_in;
@@ -1086,6 +1086,10 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 
 		mm[i].msg_hdr.msg_iov = m + i;
 		mm[i].msg_hdr.msg_iovlen = 1;
+
+		mm[i].msg_hdr.msg_control = NULL;
+		mm[i].msg_hdr.msg_controllen = 0;
+		mm[i].msg_hdr.msg_flags = 0;
 
 		count++;
 	}
