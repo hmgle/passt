@@ -47,7 +47,7 @@ setup_passt() {
 	#  10003                |      as server
 
 	__opts=
-	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt.pcap"
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/passt.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
@@ -94,7 +94,7 @@ setup_pasta() {
 	#  10003   spliced to init  |      as server
 
 	__opts=
-	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta.pcap"
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
@@ -124,7 +124,7 @@ setup_passt_in_ns() {
 	#  10031    as server  | forwarded to guest |
 
 	__opts=
-	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_with_passt.pcap"
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta_with_passt.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
@@ -142,7 +142,7 @@ setup_passt_in_ns() {
 	context_run ns "/sbin/dhclient -6 --no-pid ${__ifname}"
 
 	__opts=
-	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_in_pasta.pcap"
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/passt_in_pasta.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
@@ -194,7 +194,7 @@ setup_two_guests() {
 	#  10005            |           |           |  as server |  to ns #2
 
 	__opts=
-	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_1.pcap"
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 	context_run_bg pasta_1 "./pasta ${__opts} -P pasta_1.pid -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004 ${NSHOLDER} ns1.hold hold"
@@ -202,7 +202,7 @@ setup_two_guests() {
 	context_setup_nsenter passt_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
 
 	__opts=
-	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/pasta_2.pcap"
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 	context_run_bg pasta_2 "./pasta ${__opts} -P pasta_2.pid -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001 ${NSHOLDER} ns2.hold hold"
@@ -220,7 +220,7 @@ setup_two_guests() {
 	context_run qemu_2 "/sbin/dhclient -6 --no-pid ${__ifname}"
 
 	__opts=
-	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_1.pcap"
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/passt_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
@@ -228,7 +228,7 @@ setup_two_guests() {
 	sleep 1
 
 	__opts=
-	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p /tmp/passt_2.pcap"
+	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/passt_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
