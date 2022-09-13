@@ -17,17 +17,17 @@
 # $1:	Context name
 context_setup_common() {
 	__name="$1"
-	__prefix="${LOGDIR}/context_${__name}"
-	echo -n "${__name}$ " > "${__prefix}.log"
+	__log="${LOGDIR}/context_${__name}.log"
+	echo -n "${__name}$ " > "${__log}"
 }
 
 # context_setup_host() - Create a new context for running commands on the host
 # $1:	Context name
 context_setup_host() {
 	__name="$1"
-	__prefix="${LOGDIR}/context_${__name}"
+	__enter="${STATESETUP}/context_${__name}.enter"
 	context_setup_common "${__name}"
-	echo sh -c > "${__prefix}.enter"
+	echo sh -c > "${__enter}"
 }
 
 # context_setup_nsenter() - Create a new context for running commands in a namespace
@@ -36,9 +36,9 @@ context_setup_host() {
 context_setup_nsenter() {
 	__name="$1"
 	shift
-	__prefix="${LOGDIR}/context_${__name}"
+	__enter="${STATESETUP}/context_${__name}.enter"
 	context_setup_common "${__name}"
-	echo "nsenter $@ sh -c" > "${__prefix}.enter"
+	echo "nsenter $@ sh -c" > "${__enter}"
 }
 
 # context_setup_guest() - Create a new context for running commands in a guest
@@ -47,22 +47,23 @@ context_setup_nsenter() {
 context_setup_guest() {
 	__name="$1"
 	__cid="$2"
-	__prefix="${LOGDIR}/context_${__name}"
+	__enter="${STATESETUP}/context_${__name}.enter"
+	__ssh="${STATESETUP}/context_${__name}.ssh"
 	context_setup_common "${__name}"
 
-	cat > "${__prefix}.ssh" <<EOF
+	cat > "${__ssh}" <<EOF
 Host ${__name}
 	User root
-	UserKnownHostsFile ${__prefix}.hosts
+	UserKnownHostsFile ${STATESETUP}/context_${__name}.hosts
 	StrictHostKeyChecking no
 	IdentityFile ${BASEPATH}/guest-key
 	IdentityAgent none
 	ProxyCommand socat - VSOCK-CONNECT:${__cid}:22
 EOF
-	echo "ssh -F ${__prefix}.ssh ${__name}" > "${__prefix}.enter"
+	echo "ssh -F ${__ssh} ${__name}" > "${__enter}"
 
 	# Wait for the guest to be booted and accepting connections
-	while ! ssh -F "${__prefix}.ssh" "${__name}" :; do
+	while ! ssh -F "${__ssh}" "${__name}" :; do
 		sleep 0.1
 	done
 }
@@ -71,7 +72,7 @@ EOF
 # $1:	Context name
 context_teardown() {
 	__name="$1"
-	__prefix="${LOGDIR}/context_${__name}"
+	__prefix="${STATESETUP}/context_${__name}"
 	rm -f "${__prefix}.enter" "${__prefix}.ssh" "${__prefix}.hosts"
 }
 
@@ -79,8 +80,8 @@ context_teardown() {
 # $1:	Context name
 context_exists() {
 	__name="$1"
-	__prefix="${LOGDIR}/context_${__name}"
-	[ -f "${__prefix}.enter" ]
+	__enter="${STATESETUP}/context_${__name}.enter"
+	[ -f "${__enter}" ]
 }
 
 # context_run() - Run a shell command in a context, and wait for it to finish
@@ -88,18 +89,20 @@ context_exists() {
 # $*:	Command to start
 context_run() {
 	__name="$1"
-	__prefix="${LOGDIR}/context_${__name}"
-	__enter="$(cat "${__prefix}.enter")"
+	__log="${LOGDIR}/context_${__name}.log"
+	__enter="${STATESETUP}/context_${__name}.enter"
+	__stdout="${STATESETUP}/context_${__name}.stdout"
+	__stderr="${STATESETUP}/context_${__name}.stderr"
 	shift
-	echo "$*" >> "${__prefix}.log"
-	mkfifo "${__prefix}.stdout" "${__prefix}.stderr"
-	tee -a "${__prefix}.log" < "${__prefix}.stdout" &
-	tee -a "${__prefix}.log" < "${__prefix}.stderr" >&2 &
-	${__enter} "$*" >> "${__prefix}.stdout" 2>> "${__prefix}.stderr"
+	echo "$*" >> "${__log}"
+	mkfifo "${__stdout}" "${__stderr}"
+	tee -a "${__log}" < "${__stdout}" &
+	tee -a "${__log}" < "${__stderr}" >&2 &
+	$(cat ${__enter}) "$*" >> "${__stdout}" 2>> "${__stderr}"
 	rc=$?
-	rm "${__prefix}.stdout" "${__prefix}.stderr"
-	[ ${DEBUG} -eq 1 ] && echo "[Exit code: $rc]" >> "${__prefix}.log"
-	echo -n "${__name}$ " >> "${__prefix}.log"
+	rm "${__stdout}" "${__stderr}"
+	[ ${DEBUG} -eq 1 ] && echo "[Exit code: $rc]" >> "${__log}"
+	echo -n "${__name}$ " >> "${__log}"
 	return $rc
 }
 
@@ -108,9 +111,9 @@ context_run() {
 # $*:	Command to start
 context_run_bg() {
 	__name="$1"
-	__prefix="${LOGDIR}/context_${__name}"
+	__pidfile="${STATESETUP}/context_${__name}.pid"
 	context_run "$@" &
-	echo $! > "${__prefix}.pid"
+	echo $! > "${__pidfile}"
 }
 
 # context_wait() - Wait for background command in a context to complete
@@ -118,8 +121,8 @@ context_run_bg() {
 # Returns the status of the completed command
 context_wait() {
 	__name="$1"
-	__prefix="${LOGDIR}/context_${__name}"
-	__pid=$(cat "${__prefix}.pid")
-	rm "${__prefix}.pid"
+	__pidfile="${STATESETUP}/context_${__name}.pid"
+	__pid=$(cat "${__pidfile}")
+	rm "${__pidfile}"
 	wait ${__pid}
 }
