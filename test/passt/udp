@@ -6,7 +6,7 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# test/udp/passt - Check UDP functionality in passt mode
+# test/passt/udp - Check UDP functionality in passt mode
 #
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>

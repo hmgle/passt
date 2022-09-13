@@ -6,7 +6,7 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# test/udp/passt_in_ns - Check UDP functionality for passt in ns and pasta
+# test/passt_in_ns/udp - Check UDP functionality for passt in ns and pasta
 #
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>

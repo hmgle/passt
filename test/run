@@ -74,40 +74,40 @@ run() {
 	teardown distro
 
 	setup pasta
-	test ndp/pasta
-	test dhcp/pasta
-	test tcp/pasta
-	test udp/pasta
-	test shutdown/passt
+	test pasta/ndp
+	test pasta/dhcp
+	test pasta/tcp
+	test pasta/udp
+	test passt/shutdown
 	teardown pasta
 
 	setup passt
-	test ndp/passt
-	test dhcp/passt
-	test tcp/passt
-	test udp/passt
-	test shutdown/passt
+	test passt/ndp
+	test passt/dhcp
+	test passt/tcp
+	test passt/udp
+	test passt/shutdown
 	teardown passt
 
 	VALGRIND=1
 	setup passt_in_ns
-	test ndp/passt
-	test dhcp/passt
-	test icmp/passt_in_ns
-	test tcp/passt_in_ns
-	test udp/passt_in_ns
-	test shutdown/passt_in_ns
+	test passt/ndp
+	test passt/dhcp
+	test passt_in_ns/icmp
+	test passt_in_ns/tcp
+	test passt_in_ns/udp
+	test passt_in_ns/shutdown
 	teardown passt_in_ns
 
 	VALGRIND=0
 	setup passt_in_ns
-	test ndp/passt
-	test dhcp/passt
+	test passt/ndp
+	test passt/dhcp
 	test perf/passt_tcp
 	test perf/passt_udp
 	test perf/pasta_tcp
 	test perf/pasta_udp
-	test shutdown/passt_in_ns
+	test passt_in_ns/shutdown
 	teardown passt_in_ns
 
 	setup two_guests

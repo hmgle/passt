@@ -6,7 +6,7 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# test/ndp/passt - Check NDP functionality in passt mode
+# test/passt/ndp - Check NDP functionality in passt mode
 #
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>

@@ -6,7 +6,7 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# test/ndp/pasta - Check DHCP and DHCPv6 functionality in pasta mode
+# test/pasta/ndp - Check DHCP and DHCPv6 functionality in pasta mode
 #
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>

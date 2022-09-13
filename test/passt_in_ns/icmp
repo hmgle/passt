@@ -6,7 +6,7 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# test/icmp/passt_in_ns - Check ICMP/ICMPv6 functionality for passt in ns
+# test/passt_in_ns/icmp - Check ICMP/ICMPv6 functionality for passt in ns
 #
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>

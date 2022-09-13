@@ -6,7 +6,7 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# test/tcp/passt_in_ns - Check TCP functionality for passt in ns with pasta
+# test/passt_in_ns/tcp - Check TCP functionality for passt in ns with pasta
 #
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
