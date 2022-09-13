@@ -599,8 +599,8 @@ pause_continue() {
 	info_nolog "${1}"
 	info_nolog_n "${2}"
 
-	__pause_tmp="$(mktemp)"
-	echo >> "${__pause_tmp}"
+	__pause_tmp="${STATEBASE}/pause.tmp"
+	echo > "${__pause_tmp}"
 	tmux pipe-pane -O -t ${PANE_INFO} "cat >> ${__pause_tmp}"
 	__pane_buf=
 	__wait=0
