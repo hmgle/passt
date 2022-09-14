@@ -23,13 +23,13 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 
-CFLAGS += -Wall -Wextra -pedantic -std=c99 -D_XOPEN_SOURCE=700 -D_GNU_SOURCE
-CFLAGS += -D_FORTIFY_SOURCE=2 -O2 -pie -fPIE
-CFLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)
-CFLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
-CFLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
-CFLAGS += -DRLIMIT_STACK_VAL=$(RLIMIT_STACK_VAL)
-CFLAGS += -DARCH=\"$(TARGET_ARCH)\"
+FLAGS := -Wall -Wextra -pedantic -std=c99 -D_XOPEN_SOURCE=700 -D_GNU_SOURCE
+FLAGS += -D_FORTIFY_SOURCE=2 -O2 -pie -fPIE
+FLAGS += -DPAGE_SIZE=$(shell getconf PAGE_SIZE)
+FLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
+FLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
+FLAGS += -DRLIMIT_STACK_VAL=$(RLIMIT_STACK_VAL)
+FLAGS += -DARCH=\"$(TARGET_ARCH)\"
 
 PASST_SRCS = arch.c arp.c checksum.c conf.c dhcp.c dhcpv6.c icmp.c igmp.c \
 	isolation.c lineread.c mld.c ndp.c netlink.c packet.c passt.c pasta.c \
@@ -50,36 +50,36 @@ HEADERS = $(PASST_HEADERS)
 # from the pointer arithmetic used from the tcp_tap_handler() path to get the
 # remote connection address.
 ifeq ($(shell $(CC) -dumpversion),11)
-ifneq (,$(filter -flto%,$(CFLAGS)))
-ifneq (,$(filter -O2,$(CFLAGS)))
-	CFLAGS += -DTCP_HASH_NOINLINE
-	CFLAGS += -DSIPHASH_20B_NOINLINE
+ifneq (,$(filter -flto%,$(FLAGS) $(CFLAGS)))
+ifneq (,$(filter -O2,$(FLAGS) $(CFLAGS)))
+	FLAGS += -DTCP_HASH_NOINLINE
+	FLAGS += -DSIPHASH_20B_NOINLINE
 endif
 endif
 endif
 
 C := \#include <linux/tcp.h>\nstruct tcp_info x = { .tcpi_snd_wnd = 0 };
 ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
-	CFLAGS += -DHAS_SND_WND
+	FLAGS += -DHAS_SND_WND
 endif
 
 C := \#include <linux/tcp.h>\nstruct tcp_info x = { .tcpi_bytes_acked = 0 };
 ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
-	CFLAGS += -DHAS_BYTES_ACKED
+	FLAGS += -DHAS_BYTES_ACKED
 endif
 
 C := \#include <linux/tcp.h>\nstruct tcp_info x = { .tcpi_min_rtt = 0 };
 ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
-	CFLAGS += -DHAS_MIN_RTT
+	FLAGS += -DHAS_MIN_RTT
 endif
 
 C := \#include <sys/random.h>\nint main(){int a=getrandom(0, 0, 0);}
 ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
-	CFLAGS += -DHAS_GETRANDOM
+	FLAGS += -DHAS_GETRANDOM
 endif
 
 ifeq ($(shell :|$(CC) -fstack-protector-strong -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
-	CFLAGS += -fstack-protector-strong
+	FLAGS += -fstack-protector-strong
 endif
 
 prefix		?= /usr/local
@@ -98,18 +98,19 @@ endif
 
 all: $(BIN) $(MANPAGES) docs
 
-static: CFLAGS += -static -DGLIBC_NO_STATIC_NSS
+static: FLAGS += -static -DGLIBC_NO_STATIC_NSS
 static: clean all
 
 seccomp.h: $(PASST_SRCS) $(PASST_HEADERS)
 	@ EXTRA_SYSCALLS=$(EXTRA_SYSCALLS) ./seccomp.sh $^
 
 passt: $(PASST_SRCS) $(PASST_HEADERS) seccomp.h
-	$(CC) $(CFLAGS) $(PASST_SRCS) -o passt $(LDFLAGS)
+	$(CC) $(FLAGS) $(CFLAGS) $(PASST_SRCS) -o passt $(LDFLAGS)
 
-passt.avx2: CFLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
+passt.avx2: FLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
 passt.avx2: $(PASST_SRCS) $(PASST_HEADERS) seccomp.h
-	$(CC) $(filter-out -O2,$(CFLAGS)) $(PASST_SRCS) -o passt.avx2 $(LDFLAGS)
+	$(CC) $(filter-out -O2,$(FLAGS) $(CFLAGS)) \
+		$(PASST_SRCS) -o passt.avx2 $(LDFLAGS)
 
 passt.avx2: passt
 
@@ -117,12 +118,12 @@ pasta.avx2 pasta.1 pasta: pasta%: passt%
 	ln -s $< $@
 
 qrap: $(QRAP_SRCS) passt.h
-	$(CC) $(CFLAGS) $(QRAP_SRCS) -o qrap $(LDFLAGS)
+	$(CC) $(FLAGS) $(CFLAGS) $(QRAP_SRCS) -o qrap $(LDFLAGS)
 
 valgrind: EXTRA_SYSCALLS="rt_sigprocmask rt_sigtimedwait rt_sigaction \
 			  getpid gettid kill clock_gettime mmap munmap open \
 			  unlink gettimeofday futex"
-valgrind: CFLAGS:=-g -O0 $(filter-out -O%,$(CFLAGS))
+valgrind: FLAGS:=-g -O0 $(filter-out -O%,$(FLAGS))
 valgrind: all
 
 .PHONY: clean
@@ -261,7 +262,7 @@ clang-tidy: $(SRCS) $(HEADERS)
 	-altera-struct-pack-align,\
 	-concurrency-mt-unsafe \
 	-config='{CheckOptions: [{key: bugprone-suspicious-string-compare.WarnOnImplicitComparison, value: "false"}]}' \
-	--warnings-as-errors=* $(SRCS) -- $(filter-out -pie,$(CFLAGS))
+	--warnings-as-errors=* $(SRCS) -- $(filter-out -pie,$(FLAGS) $(CFLAGS))
 
 ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"),1)
 TARGET := $(shell ${CC} -v 2>&1 | sed -n 's/Target: \(.*\)/\1/p')
@@ -304,5 +305,5 @@ cppcheck: $(SRCS) $(HEADERS)
 	--suppress=unmatchedSuppression:udp.c				\
 	--suppress=unmatchedSuppression:util.c				\
 	--suppress=unmatchedSuppression:util.h				\
-	$(filter -D%,$(CFLAGS))						\
+	$(filter -D%,$(FLAGS) $(CFLAGS))				\
 	.
