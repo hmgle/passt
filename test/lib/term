@@ -232,7 +232,7 @@ pane_status() {
 	[ ${DEMO} -eq 1 ] && return 0
 
 	__status="$(pane_parse "${1}")"
-	while ! [ "${__status}" -eq "${__status}" ]; do
+	while ! [ "${__status}" -eq "${__status}" ] 2>/dev/null; do
 		sleep 1
 		pane_run "${1}" 'echo $?'
 		pane_wait "${1}"
