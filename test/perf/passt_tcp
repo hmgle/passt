@@ -11,8 +11,8 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-gtools	sysctl ip jq nproc seq sleep iperf3 tcp_rr tcp_crr # From neper
-nstools	sysctl ip jq nproc seq sleep iperf3 tcp_rr tcp_crr
+gtools	/sbin/sysctl ip jq nproc seq sleep iperf3 tcp_rr tcp_crr # From neper
+nstools	/sbin/sysctl ip jq nproc seq sleep iperf3 tcp_rr tcp_crr
 htools	bc head sed seq
 
 # In this setup, virtio_net TX queue sometimes hangs, still under investigation

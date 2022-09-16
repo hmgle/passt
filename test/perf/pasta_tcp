@@ -12,7 +12,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 htools	head ip seq bc sleep iperf3 tcp_rr tcp_crr jq sed
-nstools	sysctl nproc ip seq sleep iperf3 tcp_rr tcp_crr jq sed
+nstools	/sbin/sysctl nproc ip seq sleep iperf3 tcp_rr tcp_crr jq sed
 
 test	pasta: throughput and latency (local connections)
 
