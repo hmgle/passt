@@ -339,15 +339,19 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ⌚ drop-in replacement for VPNKit (rootless Docker)
 
 ### Availability
-* ✅ convenience unofficial packages for Debian, RPM-based distributions on
-  x86_64 (static builds)
+* ✅ official [packages](https://src.fedoraproject.org/rpms/passt) for Fedora
+* ✅ unofficial
+  [packages](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) for CentOS
+  Stream, EPEL, Mageia, OpenSUSE
+* ✅ unofficial packages from x86_64 static builds for other RPM-based
+  distributions and Debian
 * ✅ testing on non-x86_64 architectures (aarch64, armv7l, i386, ppc64, ppc64le,
   s390x)
-* ✅ example Debian [package files](/passt/tree/contrib/debian),
-  example [`spec` file](/passt/tree/contrib/fedora) for Fedora
+* ✅ example Debian [package files](/passt/tree/contrib/debian)
 * 🛠 official
   [OpenSUSE packages](https://build.opensuse.org/package/show/home:mnhauke/passt)
-* ⌚ official packages for Debian, Fedora, etc.
+* ⌚ official packages for Debian
+  ([RFP](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1010498)), Arch Linux
 
 ### Services
 * ✅ built-in [ARP proxy](/passt/tree/arp.c)
@@ -530,16 +534,19 @@ See also the [test logs](/builds/latest/test/).
         cd passt
         make
 
-    * alternatively, [static builds](/builds/latest/x86_64/) for x86_64 as of
-      the latest commit are also available for convenience. Non-official
-      packages for Debian (and derivatives) and RPM-based distributions are also
-      available there. These binaries and packages are simply built with:
+    * alternatively, install one of the available packages:
 
-            make pkgs
+        * [Debian and Debian-based](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
+        * [Fedora](https://src.fedoraproject.org/rpms/passt) (official)
+        * [CentOS Stream](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
+        * [EPEL](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
+        * [Mageia](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
+        * [OpenSUSE](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
+        * [Other RPM-based distributions](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
 
-    * or use one of the unofficial
-      [repositories](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) for
-      CentOS Stream, EPEL, Fedora, Mageia and OpenSUSE Tumbleweed
+      Static binaries and packages are simply built with:
+
+                make pkgs
 
 * have a look at the _man_ page for synopsis and options:
 
@@ -565,10 +572,7 @@ See also the [test logs](/builds/latest/test/).
   echo working from/to the guest for IPv4 and IPv6
 
 * to connect to a service on the VM, just connect to the same port directly
-  with the address of the network namespace. For example, to ssh to the guest,
-  from the main namespace on the host:
-
-        ssh 192.0.2.2
+  with the address of the current network namespace
 
 ### pasta
 
@@ -578,16 +582,19 @@ See also the [test logs](/builds/latest/test/).
         cd passt
         make
 
-    * alternatively, [static builds](/builds/latest/x86_64/) for x86_64 as of
-      the latest commit are also available for convenience. Non-official
-      packages for Debian (and derivatives) and RPM-based distributions are also
-      available there. These binaries and packages are simply built with:
+    * alternatively, install one of the available packages:
 
-            make pkgs
+        * [Debian and Debian-based](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
+        * [Fedora](https://src.fedoraproject.org/rpms/passt) (official)
+        * [CentOS Stream](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
+        * [EPEL](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
+        * [Mageia](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
+        * [OpenSUSE](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
+        * [Other RPM-based distributions](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
 
-    * or use one of the unofficial
-      [repositories](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) for
-      CentOS Stream, EPEL, Fedora, Mageia and OpenSUSE Tumbleweed
+      Static binaries and packages are simply built with:
+
+              make pkgs
 
 * have a look at the _man_ page for synopsis and options:
 
