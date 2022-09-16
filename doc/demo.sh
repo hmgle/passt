@@ -128,6 +128,19 @@ start_pasta_delayed() {
 	exit 0
 }
 
+# start_mbuto_delayed() - Run mbuto once, and if, $DEMO_DIR/mbuto.wait is gone
+start_mbuto_delayed() {
+	trap '' EXIT
+	while [ -d "${DEMO_DIR}/mbuto.wait" ]; do sleep 1; done
+	cmd git -C "${DEMO_DIR}" clone git://mbuto.sh/mbuto
+	echo
+	cmd "${DEMO_DIR}/mbuto/mbuto" \
+		-p "$(realpath "${0}")" -f "${DEMO_DIR}/demo.img"
+
+	mkdir "${DEMO_DIR}/mbuto.done"
+	exit 0
+}
+
 # into_ns() - Entry point and demo script to run inside new namespace
 into_ns() {
 	echo "We're in the new namespace now."
@@ -204,11 +217,8 @@ into_ns() {
 		exit 0
 	fi
 
-	cmd git -C "${DEMO_DIR}" clone git://mbuto.sh/mbuto
-	echo
-	cmd "${DEMO_DIR}/mbuto/mbuto" \
-		-p "$(realpath "${0}")" -f "${DEMO_DIR}/demo.img"
-	echo
+	rmdir "${DEMO_DIR}/mbuto.wait"
+	while [ ! -d "${DEMO_DIR}/mbuto.done" ]; do sleep 1; done
 	echo "The guest image is ready. The next step will start the guest."
 	echo "Use ^C to terminate it."
 	next
@@ -229,6 +239,7 @@ trap cleanup EXIT INT
 
 DEMO_DIR="$(mktemp -d)"
 mkdir "${DEMO_DIR}/pasta.wait"
+mkdir "${DEMO_DIR}/mbuto.wait"
 
 echo "This script sets up a network and user namespace using pasta(1), then"
 echo "starts a virtual machine in it, connected via passt(1), pausing at every"
@@ -242,6 +253,7 @@ echo "of this script from there."
 next
 
 start_pasta_delayed &
+start_mbuto_delayed &
 DEMO_DIR="${DEMO_DIR}" cmd unshare -rUn "${0}" into_ns
 
 exit 0
