@@ -18,8 +18,8 @@ htools	dd socat ip jq md5sum cut
 test	UDP/IPv4: host to guest
 set	TEMP __STATEDIR__/data
 guestb	socat -u UDP4-LISTEN:10001,null-eof OPEN:test.bin,create,trunc
-sleep	1
 host	dd if=/dev/urandom bs=1k count=5 > __TEMP__
+sleep	1
 host	socat -u OPEN:__TEMP__ UDP4:127.0.0.1:10001,shut-null
 guestw
 hout	MD5 md5sum __TEMP__ | cut -d' ' -f1
@@ -29,6 +29,7 @@ check	[ "__GUEST_MD5__" = "__MD5__" ]
 test	UDP/IPv4: host to ns
 set	TEMP_NS __STATEDIR__/data_ns
 nsb	socat -u UDP4-LISTEN:10002,null-eof OPEN:__TEMP_NS__,create,trunc
+sleep	1
 host	socat -u OPEN:__TEMP__ UDP4:127.0.0.1:10002,shut-null
 nsw
 nsout	NS_MD5 md5sum __TEMP_NS__ | cut -d' ' -f1
@@ -37,6 +38,7 @@ check	[ "__NS_MD5__" = "__MD5__" ]
 test	UDP/IPv4: guest to host
 hostb	socat -u UDP4-LISTEN:10003,null-eof OPEN:__TEMP__,create,trunc
 gout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
+sleep	1
 guest	socat -u OPEN:test.bin UDP4:__GW__:10003,shut-null
 hostw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
@@ -44,14 +46,15 @@ check	[ "__HOST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv4: guest to ns
 nsb	socat -u UDP4-LISTEN:10002,null-eof OPEN:__TEMP_NS__,create,trunc
+sleep	1
 guest	socat -u OPEN:test.bin UDP4:__GW__:10002,shut-null
 nsw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
 check	[ "__HOST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv4: ns to host (recvmmsg/sendmmsg)
-sleep	1
 hostb	socat -u UDP4-LISTEN:10003,null-eof OPEN:__TEMP__,create,trunc
+sleep	1
 ns	socat -u OPEN:__TEMP_NS__ UDP4:127.0.0.1:10003,shut-null
 hostw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
@@ -59,6 +62,7 @@ check	[ "__HOST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv4: ns to host (via tap)
 hostb	socat -u UDP4-LISTEN:10003,null-eof OPEN:__TEMP__,create,trunc
+sleep	1
 ns	socat -u OPEN:__TEMP_NS__ UDP4:__GW__:10003,shut-null
 hostw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
@@ -66,6 +70,7 @@ check	[ "__HOST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv4: ns to guest (using loopback address)
 guestb	socat -u UDP4-LISTEN:10001,null-eof OPEN:test.bin,create,trunc
+sleep	1
 ns	socat -u OPEN:__TEMP_NS__ UDP4:127.0.0.1:10001,shut-null
 guestw
 gout	GUEST_MD5 md5sum test.bin | cut -d' ' -f1
@@ -75,6 +80,7 @@ test	UDP/IPv4: ns to guest (using namespace address)
 guestb	socat -u UDP4-LISTEN:10001,null-eof OPEN:test.bin,create,trunc
 nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
 nsout	ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+sleep	1
 ns	socat -u OPEN:__TEMP_NS__ UDP4:__ADDR__:10001,shut-null
 guestw
 gout	GUEST_MD5 md5sum test.bin | cut -d' ' -f1
@@ -82,6 +88,7 @@ check	[ "__GUEST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv6: host to guest
 guestb	socat -u UDP6-LISTEN:10001,null-eof OPEN:test.bin,create,trunc
+sleep	1
 host	socat -u OPEN:__TEMP__ UDP6:[::1]:10001,shut-null
 guestw
 gout	GUEST_MD5 md5sum test.bin | cut -d' ' -f1
@@ -89,6 +96,7 @@ check	[ "__GUEST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv6: host to ns
 nsb	socat -u UDP6-LISTEN:10002,null-eof OPEN:__TEMP_NS__,create,trunc
+sleep	1
 host	socat -u OPEN:__TEMP__ UDP6:[::1]:10002,shut-null
 nsw
 nsout	NS_MD5 md5sum __TEMP_NS__ | cut -d' ' -f1
@@ -98,6 +106,7 @@ test	UDP/IPv6: guest to host
 hostb	socat -u UDP6-LISTEN:10003,null-eof OPEN:__TEMP__,create,trunc
 gout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
 gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+sleep	1
 guest	socat -u OPEN:test.bin UDP6:[__GW6__%__IFNAME__]:10003,shut-null
 hostw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
@@ -105,6 +114,7 @@ check	[ "__HOST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv6: guest to ns
 nsb	socat -u UDP6-LISTEN:10002,null-eof OPEN:__TEMP_NS__,create,trunc
+sleep	1
 guest	socat -u OPEN:test.bin UDP6:[__GW6__%__IFNAME__]:10002,shut-null
 nsw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
@@ -112,6 +122,7 @@ check	[ "__HOST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv6: ns to host (recvmmsg/sendmmsg)
 hostb	socat -u UDP6-LISTEN:10003,null-eof OPEN:__TEMP__,create,trunc
+sleep	1
 ns	socat -u OPEN:__TEMP_NS__ UDP6:[::1]:10003,shut-null
 hostw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
@@ -120,6 +131,7 @@ check	[ "__HOST_MD5__" = "__MD5__" ]
 test	UDP/IPv6: ns to host (via tap)
 hostb	socat -u UDP6-LISTEN:10003,null-eof OPEN:__TEMP__,create,trunc
 nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+sleep	1
 ns	socat -u OPEN:__TEMP_NS__ UDP6:[__GW6__%__IFNAME__]:10003,shut-null
 hostw
 hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
@@ -127,6 +139,7 @@ check	[ "__HOST_MD5__" = "__MD5__" ]
 
 test	UDP/IPv6: ns to guest (using loopback address)
 guestb	socat -u UDP6-LISTEN:10001,null-eof OPEN:test.bin,create,trunc
+sleep	1
 ns	socat -u OPEN:__TEMP_NS__ UDP6:[::1]:10001,shut-null
 guestw
 gout	GUEST_MD5 md5sum test.bin | cut -d' ' -f1
@@ -135,6 +148,7 @@ check	[ "__GUEST_MD5__" = "__MD5__" ]
 test	UDP/IPv6: ns to guest (using namespace address)
 guestb	socat -u UDP6-LISTEN:10001,null-eof OPEN:test.bin,create,trunc
 nsout	ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+sleep	1
 ns	socat -u OPEN:__TEMP_NS__ UDP6:[__ADDR6__]:10001,shut-null
 guestw
 gout	GUEST_MD5 md5sum test.bin | cut -d' ' -f1
