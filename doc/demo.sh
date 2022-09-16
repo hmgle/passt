@@ -63,11 +63,11 @@ EOF
 		echo "$ ip link set dev eth0 up"
 		ip link set dev eth0 up
 		sleep 3
-		echo "$ /sbin/dhclient -4 -1"
-		/sbin/dhclient -4 -1
+		echo "$ dhclient -4 -1 -sf /sbin/dhclient-script"
+		dhclient -4 -1 -sf /sbin/dhclient-script
 		sleep 2
-		echo "$ /sbin/dhclient -6 -1"
-		/sbin/dhclient -6 -1
+		echo "$ dhclient -6 -1 -sf /sbin/dhclient-script"
+		dhclient -6 -1 -sf /sbin/dhclient-script
 		sleep 2
 		echo
 		echo "$ ip address show"
