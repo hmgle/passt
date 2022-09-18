@@ -30,9 +30,9 @@ guest	/sbin/sysctl -w net.ipv4.tcp_rmem="4096 131072 268435456"
 guest	/sbin/sysctl -w net.ipv4.tcp_wmem="4096 131072 268435456"
 guest	/sbin/sysctl -w net.ipv4.tcp_timestamps=0
 
-ns	sysctl -w net.ipv4.tcp_rmem="4096 524288 134217728"
-ns	sysctl -w net.ipv4.tcp_wmem="4096 524288 134217728"
-ns	sysctl -w net.ipv4.tcp_timestamps=0
+ns	/sbin/sysctl -w net.ipv4.tcp_rmem="4096 524288 134217728"
+ns	/sbin/sysctl -w net.ipv4.tcp_wmem="4096 524288 134217728"
+ns	/sbin/sysctl -w net.ipv4.tcp_timestamps=0
 
 gout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
 gout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'

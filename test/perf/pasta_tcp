@@ -16,9 +16,9 @@ nstools	/sbin/sysctl nproc ip seq sleep iperf3 tcp_rr tcp_crr jq sed
 
 test	pasta: throughput and latency (local connections)
 
-ns	sysctl -w net.ipv4.tcp_rmem="131072 524288 134217728"
-ns	sysctl -w net.ipv4.tcp_wmem="131072 524288 134217728"
-ns	sysctl -w net.ipv4.tcp_timestamps=0
+ns	/sbin/sysctl -w net.ipv4.tcp_rmem="131072 524288 134217728"
+ns	/sbin/sysctl -w net.ipv4.tcp_wmem="131072 524288 134217728"
+ns	/sbin/sysctl -w net.ipv4.tcp_timestamps=0
 
 
 set	THREADS 2
