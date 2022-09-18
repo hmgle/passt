@@ -23,7 +23,7 @@ ns	/sbin/sysctl -w net.ipv4.tcp_timestamps=0
 
 set	THREADS 2
 set	STREAMS 2
-set	TIME 30
+set	TIME 10
 hout	OMIT echo __TIME__ / 6 | bc -l
 set	OPTS -Z -w 4M -l 1M -P __STREAMS__ -i1 -O__OMIT__ --pacing-timer 10000
 

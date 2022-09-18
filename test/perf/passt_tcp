@@ -44,7 +44,7 @@ hout	FREQ [ -n "__FREQ_CPUFREQ__" ] && echo __FREQ_CPUFREQ__ || echo __FREQ_PROC
 
 set	THREADS 1
 set	STREAMS 8
-set	TIME 30
+set	TIME 10
 hout	OMIT echo __TIME__ / 6 | bc -l
 set	OPTS -Z -P __STREAMS__ -l 1M -i1 -O__OMIT__ --pacing-timer 1000000
 

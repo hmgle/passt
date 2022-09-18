@@ -37,7 +37,7 @@ hout	FREQ [ -n "__FREQ_CPUFREQ__" ] && echo __FREQ_CPUFREQ__ || echo __FREQ_PROC
 
 set	THREADS 4
 set	STREAMS 1
-set	TIME 30
+set	TIME 10
 set	OPTS -u -i1 -P __STREAMS__ --pacing-timer 1000
 
 info	Throughput in Gbps, latency in µs, __THREADS__ threads at __FREQ__ GHz, one stream each
