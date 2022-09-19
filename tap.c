@@ -872,11 +872,13 @@ static void tap_sock_unix_new(struct ctx *c)
 		int discard = accept4(c->fd_tap_listen, NULL, NULL,
 				      SOCK_NONBLOCK);
 
+		if (discard == -1)
+			return;
+
 		if (!getsockopt(discard, SOL_SOCKET, SO_PEERCRED, &ucred, &len))
 			info("discarding connection from PID %i", ucred.pid);
 
-		if (discard != -1)
-			close(discard);
+		close(discard);
 
 		return;
 	}
