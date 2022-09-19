@@ -127,8 +127,8 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 {
 	int start_src, end_src, start_dst, end_dst, exclude_only = 1, i, port;
 	char addr_buf[sizeof(struct in6_addr)] = { 0 }, *addr = addr_buf;
+	uint8_t *map, exclude[DIV_ROUND_UP(USHRT_MAX, 8)] = { 0 };
 	void (*remap)(in_port_t port, in_port_t delta);
-	uint8_t *map, exclude[USHRT_MAX / 8] = { 0 };
 	char buf[BUFSIZ], *sep, *spec, *p;
 	sa_family_t af = AF_UNSPEC;
 

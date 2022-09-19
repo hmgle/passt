@@ -53,9 +53,9 @@ union udp_epoll_ref {
  * @timer_run:		Timestamp of most recent timer run
  */
 struct udp_ctx {
-	uint8_t port_to_tap		[USHRT_MAX / 8];
+	uint8_t port_to_tap		[DIV_ROUND_UP(USHRT_MAX, 8)];
 	int init_detect_ports;
-	uint8_t port_to_init		[USHRT_MAX / 8];
+	uint8_t port_to_init		[DIV_ROUND_UP(USHRT_MAX, 8)];
 	int ns_detect_ports;
 	struct timespec timer_run;
 };
