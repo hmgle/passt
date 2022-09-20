@@ -32,13 +32,11 @@ test_iperf3() {
 	__time="${1}"; shift
 
 	pane_or_context_run_bg "${__sctx}" 				\
-		 '('							\
-		 '	for i in $(seq 0 '${__procs}'); do'		\
-		 '		iperf3 -s1J -p'${__port}' -i'${__time}	\
-		 '		   > s${i}.json &'			\
-		 '	done;'						\
-		 '	wait'						\
-		 ')'
+		 'for i in $(seq 0 '${__procs}'); do'			\
+		 '	(iperf3 -s1J -p'${__port}' -i'${__time}		\
+		 '	 > s${i}.json) &'				\
+		 '	echo $! > s${i}.pid &'				\
+		 'done'							\
 
 	sleep 1		# Wait for server to be ready
 
@@ -51,7 +49,9 @@ test_iperf3() {
 		 '	wait'						\
 		 ')'
 
-	pane_or_context_wait "${__sctx}"
+	# If client fails to deliver control message, tell server we're done
+	pane_or_context_run "${__sctx}" 				\
+		'sleep 2; kill -INT $(cat s*.pid); rm s*.pid'
 
 	__jval=".end.sum_received.bits_per_second"
 	for __opt in ${@}; do
