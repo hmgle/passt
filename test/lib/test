@@ -312,7 +312,7 @@ test_one_line() {
 			IFS='
 '
 			for __def_line in ${__def_body}; do
-				IFS= test_one_line "${__def_line}"
+				IFS="${__ifs}" test_one_line "${__def_line}"
 			done
 			IFS="${__ifs}"
 		fi
