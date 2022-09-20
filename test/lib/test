@@ -44,7 +44,7 @@ test_iperf3() {
 		 '('							\
 		 '	for i in $(seq 0 '${__procs}'); do'		\
 		 '		iperf3 -c '${__dest}' -p '${__port}	\
-		 '		  -t'${__time}' -T s${i} '"${@}"' &'	\
+		 '		 -t'${__time}' -i0 -T s${i} '"${@}"' &' \
 		 '	done;'						\
 		 '	wait'						\
 		 ')'

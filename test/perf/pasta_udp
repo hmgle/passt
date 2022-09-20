@@ -23,7 +23,7 @@ hout	FREQ [ -n "__FREQ_CPUFREQ__" ] && echo __FREQ_CPUFREQ__ || echo __FREQ_PROC
 set	THREADS 1
 set	STREAMS 4
 set	TIME 10
-set	OPTS -u -i1 -P __STREAMS__
+set	OPTS -u -P __STREAMS__
 
 info	Throughput in Gbps, latency in µs, one thread at __FREQ__ GHz, __STREAMS__ streams
 

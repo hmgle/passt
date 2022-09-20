@@ -46,7 +46,7 @@ set	THREADS 1
 set	STREAMS 8
 set	TIME 10
 hout	OMIT echo __TIME__ / 6 | bc -l
-set	OPTS -Z -P __STREAMS__ -l 1M -i1 -O__OMIT__ --pacing-timer 1000000
+set	OPTS -Z -P __STREAMS__ -l 1M -O__OMIT__ --pacing-timer 1000000
 
 info	Throughput in Gbps, latency in µs, one thread at __FREQ__ GHz, __STREAMS__ streams
 report	passt tcp __THREADS__ __FREQ__
