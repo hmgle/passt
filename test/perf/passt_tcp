@@ -167,6 +167,7 @@ lat	-
 lat	-
 lat	-
 guestb	tcp_rr --nolog -P 10001 -C 10011 -6
+sleep	1
 nsout	LAT tcp_rr --nolog -P 10001 -C 10011 -6 -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 200 150
 
@@ -177,6 +178,7 @@ lat	-
 lat	-
 lat	-
 guestb	tcp_crr --nolog -P 10001 -C 10011 -6
+sleep	1
 nsout	LAT tcp_crr --nolog -P 10001 -C 10011 -6 -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 500 350
 
@@ -210,6 +212,7 @@ lat	-
 lat	-
 lat	-
 guestb	tcp_rr --nolog -P 10001 -C 10011 -4
+sleep	1
 nsout	LAT tcp_rr --nolog -P 10001 -C 10011 -4 -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 200 150
 
@@ -220,6 +223,7 @@ lat	-
 lat	-
 lat	-
 guestb	tcp_crr --nolog -P 10001 -C 10011 -4
+sleep	1
 nsout	LAT tcp_crr --nolog -P 10001 -C 10011 -4 -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 500 300
 
