@@ -191,7 +191,9 @@ test	Ubuntu 22.04 (Jammy Jellyfish), s390x
 host	./qrap 5 qemu-system-s390x -m 2048 -smp 2 -serial stdio -nodefaults -nographic __BASEPATH__/prepared-jammy-server-cloudimg-s390x.img -net socket,fd=5 -net nic,model=virtio -device virtio-rng-ccw -snapshot
 
 host	export DEBIAN_FRONTEND=noninteractive
-host	apt-get -y remove needrestart snapd
+host	service systemd-networkd stop
+host	service systemd-resolved stop
+host	rm /etc/dhcp/dhclient-enter-hooks.d/resolved-enter
 host	dhclient -4
 dns_ready_wait
 host	apt-get update
