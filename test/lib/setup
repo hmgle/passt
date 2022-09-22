@@ -216,6 +216,7 @@ setup_two_guests() {
 
 	context_run qemu_1 "/sbin/dhclient -4 --no-pid ${__ifname}"
 	context_run qemu_2 "/sbin/dhclient -4 --no-pid ${__ifname}"
+	sleep 2
 	context_run qemu_1 "/sbin/dhclient -6 --no-pid ${__ifname}"
 	context_run qemu_2 "/sbin/dhclient -6 --no-pid ${__ifname}"
 
