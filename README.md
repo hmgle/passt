@@ -544,7 +544,7 @@ See also the [test logs](/builds/latest/test/).
         * [openSUSE](https://build.opensuse.org/package/show/home:dfaggioli:devel/passt) (unofficial)
         * [Other RPM-based distributions](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
 
-      Static binaries and packages are simply built with:
+        Static binaries and packages are simply built with:
 
                 make pkgs
 
@@ -592,7 +592,7 @@ See also the [test logs](/builds/latest/test/).
         * [openSUSE](https://build.opensuse.org/package/show/home:dfaggioli:devel/passt) (unofficial)
         * [Other RPM-based distributions](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
 
-      Static binaries and packages are simply built with:
+        Static binaries and packages are simply built with:
 
               make pkgs
 
@@ -623,7 +623,7 @@ See also the [test logs](/builds/latest/test/).
 
     * ...or run the demo script:
 
-        doc/demo.sh
+            doc/demo.sh
 
 * and that's it, you should now have TCP connections, UDP, and ICMP/ICMPv6
   echo working from/to the namespace for IPv4 and IPv6
