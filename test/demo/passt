@@ -53,8 +53,7 @@ nl
 say	Let's create a small initramfs image for the guest.
 guest	cd __STATEDIR__
 guest	git clone git://mbuto.sh/mbuto
-guest	cd mbuto
-guest	./mbuto -f passt.img -p __STATEDIR__/passt/test/passt.mbuto -c lz4
+guest	./mbuto/mbuto -f passt.img -p passt/test/passt.mbuto -c lz4
 sleep	2
 
 nl
@@ -82,7 +81,7 @@ say	Now let's run 'passt' in the new namespace, and
 nl
 say	  enter this namespace from the guest terminal too.
 sleep	3
-guest	cd __STATEDIR__/passt
+guest	cd passt
 gout	TARGET_PID pgrep -P $(cat pasta.pid)
 sleep	1
 
@@ -101,7 +100,7 @@ nl
 say	  back-end to passt's UNIX domain socket.
 sleep	2
 hout	VMLINUZ echo "/boot/vmlinuz-$(uname -r)"
-guest	../passt/qrap 5 qemu-system-x86_64 -enable-kvm -m 4096 -cpu host -smp 4 -kernel __VMLINUZ__ -initrd passt.img -nographic -serial stdio -nodefaults -append "console=ttyS0 virtio-net.napi_tx=1" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384 -netdev socket,fd=5,id=hostnet0
+guest	./qrap 5 qemu-system-x86_64 -enable-kvm -m 4096 -cpu host -smp 4 -kernel __VMLINUZ__ -initrd ../passt.img -nographic -serial stdio -nodefaults -append "console=ttyS0 virtio-net.napi_tx=1" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384 -netdev socket,fd=5,id=hostnet0
 sleep	10
 
 nl

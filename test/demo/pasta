@@ -140,12 +140,12 @@ say	 can also take packet captures.
 sleep	3
 passt	exit
 sleep	2
-passtb	./pasta -p __STATEDIR__/demo_pasta.pcap
+passtb	./pasta -p ../demo_pasta.pcap
 sleep	2
 passt	
 passt	/sbin/dhclient -4 --no-pid
 sleep	2
-hostb	tshark -r __STATEDIR__/demo_pasta.pcap
+hostb	tshark -r ../demo_pasta.pcap
 sleep	5
 
 nl
