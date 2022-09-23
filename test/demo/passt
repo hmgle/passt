@@ -85,7 +85,7 @@ guest	cd passt
 gout	TARGET_PID pgrep -P $(cat pasta.pid)
 sleep	1
 
-passtb	./passt -f -t 5201,5203
+passtb	./passt -f -t 10001,10003
 sleep	2
 
 guest	nsenter -t __TARGET_PID__ -U -n --preserve-credentials
@@ -128,9 +128,9 @@ nl
 nl
 say	Let's try to communicate between host and guest.
 sleep	2
-guestb	socat TCP6-LISTEN:5201 STDIO
+guestb	socat TCP6-LISTEN:10001 STDIO
 sleep	2
-host	echo "Hello from the host" | socat -u STDIN TCP6:[::1]:5201
+host	echo "Hello from the host" | socat -u STDIN TCP6:[::1]:10001
 sleep	5
 
 nl
@@ -177,18 +177,18 @@ th	flow host>guest guest>host
 set	OPTS -P4 -w 64M -l 1M -i1 --pacing-timer 100000
 
 tr	TCP/IPv6 throughput
-hostb	sleep 10; iperf3 -c ::1 __OPTS__
-gout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
+hostb	sleep 10; iperf3 -c ::1 -p 10001 __OPTS__
+gout	BW iperf3 -s1J -p 10001 | jq -rM ".end.sum_received.bits_per_second"
 bw	__BW__ 2.0 3.0
 sleep	5
-guestb	sleep 10; iperf3 -c __GW6__%__IFNAME__ -p 5202 __OPTS__ -O3
-hout	BW iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second"
+guestb	sleep 10; iperf3 -c __GW6__%__IFNAME__ -p 10002 __OPTS__ -O3
+hout	BW iperf3 -s1J -p 10002 | jq -rM ".end.sum_received.bits_per_second"
 bw	__BW__ 2.0 3.0
 
 tl	TCP/IPv6 RR latency
-guestb	tcp_rr -C 5201 -P 5203 -6 --nolog
+guestb	tcp_rr -C 10001 -P 10003 -6 --nolog
 sleep	2
-hout	LAT tcp_rr -C 5201 -P 5203 --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+hout	LAT tcp_rr -C 10001 -P 10003 --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 1000 800
 sleep	2
 hostb	tcp_rr -6 --nolog
@@ -198,9 +198,9 @@ lat	__LAT__ 1000 800
 sleep	2
 
 tl	TCP/IPv6 CRR latency
-guestb	tcp_crr -C 5201 -P 5203 -6 --nolog
+guestb	tcp_crr -C 10001 -P 10003 -6 --nolog
 sleep	2
-hout	LAT tcp_crr -C 5201 -P 5203 --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+hout	LAT tcp_crr -C 10001 -P 10003 --nolog -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 1000 800
 sleep	2
 hostb	tcp_crr -6 --nolog
@@ -210,18 +210,18 @@ lat	__LAT__ 1000 800
 sleep	2
 
 tr	TCP/IPv4 throughput
-hostb	sleep 10; iperf3 -c 127.0.0.1 __OPTS__
-gout	BW iperf3 -s1J | jq -rM ".end.sum_received.bits_per_second"
+hostb	sleep 10; iperf3 -c 127.0.0.1 -p 10001 __OPTS__
+gout	BW iperf3 -p 10001 -s1J | jq -rM ".end.sum_received.bits_per_second"
 bw	__BW__ 2.0 3.0
 sleep	5
-guestb	sleep 10; iperf3 -c __GW__ -p 5202 __OPTS__ -O3
-hout	BW iperf3 -s1J -p 5202 | jq -rM ".end.sum_received.bits_per_second"
+guestb	sleep 10; iperf3 -c __GW__ -p 10002 __OPTS__ -O3
+hout	BW iperf3 -s1J -p 10002 | jq -rM ".end.sum_received.bits_per_second"
 bw	__BW__ 2.0 3.0
 
 tl	TCP/IPv4 RR latency
-guestb	tcp_rr -C 5201 -P 5203 -4 --nolog
+guestb	tcp_rr -C 10001 -P 10003 -4 --nolog
 sleep	2
-hout	LAT tcp_rr -C 5201 -P 5203 --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+hout	LAT tcp_rr -C 10001 -P 10003 --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 1000 800
 sleep	2
 hostb	tcp_rr -4 --nolog
@@ -231,9 +231,9 @@ lat	__LAT__ 1000 800
 sleep	2
 
 tl	TCP/IPv4 CRR latency
-guestb	tcp_crr -C 5201 -P 5203 -4 --nolog
+guestb	tcp_crr -C 10001 -P 10003 -4 --nolog
 sleep	2
-hout	LAT tcp_crr -C 5201 -P 5203 --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+hout	LAT tcp_crr -C 10001 -P 10003 --nolog -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
 lat	__LAT__ 1000 800
 sleep	2
 hostb	tcp_crr -4 --nolog
