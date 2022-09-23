@@ -215,6 +215,8 @@ perf_report() {
 
 # perf_th() - Table header for a set of tests
 perf_th() {
+	[ ${DEMO} -eq 1 ] && return
+
 	shift
 
 	__th_buf=
@@ -229,6 +231,8 @@ perf_th() {
 
 # perf_tr() - Main table row
 perf_tr() {
+	[ ${DEMO} -eq 1 ] && return
+
 	__line_no=0
 	shift
 	while true; do
@@ -240,6 +244,8 @@ perf_tr() {
 
 # perf_td() - Single cell with test result
 perf_td() {
+	[ ${DEMO} -eq 1 ] && return
+
 	__rewind="${1}"
 	shift
 
