@@ -247,6 +247,9 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 
 ## Features
 
+✅: done/supported, ❌: out of scope, 🛠: in progress/being considered
+⌚: nice-to-have, eventually
+
 ### Protocols
 * ✅ IPv4
     * ✅ all features, except for
