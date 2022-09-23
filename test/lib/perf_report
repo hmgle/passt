@@ -192,12 +192,7 @@ perf_report_sub() {
 	sed -i 's/__'"${__et}"'__/'"${__es}"'/g' "${PERF_JS}"
 }
 
-# perf_report_append() - Append generic string to current JavaScript report
-perf_report_append() {
-	echo "${@}" >> "${PERF_JS}"
-}
-
-# perf_report_append() - Append generic string to current template buffer
+# perf_report_append_js() - Append generic string to current template buffer
 perf_report_append_js() {
 	PERF_TEMPLATE_JS="${PERF_TEMPLATE_JS}${@}"
 }
