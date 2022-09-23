@@ -34,11 +34,14 @@ ssh "${USER_HOST}" 				"mkdir -p ${WEB} ${TEST} ${BIN}"
 cd test
 
 ./ci
-gzip -fk9 test_logs/web/perf.js
-scp test_logs/web/perf.js test_logs/web/perf.js.gz "${USER_HOST}:${WEB}/"
-scp test_logs/* 				"${USER_HOST}:${TEST}/"
-./run_demo
+scp test_logs/*.log 				"${USER_HOST}:${TEST}/"
+for f in test_logs/web/*.cast test_logs/web/*.js; do
+	gzip -fk9 "${f}"
+	scp "${f}"			 	"${USER_HOST}:${WEB}/"
+	scp "${f}.gz"			 	"${USER_HOST}:${WEB}/"
+done
 
+./run_demo
 for f in test_logs/web/*.cast test_logs/web/*.js; do
 	gzip -fk9 "${f}"
 	scp "${f}"			 	"${USER_HOST}:${WEB}/"
