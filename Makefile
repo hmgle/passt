@@ -15,10 +15,10 @@ RLIMIT_STACK_VAL := 1024
 endif
 
 # Get 'uname -m'-like architecture description for target
-TARGET_ARCH := $(shell $(CC) -dumpmachine | cut -f1 -d- | tr [a-z] [A-Z])
-TARGET_ARCH := $(shell echo $(TARGET_ARCH) | sed 's/POWERPC/PPC/')
+TARGET_ARCH := $(shell $(CC) -dumpmachine | cut -f1 -d- | tr [A-Z] [a-z])
+TARGET_ARCH := $(shell echo $(TARGET_ARCH) | sed 's/powerpc/ppc/')
 
-AUDIT_ARCH := $(shell echo $(TARGET_ARCH) | sed 's/^ARM.*/ARM/')
+AUDIT_ARCH := $(shell echo $(TARGET_ARCH) | tr [a-z] [A-Z] | sed 's/^ARM.*/ARM/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
@@ -90,7 +90,7 @@ docdir		?= $(datarootdir)/doc/passt
 mandir		?= $(datarootdir)/man
 man1dir		?= $(mandir)/man1
 
-ifeq ($(TARGET_ARCH),X86_64)
+ifeq ($(TARGET_ARCH),x86_64)
 BIN := passt passt.avx2 pasta pasta.avx2 qrap
 else
 BIN := passt pasta qrap
