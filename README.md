@@ -557,9 +557,10 @@ See also the [test logs](/builds/latest/test/).
 
         doc/demo.sh
 
-* alternatively, you can use libvirt, with [this patch](/passt/tree/libvirt/0001-conf-Introduce-support-for-UNIX-domain-socket-as-qem.patch),
-  to start qemu (with the patch mentioned above), with this kind of network
-  interface configuration:
+* alternatively, you can use libvirt, with
+  [this patch](/passt/tree/libvirt/0001-conf-Introduce-support-for-UNIX-domain-socket-as-qem.patch),
+  to start qemu (with [these patches](/passt/tree/contrib/qemu), and this kind
+  of network interface configuration:
 
         <interface type='client'>
           <mac address='52:54:00:02:6b:60'/>
