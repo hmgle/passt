@@ -342,14 +342,14 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ✅ official [packages](https://src.fedoraproject.org/rpms/passt) for Fedora
 * ✅ unofficial
   [packages](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) for CentOS
-  Stream, EPEL, Mageia, OpenSUSE
+  Stream, EPEL, Mageia, openSUSE
 * ✅ unofficial packages from x86_64 static builds for other RPM-based
   distributions and Debian
 * ✅ testing on non-x86_64 architectures (aarch64, armv7l, i386, ppc64, ppc64le,
   s390x)
 * ✅ example Debian [package files](/passt/tree/contrib/debian)
 * 🛠 official
-  [OpenSUSE packages](https://build.opensuse.org/package/show/home:mnhauke/passt)
+  [openSUSE packages](https://build.opensuse.org/package/show/home:mnhauke/passt)
 * ⌚ official packages for Debian
   ([RFP](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1010498)), Arch Linux
 
@@ -541,7 +541,7 @@ See also the [test logs](/builds/latest/test/).
         * [CentOS Stream](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [EPEL](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [Mageia](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
-        * [OpenSUSE](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
+        * [openSUSE](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [Other RPM-based distributions](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
 
       Static binaries and packages are simply built with:
@@ -589,7 +589,7 @@ See also the [test logs](/builds/latest/test/).
         * [CentOS Stream](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [EPEL](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [Mageia](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
-        * [OpenSUSE](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
+        * [openSUSE](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [Other RPM-based distributions](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
 
       Static binaries and packages are simply built with:
