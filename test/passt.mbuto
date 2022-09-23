@@ -68,7 +68,7 @@ EOF
 	ln -s /run/sshd /usr/share/empty.sshd
 
 	cat > /root/.ssh/authorized_keys <<EOF
-'"$(cat guest-key.pub)"'
+'"$(cat guest-key.pub 2>/dev/null || :)"'
 EOF
 	chmod 600 /root/.ssh/authorized_keys
 	chmod 700 /root
