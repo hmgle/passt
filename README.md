@@ -562,7 +562,7 @@ See also the [test logs](/builds/latest/test/).
 
 * alternatively, you can use libvirt, with
   [this patch](/passt/tree/libvirt/0001-conf-Introduce-support-for-UNIX-domain-socket-as-qem.patch),
-  to start qemu (with [these patches](/passt/tree/contrib/qemu), and this kind
+  to start qemu (with [these patches](/passt/tree/contrib/qemu)), and this kind
   of network interface configuration:
 
         <interface type='client'>
