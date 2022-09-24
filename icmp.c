@@ -39,6 +39,7 @@
 #include "icmp.h"
 
 #define ICMP_ECHO_TIMEOUT	60 /* s, timeout for ICMP socket activity */
+#define ICMP_NUM_IDS		(1U << 16)
 
 /**
  * struct icmp_id_sock - Tracking information for single ICMP echo identifier
@@ -53,10 +54,10 @@ struct icmp_id_sock {
 };
 
 /* Indexed by ICMP echo identifier */
-static struct icmp_id_sock icmp_id_map	[IP_VERSIONS][USHRT_MAX];
+static struct icmp_id_sock icmp_id_map[IP_VERSIONS][ICMP_NUM_IDS];
 
 /* Bitmaps, activity monitoring needed for identifier */
-static uint8_t icmp_act			[IP_VERSIONS][USHRT_MAX / 8];
+static uint8_t icmp_act[IP_VERSIONS][DIV_ROUND_UP(ICMP_NUM_IDS, 8)];
 
 /**
  * icmp_sock_handler() - Handle new data from socket
