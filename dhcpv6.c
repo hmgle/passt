@@ -30,6 +30,7 @@
 #include "util.h"
 #include "passt.h"
 #include "tap.h"
+#include "log.h"
 
 /**
  * struct opt_hdr - DHCPv6 option header

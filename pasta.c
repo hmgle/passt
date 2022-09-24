@@ -44,6 +44,7 @@
 #include "passt.h"
 #include "isolation.h"
 #include "netlink.h"
+#include "log.h"
 
 /* PID of child, in case we created a namespace */
 static int pasta_child_pid;

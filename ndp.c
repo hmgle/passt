@@ -30,6 +30,7 @@
 #include "util.h"
 #include "passt.h"
 #include "tap.h"
+#include "log.h"
 
 #define RS	133
 #define RA	134

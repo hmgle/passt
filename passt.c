@@ -44,6 +44,7 @@
 #include "conf.h"
 #include "pasta.h"
 #include "arch.h"
+#include "log.h"
 
 #define EPOLL_EVENTS		8
 

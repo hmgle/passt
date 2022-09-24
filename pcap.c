@@ -30,6 +30,7 @@
 
 #include "util.h"
 #include "passt.h"
+#include "log.h"
 
 #define PCAP_VERSION_MINOR 4
 

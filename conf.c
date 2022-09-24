@@ -40,6 +40,7 @@
 #include "pasta.h"
 #include "lineread.h"
 #include "isolation.h"
+#include "log.h"
 
 /**
  * get_bound_ports() - Get maps of ports with bound sockets

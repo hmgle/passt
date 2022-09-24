@@ -298,6 +298,7 @@
 #include "pcap.h"
 #include "conf.h"
 #include "tcp_splice.h"
+#include "log.h"
 
 #define TCP_FRAMES_MEM			128
 #define TCP_FRAMES							\

@@ -52,6 +52,7 @@
 #include "netlink.h"
 #include "pasta.h"
 #include "packet.h"
+#include "log.h"
 
 /* IPv4 (plus ARP) and IPv6 message batches from tap/guest to IP handlers */
 static PACKET_POOL_NOINIT(pool_tap4, TAP_MSGS, pkt_buf);

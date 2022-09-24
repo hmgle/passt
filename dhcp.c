@@ -29,6 +29,7 @@
 #include "packet.h"
 #include "passt.h"
 #include "tap.h"
+#include "log.h"
 #include "dhcp.h"
 
 /**

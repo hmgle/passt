@@ -42,6 +42,7 @@
 #include "util.h"
 #include "seccomp.h"
 #include "passt.h"
+#include "log.h"
 #include "isolation.h"
 
 /**

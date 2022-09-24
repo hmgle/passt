@@ -30,6 +30,7 @@
 
 #include "util.h"
 #include "passt.h"
+#include "log.h"
 #include "netlink.h"
 
 /* Socket in init, in target namespace, sequence (just needs to be monotonic) */

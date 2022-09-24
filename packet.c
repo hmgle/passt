@@ -20,6 +20,7 @@
 
 #include "packet.h"
 #include "util.h"
+#include "log.h"
 
 /**
  * packet_add_do() - Add data as packet descriptor to given pool

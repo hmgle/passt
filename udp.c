@@ -116,6 +116,7 @@
 #include "passt.h"
 #include "tap.h"
 #include "pcap.h"
+#include "log.h"
 
 #define UDP_CONN_TIMEOUT	180 /* s, timeout for ephemeral or local bind */
 #define UDP_SPLICE_FRAMES	32

@@ -33,8 +33,8 @@ FLAGS += -DRLIMIT_STACK_VAL=$(RLIMIT_STACK_VAL)
 FLAGS += -DARCH=\"$(TARGET_ARCH)\"
 
 PASST_SRCS = arch.c arp.c checksum.c conf.c dhcp.c dhcpv6.c icmp.c igmp.c \
-	isolation.c lineread.c mld.c ndp.c netlink.c packet.c passt.c pasta.c \
-	pcap.c siphash.c tap.c tcp.c tcp_splice.c udp.c util.c
+	isolation.c lineread.c log.c mld.c ndp.c netlink.c packet.c passt.c \
+	pasta.c pcap.c siphash.c tap.c tcp.c tcp_splice.c udp.c util.c
 QRAP_SRCS = qrap.c
 SRCS = $(PASST_SRCS) $(QRAP_SRCS)
 

@@ -6,19 +6,6 @@
 #ifndef UTIL_H
 #define UTIL_H
 
-void err(const char *format, ...);
-void warn(const char *format, ...);
-void info(const char *format, ...);
-void debug(const char *format, ...);
-
-extern int log_trace;
-void trace_init(int enable);
-#define trace(format, ...)						\
-	do {								\
-		if (log_trace)						\
-			debug(format, ##__VA_ARGS__);			\
-	} while (0)
-
 #ifndef SECCOMP_RET_KILL_PROCESS
 #define SECCOMP_RET_KILL_PROCESS	SECCOMP_RET_KILL
 #endif
@@ -196,9 +183,6 @@ struct ipv6_opt_hdr {
 
 /* cppcheck-suppress funcArgNamesDifferent */
 __attribute__ ((weak)) int ffsl(long int i) { return __builtin_ffsl(i); }
-void __openlog(const char *ident, int option, int facility);
-void passt_vsyslog(int pri, const char *format, va_list ap);
-void __setlogmask(int mask);
 char *ipv6_l4hdr(const struct pool *p, int index, size_t offset, uint8_t *proto,
 		 size_t *dlen);
 int sock_l4(const struct ctx *c, int af, uint8_t proto,
