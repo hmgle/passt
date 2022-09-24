@@ -29,8 +29,6 @@ void tcp_defer_handler(struct ctx *c);
 void tcp_sock_set_bufsize(const struct ctx *c, int s);
 void tcp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 		       const uint32_t *ip_da);
-void tcp_remap_to_tap(struct ctx *c, in_port_t port, in_port_t delta);
-void tcp_remap_to_init(struct ctx *c, in_port_t port, in_port_t delta);
 
 /**
  * union tcp_epoll_ref - epoll reference portion for TCP connections

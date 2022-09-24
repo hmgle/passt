@@ -949,28 +949,6 @@ static void conn_event_do(const struct ctx *c, struct tcp_conn *conn,
 	} while (0)
 
 /**
- * tcp_remap_to_tap() - Set delta for port translation toward guest/tap
- * @c:		Execution context
- * @port:	Original destination port, host order
- * @delta:	Delta to be added to original destination port
- */
-void tcp_remap_to_tap(struct ctx *c, in_port_t port, in_port_t delta)
-{
-	c->tcp.fwd_in.delta[port] = delta;
-}
-
-/**
- * tcp_remap_to_tap() - Set delta for port translation toward init namespace
- * @c:		Execution context
- * @port:	Original destination port, host order
- * @delta:	Delta to be added to original destination port
- */
-void tcp_remap_to_init(struct ctx *c, in_port_t port, in_port_t delta)
-{
-	c->tcp.fwd_out.delta[port] = delta;
-}
-
-/**
  * tcp_rtt_dst_low() - Check if low RTT was seen for connection endpoint
  * @conn:	Connection pointer
  *

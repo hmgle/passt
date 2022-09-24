@@ -120,24 +120,24 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 {
 	int start_src, end_src, start_dst, end_dst, exclude_only = 1, i, port;
 	char addr_buf[sizeof(struct in6_addr)] = { 0 }, *addr = addr_buf;
-	void (*remap)(struct ctx *c, in_port_t port, in_port_t delta);
 	uint8_t exclude[PORT_BITMAP_SIZE] = { 0 };
 	char buf[BUFSIZ], *sep, *spec, *p;
 	sa_family_t af = AF_UNSPEC;
+	in_port_t *delta;
 	uint8_t *map;
 
 	if (optname == 't') {
 		map = c->tcp.fwd_in.map;
-		remap = tcp_remap_to_tap;
+		delta = c->tcp.fwd_in.delta;
 	} else if (optname == 'T') {
 		map = c->tcp.fwd_out.map;
-		remap = tcp_remap_to_init;
+		delta = c->tcp.fwd_out.delta;
 	} else if (optname == 'u') {
 		map = c->udp.fwd_in.f.map;
-		remap = udp_remap_to_tap;
+		delta = c->udp.fwd_in.f.delta;
 	} else if (optname == 'U') {
 		map = c->udp.fwd_out.f.map;
-		remap = udp_remap_to_init;
+		delta = c->udp.fwd_out.f.delta;
 	} else {	/* For gcc -O3 */
 		return 0;
 	}
@@ -365,8 +365,8 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 
 				if (start_dst != -1) {
 					/* 80:8080 or 22-80:8080:8080 */
-					remap(c, i, (in_port_t)(start_dst -
-								start_src));
+					delta[i] = (in_port_t)(start_dst -
+							       start_src);
 				}
 
 				if (optname == 't')

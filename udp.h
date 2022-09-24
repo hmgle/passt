@@ -18,8 +18,6 @@ int udp_init(struct ctx *c);
 void udp_timer(struct ctx *c, const struct timespec *ts);
 void udp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 		       const uint32_t *ip_da);
-void udp_remap_to_tap(struct ctx *c, in_port_t port, in_port_t delta);
-void udp_remap_to_init(struct ctx *c, in_port_t port, in_port_t delta);
 
 /**
  * union udp_epoll_ref - epoll reference portion for TCP connections

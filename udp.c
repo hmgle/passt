@@ -259,28 +259,6 @@ static struct iovec	udp_iov_sendto		[UDP_SPLICE_FRAMES];
 static struct mmsghdr	udp_mmh_sendto		[UDP_SPLICE_FRAMES];
 
 /**
- * udp_remap_to_tap() - Set delta for port translation to/from guest/tap
- * @c:		Execution context
- * @port:	Original destination port, host order
- * @delta:	Delta to be added to original destination port
- */
-void udp_remap_to_tap(struct ctx *c, in_port_t port, in_port_t delta)
-{
-	c->udp.fwd_in.f.delta[port] = delta;
-}
-
-/**
- * udp_remap_to_init() - Set delta for port translation to/from init namespace
- * @c:		Execution context
- * @port:	Original destination port, host order
- * @delta:	Delta to be added to original destination port
- */
-void udp_remap_to_init(struct ctx *c, in_port_t port, in_port_t delta)
-{
-	c->udp.fwd_out.f.delta[port] = delta;
-}
-
-/**
  * udp_invert_portmap() - Compute reverse port translations for return packets
  * @fwd:	Port forwarding configuration to compute reverse map for
  */
