@@ -3182,7 +3182,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 static int tcp_sock_init_ns(void *arg)
 {
 	struct ctx *c = (struct ctx *)arg;
-	int port;
+	unsigned port;
 
 	ns_enter(c);
 
@@ -3381,7 +3381,7 @@ struct tcp_port_rebind_arg {
 static int tcp_port_rebind(void *arg)
 {
 	struct tcp_port_rebind_arg *a = (struct tcp_port_rebind_arg *)arg;
-	int port;
+	unsigned port;
 
 	if (a->bind_in_ns) {
 		ns_enter(a->c);

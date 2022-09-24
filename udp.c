@@ -1193,7 +1193,7 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 int udp_sock_init_ns(void *arg)
 {
 	struct ctx *c = (struct ctx *)arg;
-	int dst;
+	unsigned dst;
 
 	if (ns_enter(c))
 		return 0;

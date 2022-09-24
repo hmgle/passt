@@ -118,11 +118,12 @@ static int get_bound_ports_ns(void *arg)
 static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 		      struct port_fwd *fwd)
 {
-	int start_src, end_src, start_dst, end_dst, exclude_only = 1, i, port;
 	char addr_buf[sizeof(struct in6_addr)] = { 0 }, *addr = addr_buf;
+	int start_src, end_src, start_dst, end_dst, exclude_only = 1, i;
 	uint8_t exclude[PORT_BITMAP_SIZE] = { 0 };
 	char buf[BUFSIZ], *sep, *spec, *p;
 	sa_family_t af = AF_UNSPEC;
+	unsigned port;
 
 	if (!strcmp(optarg, "none")) {
 		if (fwd->mode)
@@ -204,11 +205,11 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 			p++;
 
 		errno = 0;
-		port = strtol(p, &sep, 10);
+		port = strtoul(p, &sep, 10);
 		if (sep == p)
 			break;
 
-		if (port < 0 || port > USHRT_MAX || errno)
+		if (port > USHRT_MAX || errno)
 			goto bad;
 
 		switch (*sep) {
@@ -271,11 +272,11 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 			break;
 
 		errno = 0;
-		port = strtol(p, &sep, 10);
+		port = strtoul(p, &sep, 10);
 		if (sep == p)
 			break;
 
-		if (port < 0 || port > USHRT_MAX || errno)
+		if (port > USHRT_MAX || errno)
 			goto bad;
 
 		/* -p 22
