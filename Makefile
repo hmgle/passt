@@ -41,7 +41,7 @@ MANPAGES = passt.1 pasta.1 qrap.1
 
 PASST_HEADERS = arch.h arp.h checksum.h conf.h dhcp.h dhcpv6.h icmp.h \
 	isolation.h lineread.h ndp.h netlink.h packet.h passt.h pasta.h \
-	pcap.h siphash.h tap.h tcp.h tcp_splice.h udp.h util.h
+	pcap.h port_fwd.h siphash.h tap.h tcp.h tcp_splice.h udp.h util.h
 HEADERS = $(PASST_HEADERS) seccomp.h
 
 # On gcc 11.2, with -O2 and -flto, tcp_hash() and siphash_20b(), if inlined,

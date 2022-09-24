@@ -58,9 +58,9 @@ union tcp_epoll_ref {
  * @conn_count:		Count of connections (not spliced) in connection table
  * @splice_conn_count:	Count of spliced connections in connection table
  * @port_to_tap:	Ports bound host-side, packets to tap or spliced
- * @init_detect_ports:	If set, periodically detect ports bound in init
+ * @fwd_mode_in:	Port forwarding mode for inbound packets
  * @port_to_init:	Ports bound namespace-side, spliced to init
- * @ns_detect_ports:	If set, periodically detect ports bound in namespace
+ * @fwd_mode_out:	Port forwarding mode for outbound packets
  * @timer_run:		Timestamp of most recent timer run
  * @kernel_snd_wnd:	Kernel reports sending window (with commit 8f7baad7f035)
  * @pipe_size:		Size of pipes for spliced connections
@@ -69,10 +69,10 @@ struct tcp_ctx {
 	uint64_t hash_secret[2];
 	int conn_count;
 	int splice_conn_count;
-	uint8_t port_to_tap	[DIV_ROUND_UP(USHRT_MAX, 8)];
-	int init_detect_ports;
-	uint8_t port_to_init	[DIV_ROUND_UP(USHRT_MAX, 8)];
-	int ns_detect_ports;
+	uint8_t port_to_tap	[PORT_BITMAP_SIZE];
+	enum port_fwd_mode fwd_mode_in;
+	uint8_t port_to_init	[PORT_BITMAP_SIZE];
+	enum port_fwd_mode fwd_mode_out;
 	struct timespec timer_run;
 #ifdef HAS_SND_WND
 	int kernel_snd_wnd;

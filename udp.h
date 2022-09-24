@@ -47,16 +47,16 @@ union udp_epoll_ref {
 /**
  * struct udp_ctx - Execution context for UDP
  * @port_to_tap:	Ports bound host-side, data to tap or ns L4 socket
- * @init_detect_ports:	If set, periodically detect ports bound in init (TODO)
+ * @fwd_mode_in:	Port forwarding mode for inbound packets
  * @port_to_init:	Ports bound namespace-side, data to init L4 socket
- * @ns_detect_ports:	If set, periodically detect ports bound in namespace
+ * @fwd_mode_out:	Port forwarding mode for outbound packets
  * @timer_run:		Timestamp of most recent timer run
  */
 struct udp_ctx {
-	uint8_t port_to_tap		[DIV_ROUND_UP(USHRT_MAX, 8)];
-	int init_detect_ports;
-	uint8_t port_to_init		[DIV_ROUND_UP(USHRT_MAX, 8)];
-	int ns_detect_ports;
+	uint8_t port_to_tap	[PORT_BITMAP_SIZE];
+	enum port_fwd_mode fwd_mode_in;
+	uint8_t port_to_init	[PORT_BITMAP_SIZE];
+	enum port_fwd_mode fwd_mode_out;
 	struct timespec timer_run;
 };
 

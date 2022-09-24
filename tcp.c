@@ -3133,7 +3133,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			else
 				s = -1;
 
-			if (c->tcp.init_detect_ports)
+			if (c->tcp.fwd_mode_in == FWD_AUTO)
 				tcp_sock_init_ext[port][V4] = s;
 		}
 
@@ -3148,7 +3148,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			else
 				s = -1;
 
-			if (c->tcp.ns_detect_ports) {
+			if (c->tcp.fwd_mode_out == FWD_AUTO) {
 				if (ns)
 					tcp_sock_ns[port][V4] = s;
 				else
@@ -3174,7 +3174,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			else
 				s = -1;
 
-			if (c->tcp.init_detect_ports)
+			if (c->tcp.fwd_mode_in == FWD_AUTO)
 				tcp_sock_init_ext[port][V6] = s;
 		}
 
@@ -3189,7 +3189,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			else
 				s = -1;
 
-			if (c->tcp.ns_detect_ports) {
+			if (c->tcp.fwd_mode_out == FWD_AUTO) {
 				if (ns)
 					tcp_sock_ns[port][V6] = s;
 				else
@@ -3489,14 +3489,14 @@ void tcp_timer(struct ctx *c, const struct timespec *ts)
 		struct tcp_port_detect_arg detect_arg = { c, 0 };
 		struct tcp_port_rebind_arg rebind_arg = { c, 0 };
 
-		if (c->tcp.init_detect_ports) {
+		if (c->tcp.fwd_mode_in == FWD_AUTO) {
 			detect_arg.detect_in_ns = 0;
 			tcp_port_detect(&detect_arg);
 			rebind_arg.bind_in_ns = 1;
 			NS_CALL(tcp_port_rebind, &rebind_arg);
 		}
 
-		if (c->tcp.ns_detect_ports) {
+		if (c->tcp.fwd_mode_out == FWD_AUTO) {
 			detect_arg.detect_in_ns = 1;
 			NS_CALL(tcp_port_detect, &detect_arg);
 			rebind_arg.bind_in_ns = 0;

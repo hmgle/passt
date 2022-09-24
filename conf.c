@@ -64,14 +64,14 @@ void get_bound_ports(struct ctx *c, int ns, uint8_t proto)
 	}
 
 	if (proto == IPPROTO_UDP) {
-		memset(udp_map, 0, USHRT_MAX / 8);
+		memset(udp_map, 0, PORT_BITMAP_SIZE);
 		procfs_scan_listen(c, IPPROTO_UDP, V4, ns, udp_map, udp_excl);
 		procfs_scan_listen(c, IPPROTO_UDP, V6, ns, udp_map, udp_excl);
 
 		procfs_scan_listen(c, IPPROTO_TCP, V4, ns, udp_map, udp_excl);
 		procfs_scan_listen(c, IPPROTO_TCP, V6, ns, udp_map, udp_excl);
 	} else if (proto == IPPROTO_TCP) {
-		memset(tcp_map, 0, USHRT_MAX / 8);
+		memset(tcp_map, 0, PORT_BITMAP_SIZE);
 		procfs_scan_listen(c, IPPROTO_TCP, V4, ns, tcp_map, tcp_excl);
 		procfs_scan_listen(c, IPPROTO_TCP, V6, ns, tcp_map, tcp_excl);
 	}
@@ -106,31 +106,25 @@ static int get_bound_ports_ns(void *arg)
 	return 0;
 }
 
-enum conf_port_type {
-	PORT_SPEC = 1,
-	PORT_NONE,
-	PORT_AUTO,
-	PORT_ALL,
-};
-
 /**
  * conf_ports() - Parse port configuration options, initialise UDP/TCP sockets
  * @c:		Execution context
  * @optname:	Short option name, t, T, u, or U
  * @optarg:	Option argument (port specification)
- * @set:	Pointer to @conf_port_type to be set (port binding type)
+ * @set:	Pointer to @port_fwd_mode to be set (port forwarding mode)
  *
  * Return: -EINVAL on parsing error, 0 otherwise
  */
 static int conf_ports(struct ctx *c, char optname, const char *optarg,
-		      enum conf_port_type *set)
+		      enum port_fwd_mode *set)
 {
 	int start_src, end_src, start_dst, end_dst, exclude_only = 1, i, port;
 	char addr_buf[sizeof(struct in6_addr)] = { 0 }, *addr = addr_buf;
-	uint8_t *map, exclude[DIV_ROUND_UP(USHRT_MAX, 8)] = { 0 };
 	void (*remap)(in_port_t port, in_port_t delta);
+	uint8_t exclude[PORT_BITMAP_SIZE] = { 0 };
 	char buf[BUFSIZ], *sep, *spec, *p;
 	sa_family_t af = AF_UNSPEC;
+	uint8_t *map;
 
 	if (optname == 't') {
 		map = c->tcp.port_to_tap;
@@ -151,14 +145,14 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 	if (!strcmp(optarg, "none")) {
 		if (*set)
 			return -EINVAL;
-		*set = PORT_NONE;
+		*set = FWD_NONE;
 		return 0;
 	}
 
 	if (!strcmp(optarg, "auto")) {
 		if (*set || c->mode != MODE_PASTA)
 			return -EINVAL;
-		*set = PORT_AUTO;
+		*set = FWD_AUTO;
 		return 0;
 	}
 
@@ -167,7 +161,7 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 
 		if (*set || c->mode != MODE_PASST)
 			return -EINVAL;
-		*set = PORT_ALL;
+		*set = FWD_ALL;
 		memset(map, 0xff, PORT_EPHEMERAL_MIN / 8);
 
 		for (i = 0; i < PORT_EPHEMERAL_MIN; i++) {
@@ -180,10 +174,10 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 		return 0;
 	}
 
-	if (*set > PORT_SPEC)
+	if (*set > FWD_SPEC)
 		return -EINVAL;
 
-	*set = PORT_SPEC;
+	*set = FWD_SPEC;
 
 	strncpy(buf, optarg, sizeof(buf) - 1);
 
@@ -1088,8 +1082,6 @@ void conf(struct ctx *c, int argc, char **argv)
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
 	char userns[PATH_MAX] = { 0 }, netns[PATH_MAX] = { 0 };
-	enum conf_port_type tcp_tap = 0, tcp_init = 0;
-	enum conf_port_type udp_tap = 0, udp_init = 0;
 	bool v4_only = false, v6_only = false;
 	struct in6_addr *dns6 = c->ip6.dns;
 	struct fqdn *dnss = c->dns_search;
@@ -1102,6 +1094,9 @@ void conf(struct ctx *c, int argc, char **argv)
 
 	if (c->mode == MODE_PASTA)
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
+
+	c->tcp.fwd_mode_in = c->tcp.fwd_mode_out = 0;
+	c->udp.fwd_mode_in = c->udp.fwd_mode_out = 0;
 
 	do {
 		const char *optstring;
@@ -1553,7 +1548,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	/* Now we can process port configuration options */
 	optind = 1;
 	do {
-		enum conf_port_type *set = NULL;
+		enum port_fwd_mode *fwd = NULL;
 		const char *optstring;
 
 		if (c->mode == MODE_PASST)
@@ -1568,15 +1563,15 @@ void conf(struct ctx *c, int argc, char **argv)
 		case 'T':
 		case 'U':
 			if (name == 't')
-				set = &tcp_tap;
+				fwd = &c->tcp.fwd_mode_in;
 			else if (name == 'T')
-				set = &tcp_init;
+				fwd = &c->tcp.fwd_mode_out;
 			else if (name == 'u')
-				set = &udp_tap;
+				fwd = &c->udp.fwd_mode_in;
 			else if (name == 'U')
-				set = &udp_init;
+				fwd = &c->udp.fwd_mode_out;
 
-			if (!optarg || conf_ports(c, name, optarg, set))
+			if (!optarg || conf_ports(c, name, optarg, fwd))
 				usage(argv[0]);
 
 			break;
@@ -1605,33 +1600,39 @@ void conf(struct ctx *c, int argc, char **argv)
 			if_indextoname(c->ifi6, c->pasta_ifn);
 	}
 
-	c->tcp.ns_detect_ports   = c->udp.ns_detect_ports   = 0;
-	c->tcp.init_detect_ports = c->udp.init_detect_ports = 0;
-
 	if (c->mode == MODE_PASTA) {
 		c->proc_net_tcp[V4][0] = c->proc_net_tcp[V4][1] = -1;
 		c->proc_net_tcp[V6][0] = c->proc_net_tcp[V6][1] = -1;
 		c->proc_net_udp[V4][0] = c->proc_net_udp[V4][1] = -1;
 		c->proc_net_udp[V6][0] = c->proc_net_udp[V6][1] = -1;
 
-		if (!tcp_tap || tcp_tap == PORT_AUTO) {
-			c->tcp.ns_detect_ports = 1;
+		if (!c->tcp.fwd_mode_in || c->tcp.fwd_mode_in == FWD_AUTO) {
+			c->tcp.fwd_mode_in = FWD_AUTO;
 			ns_ports_arg.proto = IPPROTO_TCP;
 			NS_CALL(get_bound_ports_ns, &ns_ports_arg);
 		}
-		if (!udp_tap || udp_tap == PORT_AUTO) {
-			c->udp.ns_detect_ports = 1;
+		if (!c->udp.fwd_mode_in || c->udp.fwd_mode_in == FWD_AUTO) {
+			c->udp.fwd_mode_in = FWD_AUTO;
 			ns_ports_arg.proto = IPPROTO_UDP;
 			NS_CALL(get_bound_ports_ns, &ns_ports_arg);
 		}
-		if (!tcp_init || tcp_init == PORT_AUTO) {
-			c->tcp.init_detect_ports = 1;
+		if (!c->tcp.fwd_mode_out || c->tcp.fwd_mode_out == FWD_AUTO) {
+			c->tcp.fwd_mode_out = FWD_AUTO;
 			get_bound_ports(c, 0, IPPROTO_TCP);
 		}
-		if (!udp_init || udp_init == PORT_AUTO) {
-			c->udp.init_detect_ports = 1;
+		if (!c->udp.fwd_mode_out || c->udp.fwd_mode_out == FWD_AUTO) {
+			c->udp.fwd_mode_out = FWD_AUTO;
 			get_bound_ports(c, 0, IPPROTO_UDP);
 		}
+	} else {
+		if (!c->tcp.fwd_mode_in)
+			c->tcp.fwd_mode_in = FWD_NONE;
+		if (!c->tcp.fwd_mode_out)
+			c->tcp.fwd_mode_out= FWD_NONE;
+		if (!c->udp.fwd_mode_in)
+			c->udp.fwd_mode_in = FWD_NONE;
+		if (!c->udp.fwd_mode_out)
+			c->udp.fwd_mode_out = FWD_NONE;
 	}
 
 	if (!c->quiet)
