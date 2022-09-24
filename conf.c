@@ -111,58 +111,40 @@ static int get_bound_ports_ns(void *arg)
  * @c:		Execution context
  * @optname:	Short option name, t, T, u, or U
  * @optarg:	Option argument (port specification)
- * @set:	Pointer to @port_fwd_mode to be set (port forwarding mode)
+ * @fwd:	Pointer to @port_fwd to be updated
  *
  * Return: -EINVAL on parsing error, 0 otherwise
  */
-static int conf_ports(struct ctx *c, char optname, const char *optarg,
-		      enum port_fwd_mode *set)
+static int conf_ports(const struct ctx *c, char optname, const char *optarg,
+		      struct port_fwd *fwd)
 {
 	int start_src, end_src, start_dst, end_dst, exclude_only = 1, i, port;
 	char addr_buf[sizeof(struct in6_addr)] = { 0 }, *addr = addr_buf;
 	uint8_t exclude[PORT_BITMAP_SIZE] = { 0 };
 	char buf[BUFSIZ], *sep, *spec, *p;
 	sa_family_t af = AF_UNSPEC;
-	in_port_t *delta;
-	uint8_t *map;
-
-	if (optname == 't') {
-		map = c->tcp.fwd_in.map;
-		delta = c->tcp.fwd_in.delta;
-	} else if (optname == 'T') {
-		map = c->tcp.fwd_out.map;
-		delta = c->tcp.fwd_out.delta;
-	} else if (optname == 'u') {
-		map = c->udp.fwd_in.f.map;
-		delta = c->udp.fwd_in.f.delta;
-	} else if (optname == 'U') {
-		map = c->udp.fwd_out.f.map;
-		delta = c->udp.fwd_out.f.delta;
-	} else {	/* For gcc -O3 */
-		return 0;
-	}
 
 	if (!strcmp(optarg, "none")) {
-		if (*set)
+		if (fwd->mode)
 			return -EINVAL;
-		*set = FWD_NONE;
+		fwd->mode = FWD_NONE;
 		return 0;
 	}
 
 	if (!strcmp(optarg, "auto")) {
-		if (*set || c->mode != MODE_PASTA)
+		if (fwd->mode || c->mode != MODE_PASTA)
 			return -EINVAL;
-		*set = FWD_AUTO;
+		fwd->mode = FWD_AUTO;
 		return 0;
 	}
 
 	if (!strcmp(optarg, "all")) {
 		int i;
 
-		if (*set || c->mode != MODE_PASST)
+		if (fwd->mode || c->mode != MODE_PASST)
 			return -EINVAL;
-		*set = FWD_ALL;
-		memset(map, 0xff, PORT_EPHEMERAL_MIN / 8);
+		fwd->mode = FWD_ALL;
+		memset(fwd->map, 0xff, PORT_EPHEMERAL_MIN / 8);
 
 		for (i = 0; i < PORT_EPHEMERAL_MIN; i++) {
 			if (optname == 't')
@@ -174,10 +156,10 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 		return 0;
 	}
 
-	if (*set > FWD_SPEC)
+	if (fwd->mode > FWD_SPEC)
 		return -EINVAL;
 
-	*set = FWD_SPEC;
+	fwd->mode = FWD_SPEC;
 
 	strncpy(buf, optarg, sizeof(buf) - 1);
 
@@ -265,7 +247,7 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 			if (bitmap_isset(exclude, i))
 				continue;
 
-			bitmap_set(map, i);
+			bitmap_set(fwd->map, i);
 
 			if (optname == 't')
 				tcp_sock_init(c, 0, af, addr, i);
@@ -355,18 +337,18 @@ static int conf_ports(struct ctx *c, char optname, const char *optarg,
 				goto bad;		/* 22-81:8022:8080 */
 
 			for (i = start_src; i <= end_src; i++) {
-				if (bitmap_isset(map, i))
+				if (bitmap_isset(fwd->map, i))
 					goto overlap;
 
 				if (bitmap_isset(exclude, i))
 					continue;
 
-				bitmap_set(map, i);
+				bitmap_set(fwd->map, i);
 
 				if (start_dst != -1) {
 					/* 80:8080 or 22-80:8080:8080 */
-					delta[i] = (in_port_t)(start_dst -
-							       start_src);
+					fwd->delta[i] = (in_port_t)(start_dst -
+								    start_src);
 				}
 
 				if (optname == 't')
@@ -1548,7 +1530,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	/* Now we can process port configuration options */
 	optind = 1;
 	do {
-		enum port_fwd_mode *fwd = NULL;
+		struct port_fwd *fwd = NULL;
 		const char *optstring;
 
 		if (c->mode == MODE_PASST)
@@ -1563,13 +1545,13 @@ void conf(struct ctx *c, int argc, char **argv)
 		case 'T':
 		case 'U':
 			if (name == 't')
-				fwd = &c->tcp.fwd_in.mode;
+				fwd = &c->tcp.fwd_in;
 			else if (name == 'T')
-				fwd = &c->tcp.fwd_out.mode;
+				fwd = &c->tcp.fwd_out;
 			else if (name == 'u')
-				fwd = &c->udp.fwd_in.f.mode;
+				fwd = &c->udp.fwd_in.f;
 			else if (name == 'U')
-				fwd = &c->udp.fwd_out.f.mode;
+				fwd = &c->udp.fwd_out.f;
 
 			if (!optarg || conf_ports(c, name, optarg, fwd))
 				usage(argv[0]);
