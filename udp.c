@@ -109,6 +109,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include <time.h>
+#include <assert.h>
 
 #include "checksum.h"
 #include "util.h"
@@ -266,7 +267,6 @@ static struct mmsghdr	udp_mmh_sendto		[UDP_SPLICE_FRAMES];
 void udp_remap_to_tap(struct ctx *c, in_port_t port, in_port_t delta)
 {
 	c->udp.fwd_in.f.delta[port] = delta;
-	c->udp.fwd_in.rdelta[port + delta] = USHRT_MAX - delta;
 }
 
 /**
@@ -278,7 +278,23 @@ void udp_remap_to_tap(struct ctx *c, in_port_t port, in_port_t delta)
 void udp_remap_to_init(struct ctx *c, in_port_t port, in_port_t delta)
 {
 	c->udp.fwd_out.f.delta[port] = delta;
-	c->udp.fwd_out.rdelta[port + delta] = USHRT_MAX - delta;
+}
+
+/**
+ * udp_invert_portmap() - Compute reverse port translations for return packets
+ * @fwd:	Port forwarding configuration to compute reverse map for
+ */
+static void udp_invert_portmap(struct udp_port_fwd *fwd)
+{
+	int i;
+
+	assert(ARRAY_SIZE(fwd->f.delta) == ARRAY_SIZE(fwd->rdelta));
+	for (i = 0; i < ARRAY_SIZE(fwd->f.delta); i++) {
+		in_port_t delta = fwd->f.delta[i];
+
+		if (delta)
+			fwd->rdelta[(in_port_t)i + delta] = USHRT_MAX - delta;
+	}
 }
 
 /**
@@ -1267,13 +1283,16 @@ static void udp_splice_iov_init(void)
  *
  * Return: 0
  */
-int udp_init(const struct ctx *c)
+int udp_init(struct ctx *c)
 {
 	if (c->ifi4)
 		udp_sock4_iov_init();
 
 	if (c->ifi6)
 		udp_sock6_iov_init();
+
+	udp_invert_portmap(&c->udp.fwd_in);
+	udp_invert_portmap(&c->udp.fwd_out);
 
 	if (c->mode == MODE_PASTA) {
 		udp_splice_iov_init();
