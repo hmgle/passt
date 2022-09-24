@@ -546,10 +546,6 @@ static const char *tcp_flag_str[] __attribute((__unused__)) = {
 	"ACK_TO_TAP_DUE", "ACK_FROM_TAP_DUE",
 };
 
-/* Port re-mappings as delta, indexed by original destination port */
-static in_port_t		tcp_port_delta_to_tap	[USHRT_MAX];
-static in_port_t		tcp_port_delta_to_init	[USHRT_MAX];
-
 /* Listening sockets, used for automatic port forwarding in pasta mode only */
 static int tcp_sock_init_lo	[USHRT_MAX][IP_VERSIONS];
 static int tcp_sock_init_ext	[USHRT_MAX][IP_VERSIONS];
@@ -954,22 +950,24 @@ static void conn_event_do(const struct ctx *c, struct tcp_conn *conn,
 
 /**
  * tcp_remap_to_tap() - Set delta for port translation toward guest/tap
+ * @c:		Execution context
  * @port:	Original destination port, host order
  * @delta:	Delta to be added to original destination port
  */
-void tcp_remap_to_tap(in_port_t port, in_port_t delta)
+void tcp_remap_to_tap(struct ctx *c, in_port_t port, in_port_t delta)
 {
-	tcp_port_delta_to_tap[port] = delta;
+	c->tcp.fwd_in.delta[port] = delta;
 }
 
 /**
  * tcp_remap_to_tap() - Set delta for port translation toward init namespace
+ * @c:		Execution context
  * @port:	Original destination port, host order
  * @delta:	Delta to be added to original destination port
  */
-void tcp_remap_to_init(in_port_t port, in_port_t delta)
+void tcp_remap_to_init(struct ctx *c, in_port_t port, in_port_t delta)
 {
-	tcp_port_delta_to_init[port] = delta;
+	c->tcp.fwd_out.delta[port] = delta;
 }
 
 /**
@@ -3109,11 +3107,9 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 	int s;
 
 	if (ns) {
-		tref.tcp.index = (in_port_t)(port +
-					     tcp_port_delta_to_init[port]);
+		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_out.delta[port]);
 	} else {
-		tref.tcp.index = (in_port_t)(port +
-					     tcp_port_delta_to_tap[port]);
+		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_in.delta[port]);
 	}
 
 	if (af == AF_INET || af == AF_UNSPEC) {
@@ -3133,7 +3129,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			else
 				s = -1;
 
-			if (c->tcp.fwd_mode_in == FWD_AUTO)
+			if (c->tcp.fwd_in.mode == FWD_AUTO)
 				tcp_sock_init_ext[port][V4] = s;
 		}
 
@@ -3148,7 +3144,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			else
 				s = -1;
 
-			if (c->tcp.fwd_mode_out == FWD_AUTO) {
+			if (c->tcp.fwd_out.mode == FWD_AUTO) {
 				if (ns)
 					tcp_sock_ns[port][V4] = s;
 				else
@@ -3174,7 +3170,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			else
 				s = -1;
 
-			if (c->tcp.fwd_mode_in == FWD_AUTO)
+			if (c->tcp.fwd_in.mode == FWD_AUTO)
 				tcp_sock_init_ext[port][V6] = s;
 		}
 
@@ -3189,7 +3185,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			else
 				s = -1;
 
-			if (c->tcp.fwd_mode_out == FWD_AUTO) {
+			if (c->tcp.fwd_out.mode == FWD_AUTO) {
 				if (ns)
 					tcp_sock_ns[port][V6] = s;
 				else
@@ -3213,7 +3209,7 @@ static int tcp_sock_init_ns(void *arg)
 	ns_enter(c);
 
 	for (port = 0; port < USHRT_MAX; port++) {
-		if (!bitmap_isset(c->tcp.port_to_init, port))
+		if (!bitmap_isset(c->tcp.fwd_out.map, port))
 			continue;
 
 		tcp_sock_init(c, 1, AF_UNSPEC, NULL, port);
@@ -3413,7 +3409,7 @@ static int tcp_port_rebind(void *arg)
 		ns_enter(a->c);
 
 		for (port = 0; port < USHRT_MAX; port++) {
-			if (!bitmap_isset(a->c->tcp.port_to_init, port)) {
+			if (!bitmap_isset(a->c->tcp.fwd_out.map, port)) {
 				if (tcp_sock_ns[port][V4] >= 0) {
 					close(tcp_sock_ns[port][V4]);
 					tcp_sock_ns[port][V4] = -1;
@@ -3428,7 +3424,7 @@ static int tcp_port_rebind(void *arg)
 			}
 
 			/* Don't loop back our own ports */
-			if (bitmap_isset(a->c->tcp.port_to_tap, port))
+			if (bitmap_isset(a->c->tcp.fwd_in.map, port))
 				continue;
 
 			if ((a->c->ifi4 && tcp_sock_ns[port][V4] == -1) ||
@@ -3437,7 +3433,7 @@ static int tcp_port_rebind(void *arg)
 		}
 	} else {
 		for (port = 0; port < USHRT_MAX; port++) {
-			if (!bitmap_isset(a->c->tcp.port_to_tap, port)) {
+			if (!bitmap_isset(a->c->tcp.fwd_in.map, port)) {
 				if (tcp_sock_init_ext[port][V4] >= 0) {
 					close(tcp_sock_init_ext[port][V4]);
 					tcp_sock_init_ext[port][V4] = -1;
@@ -3461,7 +3457,7 @@ static int tcp_port_rebind(void *arg)
 			}
 
 			/* Don't loop back our own ports */
-			if (bitmap_isset(a->c->tcp.port_to_init, port))
+			if (bitmap_isset(a->c->tcp.fwd_out.map, port))
 				continue;
 
 			if ((a->c->ifi4 && tcp_sock_init_ext[port][V4] == -1) ||
@@ -3489,14 +3485,14 @@ void tcp_timer(struct ctx *c, const struct timespec *ts)
 		struct tcp_port_detect_arg detect_arg = { c, 0 };
 		struct tcp_port_rebind_arg rebind_arg = { c, 0 };
 
-		if (c->tcp.fwd_mode_in == FWD_AUTO) {
+		if (c->tcp.fwd_in.mode == FWD_AUTO) {
 			detect_arg.detect_in_ns = 0;
 			tcp_port_detect(&detect_arg);
 			rebind_arg.bind_in_ns = 1;
 			NS_CALL(tcp_port_rebind, &rebind_arg);
 		}
 
-		if (c->tcp.fwd_mode_out == FWD_AUTO) {
+		if (c->tcp.fwd_out.mode == FWD_AUTO) {
 			detect_arg.detect_in_ns = 1;
 			NS_CALL(tcp_port_detect, &detect_arg);
 			rebind_arg.bind_in_ns = 0;

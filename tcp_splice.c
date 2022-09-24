@@ -514,7 +514,7 @@ static int tcp_splice_new(const struct ctx *c, struct tcp_splice_conn *conn,
 	struct tcp_splice_connect_ns_arg ns_arg = { c, conn, port, 0 };
 	int *p, i, s = -1;
 
-	if (bitmap_isset(c->tcp.port_to_tap, port))
+	if (bitmap_isset(c->tcp.fwd_in.map, port))
 		p = CONN_V6(conn) ? ns_sock_pool6 : ns_sock_pool4;
 	else
 		p = CONN_V6(conn) ? init_sock_pool6 : init_sock_pool4;
@@ -525,7 +525,7 @@ static int tcp_splice_new(const struct ctx *c, struct tcp_splice_conn *conn,
 			break;
 	}
 
-	if (s < 0 && bitmap_isset(c->tcp.port_to_tap, port)) {
+	if (s < 0 && bitmap_isset(c->tcp.fwd_in.map, port)) {
 		NS_CALL(tcp_splice_connect_ns, &ns_arg);
 		return ns_arg.ret;
 	}

@@ -16,4 +16,16 @@ enum port_fwd_mode {
 
 #define PORT_BITMAP_SIZE	DIV_ROUND_UP(USHRT_MAX, 8)
 
+/**
+ * port_fwd - Describes port forwarding for one protocol and direction
+ * @mode:	Overall forwarding mode (all, none, auto, specific ports)
+ * @map:	Bitmap describing which ports are forwarded
+ * @delta:	Offset between the original destination and mapped port number
+ */
+struct port_fwd {
+	enum port_fwd_mode mode;
+	uint8_t map[PORT_BITMAP_SIZE];
+	in_port_t delta[USHRT_MAX];
+};
+
 #endif /* PORT_FWD_H */

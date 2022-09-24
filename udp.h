@@ -18,8 +18,8 @@ int udp_init(const struct ctx *c);
 void udp_timer(struct ctx *c, const struct timespec *ts);
 void udp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 		       const uint32_t *ip_da);
-void udp_remap_to_tap(in_port_t port, in_port_t delta);
-void udp_remap_to_init(in_port_t port, in_port_t delta);
+void udp_remap_to_tap(struct ctx *c, in_port_t port, in_port_t delta);
+void udp_remap_to_init(struct ctx *c, in_port_t port, in_port_t delta);
 
 /**
  * union udp_epoll_ref - epoll reference portion for TCP connections
@@ -44,19 +44,26 @@ union udp_epoll_ref {
 	uint32_t u32;
 };
 
+
+/**
+ * udp_port_fwd - UDP specific port forwarding configuration
+ * @f:		Generic forwarding configuration
+ * @rdelta:	Reversed delta map to translate source ports on return packets
+ */
+struct udp_port_fwd {
+	struct port_fwd f;
+	in_port_t rdelta[USHRT_MAX];
+};
+
 /**
  * struct udp_ctx - Execution context for UDP
- * @port_to_tap:	Ports bound host-side, data to tap or ns L4 socket
- * @fwd_mode_in:	Port forwarding mode for inbound packets
- * @port_to_init:	Ports bound namespace-side, data to init L4 socket
- * @fwd_mode_out:	Port forwarding mode for outbound packets
+ * @fwd_in:		Port forwarding configuration for inbound packets
+ * @fwd_out:		Port forwarding configuration for outbound packets
  * @timer_run:		Timestamp of most recent timer run
  */
 struct udp_ctx {
-	uint8_t port_to_tap	[PORT_BITMAP_SIZE];
-	enum port_fwd_mode fwd_mode_in;
-	uint8_t port_to_init	[PORT_BITMAP_SIZE];
-	enum port_fwd_mode fwd_mode_out;
+	struct udp_port_fwd fwd_in;
+	struct udp_port_fwd fwd_out;
 	struct timespec timer_run;
 };
 

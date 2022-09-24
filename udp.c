@@ -166,12 +166,6 @@ struct udp_splice_port {
 static struct udp_tap_port	udp_tap_map	[IP_VERSIONS][USHRT_MAX];
 static struct udp_splice_port	udp_splice_map	[IP_VERSIONS][USHRT_MAX];
 
-/* Port re-mappings as delta, indexed by original destination port */
-static in_port_t		udp_port_delta_to_tap	[USHRT_MAX];
-static in_port_t		udp_port_delta_from_tap	[USHRT_MAX];
-static in_port_t		udp_port_delta_to_init	[USHRT_MAX];
-static in_port_t		udp_port_delta_from_init[USHRT_MAX];
-
 enum udp_act_type {
 	UDP_ACT_TAP,
 	UDP_ACT_NS_CONN,
@@ -265,24 +259,26 @@ static struct mmsghdr	udp_mmh_sendto		[UDP_SPLICE_FRAMES];
 
 /**
  * udp_remap_to_tap() - Set delta for port translation to/from guest/tap
+ * @c:		Execution context
  * @port:	Original destination port, host order
  * @delta:	Delta to be added to original destination port
  */
-void udp_remap_to_tap(in_port_t port, in_port_t delta)
+void udp_remap_to_tap(struct ctx *c, in_port_t port, in_port_t delta)
 {
-	udp_port_delta_to_tap[port] = delta;
-	udp_port_delta_from_tap[port + delta] = USHRT_MAX - delta;
+	c->udp.fwd_in.f.delta[port] = delta;
+	c->udp.fwd_in.rdelta[port + delta] = USHRT_MAX - delta;
 }
 
 /**
  * udp_remap_to_init() - Set delta for port translation to/from init namespace
+ * @c:		Execution context
  * @port:	Original destination port, host order
  * @delta:	Delta to be added to original destination port
  */
-void udp_remap_to_init(in_port_t port, in_port_t delta)
+void udp_remap_to_init(struct ctx *c, in_port_t port, in_port_t delta)
 {
-	udp_port_delta_to_init[port] = delta;
-	udp_port_delta_from_init[port + delta] = USHRT_MAX - delta;
+	c->udp.fwd_out.f.delta[port] = delta;
+	c->udp.fwd_out.rdelta[port + delta] = USHRT_MAX - delta;
 }
 
 /**
@@ -583,7 +579,7 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 
 	switch (ref.r.p.udp.udp.splice) {
 	case UDP_TO_NS:
-		src += udp_port_delta_from_init[src];
+		src += c->udp.fwd_out.rdelta[src];
 
 		if (!(s = udp_splice_map[v6][src].ns_conn_sock)) {
 			struct udp_splice_connect_ns_arg arg = {
@@ -603,7 +599,7 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		send_dst = udp_splice_map[v6][dst].init_dst_port;
 		break;
 	case UDP_TO_INIT:
-		src += udp_port_delta_from_tap[src];
+		src += c->udp.fwd_in.rdelta[src];
 
 		if (!(s = udp_splice_map[v6][src].init_conn_sock)) {
 			s = udp_splice_connect(c, v6, ref.r.s, src, dst,
@@ -1121,10 +1117,10 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 
 	if (ns) {
 		uref.udp.port = (in_port_t)(port +
-					    udp_port_delta_to_init[port]);
+					    c->udp.fwd_out.f.delta[port]);
 	} else {
 		uref.udp.port = (in_port_t)(port +
-					    udp_port_delta_to_tap[port]);
+					    c->udp.fwd_in.f.delta[port]);
 	}
 
 	if (af == AF_INET || af == AF_UNSPEC) {
@@ -1209,7 +1205,7 @@ int udp_sock_init_ns(void *arg)
 		return 0;
 
 	for (dst = 0; dst < USHRT_MAX; dst++) {
-		if (!bitmap_isset(c->udp.port_to_init, dst))
+		if (!bitmap_isset(c->udp.fwd_out.f.map, dst))
 			continue;
 
 		udp_sock_init(c, 1, AF_UNSPEC, NULL, dst);

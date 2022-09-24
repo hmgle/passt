@@ -29,8 +29,8 @@ void tcp_defer_handler(struct ctx *c);
 void tcp_sock_set_bufsize(const struct ctx *c, int s);
 void tcp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 		       const uint32_t *ip_da);
-void tcp_remap_to_tap(in_port_t port, in_port_t delta);
-void tcp_remap_to_init(in_port_t port, in_port_t delta);
+void tcp_remap_to_tap(struct ctx *c, in_port_t port, in_port_t delta);
+void tcp_remap_to_init(struct ctx *c, in_port_t port, in_port_t delta);
 
 /**
  * union tcp_epoll_ref - epoll reference portion for TCP connections
@@ -58,9 +58,8 @@ union tcp_epoll_ref {
  * @conn_count:		Count of connections (not spliced) in connection table
  * @splice_conn_count:	Count of spliced connections in connection table
  * @port_to_tap:	Ports bound host-side, packets to tap or spliced
- * @fwd_mode_in:	Port forwarding mode for inbound packets
- * @port_to_init:	Ports bound namespace-side, spliced to init
- * @fwd_mode_out:	Port forwarding mode for outbound packets
+ * @fwd_in:		Port forwarding configuration for inbound packets
+ * @fwd_out:		Port forwarding configuration for outbound packets
  * @timer_run:		Timestamp of most recent timer run
  * @kernel_snd_wnd:	Kernel reports sending window (with commit 8f7baad7f035)
  * @pipe_size:		Size of pipes for spliced connections
@@ -69,10 +68,8 @@ struct tcp_ctx {
 	uint64_t hash_secret[2];
 	int conn_count;
 	int splice_conn_count;
-	uint8_t port_to_tap	[PORT_BITMAP_SIZE];
-	enum port_fwd_mode fwd_mode_in;
-	uint8_t port_to_init	[PORT_BITMAP_SIZE];
-	enum port_fwd_mode fwd_mode_out;
+	struct port_fwd fwd_in;
+	struct port_fwd fwd_out;
 	struct timespec timer_run;
 #ifdef HAS_SND_WND
 	int kernel_snd_wnd;
