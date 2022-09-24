@@ -549,7 +549,7 @@ See also the [test logs](/builds/latest/test/).
 
         Static binaries and packages are simply built with:
 
-                make pkgs
+            make pkgs
 
 * have a look at the _man_ page for synopsis and options:
 
@@ -598,7 +598,7 @@ See also the [test logs](/builds/latest/test/).
 
         Static binaries and packages are simply built with:
 
-              make pkgs
+            make pkgs
 
 * have a look at the _man_ page for synopsis and options:
 
