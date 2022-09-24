@@ -7,6 +7,9 @@
 #ifndef PORT_FWD_H
 #define PORT_FWD_H
 
+/* Number of ports for both TCP and UDP */
+#define	NUM_PORTS	(1U << 16)
+
 enum port_fwd_mode {
 	FWD_SPEC = 1,
 	FWD_NONE,
@@ -14,7 +17,7 @@ enum port_fwd_mode {
 	FWD_ALL,
 };
 
-#define PORT_BITMAP_SIZE	DIV_ROUND_UP(USHRT_MAX, 8)
+#define PORT_BITMAP_SIZE	DIV_ROUND_UP(NUM_PORTS, 8)
 
 /**
  * port_fwd - Describes port forwarding for one protocol and direction
@@ -25,7 +28,7 @@ enum port_fwd_mode {
 struct port_fwd {
 	enum port_fwd_mode mode;
 	uint8_t map[PORT_BITMAP_SIZE];
-	in_port_t delta[USHRT_MAX];
+	in_port_t delta[NUM_PORTS];
 };
 
 #endif /* PORT_FWD_H */

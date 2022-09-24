@@ -164,8 +164,8 @@ struct udp_splice_port {
 };
 
 /* Port tracking, arrays indexed by packet source port (host order) */
-static struct udp_tap_port	udp_tap_map	[IP_VERSIONS][USHRT_MAX];
-static struct udp_splice_port	udp_splice_map	[IP_VERSIONS][USHRT_MAX];
+static struct udp_tap_port	udp_tap_map	[IP_VERSIONS][NUM_PORTS];
+static struct udp_splice_port	udp_splice_map	[IP_VERSIONS][NUM_PORTS];
 
 enum udp_act_type {
 	UDP_ACT_TAP,
@@ -175,7 +175,7 @@ enum udp_act_type {
 };
 
 /* Activity-based aging for bindings */
-static uint8_t udp_act[IP_VERSIONS][UDP_ACT_TYPE_MAX][(USHRT_MAX + 1) / 8];
+static uint8_t udp_act[IP_VERSIONS][UDP_ACT_TYPE_MAX][DIV_ROUND_UP(NUM_PORTS, 8)];
 
 /* Static buffers */
 
@@ -271,7 +271,7 @@ static void udp_invert_portmap(struct udp_port_fwd *fwd)
 		in_port_t delta = fwd->f.delta[i];
 
 		if (delta)
-			fwd->rdelta[(in_port_t)i + delta] = USHRT_MAX - delta;
+			fwd->rdelta[(in_port_t)i + delta] = NUM_PORTS - delta;
 	}
 }
 
@@ -1198,7 +1198,7 @@ int udp_sock_init_ns(void *arg)
 	if (ns_enter(c))
 		return 0;
 
-	for (dst = 0; dst < USHRT_MAX; dst++) {
+	for (dst = 0; dst < NUM_PORTS; dst++) {
 		if (!bitmap_isset(c->udp.fwd_out.f.map, dst))
 			continue;
 

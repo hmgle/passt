@@ -209,7 +209,7 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 		if (sep == p)
 			break;
 
-		if (port > USHRT_MAX || errno)
+		if (port >= NUM_PORTS || errno)
 			goto bad;
 
 		switch (*sep) {
@@ -276,7 +276,7 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 		if (sep == p)
 			break;
 
-		if (port > USHRT_MAX || errno)
+		if (port >= NUM_PORTS || errno)
 			goto bad;
 
 		/* -p 22

@@ -547,9 +547,9 @@ static const char *tcp_flag_str[] __attribute((__unused__)) = {
 };
 
 /* Listening sockets, used for automatic port forwarding in pasta mode only */
-static int tcp_sock_init_lo	[USHRT_MAX][IP_VERSIONS];
-static int tcp_sock_init_ext	[USHRT_MAX][IP_VERSIONS];
-static int tcp_sock_ns		[USHRT_MAX][IP_VERSIONS];
+static int tcp_sock_init_lo	[NUM_PORTS][IP_VERSIONS];
+static int tcp_sock_init_ext	[NUM_PORTS][IP_VERSIONS];
+static int tcp_sock_ns		[NUM_PORTS][IP_VERSIONS];
 
 /* Table of destinations with very low RTT (assumed to be local), LRU */
 static struct in6_addr low_rtt_dst[LOW_RTT_TABLE_SIZE];
@@ -3186,7 +3186,7 @@ static int tcp_sock_init_ns(void *arg)
 
 	ns_enter(c);
 
-	for (port = 0; port < USHRT_MAX; port++) {
+	for (port = 0; port < NUM_PORTS; port++) {
 		if (!bitmap_isset(c->tcp.fwd_out.map, port))
 			continue;
 
@@ -3386,7 +3386,7 @@ static int tcp_port_rebind(void *arg)
 	if (a->bind_in_ns) {
 		ns_enter(a->c);
 
-		for (port = 0; port < USHRT_MAX; port++) {
+		for (port = 0; port < NUM_PORTS; port++) {
 			if (!bitmap_isset(a->c->tcp.fwd_out.map, port)) {
 				if (tcp_sock_ns[port][V4] >= 0) {
 					close(tcp_sock_ns[port][V4]);
@@ -3410,7 +3410,7 @@ static int tcp_port_rebind(void *arg)
 				tcp_sock_init(a->c, 1, AF_UNSPEC, NULL, port);
 		}
 	} else {
-		for (port = 0; port < USHRT_MAX; port++) {
+		for (port = 0; port < NUM_PORTS; port++) {
 			if (!bitmap_isset(a->c->tcp.fwd_in.map, port)) {
 				if (tcp_sock_init_ext[port][V4] >= 0) {
 					close(tcp_sock_init_ext[port][V4]);

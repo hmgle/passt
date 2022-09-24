@@ -50,7 +50,7 @@ union udp_epoll_ref {
  */
 struct udp_port_fwd {
 	struct port_fwd f;
-	in_port_t rdelta[USHRT_MAX];
+	in_port_t rdelta[NUM_PORTS];
 };
 
 /**
