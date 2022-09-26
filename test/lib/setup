@@ -132,18 +132,13 @@ setup_passt_in_ns() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	context_run_bg pasta "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P ${STATESETUP}/pasta.pid ${NSHOLDER} ${STATESETUP}/ns.hold hold"
+	context_run_bg pasta "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P ${STATESETUP}/pasta.pid --config-net ${NSHOLDER} ${STATESETUP}/ns.hold hold"
 	wait_for [ -f "${STATESETUP}/pasta.pid" ]
 	__ns_pid=$(${NSHOLDER} ${STATESETUP}/ns.hold pid)
 
 	context_setup_nsenter qemu "-t ${__ns_pid} -U -n -p --preserve-credentials"
 	context_setup_nsenter ns "-t ${__ns_pid} -U -n -p --preserve-credentials"
 	context_setup_nsenter passt "-t ${__ns_pid} -U -n -p --preserve-credentials"
-
-	__ifname=$(context_run ns "ip -j link show | jq -rM '.[] | select(.link_type == \"ether\").ifname'")
-	context_run ns "/sbin/dhclient -4 --no-pid ${__ifname}"
-	sleep 2
-	context_run ns "/sbin/dhclient -6 --no-pid ${__ifname}"
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/passt_in_pasta.pcap"
@@ -201,7 +196,7 @@ setup_two_guests() {
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
-	context_run_bg pasta_1 "./pasta ${__opts} -P ${STATESETUP}/pasta_1.pid -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004 ${NSHOLDER} ${STATESETUP}/ns1.hold hold"
+	context_run_bg pasta_1 "./pasta ${__opts} -P ${STATESETUP}/pasta_1.pid -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004 --config-net ${NSHOLDER} ${STATESETUP}/ns1.hold hold"
 	__ns1_pid=$(${NSHOLDER} ${STATESETUP}/ns1.hold pid)
 	context_setup_nsenter passt_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
 
@@ -209,7 +204,7 @@ setup_two_guests() {
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
-	context_run_bg pasta_2 "./pasta ${__opts} -P ${STATESETUP}/pasta_2.pid -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001 ${NSHOLDER} ${STATESETUP}/ns2.hold hold"
+	context_run_bg pasta_2 "./pasta ${__opts} -P ${STATESETUP}/pasta_2.pid -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001 --config-net ${NSHOLDER} ${STATESETUP}/ns2.hold hold"
 	__ns2_pid=$(${NSHOLDER} ${STATESETUP}/ns2.hold pid)
 	context_setup_nsenter passt_2 -U -n -p --preserve-credentials -t ${__ns2_pid}
 
@@ -217,12 +212,6 @@ setup_two_guests() {
 	context_setup_nsenter qemu_2 -U -n -p --preserve-credentials -t ${__ns2_pid}
 
 	__ifname="$(context_run qemu_1 "ip -j link show | jq -rM '.[] | select(.link_type == \"ether\").ifname'")"
-
-	context_run qemu_1 "/sbin/dhclient -4 --no-pid ${__ifname}"
-	context_run qemu_2 "/sbin/dhclient -4 --no-pid ${__ifname}"
-	sleep 2
-	context_run qemu_1 "/sbin/dhclient -6 --no-pid ${__ifname}"
-	context_run qemu_2 "/sbin/dhclient -6 --no-pid ${__ifname}"
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/passt_1.pcap"
