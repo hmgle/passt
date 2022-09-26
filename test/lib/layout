@@ -155,10 +155,6 @@ layout_two_guests() {
 	tmux split-window -h -l '35%' -t passt_test:1.0
 	tmux split-window -v -t passt_test:1.0
 
-	for i in `seq 0 5`; do
-		tmux select-pane -t $i -T "${i}"
-	done
-
 	PANE_GUEST_1=0
 	PANE_GUEST_2=1
 	PANE_INFO=2
