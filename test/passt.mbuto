@@ -12,8 +12,8 @@
 
 PROGS="${PROGS:-ash,dash,bash ip mount ls insmod mkdir ln cat chmod lsmod
        modprobe find grep mknod mv rm umount jq iperf3 dhclient hostname
-       sed tr chown sipcalc cut md5sum socat dd strace ping tail killall sleep
-       sysctl nproc tcp_rr tcp_crr udp_rr which tee seq bc sshd ssh-keygen}"
+       sed tr chown sipcalc cut socat dd strace ping tail killall sleep sysctl
+       nproc tcp_rr tcp_crr udp_rr which tee seq bc sshd ssh-keygen cmp}"
 
 KMODS="${KMODS:- virtio_net virtio_pci vmw_vsock_virtio_transport}"
 
@@ -22,6 +22,8 @@ LINKS="${LINKS:-
 	 ash,dash,bash		/bin/sh}"
 
 DIRS="${DIRS} /tmp /sbin /usr/share /var/log /var/lib /etc/ssh /run/sshd /root/.ssh"
+
+COPIES="${COPIES} small.bin,/root/small.bin medium.bin,/root/medium.bin big.bin,/root/big.bin"
 
 FIXUP="${FIXUP}"'
 	cat > /sbin/dhclient-script << EOF

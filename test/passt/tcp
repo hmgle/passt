@@ -11,77 +11,66 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-gtools	socat ip jq md5sum cut
-htools	dd socat ip jq md5sum cut
+gtools	socat ip jq cmp
+htools	socat ip jq
+
+set	TEMP_BIG __STATEDIR__/test_big.bin
+set	TEMP_SMALL __STATEDIR__/test_small.bin
 
 test	TCP/IPv4: host to guest: big transfer
-set	TEMP_BIG __STATEDIR__/big
 guestb	socat -u TCP4-LISTEN:10001,reuseaddr OPEN:test_big.bin,create,trunc
 sleep	1
-host	dd if=/dev/urandom bs=1M count=10 > __TEMP_BIG__
-host	socat -u OPEN:__TEMP_BIG__ TCP4:127.0.0.1:10001
+host	socat -u OPEN:__BASEPATH__/big.bin TCP4:127.0.0.1:10001
 guestw
-hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
-gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
-check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
+guest	cmp /root/big.bin test_big.bin
 
 test	TCP/IPv4: guest to host: big transfer
 hostb	socat -u TCP4-LISTEN:10003,bind=127.0.0.1,reuseaddr OPEN:__TEMP_BIG__,create,trunc
 gout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
-guest	socat -u OPEN:test_big.bin TCP4:__GW__:10003
+guest	socat -u OPEN:/root/big.bin TCP4:__GW__:10003
 hostw
-hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
-check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
+check	cmp __BASEPATH__/big.bin __TEMP_BIG__
 
 test	TCP/IPv4: host to guest: small transfer
-set	TEMP_SMALL __STATEDIR__/small
 guestb	socat -u TCP4-LISTEN:10001,reuseaddr OPEN:test_small.bin,create,trunc
 sleep	1
-host	dd if=/dev/urandom bs=2k count=1 > __TEMP_SMALL__
-host	socat -u OPEN:__TEMP_SMALL__ TCP4:127.0.0.1:10001
+host	socat -u OPEN:__BASEPATH__/small.bin TCP4:127.0.0.1:10001
 guestw
-hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
-gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
-check	[ "__GUEST_MD5_SMALL__" = "__HOST_MD5_SMALL__" ]
+guest	cmp /root/small.bin test_small.bin
 
 test	TCP/IPv4: guest to host: small transfer
 hostb	socat -u TCP4-LISTEN:10003,bind=127.0.0.1,reuseaddr OPEN:__TEMP_SMALL__,create,trunc
 sleep	1
-guest	socat -u OPEN:test_small.bin TCP4:__GW__:10003
+guest	socat -u OPEN:/root/small.bin TCP4:__GW__:10003
 hostw
-hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
-check	[ "__GUEST_MD5_SMALL__" = "__HOST_MD5_SMALL__" ]
+check	cmp __BASEPATH__/small.bin __TEMP_SMALL__
 
 
 test	TCP/IPv6: host to guest: big transfer
 guestb	socat -u TCP6-LISTEN:10001,reuseaddr OPEN:test_big.bin,create,trunc
 sleep	1
-host	socat -u OPEN:__TEMP_BIG__ TCP6:[::1]:10001
+host	socat -u OPEN:__BASEPATH__/big.bin TCP6:[::1]:10001
 guestw
-gout	GUEST_MD5_BIG md5sum test_big.bin | cut -d' ' -f1
-check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
+guest	cmp /root/big.bin test_big.bin
 
 test	TCP/IPv6: guest to host: big transfer
 hostb	socat -u TCP6-LISTEN:10003,bind=[::1],reuseaddr OPEN:__TEMP_BIG__,create,trunc
 gout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
 gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
-guest	socat -u OPEN:test_big.bin TCP6:[__GW6__%__IFNAME__]:10003
+guest	socat -u OPEN:/root/big.bin TCP6:[__GW6__%__IFNAME__]:10003
 hostw
-hout	HOST_MD5_BIG md5sum __TEMP_BIG__ | cut -d' ' -f1
-check	[ "__GUEST_MD5_BIG__" = "__HOST_MD5_BIG__" ]
+check	cmp __BASEPATH__/big.bin __TEMP_BIG__
 
 test	TCP/IPv6: host to guest: small transfer
 guestb	socat -u TCP6-LISTEN:10001,reuseaddr OPEN:test_small.bin,create,trunc
 sleep	1
-host	socat -u OPEN:__TEMP_SMALL__ TCP6:[::1]:10001
+host	socat -u OPEN:__BASEPATH__/small.bin TCP6:[::1]:10001
 guestw
-gout	GUEST_MD5_SMALL md5sum test_small.bin | cut -d' ' -f1
-check	[ "__GUEST_MD5_SMALL__" = "__HOST_MD5_SMALL__" ]
+guest	cmp /root/small.bin test_small.bin
 
 test	TCP/IPv6: guest to host: small transfer
 hostb	socat -u TCP6-LISTEN:10003,bind=[::1],reuseaddr OPEN:__TEMP_SMALL__,create,trunc
 sleep	1
-guest	socat -u OPEN:test_small.bin TCP6:[__GW6__%__IFNAME__]:10003
+guest	socat -u OPEN:/root/small.bin TCP6:[__GW6__%__IFNAME__]:10003
 hostw
-hout	HOST_MD5_SMALL md5sum __TEMP_SMALL__ | cut -d' ' -f1
-check	[ "__GUEST_MD5_SMALL__" = "__HOST_MD5_SMALL__" ]
+check	cmp __BASEPATH__/small.bin __TEMP_SMALL__

@@ -11,58 +11,49 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
-nstools	socat ip jq md5sum cut
-htools	dd socat ip jq md5sum cut
+nstools	socat ip jq
+htools	dd socat ip jq
+
+set	TEMP __STATEDIR__/test.bin
+set	TEMP_NS __STATEDIR__/test_ns.bin
 
 test	UDP/IPv4: host to ns
-set	TEMP __STATEDIR__/data
-set	TEMP_NS __STATEDIR__/data_ns
 nsb	socat -u UDP4-LISTEN:10002,bind=127.0.0.1,null-eof OPEN:__TEMP_NS__,create,trunc
-host	dd if=/dev/urandom bs=1k count=5 > __TEMP__
-
-host	socat OPEN:__TEMP__ UDP4:127.0.0.1:10002,shut-null
+host	socat OPEN:__BASEPATH__/medium.bin UDP4:127.0.0.1:10002,shut-null
 nsw
-hout	MD5 md5sum __TEMP__ | cut -d' ' -f1
-nsout	NS_MD5 md5sum __TEMP_NS__ | cut -d' ' -f1
-check	[ "__NS_MD5__" = "__MD5__" ]
+check	cmp __BASEPATH__/medium.bin __TEMP_NS__
 
 test	UDP/IPv4: ns to host (recvmmsg/sendmmsg)
 hostb	socat -u UDP4-LISTEN:10003,bind=127.0.0.1,null-eof OPEN:__TEMP__,create,trunc
 sleep	1
-ns	socat OPEN:__TEMP_NS__ UDP4:127.0.0.1:10003,shut-null
+ns	socat OPEN:__BASEPATH__/medium.bin UDP4:127.0.0.1:10003,shut-null
 hostw
-hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
-check	[ "__HOST_MD5__" = "__MD5__" ]
+check	cmp __BASEPATH__/medium.bin __TEMP__
 
 test	UDP/IPv4: ns to host (via tap)
 hostb	socat -u UDP4-LISTEN:10003,null-eof OPEN:__TEMP__,create,trunc
 nsout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
-ns	socat -u OPEN:__TEMP_NS__ UDP4:__GW__:10003,shut-null
+ns	socat -u OPEN:__BASEPATH__/medium.bin UDP4:__GW__:10003,shut-null
 hostw
-hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
-check	[ "__HOST_MD5__" = "__MD5__" ]
+check	cmp __BASEPATH__/medium.bin __TEMP__
 
 test	UDP/IPv6: host to ns
 nsb	socat -u UDP6-LISTEN:10002,bind=[::1],null-eof OPEN:__TEMP_NS__,create,trunc
-host	socat -u OPEN:__TEMP__ UDP6:[::1]:10002,shut-null
+host	socat -u OPEN:__BASEPATH__/medium.bin UDP6:[::1]:10002,shut-null
 nsw
-hout	MD5 md5sum __TEMP__ | cut -d' ' -f1
-nsout	NS_MD5 md5sum __TEMP_NS__ | cut -d' ' -f1
-check	[ "__NS_MD5__" = "__MD5__" ]
+check	cmp __BASEPATH__/medium.bin __TEMP_NS__
 
 test	UDP/IPv6: ns to host (recvmmsg/sendmmsg)
 hostb	socat -u UDP6-LISTEN:10003,bind=[::1],null-eof OPEN:__TEMP__,create,trunc
 sleep	1
-ns	socat -u OPEN:__TEMP_NS__ UDP6:[::1]:10003,shut-null
+ns	socat -u OPEN:__BASEPATH__/medium.bin UDP6:[::1]:10003,shut-null
 hostw
-hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
-check	[ "__HOST_MD5__" = "__MD5__" ]
+check	cmp __BASEPATH__/medium.bin __TEMP__
 
 test	UDP/IPv6: ns to host (via tap)
 hostb	socat -u UDP6-LISTEN:10003,null-eof OPEN:__TEMP__,create,trunc
 nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
 nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
-ns	socat -u OPEN:__TEMP_NS__ UDP6:[__GW6__%__IFNAME__]:10003,shut-null
+ns	socat -u OPEN:__BASEPATH__/medium.bin UDP6:[__GW6__%__IFNAME__]:10003,shut-null
 hostw
-hout	HOST_MD5 md5sum __TEMP__ | cut -d' ' -f1
-check	[ "__HOST_MD5__" = "__MD5__" ]
+check	cmp __BASEPATH__/medium.bin __TEMP__

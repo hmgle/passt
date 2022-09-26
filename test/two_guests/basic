@@ -13,7 +13,7 @@
 
 g1tools	ip jq dhclient socat cat
 g2tools	ip jq dhclient socat cat
-htools	ip jq md5sum cut
+htools	ip jq
 
 test	Interface names
 g1out	IFNAME1 ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
