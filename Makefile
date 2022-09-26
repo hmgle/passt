@@ -237,6 +237,10 @@ docs: README.md
 #
 # - concurrency-mt-unsafe
 #	TODO: check again if multithreading is implemented
+#
+# - readability-identifier-length
+#	Complains about any identifier <3 characters, reasonable for
+#	globals, pointlessly verbose for locals and parameters.
 
 clang-tidy: $(SRCS) $(HEADERS)
 	clang-tidy -checks=*,-modernize-*,\
@@ -260,7 +264,8 @@ clang-tidy: $(SRCS) $(HEADERS)
 	-bugprone-easily-swappable-parameters,\
 	-readability-function-cognitive-complexity,\
 	-altera-struct-pack-align,\
-	-concurrency-mt-unsafe \
+	-concurrency-mt-unsafe,\
+	-readability-identifier-length \
 	-config='{CheckOptions: [{key: bugprone-suspicious-string-compare.WarnOnImplicitComparison, value: "false"}]}' \
 	--warnings-as-errors=* $(SRCS) -- $(filter-out -pie,$(FLAGS) $(CFLAGS))
 
