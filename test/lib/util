@@ -123,3 +123,11 @@ get_info_cols() {
 		__j=$((__j + 1))
 	done
 }
+
+# wait_for() - Retry a command until it succeeds
+# $@:	Command to run
+wait_for() {
+        while ! "$@"; do
+                sleep 0.1 || sleep 1
+        done
+}

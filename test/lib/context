@@ -63,9 +63,7 @@ EOF
 	echo "ssh -F ${__ssh} ${__name}" > "${__enter}"
 
 	# Wait for the guest to be booted and accepting connections
-	while ! ssh -F "${__ssh}" "${__name}" :; do
-		sleep 0.1
-	done
+	wait_for ssh -F "${__ssh}" "${__name}" :
 }
 
 # context_teardown() - Remove a context (leave log files intact)
