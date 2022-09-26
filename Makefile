@@ -14,8 +14,9 @@ ifeq ($(RLIMIT_STACK_VAL),unlimited)
 RLIMIT_STACK_VAL := 1024
 endif
 
+TARGET := $(shell $(CC) -dumpmachine)
 # Get 'uname -m'-like architecture description for target
-TARGET_ARCH := $(shell $(CC) -dumpmachine | cut -f1 -d- | tr [A-Z] [a-z])
+TARGET_ARCH := $(shell echo $(TARGET) | cut -f1 -d- | tr [A-Z] [a-z])
 TARGET_ARCH := $(shell echo $(TARGET_ARCH) | sed 's/powerpc/ppc/')
 
 AUDIT_ARCH := $(shell echo $(TARGET_ARCH) | tr [a-z] [A-Z] | sed 's/^ARM.*/ARM/')
@@ -271,7 +272,6 @@ clang-tidy: $(SRCS) $(HEADERS)
 
 SYSTEM_INCLUDES := /usr/include
 ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"),1)
-TARGET := $(shell ${CC} -v 2>&1 | sed -n 's/Target: \(.*\)/\1/p')
 VER := $(shell $(CC) -dumpversion)
 SYSTEM_INCLUDES += /usr/lib/gcc/$(TARGET)/$(VER)/include
 endif
