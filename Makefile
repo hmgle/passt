@@ -270,7 +270,7 @@ clang-tidy: $(SRCS) $(HEADERS)
 	-config='{CheckOptions: [{key: bugprone-suspicious-string-compare.WarnOnImplicitComparison, value: "false"}]}' \
 	--warnings-as-errors=* $(SRCS) -- $(filter-out -pie,$(FLAGS) $(CFLAGS))
 
-SYSTEM_INCLUDES := /usr/include
+SYSTEM_INCLUDES := /usr/include $(wildcard /usr/include/$(TARGET))
 ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"),1)
 VER := $(shell $(CC) -dumpversion)
 SYSTEM_INCLUDES += /usr/lib/gcc/$(TARGET)/$(VER)/include
