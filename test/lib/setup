@@ -54,7 +54,9 @@ setup_passt() {
 	context_run passt "make clean"
 	context_run passt "make valgrind"
 	context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt ${__opts} -f -t 10001 -u 10001 -P ${STATESETUP}/passt.pid"
-	sleep 5
+
+	# pidfile isn't created until passt is listening
+	wait_for [ -f "${STATESETUP}/passt.pid" ]
 
 	GUEST_CID=94557
 	context_run_bg qemu './qrap 5 qemu-system-$(uname -m)'		   \
@@ -99,7 +101,9 @@ setup_pasta() {
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
 	context_run_bg passt "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 -P ${STATESETUP}/passt.pid ${__target_pid}"
-	sleep 1
+
+	# pidfile isn't created until pasta is ready
+	wait_for [ -f "${STATESETUP}/passt.pid" ]
 }
 
 # setup_passt_in_ns() - Set up namespace (with pasta), run qemu and passt into it
@@ -129,7 +133,7 @@ setup_passt_in_ns() {
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
 	context_run_bg pasta "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P ${STATESETUP}/pasta.pid ${NSHOLDER} ${STATESETUP}/ns.hold hold"
-	sleep 1
+	wait_for [ -f "${STATESETUP}/pasta.pid" ]
 	__ns_pid=$(${NSHOLDER} ${STATESETUP}/ns.hold pid)
 
 	context_setup_nsenter qemu "-t ${__ns_pid} -U -n -p --preserve-credentials"
@@ -155,7 +159,7 @@ setup_passt_in_ns() {
 		context_run passt "make"
 		context_run_bg passt "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P ${STATESETUP}/passt.pid"
 	fi
-	sleep 5
+	wait_for [ -f "${STATESETUP}/passt.pid" ]
 
 	GUEST_CID=94557
 	context_run_bg qemu './qrap 5 qemu-system-$(uname -m)'                \
@@ -226,7 +230,7 @@ setup_two_guests() {
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
 	context_run_bg passt_1 "./passt -P ${STATESETUP}/passt_1.pid -f ${__opts} -t 10001 -u 10001"
-	sleep 1
+	wait_for [ -f "${STATESETUP}/passt_1.pid" ]
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/passt_2.pcap"
@@ -234,6 +238,7 @@ setup_two_guests() {
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
 	context_run_bg passt_2 "./passt -P ${STATESETUP}/passt_2.pid -f ${__opts} -t 10004 -u 10004"
+	wait_for [ -f "${STATESETUP}/passt_2.pid" ]
 
 	GUEST_1_CID=94557
 	context_run_bg qemu_1 './qrap 5 qemu-system-$(uname -m)'             \
