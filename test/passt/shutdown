@@ -16,5 +16,4 @@ test	shutdown: exit code
 
 hout	PASST_PID cat __STATESETUP__/passt.pid
 host	kill __PASST_PID__
-sleep	1
 passtw
