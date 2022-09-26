@@ -269,27 +269,19 @@ clang-tidy: $(SRCS) $(HEADERS)
 	-config='{CheckOptions: [{key: bugprone-suspicious-string-compare.WarnOnImplicitComparison, value: "false"}]}' \
 	--warnings-as-errors=* $(SRCS) -- $(filter-out -pie,$(FLAGS) $(CFLAGS))
 
+SYSTEM_INCLUDES := /usr/include
 ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"),1)
 TARGET := $(shell ${CC} -v 2>&1 | sed -n 's/Target: \(.*\)/\1/p')
 VER := $(shell $(CC) -dumpversion)
-EXTRA_INCLUDES := /usr/lib/gcc/$(TARGET)/$(VER)/include
-EXTRA_INCLUDES_OPT := -I$(EXTRA_INCLUDES)
-else
-EXTRA_INCLUDES_OPT :=
+SYSTEM_INCLUDES += /usr/lib/gcc/$(TARGET)/$(VER)/include
 endif
 cppcheck: $(SRCS) $(HEADERS)
 	cppcheck --std=c99 --error-exitcode=1 --enable=all --force	\
 	--inconclusive --library=posix					\
-	-I/usr/include $(EXTRA_INCLUDES_OPT)				\
-									\
-	--suppress=syntaxError:/usr/include/stdlib.h			\
-	--suppress=missingIncludeSystem					\
-	--suppress="*:$(EXTRA_INCLUDES)/avx512fintrin.h"		\
-	--suppress="*:$(EXTRA_INCLUDES)/xmmintrin.h"			\
-	--suppress="*:$(EXTRA_INCLUDES)/emmintrin.h"			\
-	--suppress="*:$(EXTRA_INCLUDES)/avxintrin.h"			\
-	--suppress="*:$(EXTRA_INCLUDES)/bmiintrin.h"			\
-									\
+	$(SYSTEM_INCLUDES:%=-I%)					\
+	$(SYSTEM_INCLUDES:%=--config-exclude=%)				\
+	$(SYSTEM_INCLUDES:%=--suppress=*:%/*)				\
+	$(SYSTEM_INCLUDES:%=--suppress=unmatchedSuppression:%/*)	\
 	--suppress=objectIndex:tcp.c --suppress=objectIndex:udp.c	\
 	--suppress=va_list_usedBeforeStarted:util.c			\
 	--suppress=unusedFunction					\
