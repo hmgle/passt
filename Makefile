@@ -277,7 +277,7 @@ SYSTEM_INCLUDES += /usr/lib/gcc/$(TARGET)/$(VER)/include
 endif
 cppcheck: $(SRCS) $(HEADERS)
 	cppcheck --std=c99 --error-exitcode=1 --enable=all --force	\
-	--inconclusive --library=posix					\
+	--inconclusive --library=posix --quiet				\
 	$(SYSTEM_INCLUDES:%=-I%)					\
 	$(SYSTEM_INCLUDES:%=--config-exclude=%)				\
 	$(SYSTEM_INCLUDES:%=--suppress=*:%/*)				\
