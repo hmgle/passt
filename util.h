@@ -217,6 +217,7 @@ struct ipv6_opt_hdr {
 	 */
 } __attribute__((packed));	/* required for some archs */
 
+/* cppcheck-suppress funcArgNamesDifferent */
 __attribute__ ((weak)) int ffsl(long int i) { return __builtin_ffsl(i); }
 void __openlog(const char *ident, int option, int facility);
 void passt_vsyslog(int pri, const char *format, va_list ap);

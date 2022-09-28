@@ -290,7 +290,6 @@ cppcheck: $(SRCS) $(HEADERS)
 	--suppress=strtokCalled:conf.c --suppress=strtokCalled:qrap.c	\
 	--suppress=localtimeCalled:pcap.c				\
 	--suppress=unusedStructMember:pcap.c				\
-	--suppress=funcArgNamesDifferent:util.h				\
 	--suppress=unusedStructMember:dhcp.c				\
 									\
 	--suppress=unmatchedSuppression:conf.c				\
@@ -300,6 +299,5 @@ cppcheck: $(SRCS) $(HEADERS)
 	--suppress=unmatchedSuppression:tcp.c				\
 	--suppress=unmatchedSuppression:udp.c				\
 	--suppress=unmatchedSuppression:util.c				\
-	--suppress=unmatchedSuppression:util.h				\
 	$(filter -D%,$(FLAGS) $(CFLAGS))				\
 	.
