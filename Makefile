@@ -286,10 +286,9 @@ cppcheck: $(SRCS) $(HEADERS)
 	--suppress=objectIndex:tcp.c --suppress=objectIndex:udp.c	\
 	--suppress=va_list_usedBeforeStarted:util.c			\
 	--suppress=unusedFunction					\
+	--suppress=unusedStructMember					\
 	--suppress=knownConditionTrueFalse:conf.c			\
 	--suppress=localtimeCalled:pcap.c				\
-	--suppress=unusedStructMember:pcap.c				\
-	--suppress=unusedStructMember:dhcp.c				\
 									\
 	--suppress=unmatchedSuppression:conf.c				\
 	--suppress=unmatchedSuppression:dhcp.c				\
