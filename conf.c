@@ -410,10 +410,12 @@ static void get_dns(struct ctx *c)
 			if (end)
 				*end = 0;
 
+			/* cppcheck-suppress strtokCalled */
 			if (!strtok(line, " \t"))
 				continue;
 
 			while (s - c->dns_search < ARRAY_SIZE(c->dns_search) - 1
+			       /* cppcheck-suppress strtokCalled */
 			       && (p = strtok(NULL, " \t"))) {
 				strncpy(s->n, p, sizeof(c->dns_search[0]));
 				s++;

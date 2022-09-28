@@ -287,7 +287,6 @@ cppcheck: $(SRCS) $(HEADERS)
 	--suppress=va_list_usedBeforeStarted:util.c			\
 	--suppress=unusedFunction					\
 	--suppress=knownConditionTrueFalse:conf.c			\
-	--suppress=strtokCalled:conf.c					\
 	--suppress=localtimeCalled:pcap.c				\
 	--suppress=unusedStructMember:pcap.c				\
 	--suppress=unusedStructMember:dhcp.c				\
