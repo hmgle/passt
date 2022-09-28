@@ -179,12 +179,14 @@ int main(int argc, char **argv)
 			char env_path[ARG_MAX + 1], *p, command[ARG_MAX];
 
 			strncpy(env_path, getenv("PATH"), ARG_MAX);
+			/* cppcheck-suppress strtokCalled */
 			p = strtok(env_path, ":");
 			while (p) {
 				snprintf(command, ARG_MAX, "%s/%s", p, argv[2]);
 				if (!access(command, X_OK))
 					goto valid_args;
 
+				/* cppcheck-suppress strtokCalled */
 				p = strtok(NULL, ":");
 			}
 		}
@@ -317,6 +319,7 @@ retry:
 		 */
 		if (retry_on_reset && rc == ECONNRESET) {
 			retry_on_reset--;
+			/* cppcheck-suppress usleepCalled */
 			usleep(50 * 1000);
 			goto retry;
 		}
