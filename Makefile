@@ -283,12 +283,10 @@ cppcheck: $(SRCS) $(HEADERS)
 	$(SYSTEM_INCLUDES:%=--suppress=*:%/*)				\
 	$(SYSTEM_INCLUDES:%=--suppress=unmatchedSuppression:%/*)	\
 	--inline-suppr							\
-	--suppress=va_list_usedBeforeStarted:util.c			\
 	--suppress=unusedFunction					\
 	--suppress=unusedStructMember					\
 									\
 	--suppress=unmatchedSuppression:dhcp.c				\
 	--suppress=unmatchedSuppression:pcap.c				\
-	--suppress=unmatchedSuppression:util.c				\
 	$(filter -D%,$(FLAGS) $(CFLAGS))				\
 	.
