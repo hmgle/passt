@@ -287,9 +287,7 @@ cppcheck: $(SRCS) $(HEADERS)
 	--suppress=va_list_usedBeforeStarted:util.c			\
 	--suppress=unusedFunction					\
 	--suppress=unusedStructMember					\
-	--suppress=knownConditionTrueFalse:conf.c			\
 									\
-	--suppress=unmatchedSuppression:conf.c				\
 	--suppress=unmatchedSuppression:dhcp.c				\
 	--suppress=unmatchedSuppression:pcap.c				\
 	--suppress=unmatchedSuppression:tcp.c				\
