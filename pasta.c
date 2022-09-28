@@ -184,7 +184,7 @@ void pasta_start_ns(struct ctx *c, int argc, char *argv[])
 	struct pasta_setup_ns_arg arg = {
 		.argv = argv,
 	};
-	char *shell = getenv("SHELL") ? getenv("SHELL") : "/bin/sh";
+	char *shell = getenv("SHELL");
 	char *sh_argv[] = { shell, NULL };
 	char *bash_argv[] = { shell, "-l", NULL };
 	char ns_fn_stack[NS_FN_STACK_SIZE];
@@ -192,6 +192,9 @@ void pasta_start_ns(struct ctx *c, int argc, char *argv[])
 	c->foreground = 1;
 	if (!c->debug)
 		c->quiet = 1;
+
+	if (!shell)
+		shell = "/bin/sh";
 
 	if (argc == 0) {
 		if (strstr(shell, "/bash")) {
