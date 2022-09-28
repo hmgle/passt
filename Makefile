@@ -282,12 +282,12 @@ cppcheck: $(SRCS) $(HEADERS)
 	$(SYSTEM_INCLUDES:%=--config-exclude=%)				\
 	$(SYSTEM_INCLUDES:%=--suppress=*:%/*)				\
 	$(SYSTEM_INCLUDES:%=--suppress=unmatchedSuppression:%/*)	\
+	--inline-suppr							\
 	--suppress=objectIndex:tcp.c --suppress=objectIndex:udp.c	\
 	--suppress=va_list_usedBeforeStarted:util.c			\
 	--suppress=unusedFunction					\
 	--suppress=knownConditionTrueFalse:conf.c			\
 	--suppress=strtokCalled:conf.c --suppress=strtokCalled:qrap.c	\
-	--suppress=getpwnamCalled:passt.c				\
 	--suppress=localtimeCalled:pcap.c				\
 	--suppress=unusedStructMember:pcap.c				\
 	--suppress=funcArgNamesDifferent:util.h				\
@@ -295,7 +295,6 @@ cppcheck: $(SRCS) $(HEADERS)
 									\
 	--suppress=unmatchedSuppression:conf.c				\
 	--suppress=unmatchedSuppression:dhcp.c				\
-	--suppress=unmatchedSuppression:passt.c				\
 	--suppress=unmatchedSuppression:pcap.c				\
 	--suppress=unmatchedSuppression:qrap.c				\
 	--suppress=unmatchedSuppression:tcp.c				\

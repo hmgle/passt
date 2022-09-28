@@ -859,46 +859,50 @@ dns6:
  *
  * Return: 0 on success, negative error code on failure
  */
-static int conf_runas(const char *opt, unsigned int *uid, unsigned int *gid)
+static int conf_runas(char *opt, unsigned int *uid, unsigned int *gid)
 {
-	char ubuf[LOGIN_NAME_MAX], gbuf[LOGIN_NAME_MAX], *endptr;
-	struct passwd *pw;
-	struct group *gr;
+	const char *uopt, *gopt = NULL;
+	char *sep = strchr(opt, ':');
+	char *endptr;
 
-	/* NOLINTNEXTLINE(cert-err34-c): 2 if conversion succeeds */
-	if (sscanf(opt, "%u:%u", uid, gid) == 2 && *uid && *gid)
-		return 0;
+	if (sep) {
+		*sep = '\0';
+		gopt = sep + 1;
+	}
+	uopt = opt;
 
-	*uid = strtol(opt, &endptr, 0);
-	if (!*endptr && (*gid = *uid))
-		return 0;
-
-#ifdef GLIBC_NO_STATIC_NSS
-	(void)ubuf;
-	(void)gbuf;
-	(void)pw;
-	(void)gr;
-
-	return -EINVAL;
+	*gid = *uid = strtol(uopt, &endptr, 0);
+	if (*endptr) {
+#ifndef GLIBC_NO_STATIC_NSS
+		/* Not numeric, look up as a username */
+		struct passwd *pw;
+		/* cppcheck-suppress getpwnamCalled */
+		if (!(pw = getpwnam(uopt)) || !(*uid = pw->pw_uid))
+			return -ENOENT;
+		*gid = pw->pw_gid;
 #else
-	/* NOLINTNEXTLINE(cert-err34-c): 2 if conversion succeeds */
-	if (sscanf(opt, "%" STR(LOGIN_NAME_MAX) "[^:]:"
-			"%" STR(LOGIN_NAME_MAX) "s", ubuf, gbuf) == 2) {
-		if (!(pw = getpwnam(ubuf)) || !(*uid = pw->pw_uid))
-			return -ENOENT;
-
-		if (!(gr = getgrnam(gbuf)) || !(*gid = gr->gr_gid))
-			return -ENOENT;
-
-		return 0;
+		return -EINVAL;
+#endif
 	}
 
-	pw = getpwnam(ubuf);
-	if (!pw || !(*uid = pw->pw_uid) || !(*gid = pw->pw_gid))
-		return -ENOENT;
+	if (!gopt)
+		return 0;
+
+	*gid = strtol(gopt, &endptr, 0);
+	if (*endptr) {
+#ifndef GLIBC_NO_STATIC_NSS
+		/* Not numeric, look up as a group name */
+		struct group *gr;
+		/* cppcheck-suppress getgrnamCalled */
+		if (!(gr = getgrnam(gopt)))
+			return -ENOENT;
+		*gid = gr->gr_gid;
+#else
+		return -EINVAL;
+#endif
+	}
 
 	return 0;
-#endif /* !GLIBC_NO_STATIC_NSS */
 }
 
 /**
@@ -909,10 +913,9 @@ static int conf_runas(const char *opt, unsigned int *uid, unsigned int *gid)
  *
  * Return: 0 on success, negative error code on failure
  */
-static int conf_ugid(const char *runas, uid_t *uid, gid_t *gid)
+static int conf_ugid(char *runas, uid_t *uid, gid_t *gid)
 {
 	const char root_uid_map[] = "         0          0 4294967295";
-	struct passwd *pw;
 	char buf[BUFSIZ];
 	int ret;
 	int fd;
@@ -951,21 +954,23 @@ static int conf_ugid(const char *runas, uid_t *uid, gid_t *gid)
 
 	/* ...otherwise use nobody:nobody */
 	warn("Don't run as root. Changing to nobody...");
+	{
 #ifndef GLIBC_NO_STATIC_NSS
-	pw = getpwnam("nobody");
-	if (!pw) {
-		perror("getpwnam");
-		exit(EXIT_FAILURE);
-	}
+		struct passwd *pw;
+		/* cppcheck-suppress getpwnamCalled */
+		pw = getpwnam("nobody");
+		if (!pw) {
+			perror("getpwnam");
+			exit(EXIT_FAILURE);
+		}
 
-	*uid = pw->pw_uid;
-	*gid = pw->pw_gid;
+		*uid = pw->pw_uid;
+		*gid = pw->pw_gid;
 #else
-	(void)pw;
-
-	/* Common value for 'nobody', not really specified */
-	*uid = *gid = 65534;
+		/* Common value for 'nobody', not really specified */
+		*uid = *gid = 65534;
 #endif
+	}
 	return 0;
 }
 
@@ -1032,8 +1037,8 @@ void conf(struct ctx *c, int argc, char **argv)
 	struct fqdn *dnss = c->dns_search;
 	uint32_t *dns4 = c->ip4.dns;
 	int name, ret, mask, b, i;
-	const char *runas = NULL;
 	unsigned int ifi = 0;
+	char *runas = NULL;
 	uid_t uid;
 	gid_t gid;
 
