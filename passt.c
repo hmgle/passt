@@ -201,8 +201,10 @@ int main(int argc, char **argv)
 	name = basename(argv0);
 	if (strstr(name, "pasta")) {
 		sa.sa_handler = pasta_child_handler;
-		sigaction(SIGCHLD, &sa, NULL);
-		signal(SIGPIPE, SIG_IGN);
+		if (sigaction(SIGCHLD, &sa, NULL) || signal(SIGPIPE, SIG_IGN)) {
+			err("Couldn't install signal handlers");
+			exit(EXIT_FAILURE);
+		}
 
 		c.mode = MODE_PASTA;
 		log_name = "pasta";
