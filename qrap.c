@@ -173,12 +173,13 @@ int main(int argc, char **argv)
 	char probe_r;
 
 	if (argc >= 3) {
+		const char *path = getenv("PATH");
 		errno = 0;
 		fd = strtol(argv[1], NULL, 0);
-		if (fd >= 3 && fd < INT_MAX && !errno) {
+		if (fd >= 3 && fd < INT_MAX && !errno && path) {
 			char env_path[ARG_MAX + 1], *p, command[ARG_MAX];
 
-			strncpy(env_path, getenv("PATH"), ARG_MAX);
+			strncpy(env_path, path, ARG_MAX);
 			/* cppcheck-suppress strtokCalled */
 			p = strtok(env_path, ":");
 			while (p) {
