@@ -45,12 +45,12 @@ PASST_HEADERS = arch.h arp.h checksum.h conf.h dhcp.h dhcpv6.h icmp.h \
 	pcap.h port_fwd.h siphash.h tap.h tcp.h tcp_splice.h udp.h util.h
 HEADERS = $(PASST_HEADERS) seccomp.h
 
-# On gcc 11.2, with -O2 and -flto, tcp_hash() and siphash_20b(), if inlined,
-# seem to be hitting something similar to:
+# On gcc 11 and 12, with -O2 and -flto, tcp_hash() and siphash_20b(), if
+# inlined, seem to be hitting something similar to:
 #	https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78993
 # from the pointer arithmetic used from the tcp_tap_handler() path to get the
 # remote connection address.
-ifeq ($(shell $(CC) -dumpversion),11)
+ifeq (,$(filter-out 11 12, $(shell $(CC) -dumpversion)))
 ifneq (,$(filter -flto%,$(FLAGS) $(CFLAGS)))
 ifneq (,$(filter -O2,$(FLAGS) $(CFLAGS)))
 	FLAGS += -DTCP_HASH_NOINLINE
