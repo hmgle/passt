@@ -2280,6 +2280,7 @@ static int tcp_sock_consume(struct tcp_conn *conn, uint32_t ack_seq)
 	if (SEQ_LE(ack_seq, conn->seq_ack_from_tap))
 		return 0;
 
+	/* cppcheck-suppress [nullPointer, unmatchedSuppression] */
 	if (recv(conn->sock, NULL, ack_seq - conn->seq_ack_from_tap,
 		 MSG_DONTWAIT | MSG_TRUNC) < 0)
 		return -errno;
