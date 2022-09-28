@@ -305,6 +305,7 @@ int main(int argc, char **argv)
 
 loop:
 	/* NOLINTNEXTLINE(bugprone-branch-clone): intervals can be the same */
+	/* cppcheck-suppress [duplicateValueTernary, unmatchedSuppression] */
 	nfds = epoll_wait(c.epollfd, events, EPOLL_EVENTS, TIMER_INTERVAL);
 	if (nfds == -1 && errno != EINTR) {
 		perror("epoll_wait");
