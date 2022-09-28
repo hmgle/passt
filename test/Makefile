@@ -63,7 +63,7 @@ LOCAL_ASSETS = mbuto.img QEMU_EFI.fd \
 
 ASSETS = $(DOWNLOAD_ASSETS) $(LOCAL_ASSETS)
 
-CFLAGS = -Wall -Werror
+CFLAGS = -Wall -Werror -Wextra -pedantic -std=c99
 
 assets: $(ASSETS)
 

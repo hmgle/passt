@@ -53,7 +53,7 @@ static void hold(int fd, const struct sockaddr_un *addr)
 	if (rc < 0)
 		die("listen(): %s\n", strerror(errno));
 
-	printf("nsholder: local PID=%d  local UID=%d  local GID=%d\n",
+	printf("nsholder: local PID=%d  local UID=%u  local GID=%u\n",
 	       getpid(), getuid(), getgid());
 	do {
 		int afd = accept(fd, NULL, NULL);
