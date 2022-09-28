@@ -115,7 +115,7 @@ void usage(const char *name)
  */
 int main(int argc, char **argv)
 {
-	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0, retry_on_reset, err;
+	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0, retry_on_reset, rc;
 	struct timeval tv = { .tv_sec = 0, .tv_usec = (long)(500 * 1000) };
 	char *qemu_argv[ARG_MAX], dev_str[ARG_MAX];
 	struct sockaddr_un addr = {
@@ -281,13 +281,13 @@ retry:
 		errno = 0;
 
 		if (connect(s, (const struct sockaddr *)&addr, sizeof(addr))) {
-			err = errno;
+			rc = errno;
 			perror("connect");
 		} else if (send(s, &probe, sizeof(probe), 0) != sizeof(probe)) {
-			err = errno;
+			rc = errno;
 			perror("send");
 		} else if (recv(s, &probe_r, 1, MSG_PEEK) <= 0) {
-			err = errno;
+			rc = errno;
 			perror("recv");
 		} else {
 			break;
@@ -315,7 +315,7 @@ retry:
 		 * this FIXME will probably remain until the tool itself is
 		 * obsoleted.
 		 */
-		if (retry_on_reset && err == ECONNRESET) {
+		if (retry_on_reset && rc == ECONNRESET) {
 			retry_on_reset--;
 			usleep(50 * 1000);
 			goto retry;
