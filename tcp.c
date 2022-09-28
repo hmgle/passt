@@ -1734,6 +1734,7 @@ static int tcp_update_seqack_wnd(const struct ctx *c, struct tcp_conn *conn,
 {
 	uint32_t prev_wnd_to_tap = conn->wnd_to_tap << conn->ws_to_tap;
 	uint32_t prev_ack_to_tap = conn->seq_ack_to_tap;
+	/* cppcheck-suppress [ctunullpointer, unmatchedSuppression] */
 	socklen_t sl = sizeof(*tinfo);
 	struct tcp_info tinfo_new;
 	uint32_t new_wnd_to_tap = prev_wnd_to_tap;
