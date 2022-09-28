@@ -13,4 +13,5 @@
  */
 
 /* TO BE IMPLEMENTED */
+/* cppcheck-suppress unusedFunction */
 __attribute__((__unused__)) static void unused(void) { }

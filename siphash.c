@@ -177,6 +177,7 @@ uint64_t siphash_20b(const uint8_t *in, const uint64_t *k)
  *
  * Return: the 64-bit hash output
  */
+/* cppcheck-suppress unusedFunction */
 uint32_t siphash_32b(const uint8_t *in, const uint64_t *k)
 {
 	uint64_t *in64 = (uint64_t *)in;
