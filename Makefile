@@ -284,8 +284,5 @@ cppcheck: $(SRCS) $(HEADERS)
 	$(SYSTEM_INCLUDES:%=--suppress=unmatchedSuppression:%/*)	\
 	--inline-suppr							\
 	--suppress=unusedStructMember					\
-									\
-	--suppress=unmatchedSuppression:dhcp.c				\
-	--suppress=unmatchedSuppression:pcap.c				\
 	$(filter -D%,$(FLAGS) $(CFLAGS))				\
 	.
