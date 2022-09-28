@@ -206,7 +206,6 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 				uint32_t d;
 				struct rtattr rta_gw;
 				uint32_t a;
-				uint8_t end;
 			} r4;
 		} set;
 	} req = {
@@ -234,7 +233,8 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 		if (af == AF_INET6) {
 			size_t rta_len = RTA_LENGTH(sizeof(req.set.r6.d));
 
-			req.nlh.nlmsg_len = sizeof(req);
+			req.nlh.nlmsg_len = offsetof(struct req_t, set.r6)
+				+ sizeof(req.set.r6);
 
 			req.set.r6.rta_dst.rta_type = RTA_DST;
 			req.set.r6.rta_dst.rta_len = rta_len;
@@ -245,7 +245,8 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 		} else {
 			size_t rta_len = RTA_LENGTH(sizeof(req.set.r4.d));
 
-			req.nlh.nlmsg_len = offsetof(struct req_t, set.r4.end);
+			req.nlh.nlmsg_len = offsetof(struct req_t, set.r4)
+				+ sizeof(req.set.r4);
 
 			req.set.r4.rta_dst.rta_type = RTA_DST;
 			req.set.r4.rta_dst.rta_len = rta_len;
@@ -312,8 +313,6 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 				uint32_t l;
 				struct rtattr rta_a;
 				uint32_t a;
-
-				uint8_t end;
 			} a4;
 			struct {
 				struct rtattr rta_l;
@@ -343,7 +342,8 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 		if (af == AF_INET6) {
 			size_t rta_len = RTA_LENGTH(sizeof(req.set.a6.l));
 
-			req.nlh.nlmsg_len = sizeof(req);
+			req.nlh.nlmsg_len = offsetof(struct req_t, set.a6)
+				+ sizeof(req.set.a6);
 
 			memcpy(&req.set.a6.l, addr, sizeof(req.set.a6.l));
 			req.set.a6.rta_l.rta_len = rta_len;
@@ -354,7 +354,8 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 		} else {
 			size_t rta_len = RTA_LENGTH(sizeof(req.set.a4.l));
 
-			req.nlh.nlmsg_len = offsetof(struct req_t, set.a4.end);
+			req.nlh.nlmsg_len = offsetof(struct req_t, set.a4)
+				+ sizeof(req.set.a4);
 
 			req.set.a4.l = req.set.a4.a = *(uint32_t *)addr;
 			req.set.a4.rta_l.rta_len = rta_len;
@@ -425,7 +426,6 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 			unsigned char mac[ETH_ALEN];
 			struct {
 				unsigned int mtu;
-				uint8_t end;
 			} mtu;
 		} set;
 	} req = {
@@ -457,7 +457,8 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 	}
 
 	if (mtu) {
-		req.nlh.nlmsg_len = offsetof(struct req_t, set.mtu.end);
+		req.nlh.nlmsg_len = offsetof(struct req_t, set.mtu)
+			+ sizeof(req.set.mtu);
 		req.set.mtu.mtu = mtu;
 		req.rta.rta_type = IFLA_MTU;
 		req.rta.rta_len = RTA_LENGTH(sizeof(unsigned int));
