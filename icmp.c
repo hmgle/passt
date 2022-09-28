@@ -35,7 +35,6 @@
 #include "util.h"
 #include "passt.h"
 #include "tap.h"
-#include "packet.h"
 #include "icmp.h"
 
 #define ICMP_ECHO_TIMEOUT	60 /* s, timeout for ICMP socket activity */
