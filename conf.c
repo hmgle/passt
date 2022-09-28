@@ -183,7 +183,6 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 	char buf[BUFSIZ], *spec, *p;
 	sa_family_t af = AF_UNSPEC;
 	bool exclude_only = true;
-	unsigned i;
 
 	if (!strcmp(optarg, "none")) {
 		if (fwd->mode)
@@ -200,7 +199,7 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 	}
 
 	if (!strcmp(optarg, "all")) {
-		int i;
+		unsigned i;
 
 		if (fwd->mode || c->mode != MODE_PASST)
 			return -EINVAL;
@@ -247,6 +246,7 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 	p = spec;
 	do {
 		struct port_range xrange;
+		unsigned i;
 
 		if (*p != '~') {
 			/* Not an exclude range, parse later */
@@ -268,6 +268,8 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 	} while ((p = next_chunk(p, ',')));
 
 	if (exclude_only) {
+		unsigned i;
+
 		for (i = 0; i < PORT_EPHEMERAL_MIN; i++) {
 			if (bitmap_isset(exclude, i))
 				continue;
@@ -287,6 +289,7 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 	p = spec;
 	do {
 		struct port_range orig_range, mapped_range;
+		unsigned i;
 
 		if (*p == '~')
 			/* Exclude range, already parsed */
