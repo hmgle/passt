@@ -96,29 +96,6 @@ void trace_init(int enable);
 		      (void *)(arg));					\
 	} while (0)
 
-
-#ifdef __has_warning
-# if __has_warning("-Wstringop-overread")
-#  define PRAGMA_STRINGOP_OVERREAD_IGNORE				\
-     _Pragma("GCC diagnostic ignored \"-Wstringop-overread\"")
-#  define PRAGMA_STRINGOP_OVERREAD_IGNORE_POP				\
-     _Pragma("GCC diagnostic pop")
-# else
-#  define PRAGMA_STRINGOP_OVERREAD_IGNORE
-#  define PRAGMA_STRINGOP_OVERREAD_IGNORE_POP
-# endif
-#else
-# if defined(__GNUC__) && __GNUC__ >= 11
-#  define PRAGMA_STRINGOP_OVERREAD_IGNORE				\
-     _Pragma("GCC diagnostic ignored \"-Wstringop-overread\"")
-#  define PRAGMA_STRINGOP_OVERREAD_IGNORE_POP				\
-     _Pragma("GCC diagnostic pop")
-# else
-#  define PRAGMA_STRINGOP_OVERREAD_IGNORE
-#  define PRAGMA_STRINGOP_OVERREAD_IGNORE_POP
-# endif
-#endif
-
 #if __BYTE_ORDER == __BIG_ENDIAN
 #define L2_BUF_ETH_IP4_INIT						\
 	{								\

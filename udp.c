@@ -704,11 +704,20 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 	b->uh.len = htons(udp4_l2_mh_sock[n].msg_len + sizeof(b->uh));
 
 	if (c->mode == MODE_PASTA) {
-		PRAGMA_STRINGOP_OVERREAD_IGNORE
-		if (write(c->fd_tap, &b->eh, sizeof(b->eh) + ip_len) < 0)
+		/* If we pass &b->eh directly to write(), starting from
+		 * gcc 12.1, at least on aarch64 and x86_64, we get a bogus
+		 * stringop-overread warning, due to:
+		 *   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103483
+		 *
+		 * but we can't disable it with a pragma, because it will be
+		 * ignored if LTO is enabled:
+		 *   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80922
+		 */
+		void *frame = (char *)b + offsetof(struct udp4_l2_buf_t, eh);
+
+		if (write(c->fd_tap, frame, sizeof(b->eh) + ip_len) < 0)
 			debug("tap write: %s", strerror(errno));
-		PRAGMA_STRINGOP_OVERREAD_IGNORE_POP
-		pcap((char *)&b->eh, sizeof(b->eh) + ip_len);
+		pcap(frame, sizeof(b->eh) + ip_len);
 
 		return;
 	}
@@ -805,11 +814,12 @@ static void udp_sock_fill_data_v6(const struct ctx *c, int n,
 	b->ip6h.hop_limit = 255;
 
 	if (c->mode == MODE_PASTA) {
-		PRAGMA_STRINGOP_OVERREAD_IGNORE
-		if (write(c->fd_tap, &b->eh, sizeof(b->eh) + ip_len) < 0)
+		/* See udp_sock_fill_data_v4() for the reason behind 'frame' */
+		void *frame = (char *)b + offsetof(struct udp6_l2_buf_t, eh);
+
+		if (write(c->fd_tap, frame, sizeof(b->eh) + ip_len) < 0)
 			debug("tap write: %s", strerror(errno));
-		PRAGMA_STRINGOP_OVERREAD_IGNORE_POP
-		pcap((char *)&b->eh, sizeof(b->eh) + ip_len);
+		pcap(frame, sizeof(b->eh) + ip_len);
 
 		return;
 	}
