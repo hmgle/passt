@@ -62,7 +62,7 @@ struct opt_hdr {
 #define   STR_NOTONLINK		"Prefix not appropriate for link."
 
 	uint16_t l;
-};
+} __attribute__((packed));
 
 #if __BYTE_ORDER == __BIG_ENDIAN
 # define OPT_SIZE_CONV(x)	(x)
@@ -82,7 +82,7 @@ struct opt_hdr {
 struct opt_client_id {
 	struct opt_hdr hdr;
 	uint8_t duid[128];
-};
+} __attribute__((packed));
 
 /**
  * struct opt_server_id - DHCPv6 Server Identifier option
@@ -100,7 +100,7 @@ struct opt_server_id {
 	uint16_t duid_hw;
 	uint32_t duid_time;
 	uint8_t duid_lladdr[ETH_ALEN];
-};
+} __attribute__ ((packed));
 
 #if __BYTE_ORDER == __BIG_ENDIAN
 #define SERVER_ID {						\
@@ -128,7 +128,7 @@ struct opt_ia_na {
 	uint32_t iaid;
 	uint32_t t1;
 	uint32_t t2;
-};
+} __attribute__((packed));
 
 /**
  * struct opt_ia_ta - Identity Association for Temporary Addresses Option
@@ -138,7 +138,7 @@ struct opt_ia_na {
 struct opt_ia_ta {
 	struct opt_hdr hdr;
 	uint32_t iaid;
-};
+} __attribute__((packed));
 
 /**
  * struct opt_ia_addr - IA Address Option
@@ -152,7 +152,7 @@ struct opt_ia_addr {
 	struct in6_addr addr;
 	uint32_t pref_lifetime;
 	uint32_t valid_lifetime;
-};
+} __attribute__((packed));
 
 /**
  * struct opt_status_code - Status Code Option (used for NotOnLink error only)
@@ -164,7 +164,7 @@ struct opt_status_code {
 	struct opt_hdr hdr;
 	uint16_t code;
 	char status_msg[sizeof(STR_NOTONLINK) - 1];
-};
+} __attribute__((packed));
 
 /**
  * struct opt_dns_servers - DNS Recursive Name Server option (RFC 3646)
@@ -174,7 +174,7 @@ struct opt_status_code {
 struct opt_dns_servers {
 	struct opt_hdr hdr;
 	struct in6_addr addr[MAXNS];
-};
+} __attribute__((packed));
 
 /**
  * struct opt_dns_servers - Domain Search List option (RFC 3646)
@@ -184,7 +184,7 @@ struct opt_dns_servers {
 struct opt_dns_search {
 	struct opt_hdr hdr;
 	char list[MAXDNSRCH * NS_MAXDNAME];
-};
+} __attribute__((packed));
 
 /**
  * struct msg_hdr - DHCPv6 client/server message header
@@ -332,7 +332,7 @@ static struct opt_hdr *dhcpv6_ia_notonlink(const struct pool *p,
 					   struct in6_addr *la)
 {
 	char buf[INET6_ADDRSTRLEN];
-	struct in6_addr *req_addr;
+	struct in6_addr req_addr;
 	struct opt_hdr *ia, *h;
 	size_t offset;
 	int ia_type;
@@ -352,10 +352,10 @@ ia_ta:
 			if (ntohs(h->l) != OPT_VSIZE(ia_addr))
 				return NULL;
 
-			req_addr = &opt_addr->addr;
-			if (!IN6_ARE_ADDR_EQUAL(la, req_addr)) {
+			memcpy(&req_addr, &opt_addr->addr, sizeof(req_addr));
+			if (!IN6_ARE_ADDR_EQUAL(la, &req_addr)) {
 				info("DHCPv6: requested address %s not on link",
-				     inet_ntop(AF_INET6, req_addr,
+				     inet_ntop(AF_INET6, &req_addr,
 					       buf, sizeof(buf)));
 				return ia;
 			}
