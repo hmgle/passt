@@ -25,7 +25,7 @@
 #ifdef __x86_64__
 void arch_avx2_exec(char **argv)
 {
-	char exe[PATH_MAX] = { 0 }, new_path[PATH_MAX + sizeof(".avx2")], *p;
+	char exe[PATH_MAX] = { 0 }, *p;
 
 	if (readlink("/proc/self/exe", exe, PATH_MAX - 1) < 0) {
 		perror("readlink /proc/self/exe");
@@ -37,6 +37,8 @@ void arch_avx2_exec(char **argv)
 		return;
 
 	if (__builtin_cpu_supports("avx2")) {
+		char new_path[PATH_MAX + sizeof(".avx2")];
+
 		snprintf(new_path, PATH_MAX + sizeof(".avx2"), "%s.avx2", exe);
 		execve(new_path, argv, environ);
 		perror("Can't run AVX2 build, using non-AVX2 version");

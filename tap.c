@@ -782,12 +782,12 @@ restart:
  */
 static void tap_sock_unix_init(struct ctx *c)
 {
-	int fd = socket(AF_UNIX, SOCK_STREAM, 0), ex;
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	struct epoll_event ev = { 0 };
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
 	};
-	int i, ret;
+	int i;
 
 	if (fd < 0) {
 		perror("UNIX socket");
@@ -802,6 +802,7 @@ static void tap_sock_unix_init(struct ctx *c)
 
 	for (i = 1; i < UNIX_SOCK_MAX; i++) {
 		char *path = addr.sun_path;
+		int ex, ret;
 
 		if (*c->sock_path)
 			memcpy(path, c->sock_path, UNIX_PATH_MAX);

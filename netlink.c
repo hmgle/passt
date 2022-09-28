@@ -147,7 +147,6 @@ unsigned int nl_get_ext_if(sa_family_t af)
 	};
 	struct nlmsghdr *nh;
 	struct rtattr *rta;
-	struct rtmsg *rtm;
 	char buf[BUFSIZ];
 	ssize_t n;
 	size_t na;
@@ -158,7 +157,7 @@ unsigned int nl_get_ext_if(sa_family_t af)
 	nh = (struct nlmsghdr *)buf;
 
 	for ( ; NLMSG_OK(nh, n); nh = NLMSG_NEXT(nh, n)) {
-		rtm = (struct rtmsg *)NLMSG_DATA(nh);
+		struct rtmsg *rtm = (struct rtmsg *)NLMSG_DATA(nh);
 
 		if (rtm->rtm_dst_len || rtm->rtm_family != af)
 			continue;
