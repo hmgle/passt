@@ -102,8 +102,8 @@ all: $(BIN) $(MANPAGES) docs
 static: FLAGS += -static -DGLIBC_NO_STATIC_NSS
 static: clean all
 
-seccomp.h: $(PASST_SRCS) $(PASST_HEADERS)
-	@ EXTRA_SYSCALLS=$(EXTRA_SYSCALLS) ./seccomp.sh $^
+seccomp.h: seccomp.sh $(PASST_SRCS) $(PASST_HEADERS)
+	@ EXTRA_SYSCALLS=$(EXTRA_SYSCALLS) ./seccomp.sh $(PASST_SRCS) $(PASST_HEADERS)
 
 passt: $(PASST_SRCS) $(HEADERS)
 	$(CC) $(FLAGS) $(CFLAGS) $(PASST_SRCS) -o passt $(LDFLAGS)
