@@ -288,7 +288,6 @@ cppcheck: $(SRCS) $(HEADERS)
 	--suppress=unusedFunction					\
 	--suppress=unusedStructMember					\
 	--suppress=knownConditionTrueFalse:conf.c			\
-	--suppress=localtimeCalled:pcap.c				\
 									\
 	--suppress=unmatchedSuppression:conf.c				\
 	--suppress=unmatchedSuppression:dhcp.c				\
