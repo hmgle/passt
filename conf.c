@@ -107,6 +107,66 @@ static int get_bound_ports_ns(void *arg)
 }
 
 /**
+ * next_chunk - Return the next piece of a string delimited by a character
+ * @s:		String to search
+ * @c:		Delimiter character
+ *
+ * Returns: If another @c is found in @s, returns a pointer to the
+ *	    character *after* the delimiter, if no further @c is in
+ *	    @s, return NULL
+ */
+static char *next_chunk(const char *s, char c)
+{
+	char *sep = strchr(s, c);
+	return sep ? sep + 1 : NULL;
+}
+
+/**
+ * port_range - Represents a non-empty range of ports
+ * @first:	First port number in the range
+ * @last:	Last port number in the range (inclusive)
+ *
+ * Invariant:	@last >= @first
+ */
+struct port_range {
+	in_port_t first, last;
+};
+
+/**
+ * parse_port_range() - Parse a range of port numbers '<first>[-<last>]'
+ * @s:		String to parse
+ * @endptr:	Update to the character after the parsed range (similar to
+ *		strtol() etc.)
+ * @range:	Update with the parsed values on success
+ *
+ * Return: -EINVAL on parsing error, -ERANGE on out of range port
+ *	   numbers, 0 on success
+ */
+static int parse_port_range(const char *s, char **endptr,
+			    struct port_range *range)
+{
+	unsigned long first, last;
+
+	last = first = strtoul(s, endptr, 10);
+	if (*endptr == s) /* Parsed nothing */
+		return -EINVAL;
+	if (**endptr == '-') { /* we have a last value too */
+		const char *lasts = *endptr + 1;
+		last = strtoul(lasts, endptr, 10);
+		if (*endptr == lasts) /* Parsed nothing */
+			return -EINVAL;
+	}
+
+	if ((last < first) || (last >= NUM_PORTS))
+		return -ERANGE;
+
+	range->first = first;
+	range->last = last;
+
+	return 0;
+}
+
+/**
  * conf_ports() - Parse port configuration options, initialise UDP/TCP sockets
  * @c:		Execution context
  * @optname:	Short option name, t, T, u, or U
@@ -119,11 +179,11 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 		      struct port_fwd *fwd)
 {
 	char addr_buf[sizeof(struct in6_addr)] = { 0 }, *addr = addr_buf;
-	int start_src, end_src, start_dst, end_dst, exclude_only = 1, i;
 	uint8_t exclude[PORT_BITMAP_SIZE] = { 0 };
-	char buf[BUFSIZ], *sep, *spec, *p;
+	char buf[BUFSIZ], *spec, *p;
 	sa_family_t af = AF_UNSPEC;
-	unsigned port;
+	bool exclude_only = true;
+	unsigned i;
 
 	if (!strcmp(optarg, "none")) {
 		if (fwd->mode)
@@ -183,65 +243,29 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 		addr = NULL;
 	}
 
-	if (strspn(spec, "0123456789-,:~") != strlen(spec))
-		goto bad;
-
 	/* Mark all exclusions first, they might be given after base ranges */
 	p = spec;
-	start_src = end_src = -1;
 	do {
-		while (*p != '~' && start_src == -1) {
-			exclude_only = 0;
+		struct port_range xrange;
 
-			if (!(p = strchr(p, ',')))
-				break;
-
-			p++;
+		if (*p != '~') {
+			/* Not an exclude range, parse later */
+			exclude_only = false;
+			continue;
 		}
-		if (!p || !*p)
-			break;
 
-		if (*p == '~')
-			p++;
-
-		errno = 0;
-		port = strtoul(p, &sep, 10);
-		if (sep == p)
-			break;
-
-		if (port >= NUM_PORTS || errno)
+		if (parse_port_range(p, &p, &xrange))
+			goto bad;
+		if ((*p != '\0')  && (*p != ',')) /* Garbage after the range */
 			goto bad;
 
-		switch (*sep) {
-		case '-':
-			if (start_src == -1)		/* ~22-... */
-				start_src = port;
-			break;
-		case ',':
-		case 0:
-			if (start_src == -1)		/* ~80 */
-				start_src = end_src = port;
-			else if (end_src == -1)		/* ~22-25 */
-				end_src = port;
-			else
-				goto bad;
+		for (i = xrange.first; i <= xrange.last; i++) {
+			if (bitmap_isset(exclude, i))
+				goto overlap;
 
-			if (start_src > end_src)	/* ~80-22 */
-				goto bad;
-
-			for (i = start_src; i <= end_src; i++) {
-				if (bitmap_isset(exclude, i))
-					goto overlap;
-
-				bitmap_set(exclude, i);
-			}
-			start_src = end_src = -1;
-			break;
-		default:
-			goto bad;
+			bitmap_set(exclude, i);
 		}
-		p = sep + 1;
-	} while (*sep);
+	} while ((p = next_chunk(p, ',')));
 
 	if (exclude_only) {
 		for (i = 0; i < PORT_EPHEMERAL_MIN; i++) {
@@ -260,109 +284,47 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 	}
 
 	/* Now process base ranges, skipping exclusions */
-	start_src = end_src = start_dst = end_dst = -1;
 	p = spec;
 	do {
-		while (*p == '~') {
-			if (!(p = strchr(p, ',')))
-				break;
-			p++;
-		}
-		if (!p || !*p)
-			break;
+		struct port_range orig_range, mapped_range;
 
-		errno = 0;
-		port = strtoul(p, &sep, 10);
-		if (sep == p)
-			break;
+		if (*p == '~')
+			/* Exclude range, already parsed */
+			continue;
 
-		if (port >= NUM_PORTS || errno)
+		if (parse_port_range(p, &p, &orig_range))
 			goto bad;
 
-		/* -p 22
-		 *    ^ start_src	end_src == start_dst == end_dst == -1
-		 *
-		 * -p 22-25
-		 *    |  ^ end_src
-		 *     ` start_src	start_dst == end_dst == -1
-		 *
-		 * -p 80:8080
-		 *    |  ^ start_dst
-		 *     ` start_src	end_src == end_dst == -1
-		 *
-		 * -p 22-80:8022-8080
-		 *    |  |  |    ^ end_dst
-		 *    |  |   ` start_dst
-		 *    |   ` end_dst
-		 *     ` start_src
-		 */
-		switch (*sep) {
-		case '-':
-			if (start_src == -1) {		/* 22-... */
-				start_src = port;
-			} else {
-				if (!end_src)		/* 22:8022-8080 */
-					goto bad;
-				start_dst = port;	/* 22-80:8022-... */
-			}
-			break;
-		case ':':
-			if (start_src == -1)		/* 80:... */
-				start_src = end_src = port;
-			else if (end_src == -1)		/* 22-80:... */
-				end_src = port;
-			else				/* 22-80:8022:... */
+		if (*p == ':') { /* There's a range to map to as well */
+			if (parse_port_range(p + 1, &p, &mapped_range))
 				goto bad;
-			break;
-		case ',':
-		case 0:
-			if (start_src == -1)		/* 80 */
-				start_src = end_src = port;
-			else if (end_src == -1)		/* 22-25 */
-				end_src = port;
-			else if (start_dst == -1)	/* 80:8080 */
-				start_dst = end_dst = port;
-			else if (end_dst == -1)		/* 22-80:8022-8080 */
-				end_dst = port;
-			else
+			if ((mapped_range.last - mapped_range.first) !=
+			    (orig_range.last - orig_range.first))
 				goto bad;
-
-			if (start_src > end_src)	/* 80-22 */
-				goto bad;
-
-			if (start_dst > end_dst)	/* 22-80:8080:8022 */
-				goto bad;
-
-			if (end_dst != -1 &&
-			    end_dst - start_dst != end_src - start_src)
-				goto bad;		/* 22-81:8022:8080 */
-
-			for (i = start_src; i <= end_src; i++) {
-				if (bitmap_isset(fwd->map, i))
-					goto overlap;
-
-				if (bitmap_isset(exclude, i))
-					continue;
-
-				bitmap_set(fwd->map, i);
-
-				if (start_dst != -1) {
-					/* 80:8080 or 22-80:8080:8080 */
-					fwd->delta[i] = (in_port_t)(start_dst -
-								    start_src);
-				}
-
-				if (optname == 't')
-					tcp_sock_init(c, 0, af, addr, i);
-				else if (optname == 'u')
-					udp_sock_init(c, 0, af, addr, i);
-			}
-
-			start_src = end_src = start_dst = end_dst = -1;
-			break;
+		} else {
+			mapped_range = orig_range;
 		}
-		p = sep + 1;
-	} while (*sep);
+
+		if ((*p != '\0')  && (*p != ',')) /* Garbage after the ranges */
+			goto bad;
+
+		for (i = orig_range.first; i <= orig_range.last; i++) {
+			if (bitmap_isset(fwd->map, i))
+				goto overlap;
+
+			if (bitmap_isset(exclude, i))
+				continue;
+
+			bitmap_set(fwd->map, i);
+
+			fwd->delta[i] = mapped_range.first - orig_range.first;
+
+			if (optname == 't')
+				tcp_sock_init(c, 0, af, addr, i);
+			else if (optname == 'u')
+				udp_sock_init(c, 0, af, addr, i);
+		}
+	} while ((p = next_chunk(p, ',')));
 
 	return 0;
 bad:
