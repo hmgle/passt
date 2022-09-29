@@ -50,11 +50,18 @@ HEADERS = $(PASST_HEADERS) seccomp.h
 #	https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78993
 # from the pointer arithmetic used from the tcp_tap_handler() path to get the
 # remote connection address.
+#
+# TODO: With the same combination, in ndp(), gcc optimises away the store of
+# hop_limit in the IPv6 header (temporarily set to the protocol number for
+# convenience, to mimic the ICMPv6 checksum pseudo-header) before the call to
+# csum_unaligned(). Mark csum_unaligned() as "noipa" as a quick work-around,
+# while we figure out if a corresponding gcc issue has already been reported.
 ifeq (,$(filter-out 11 12, $(shell $(CC) -dumpversion)))
 ifneq (,$(filter -flto%,$(FLAGS) $(CFLAGS)))
 ifneq (,$(filter -O2,$(FLAGS) $(CFLAGS)))
 	FLAGS += -DTCP_HASH_NOINLINE
 	FLAGS += -DSIPHASH_20B_NOINLINE
+	FLAGS += -DCSUM_UNALIGNED_NO_IPA
 endif
 endif
 endif

@@ -97,6 +97,9 @@ uint16_t csum_fold(uint32_t sum)
  *
  * Return: 16-bit IPv4-style checksum
  */
+#if CSUM_UNALIGNED_NO_IPA
+__attribute__((__noipa__))	/* See comment in Makefile */
+#endif
 uint16_t csum_unaligned(const void *buf, size_t len, uint32_t init)
 {
 	return (uint16_t)~csum_fold(sum_16b(buf, len) + init);
