@@ -1043,25 +1043,23 @@ void conf(struct ctx *c, int argc, char **argv)
 	struct fqdn *dnss = c->dns_search;
 	uint32_t *dns4 = c->ip4.dns;
 	int name, ret, mask, b, i;
+	const char *optstring;
 	unsigned int ifi = 0;
 	char *runas = NULL;
 	uid_t uid;
 	gid_t gid;
 
-	if (c->mode == MODE_PASTA)
+	if (c->mode == MODE_PASTA) {
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
+		optstring = "dqfehI:p:P:m:a:n:M:g:i:D:S:46t:u:T:U:";
+	} else {
+		optstring = "dqfehs:p:P:m:a:n:M:g:i:D:S:46t:u:";
+	}
 
 	c->tcp.fwd_in.mode = c->tcp.fwd_out.mode = 0;
 	c->udp.fwd_in.f.mode = c->udp.fwd_out.f.mode = 0;
 
 	do {
-		const char *optstring;
-
-		if (c->mode == MODE_PASST)
-			optstring = "dqfehs:p:P:m:a:n:M:g:i:D:S:46t:u:";
-		else
-			optstring = "dqfehI:p:P:m:a:n:M:g:i:D:S:46t:u:T:U:";
-
 		name = getopt_long(argc, argv, optstring, options, NULL);
 
 		switch (name) {
@@ -1505,12 +1503,6 @@ void conf(struct ctx *c, int argc, char **argv)
 	optind = 1;
 	do {
 		struct port_fwd *fwd = NULL;
-		const char *optstring;
-
-		if (c->mode == MODE_PASST)
-			optstring = "dqfehs:p::P:m:a:n:M:g:i:D::S::46t:u:";
-		else
-			optstring = "dqfehI:p::P:m:a:n:M:g:i:D::S::46t:u:T:U:";
 
 		name = getopt_long(argc, argv, optstring, options, NULL);
 		switch (name) {
