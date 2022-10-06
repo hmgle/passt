@@ -220,6 +220,7 @@ int main(int argc, char **argv)
 
 	__openlog(log_name, 0, LOG_DAEMON);
 
+	/* Meaning we don't know yet: log everything. LOG_EMERG is unused */
 	__setlogmask(LOG_MASK(LOG_EMERG));
 
 	c.epollfd = epoll_create1(EPOLL_CLOEXEC);

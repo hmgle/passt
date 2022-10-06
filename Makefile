@@ -41,7 +41,7 @@ SRCS = $(PASST_SRCS) $(QRAP_SRCS)
 MANPAGES = passt.1 pasta.1 qrap.1
 
 PASST_HEADERS = arch.h arp.h checksum.h conf.h dhcp.h dhcpv6.h icmp.h \
-	isolation.h lineread.h ndp.h netlink.h packet.h passt.h pasta.h \
+	isolation.h lineread.h log.h ndp.h netlink.h packet.h passt.h pasta.h \
 	pcap.h port_fwd.h siphash.h tap.h tcp.h tcp_splice.h udp.h util.h
 HEADERS = $(PASST_HEADERS) seccomp.h
 
@@ -90,6 +90,11 @@ ifeq ($(shell :|$(CC) -fstack-protector-strong -S -xc - -o - >/dev/null 2>&1; ec
 	FLAGS += -fstack-protector-strong
 endif
 
+C := \#define _GNU_SOURCE\n\#include <fcntl.h>\nx = FALLOC_FL_COLLAPSE_RANGE;
+ifeq ($(shell printf "$(C)" | $(CC) -S -xc - -o - >/dev/null 2>&1; echo $$?),0)
+	EXTRA_SYSCALLS += fallocate
+endif
+
 prefix		?= /usr/local
 exec_prefix	?= $(prefix)
 bindir		?= $(exec_prefix)/bin
@@ -110,7 +115,7 @@ static: FLAGS += -static -DGLIBC_NO_STATIC_NSS
 static: clean all
 
 seccomp.h: seccomp.sh $(PASST_SRCS) $(PASST_HEADERS)
-	@ EXTRA_SYSCALLS=$(EXTRA_SYSCALLS) ./seccomp.sh $(PASST_SRCS) $(PASST_HEADERS)
+	@ EXTRA_SYSCALLS="$(EXTRA_SYSCALLS)" ./seccomp.sh $(PASST_SRCS) $(PASST_HEADERS)
 
 passt: $(PASST_SRCS) $(HEADERS)
 	$(CC) $(FLAGS) $(CFLAGS) $(PASST_SRCS) -o passt $(LDFLAGS)
@@ -128,9 +133,9 @@ pasta.avx2 pasta.1 pasta: pasta%: passt%
 qrap: $(QRAP_SRCS) passt.h
 	$(CC) $(FLAGS) $(CFLAGS) $(QRAP_SRCS) -o qrap $(LDFLAGS)
 
-valgrind: EXTRA_SYSCALLS="rt_sigprocmask rt_sigtimedwait rt_sigaction \
-			  getpid gettid kill clock_gettime mmap munmap open \
-			  unlink gettimeofday futex"
+valgrind: EXTRA_SYSCALLS += rt_sigprocmask rt_sigtimedwait rt_sigaction	\
+			    getpid gettid kill clock_gettime mmap	\
+			    munmap open unlink gettimeofday futex
 valgrind: FLAGS:=-g -O0 $(filter-out -O%,$(FLAGS))
 valgrind: all
 

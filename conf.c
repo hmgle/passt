@@ -633,6 +633,9 @@ static void usage(const char *name)
 	info(   "    default: run in background if started from a TTY");
 	info(   "  -e, --stderr		Log to stderr too");
 	info(   "    default: log to system logger only if started from a TTY");
+	info(   "  -l, --log-file PATH	Log (only) to given file");
+	info(   "  --log-size BYTES	Maximum size of log file");
+	info(   "    default: 1 MiB");
 	info(   "  --runas UID|UID:GID 	Run as given UID, GID, which can be");
 	info(   "    numeric, or login and group names");
 	info(   "    default: drop to user \"nobody\"");
@@ -994,6 +997,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"quiet",	no_argument,		NULL,		'q' },
 		{"foreground",	no_argument,		NULL,		'f' },
 		{"stderr",	no_argument,		NULL,		'e' },
+		{"log-file",	required_argument,	NULL,		'l' },
 		{"help",	no_argument,		NULL,		'h' },
 		{"socket",	required_argument,	NULL,		's' },
 		{"ns-ifname",	required_argument,	NULL,		'I' },
@@ -1034,26 +1038,28 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"no-netns-quit", no_argument,		NULL,		10 },
 		{"trace",	no_argument,		NULL,		11 },
 		{"runas",	required_argument,	NULL,		12 },
+		{"log-size",	required_argument,	NULL,		13 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
 	char userns[PATH_MAX] = { 0 }, netns[PATH_MAX] = { 0 };
 	bool v4_only = false, v6_only = false;
+	char *runas = NULL, *logfile = NULL;
 	struct in6_addr *dns6 = c->ip6.dns;
 	struct fqdn *dnss = c->dns_search;
 	uint32_t *dns4 = c->ip4.dns;
 	int name, ret, mask, b, i;
 	const char *optstring;
 	unsigned int ifi = 0;
-	char *runas = NULL;
+	size_t logsize = 0;
 	uid_t uid;
 	gid_t gid;
 
 	if (c->mode == MODE_PASTA) {
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
-		optstring = "dqfehI:p:P:m:a:n:M:g:i:D:S:46t:u:T:U:";
+		optstring = "dqfel:hI:p:P:m:a:n:M:g:i:D:S:46t:u:T:U:";
 	} else {
-		optstring = "dqfehs:p:P:m:a:n:M:g:i:D:S:46t:u:";
+		optstring = "dqfel:hs:p:P:m:a:n:M:g:i:D:S:46t:u:";
 	}
 
 	c->tcp.fwd_in.mode = c->tcp.fwd_out.mode = 0;
@@ -1177,6 +1183,20 @@ void conf(struct ctx *c, int argc, char **argv)
 
 			runas = optarg;
 			break;
+		case 13:
+			if (logsize) {
+				err("Multiple --log-size options given");
+				usage(argv[0]);
+			}
+
+			errno = 0;
+			logsize = strtol(optarg, NULL, 0);
+
+			if (logsize < LOGFILE_SIZE_MIN || errno) {
+				err("Invalid --log-size: %s", optarg);
+				usage(argv[0]);
+			}
+			break;
 		case 'd':
 			if (c->debug) {
 				err("Multiple --debug options given");
@@ -1192,12 +1212,30 @@ void conf(struct ctx *c, int argc, char **argv)
 			c->foreground = 1;
 			break;
 		case 'e':
+			if (logfile) {
+				err("Can't log to both file and stderr");
+				usage(argv[0]);
+			}
+
 			if (c->stderr) {
 				err("Multiple --stderr options given");
 				usage(argv[0]);
 			}
 
 			c->stderr = 1;
+			break;
+		case 'l':
+			if (c->stderr) {
+				err("Can't log to both stderr and file");
+				usage(argv[0]);
+			}
+
+			if (logfile) {
+				err("Multiple --log-file options given");
+				usage(argv[0]);
+			}
+
+			logfile = optarg;
 			break;
 		case 'q':
 			if (c->quiet) {
@@ -1459,6 +1497,11 @@ void conf(struct ctx *c, int argc, char **argv)
 	ret = conf_ugid(runas, &uid, &gid);
 	if (ret)
 		usage(argv[0]);
+
+	if (logfile) {
+		logfile_init(c->mode == MODE_PASST ? "passt" : "pasta",
+			     logfile, logsize);
+	}
 
 	if (c->mode == MODE_PASTA) {
 		if (conf_pasta_ns(&netns_only, userns, netns,

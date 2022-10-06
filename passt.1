@@ -79,7 +79,7 @@ for performance reasons.
 
 .TP
 .BR \-d ", " \-\-debug
-Be verbose, don't run in background.
+Be verbose, don't run in background, don't log to the system logger.
 
 .TP
 .BR \-\-trace
@@ -99,8 +99,18 @@ Default is to fork into background.
 .TP
 .BR \-e ", " \-\-stderr
 Log to standard error too.
-Default is to log to system logger only, if started from an interactive
+Default is to log to the system logger only, if started from an interactive
 terminal, and to both system logger and standard error otherwise.
+
+.TP
+.BR \-l ", " \-\-log-file " " \fIPATH\fR
+Log to file \fIPATH\fR, not to standard error, and not to the system logger.
+
+.TP
+.BR \-\-log-size " " \fISIZE\fR
+Limit log file size to \fISIZE\fR bytes. When the log file is full, make room
+for new entries by removing old ones at the beginning. This limit is mandatory.
+Default is 1048576 (1 MiB).
 
 .TP
 .BR \-\-runas " " \fIUID\fR|\fIUID:GID\fR|\fILOGIN\fR|\fILOGIN:GROUP\fR

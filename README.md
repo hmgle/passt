@@ -289,7 +289,7 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ✅ all capabilities dropped, other than `CAP_NET_BIND_SERVICE` (if granted)
 * ✅ with default options, user, mount, IPC, UTS, PID namespaces are detached
 * ✅ no external dependencies (other than a standard C library)
-* ✅ restrictive seccomp profiles (26 syscalls allowed for _passt_, 40 for
+* ✅ restrictive seccomp profiles (30 syscalls allowed for _passt_, 41 for
   _pasta_ on x86_64)
 * ✅ examples of [AppArmor](/passt/tree/contrib/apparmor) and
   [SELinux](/passt/tree/contrib/selinux) profiles available
