@@ -127,6 +127,37 @@ run() {
 	return 0
 }
 
+# run_selected() - Run list of tests, with setup/teardown based on test path
+# $@:	List of tests
+run_selected() {
+	mkfifo $STATEBASE/log_pipe
+
+	term
+	VALGRIND=1
+
+	__setup=
+	for __test; do
+		if [ "${__test%%/*}" != "${__setup}" ]; then
+			[ -n "${__setup}" ] && teardown "${__setup}"
+			__setup="${__test%%/*}"
+			setup "${__setup}"
+		fi
+
+		test "${__test}"
+	done
+	teardown "${__setup}"
+
+	log "PASS: ${STATUS_PASS}, FAIL: ${STATUS_FAIL}"
+
+	pause_continue \
+		"Press any key to keep test session open"	\
+		"Closing in "					\
+		"Interrupted, press any key to quit"		\
+		9
+
+	return 0
+}
+
 # demo() - Simpler path for demo purposes
 demo() {
 	mkfifo $STATEBASE/log_pipe
@@ -160,11 +191,15 @@ demo() {
 [ "$(basename "${0}")" = "run_demo" ] && DEMO=1
 
 if [ "${1}" = "from_term" ]; then
+	shift
+
 	exec > ${LOGDIR}/script.log 2>&1
 	[ ${DEBUG} -eq 1 ] && set -x
 	cd ..
 	if [ ${DEMO} -eq 1 ]; then
 		demo
+	elif [ -n "${1}" ]; then
+		run_selected ${*}
 	else
 		run
 	fi
@@ -176,7 +211,7 @@ else
 	:> "${LOGFILE}"
 	STATEBASE="$(mktemp -d --tmpdir passt-tests-XXXXXX)"
 	trap "cleanup" EXIT
-	run_term
+	run_term ${*}
 fi
 
 [ ${DEMO} -eq 1 ] && exit 0

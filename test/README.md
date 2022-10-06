@@ -85,6 +85,22 @@ variable settings: DEBUG=1 enables debugging messages, TRACE=1 enables tracing
 
     PCAP=1 TRACE=1 ./run
 
+## Running selected tests
+
+Rudimentary support to run a list of selected tests, without support for
+dependencies, is available. Tests need to have a setup function corresponding to
+their path. For example:
+
+    ./run passt/ndp passt/dhcp pasta/ndp
+
+will call the 'passt' setup function (from lib/setup), run the two corresponding
+tests, call the 'passt' teardown function, the 'pasta' setup, run the pasta/ndp
+test, and finally tear down the 'pasta' setup.
+
+Note that requirements on steps implemented by related tests are not handled.
+For example, if the 'passt/tcp' needs guest connectivity set up by the
+'passt/ndp' and 'passt/dhcp' tests, those need to be listed explicitly.
+
 ## Continuous integration
 
 Issuing:

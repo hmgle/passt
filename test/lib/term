@@ -650,7 +650,7 @@ run_term() {
 		asciinema rec --overwrite "${STATEBASE}/demo.uncut" -c "$TMUX /bin/sh -c './run_demo from_term'"
 		video_postprocess "${STATEBASE}/demo.uncut"
 	else
-		$TMUX /bin/sh -c './run from_term'
+		$TMUX /bin/sh -c "./run from_term ${*}"
 	fi
 }
 
