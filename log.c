@@ -91,6 +91,10 @@ logfn(warn,  LOG_WARNING)
 logfn(info,  LOG_INFO)
 logfn(debug, LOG_DEBUG)
 
+/**
+ * trace_init() - Set log_trace depending on trace (debug) mode
+ * @enable:	Tracing debug mode enabled if non-zero
+ */
 void trace_init(int enable)
 {
 	log_trace = enable;
