@@ -133,6 +133,8 @@ struct ip6_ctx {
 	struct in6_addr dns_fwd;
 };
 
+#include <netinet/if_ether.h>
+
 /**
  * struct ctx - Execution context
  * @mode:		Operation mode, qemu/UNIX domain socket or namespace/tap
