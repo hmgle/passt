@@ -3078,10 +3078,11 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  * @ns:		In pasta mode, if set, bind with loopback address in namespace
  * @af:		Address family to select a specific IP version, or AF_UNSPEC
  * @addr:	Pointer to address for binding, NULL if not configured
+ * @ifname:	Name of interface to bind to, NULL if not configured
  * @port:	Port, host order
  */
 void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
-		   const void *addr, in_port_t port)
+		   const void *addr, const char *ifname, in_port_t port)
 {
 	union tcp_epoll_ref tref = { .tcp.listen = 1 };
 	const void *bind_addr;
@@ -3103,8 +3104,8 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		tref.tcp.splice = 0;
 
 		if (!ns) {
-			s = sock_l4(c, AF_INET, IPPROTO_TCP, bind_addr, port,
-				    tref.u32);
+			s = sock_l4(c, AF_INET, IPPROTO_TCP, bind_addr, ifname,
+				    port, tref.u32);
 			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
 			else
@@ -3118,8 +3119,8 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
 
 			tref.tcp.splice = 1;
-			s = sock_l4(c, AF_INET, IPPROTO_TCP, bind_addr, port,
-				    tref.u32);
+			s = sock_l4(c, AF_INET, IPPROTO_TCP, bind_addr, ifname,
+				    port, tref.u32);
 			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
 			else
@@ -3144,8 +3145,8 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 
 		tref.tcp.splice = 0;
 		if (!ns) {
-			s = sock_l4(c, AF_INET6, IPPROTO_TCP, bind_addr, port,
-				    tref.u32);
+			s = sock_l4(c, AF_INET6, IPPROTO_TCP, bind_addr, ifname,
+				    port, tref.u32);
 			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
 			else
@@ -3159,8 +3160,8 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			bind_addr = &in6addr_loopback;
 
 			tref.tcp.splice = 1;
-			s = sock_l4(c, AF_INET6, IPPROTO_TCP, bind_addr, port,
-				    tref.u32);
+			s = sock_l4(c, AF_INET6, IPPROTO_TCP, bind_addr, ifname,
+				    port, tref.u32);
 			if (s >= 0)
 				tcp_sock_set_bufsize(c, s);
 			else
@@ -3193,7 +3194,7 @@ static int tcp_sock_init_ns(void *arg)
 		if (!bitmap_isset(c->tcp.fwd_out.map, port))
 			continue;
 
-		tcp_sock_init(c, 1, AF_UNSPEC, NULL, port);
+		tcp_sock_init(c, 1, AF_UNSPEC, NULL, NULL, port);
 	}
 
 	return 0;
@@ -3410,7 +3411,8 @@ static int tcp_port_rebind(void *arg)
 
 			if ((a->c->ifi4 && tcp_sock_ns[port][V4] == -1) ||
 			    (a->c->ifi6 && tcp_sock_ns[port][V6] == -1))
-				tcp_sock_init(a->c, 1, AF_UNSPEC, NULL, port);
+				tcp_sock_init(a->c, 1, AF_UNSPEC, NULL, NULL,
+					      port);
 		}
 	} else {
 		for (port = 0; port < NUM_PORTS; port++) {
@@ -3443,7 +3445,8 @@ static int tcp_port_rebind(void *arg)
 
 			if ((a->c->ifi4 && tcp_sock_init_ext[port][V4] == -1) ||
 			    (a->c->ifi6 && tcp_sock_init_ext[port][V6] == -1))
-				tcp_sock_init(a->c, 0, AF_UNSPEC, NULL, port);
+				tcp_sock_init(a->c, 0, AF_UNSPEC, NULL, NULL,
+					      port);
 		}
 	}
 

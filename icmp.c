@@ -169,7 +169,7 @@ int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 		iref.icmp.id = id = ntohs(ih->un.echo.id);
 
 		if ((s = icmp_id_map[V4][id].sock) <= 0) {
-			s = sock_l4(c, AF_INET, IPPROTO_ICMP, NULL, id,
+			s = sock_l4(c, AF_INET, IPPROTO_ICMP, NULL, NULL, id,
 				    iref.u32);
 			if (s < 0)
 				goto fail_sock;
@@ -207,7 +207,7 @@ int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 
 		iref.icmp.id = id = ntohs(ih->icmp6_identifier);
 		if ((s = icmp_id_map[V6][id].sock) <= 0) {
-			s = sock_l4(c, AF_INET6, IPPROTO_ICMPV6, NULL, id,
+			s = sock_l4(c, AF_INET6, IPPROTO_ICMPV6, NULL, NULL, id,
 				    iref.u32);
 			if (s < 0)
 				goto fail_sock;

@@ -1005,7 +1005,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 			union udp_epoll_ref uref = { .udp.bound = 1,
 						     .udp.port = src };
 
-			s = sock_l4(c, AF_INET, IPPROTO_UDP, NULL, src,
+			s = sock_l4(c, AF_INET, IPPROTO_UDP, NULL, NULL, src,
 				    uref.u32);
 			if (s < 0)
 				return p->count;
@@ -1057,8 +1057,8 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 						     .udp.v6 = 1,
 						     .udp.port = src };
 
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, src,
-				    uref.u32);
+			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, NULL,
+				    src, uref.u32);
 			if (s < 0)
 				return p->count;
 
@@ -1111,10 +1111,11 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
  * @ns:		In pasta mode, if set, bind with loopback address in namespace
  * @af:		Address family to select a specific IP version, or AF_UNSPEC
  * @addr:	Pointer to address for binding, NULL if not configured
+ * @ifname:	Name of interface to bind to, NULL if not configured
  * @port:	Port, host order
  */
 void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
-		   const void *addr, in_port_t port)
+		   const void *addr, const char *ifname, in_port_t port)
 {
 	union udp_epoll_ref uref = { .udp.bound = 1 };
 	const void *bind_addr;
@@ -1138,8 +1139,8 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 
 		if (!ns) {
 			uref.udp.splice = 0;
-			s = sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, port,
-				    uref.u32);
+			s = sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, ifname,
+				    port, uref.u32);
 
 			udp_tap_map[V4][uref.udp.port].sock = s;
 		}
@@ -1148,16 +1149,16 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
 			uref.udp.splice = UDP_TO_NS;
 
-			sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, port,
-				uref.u32);
+			sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, ifname,
+				port, uref.u32);
 		}
 
 		if (ns) {
 			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
 			uref.udp.splice = UDP_TO_INIT;
 
-			sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, port,
-				uref.u32);
+			sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, ifname,
+				port, uref.u32);
 		}
 	}
 
@@ -1171,8 +1172,8 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 
 		if (!ns) {
 			uref.udp.splice = 0;
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, port,
-				    uref.u32);
+			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, ifname,
+				    port, uref.u32);
 
 			udp_tap_map[V6][uref.udp.port].sock = s;
 		}
@@ -1181,16 +1182,16 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			bind_addr = &in6addr_loopback;
 			uref.udp.splice = UDP_TO_NS;
 
-			sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, port,
-				uref.u32);
+			sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, ifname,
+				port, uref.u32);
 		}
 
 		if (ns) {
 			bind_addr = &in6addr_loopback;
 			uref.udp.splice = UDP_TO_INIT;
 
-			sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, port,
-				uref.u32);
+			sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, ifname,
+				port, uref.u32);
 		}
 	}
 }
@@ -1213,7 +1214,7 @@ int udp_sock_init_ns(void *arg)
 		if (!bitmap_isset(c->udp.fwd_out.f.map, dst))
 			continue;
 
-		udp_sock_init(c, 1, AF_UNSPEC, NULL, dst);
+		udp_sock_init(c, 1, AF_UNSPEC, NULL, NULL, dst);
 	}
 
 	return 0;

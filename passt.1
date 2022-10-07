@@ -325,7 +325,8 @@ For low (< 1024) ports, see \fBNOTES\fR.
 .BR ports
 A comma-separated list of ports, optionally ranged with \fI-\fR, and,
 optionally, with target ports after \fI:\fR, if they differ. Specific addresses
-can be bound as well, separated by \fI/\fR. Within given ranges, selected ports
+can be bound as well, separated by \fI/\fR, and also, since Linux 5.7, limited
+to specific interfaces, prefixed by \fI%\fR. Within given ranges, selected ports
 and ranges can be excluded by an additional specification prefixed by \fI~\fR.
 Specifying excluded ranges only implies that all other ports are forwarded.
 Examples:
@@ -348,6 +349,9 @@ Forward local ports 22 to 80 to corresponding ports on the guest plus 10
 .TP
 -t 192.0.2.1/22
 Forward local port 22, bound to 192.0.2.1, to port 22 on the guest
+.TP
+-t 192.0.2.1%eth0/22
+Forward local port 22, bound to 192.0.2.1 and interface eth0, to port 22
 .TP
 -t 2000-5000,~3000-3010
 Forward local ports 2000 to 5000, but not 3000 to 3010
@@ -399,7 +403,8 @@ periodically derived (every second) from listening sockets reported by
 .BR ports
 A comma-separated list of ports, optionally ranged with \fI-\fR, and,
 optionally, with target ports after \fI:\fR, if they differ. Specific addresses
-can be bound as well, separated by \fI/\fR. Within given ranges, selected ports
+can be bound as well, separated by \fI/\fR, and also, since Linux 5.7, limited
+to specific interfaces, prefixed by \fI%\fR. Within given ranges, selected ports
 and ranges can be excluded by an additional specification prefixed by \fI~\fR.
 Specifying excluded ranges only implies that all other ports are forwarded.
 Examples:
@@ -423,6 +428,9 @@ namespace
 .TP
 -t 192.0.2.1/22
 Forward local port 22, bound to 192.0.2.1, to port 22 in the target namespace
+.TP
+-t 192.0.2.1%eth0/22
+Forward local port 22, bound to 192.0.2.1 and interface eth0, to port 22
 .TP
 -t 2000-5000,~3000-3010
 Forward local ports 2000 to 5000, but not 3000 to 3010

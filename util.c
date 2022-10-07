@@ -90,13 +90,15 @@ found:
  * @af:		Address family, AF_INET or AF_INET6
  * @proto:	Protocol number
  * @bind_addr:	Address for binding, NULL for any
+ * @ifname:	Interface for binding, NULL for any
  * @port:	Port, host order
  * @data:	epoll reference portion for protocol handlers
  *
  * Return: newly created socket, -1 on error
  */
 int sock_l4(const struct ctx *c, int af, uint8_t proto,
-	    const void *bind_addr, uint16_t port, uint32_t data)
+	    const void *bind_addr, const char *ifname, uint16_t port,
+	    uint32_t data)
 {
 	union epoll_ref ref = { .r.proto = proto, .r.p.data = data };
 	struct sockaddr_in addr4 = {
@@ -162,6 +164,21 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(y)))
 		debug("Failed to set SO_REUSEADDR on socket %i", fd);
+
+	if (ifname) {
+		/* Supported since kernel version 5.7, commit c427bfec18f2
+		 * ("net: core: enable SO_BINDTODEVICE for non-root users"). If
+		 * it's unsupported, don't bind the socket at all, because the
+		 * user might rely on this to filter incoming connections.
+		 */
+		if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE,
+			       ifname, strlen(ifname))) {
+			warn("Can't bind socket for %s port %u to %s, closing",
+			     ip_proto_str[proto], port, ifname);
+			close(fd);
+			return -1;
+		}
+	}
 
 	if (bind(fd, sa, sl) < 0) {
 		/* We'll fail to bind to low ports if we don't have enough

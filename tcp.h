@@ -21,7 +21,7 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 int tcp_tap_handler(struct ctx *c, int af, const void *addr,
 		    const struct pool *p, const struct timespec *now);
 void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
-		   const void *addr, in_port_t port);
+		   const void *addr, const char *ifname, in_port_t port);
 int tcp_init(struct ctx *c);
 void tcp_timer(struct ctx *c, const struct timespec *ts);
 void tcp_defer_handler(struct ctx *c);

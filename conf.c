@@ -180,8 +180,8 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 		      struct port_fwd *fwd)
 {
 	char addr_buf[sizeof(struct in6_addr)] = { 0 }, *addr = addr_buf;
+	char buf[BUFSIZ], *spec, *ifname = NULL, *p;
 	uint8_t exclude[PORT_BITMAP_SIZE] = { 0 };
-	char buf[BUFSIZ], *spec, *p;
 	sa_family_t af = AF_UNSPEC;
 	bool exclude_only = true;
 
@@ -209,9 +209,9 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 
 		for (i = 0; i < PORT_EPHEMERAL_MIN; i++) {
 			if (optname == 't')
-				tcp_sock_init(c, 0, AF_UNSPEC, NULL, i);
+				tcp_sock_init(c, 0, AF_UNSPEC, NULL, NULL, i);
 			else if (optname == 'u')
-				udp_sock_init(c, 0, AF_UNSPEC, NULL, i);
+				udp_sock_init(c, 0, AF_UNSPEC, NULL, NULL, i);
 		}
 
 		return 0;
@@ -230,6 +230,14 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 
 		if (optname != 't' && optname != 'u')
 			goto bad;
+
+		if ((ifname = strchr(buf, '%'))) {
+			if (spec - ifname >= IFNAMSIZ - 1)
+				goto bad;
+
+			*ifname = 0;
+			ifname++;
+		}
 
 		if (inet_pton(AF_INET, buf, addr))
 			af = AF_INET;
@@ -278,9 +286,9 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 			bitmap_set(fwd->map, i);
 
 			if (optname == 't')
-				tcp_sock_init(c, 0, af, addr, i);
+				tcp_sock_init(c, 0, af, addr, ifname, i);
 			else if (optname == 'u')
-				udp_sock_init(c, 0, af, addr, i);
+				udp_sock_init(c, 0, af, addr, ifname, i);
 		}
 
 		return 0;
@@ -324,9 +332,9 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 			fwd->delta[i] = mapped_range.first - orig_range.first;
 
 			if (optname == 't')
-				tcp_sock_init(c, 0, af, addr, i);
+				tcp_sock_init(c, 0, af, addr, ifname, i);
 			else if (optname == 'u')
-				udp_sock_init(c, 0, af, addr, i);
+				udp_sock_init(c, 0, af, addr, ifname, i);
 		}
 	} while ((p = next_chunk(p, ',')));
 
@@ -720,8 +728,9 @@ static void usage(const char *name)
 	info(   "      'all': forward all unbound, non-ephemeral ports");
 	info(   "      a comma-separated list, optionally ranged with '-'");
 	info(   "        and optional target ports after ':', with optional");
-	info(   "        address specification suffixed by '/'. Ranges can be");
-	info(   "        reduced by excluding ports or ranges prefixed by '~'");
+	info(   "        address specification suffixed by '/' and optional");
+	info(   "        interface prefixed by '%%'. Ranges can be reduced by");
+	info(   "        excluding ports or ranges prefixed by '~'");
 	info(   "        Examples:");
 	info(   "        -t 22		Forward local port 22 to 22 on guest");
 	info(   "        -t 22:23	Forward local port 22 to 23 on guest");
@@ -740,6 +749,7 @@ static void usage(const char *name)
 	exit(EXIT_FAILURE);
 
 pasta_opts:
+
 	info(   "  -t, --tcp-ports SPEC	TCP port forwarding to namespace");
 	info(   "    can be specified multiple times"); 
 	info(   "    SPEC can be:");
@@ -747,7 +757,8 @@ pasta_opts:
 	info(   "      'auto': forward all ports currently bound in namespace");
 	info(   "      a comma-separated list, optionally ranged with '-'");
 	info(   "        and optional target ports after ':', with optional");
-	info(   "        address specification suffixed by '/'. Examples:");
+	info(   "        address specification suffixed by '/' and optional");
+	info(   "        interface prefixed by '%%'. Examples:");
 	info(   "        -t 22	Forward local port 22 to port 22 in netns");
 	info(   "        -t 22:23	Forward local port 22 to port 23");
 	info(   "        -t 22,25	Forward ports 22, 25 to ports 22, 25");
