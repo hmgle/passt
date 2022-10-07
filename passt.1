@@ -303,6 +303,11 @@ Default is to probe a free socket, not accepting connections, starting from
 \fI/tmp/passt_1.socket\fR to \fI/tmp/passt_64.socket\fR.
 
 .TP
+.BR \-1 ", " \-\-one-off
+Quit after handling a single client connection, that is, once the client closes
+the socket, or once we get a socket error.
+
+.TP
 .BR \-t ", " \-\-tcp-ports " " \fIspec
 Configure TCP port forwarding to guest. \fIspec\fR can be one of:
 .RS

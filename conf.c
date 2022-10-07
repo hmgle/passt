@@ -712,6 +712,7 @@ static void usage(const char *name)
 	if (strstr(name, "pasta"))
 		goto pasta_opts;
 
+	info(   "  -1, --one-off	Quit after handling one single client");
 	info(   "  -t, --tcp-ports SPEC	TCP port forwarding to guest");
 	info(   "    can be specified multiple times");
 	info(   "    SPEC can be:");
@@ -1023,6 +1024,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"no-map-gw",	no_argument,		&c->no_map_gw,	1 },
 		{"ipv4-only",	no_argument,		NULL,		'4' },
 		{"ipv6-only",	no_argument,		NULL,		'6' },
+		{"one-off",	no_argument,		NULL,		'1' },
 		{"tcp-ports",	required_argument,	NULL,		't' },
 		{"udp-ports",	required_argument,	NULL,		'u' },
 		{"tcp-ns",	required_argument,	NULL,		'T' },
@@ -1062,7 +1064,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
 		optstring = "dqfel:hI:p:P:m:a:n:M:g:i:D:S:46t:u:T:U:";
 	} else {
-		optstring = "dqfel:hs:p:P:m:a:n:M:g:i:D:S:46t:u:";
+		optstring = "dqfel:hs:p:P:m:a:n:M:g:i:D:S:461t:u:";
 	}
 
 	c->tcp.fwd_in.mode = c->tcp.fwd_out.mode = 0;
@@ -1487,6 +1489,19 @@ void conf(struct ctx *c, int argc, char **argv)
 			break;
 		case '6':
 			v6_only = true;
+			break;
+		case '1':
+			if (c->mode != MODE_PASST) {
+				err("--one-off is for passt mode only");
+				usage(argv[0]);
+			}
+
+			if (c->one_off) {
+				err("Redundant --one-off option");
+				usage(argv[0]);
+			}
+
+			c->one_off = true;
 			break;
 		case 't':
 		case 'u':

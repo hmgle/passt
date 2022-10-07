@@ -1011,5 +1011,10 @@ void tap_handler(struct ctx *c, int fd, uint32_t events,
 
 	return;
 reinit:
+	if (c->one_off) {
+		info("Client closed connection, exiting");
+		exit(EXIT_SUCCESS);
+	}
+
 	tap_sock_init(c);
 }

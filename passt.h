@@ -196,6 +196,7 @@ struct ctx {
 	char sock_path[UNIX_PATH_MAX];
 	char pcap[PATH_MAX];
 	char pid_file[PATH_MAX];
+	int one_off;
 
 	int pasta_netns_fd;
 
