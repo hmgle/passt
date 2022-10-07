@@ -311,10 +311,14 @@ void procfs_scan_listen(struct ctx *c, uint8_t proto, int ip_version, int ns,
 			path = "/proc/net/udp6";
 	}
 
-	if (*fd != -1)
-		lseek(*fd, 0, SEEK_SET);
-	else if ((*fd = open(path, O_RDONLY | O_CLOEXEC)) < 0)
+	if (*fd != -1) {
+		if (lseek(*fd, 0, SEEK_SET)) {
+			warn("lseek() failed on %s: %s", path, strerror(errno));
+			return;
+		}
+	} else if ((*fd = open(path, O_RDONLY | O_CLOEXEC)) < 0) {
 		return;
+	}
 
 	lineread_init(&lr, *fd);
 	lineread_get(&lr, &line); /* throw away header */
