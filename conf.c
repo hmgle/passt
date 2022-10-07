@@ -787,6 +787,8 @@ pasta_opts:
 	info(   "  --netns PATH|NAME	Target network namespace to join");
 	info(   "  --netns-only		Don't join existing user namespace");
 	info(   "    implied if PATH or NAME are given without --userns");
+	info(   "  --no-netns-quit	Don't quit if filesystem-bound target");
+	info(   "  			network namespace is deleted");
 	info(   "  --config-net		Configure tap interface in namespace");
 	info(   "  --ns-mac-addr ADDR	Set MAC address on tap interface");
 
