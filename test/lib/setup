@@ -106,6 +106,13 @@ setup_pasta() {
 	wait_for [ -f "${STATESETUP}/passt.pid" ]
 }
 
+# setup_pasta_options() - Set up layout and host context without starting pasta
+setup_pasta_options() {
+	context_setup_host host
+
+	layout_pasta_simple
+}
+
 # setup_passt_in_ns() - Set up namespace (with pasta), run qemu and passt into it
 setup_passt_in_ns() {
 	context_setup_host host
@@ -294,7 +301,7 @@ teardown_passt() {
 	teardown_context_watch ${PANE_GUEST} qemu guest
 }
 
-# teardown_passt() - Exit namespace, kill pasta process
+# teardown_pasta() - Exit namespace, kill pasta process
 teardown_pasta() {
 	${NSHOLDER} "${STATESETUP}/ns.hold" stop
 	context_wait unshare
@@ -302,6 +309,12 @@ teardown_pasta() {
 	teardown_context_watch ${PANE_HOST} host
 	teardown_context_watch ${PANE_PASST} passt
 	teardown_context_watch ${PANE_NS} unshare ns
+}
+
+# teardown_pasta_options() - Tear down pasta and host context, no namespace
+teardown_pasta_options() {
+	teardown_context_watch ${PANE_HOST} host
+	teardown_context_watch ${PANE_PASST} passt
 }
 
 # teardown_passt_in_ns() - Exit namespace, kill qemu and pasta, remove pid file

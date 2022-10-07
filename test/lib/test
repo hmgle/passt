@@ -137,6 +137,9 @@ test_one_line() {
 	"passtw")
 		pane_or_context_wait passt || TEST_ONE_nok=1
 		;;
+	"pint")
+		tmux send-keys -t ${PANE_PASST} "C-c"
+		;;
 	"pout")
 		__varname="${__arg%% *}"
 		__output="$(pane_or_context_output passt "${__arg#* }")"

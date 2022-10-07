@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/pasta_options/log_to_file - Check log creation, rotations and consistency
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+htools	wc tcp_rr tail cut tr sort
+
+def	flood_log_server
+passtb	tcp_crr --nolog -P 10001 -C 10002 -6
+sleep	1
+endef
+
+def	flood_log_client
+host	tcp_crr --nolog -P 10001 -C 10002 -6 -c -H ::1
+endef
+
+def	check_log_size_mountns
+pout	SIZE cat __LOG_FILE__ | wc -c
+check	[ __SIZE__ -gt $((50 * 1024)) ]
+check	[ __SIZE__ -lt $((100 * 1024)) ]
+endef
+
+test	Log creation
+
+set	PORTS -t 10001,10002 -u 10001,10002
+set	LOG_FILE __STATEDIR__/pasta.log
+
+passt	./pasta -l __LOG_FILE__
+passt	exit
+check	[ -s __LOG_FILE__ ]
+
+test	Log truncated on creation
+passt	./pasta -l __LOG_FILE__
+passt	exit
+check	[ $(cat __LOG_FILE__ | wc -l) -eq 1 ]
+
+test	Maximum log size
+passtb	./pasta --config-net -d -f -l __LOG_FILE__ --log-size $((100 * 1024)) -- sh -c 'while true; do tcp_crr --nolog -P 10001 -C 10002 -6; done'
+sleep	1
+
+flood_log_client
+check	[ $(cat __LOG_FILE__ | wc -c) -gt $((50 * 1024)) ]
+check	[ $(cat __LOG_FILE__ | wc -c) -lt $((100 * 1024)) ]
+
+flood_log_client
+check	[ $(cat __LOG_FILE__ | wc -c) -gt $((50 * 1024)) ]
+check	[ $(cat __LOG_FILE__ | wc -c) -lt $((100 * 1024)) ]
+
+flood_log_client
+check	[ $(cat __LOG_FILE__ | wc -c) -gt $((50 * 1024)) ]
+check	[ $(cat __LOG_FILE__ | wc -c) -lt $((100 * 1024)) ]
+
+pint
+
+test	Timestamp consistency after rotations
+check	tail -n +2 __LOG_FILE__ | cut -f1 -d' ' | tr -d [.:] | sort -c
+
+test	Maximum log size on tmpfs (no FALLOC_FL_COLLAPSE_RANGE)
+passt	unshare -rUm
+passt	mkdir __STATEDIR__/t
+passt	mount -t tmpfs none __STATEDIR__/t
+set	LOG_FILE __STATEDIR__/t/log
+passt	./pasta --config-net -d -l __LOG_FILE__ --log-size $((100 * 1024))
+
+flood_log_server
+flood_log_client
+check_log_size_mountns
+
+flood_log_server
+flood_log_client
+check_log_size_mountns
+
+flood_log_server
+flood_log_client
+check_log_size_mountns
+
+test	Timestamp consistency after rotations (no FALLOC_FL_COLLAPSE_RANGE)
+check	tail -n +2 __LOG_FILE__ | cut -f1 -d' ' | tr -d [.:] | sort -c
+
+passt	exit
+passt	umount __STATEDIR__/t
+passt	exit

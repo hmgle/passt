@@ -73,6 +73,10 @@ run() {
 	test passt/shutdown
 	teardown pasta
 
+	setup pasta_options
+	test pasta_options/log_to_file
+	teardown pasta_options
+
 	setup passt
 	test passt/ndp
 	test passt/dhcp
