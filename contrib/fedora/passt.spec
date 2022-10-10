@@ -49,7 +49,7 @@ This package adds SELinux enforcement to passt(1) and pasta(1).
 
 %build
 %set_build_flags
-%make_build
+%make_build VERSION="%{version}-%{release}.%{_arch}"
 
 %install
 %make_install DESTDIR=%{buildroot} prefix=%{_prefix} bindir=%{_bindir} mandir=%{_mandir} docdir=%{_docdir}/%{name}

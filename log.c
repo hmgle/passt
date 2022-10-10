@@ -172,7 +172,7 @@ void passt_vsyslog(int pri, const char *format, va_list ap)
 }
 
 /**
- * logfile_init() - Open log file and write header with PID and path
+ * logfile_init() - Open log file and write header with PID, version, path
  * @name:	Identifier for header: passt or pasta
  * @path:	Path to log file
  * @size:	Maximum size of log file: log_cut_size is calculatd here
@@ -196,7 +196,7 @@ void logfile_init(const char *name, const char *path, size_t size)
 
 	log_size = size ? size : LOGFILE_SIZE_DEFAULT;
 
-	n = snprintf(log_header, sizeof(log_header), "%s: %s (%i)",
+	n = snprintf(log_header, sizeof(log_header), "%s " VERSION ": %s (%i)",
 		     name, exe, getpid());
 
 	if (write(log_file, log_header, n) <= 0 ||

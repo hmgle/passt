@@ -9,6 +9,8 @@
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
+VERSION ?= $(shell git describe --tags HEAD 2>/dev/null || echo "unknown\ version")
+
 RLIMIT_STACK_VAL := $(shell /bin/sh -c 'ulimit -s')
 ifeq ($(RLIMIT_STACK_VAL),unlimited)
 RLIMIT_STACK_VAL := 1024
@@ -31,6 +33,7 @@ FLAGS += -DNETNS_RUN_DIR=\"/run/netns\"
 FLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
 FLAGS += -DRLIMIT_STACK_VAL=$(RLIMIT_STACK_VAL)
 FLAGS += -DARCH=\"$(TARGET_ARCH)\"
+FLAGS += -DVERSION=\"$(VERSION)\"
 
 PASST_SRCS = arch.c arp.c checksum.c conf.c dhcp.c dhcpv6.c icmp.c igmp.c \
 	isolation.c lineread.c log.c mld.c ndp.c netlink.c packet.c passt.c \

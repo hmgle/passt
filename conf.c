@@ -626,6 +626,7 @@ static void usage(const char *name)
 	}
 	info("");
 
+
 	info(   "  -d, --debug		Be verbose, don't run in background");
 	info(   "      --trace		Be extra verbose, implies --debug");
 	info(   "  -q, --quiet		Don't print informational messages");
@@ -640,6 +641,7 @@ static void usage(const char *name)
 	info(   "    numeric, or login and group names");
 	info(   "    default: drop to user \"nobody\"");
 	info(   "  -h, --help		Display this help message and exit");
+	info(   "  --version		Show version and exit");
 
 	if (strstr(name, "pasta")) {
 		info(   "  -I, --ns-ifname NAME	namespace interface name");
@@ -1039,6 +1041,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"trace",	no_argument,		NULL,		11 },
 		{"runas",	required_argument,	NULL,		12 },
 		{"log-size",	required_argument,	NULL,		13 },
+		{"version",	no_argument,		NULL,		14 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
@@ -1197,6 +1200,11 @@ void conf(struct ctx *c, int argc, char **argv)
 				usage(argv[0]);
 			}
 			break;
+		case 14:
+			fprintf(stdout,
+				c->mode == MODE_PASST ? "passt " : "pasta ");
+			fprintf(stdout, VERSION_BLOB);
+			exit(EXIT_SUCCESS);
 		case 'd':
 			if (c->debug) {
 				err("Multiple --debug options given");
