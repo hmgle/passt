@@ -410,6 +410,9 @@ resume:
 		if (seq && L4_MATCH(iph, uh, seq) && seq->p.count < TAP_SEQS)
 			goto append;
 
+		if (seq_count == TAP_SEQS)
+			break;	/* Resume after flushing if i < in->count */
+
 		for (seq = tap4_l4 + seq_count - 1; seq >= tap4_l4; seq--) {
 			if (L4_MATCH(iph, uh, seq)) {
 				if (seq->p.count >= TAP_SEQS)
@@ -429,9 +432,6 @@ resume:
 
 append:
 		packet_add((struct pool *)&seq->p, l4_len, l4h);
-
-		if (seq_count == TAP_SEQS)
-			break;	/* Resume after flushing if i < count */
 	}
 
 	for (j = 0, seq = tap4_l4; j < seq_count; j++, seq++) {
@@ -572,6 +572,9 @@ resume:
 		    seq->p.count < TAP_SEQS)
 			goto append;
 
+		if (seq_count == TAP_SEQS)
+			break;	/* Resume after flushing if i < in->count */
+
 		for (seq = tap6_l4 + seq_count - 1; seq >= tap6_l4; seq--) {
 			if (L4_MATCH(ip6h, proto, uh, seq)) {
 				if (seq->p.count >= TAP_SEQS)
@@ -591,9 +594,6 @@ resume:
 
 append:
 		packet_add((struct pool *)&seq->p, l4_len, l4h);
-
-		if (seq_count == TAP_SEQS)
-			break;	/* Resume after flushing if i < count */
 	}
 
 	for (j = 0, seq = tap6_l4; j < seq_count; j++, seq++) {
