@@ -343,6 +343,9 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 		if (af == AF_INET6) {
 			size_t rta_len = RTA_LENGTH(sizeof(req.set.a6.l));
 
+			/* By default, strictly speaking, it's duplicated */
+			req.ifa.ifa_flags = IFA_F_NODAD;
+
 			req.nlh.nlmsg_len = offsetof(struct req_t, set.a6)
 				+ sizeof(req.set.a6);
 
