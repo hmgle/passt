@@ -35,6 +35,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -506,19 +507,19 @@ static int tcp_splice_connect_ns(void *arg)
  * @c:		Execution context
  * @conn:	Connection pointer
  * @port:	Destination port, host order
+ * @outbound:	Connection request coming from namespace
  *
  * Return: return code from connect()
  */
 static int tcp_splice_new(const struct ctx *c, struct tcp_splice_conn *conn,
-			  in_port_t port)
+			  in_port_t port, int outbound)
 {
-	struct tcp_splice_connect_ns_arg ns_arg = { c, conn, port, 0 };
 	int *p, i, s = -1;
 
-	if (bitmap_isset(c->tcp.fwd_in.map, port))
-		p = CONN_V6(conn) ? ns_sock_pool6 : ns_sock_pool4;
-	else
+	if (outbound)
 		p = CONN_V6(conn) ? init_sock_pool6 : init_sock_pool4;
+	else
+		p = CONN_V6(conn) ? ns_sock_pool6 : ns_sock_pool4;
 
 	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++, p++) {
 		SWAP(s, *p);
@@ -526,11 +527,15 @@ static int tcp_splice_new(const struct ctx *c, struct tcp_splice_conn *conn,
 			break;
 	}
 
-	if (s < 0 && bitmap_isset(c->tcp.fwd_in.map, port)) {
+	/* No socket available in namespace: create a new one for connect() */
+	if (s < 0 && !outbound) {
+		struct tcp_splice_connect_ns_arg ns_arg = { c, conn, port, 0 };
+
 		NS_CALL(tcp_splice_connect_ns, &ns_arg);
 		return ns_arg.ret;
 	}
 
+	/* Otherwise, the socket will connect on the side it was created on */
 	return tcp_splice_connect(c, conn, s, port);
 }
 
@@ -592,7 +597,8 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 		conn->a = s;
 		conn->flags = ref.r.p.tcp.tcp.v6 ? SOCK_V6 : 0;
 
-		if (tcp_splice_new(c, conn, ref.r.p.tcp.tcp.index))
+		if (tcp_splice_new(c, conn, ref.r.p.tcp.tcp.index,
+				   ref.r.p.tcp.tcp.outbound))
 			conn_flag(c, conn, CLOSING);
 
 		return;

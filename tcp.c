@@ -3084,15 +3084,14 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		   const void *addr, const char *ifname, in_port_t port)
 {
-	union tcp_epoll_ref tref = { .tcp.listen = 1 };
+	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = ns };
 	const void *bind_addr;
 	int s;
 
-	if (ns) {
+	if (ns)
 		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_out.delta[port]);
-	} else {
+	else
 		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_in.delta[port]);
-	}
 
 	if (af == AF_INET || af == AF_UNSPEC) {
 		if (!addr && c->mode == MODE_PASTA)
