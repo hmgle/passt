@@ -87,7 +87,7 @@ void packet_add_do(struct pool *p, size_t len, const char *start,
 void *packet_get_do(const struct pool *p, size_t index, size_t offset,
 		    size_t len, size_t *left, const char *func, int line)
 {
-	if (index > p->size || index > p->count) {
+	if (index >= p->size || index >= p->count) {
 		if (func) {
 			trace("packet %lu from pool size: %lu, count: %lu, "
 			      "%s:%i", index, p->size, p->count, func, line);
