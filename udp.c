@@ -678,7 +678,7 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 	b->iph.tot_len = htons(ip_len);
 
 	src = ntohl(b->s_in.sin_addr.s_addr);
-	src_port = htons(b->s_in.sin_port);
+	src_port = ntohs(b->s_in.sin_port);
 
 	if (src >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
 	    src == INADDR_ANY || src == ntohl(c->ip4.addr_seen)) {
@@ -693,7 +693,7 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 
 		bitmap_set(udp_act[V4][UDP_ACT_TAP], src_port);
 	} else if (c->ip4.dns_fwd &&
-		   src == ntohl(c->ip4.dns[0]) && ntohs(src_port) == 53) {
+		   src == htonl(c->ip4.dns[0]) && src_port == 53) {
 		b->iph.saddr = c->ip4.dns_fwd;
 	} else {
 		b->iph.saddr = b->s_in.sin_addr.s_addr;
@@ -795,7 +795,7 @@ static void udp_sock_fill_data_v6(const struct ctx *c, int n,
 
 		bitmap_set(udp_act[V6][UDP_ACT_TAP], src_port);
 	} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_fwd) &&
-		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.dns_fwd) && src_port == 53) {
+		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.dns[0]) && src_port == 53) {
 		b->ip6h.daddr = c->ip6.addr_seen;
 		b->ip6h.saddr = c->ip6.dns_fwd;
 	} else {
