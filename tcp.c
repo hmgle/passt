@@ -3178,7 +3178,7 @@ void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 }
 
 /**
- * tcp_sock_init_ns() - Bind sockets in namespace for inbound connections
+ * tcp_sock_init_ns() - Bind sockets in namespace for outbound connections
  * @arg:	Execution context
  *
  * Return: 0

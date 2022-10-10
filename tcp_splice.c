@@ -502,7 +502,7 @@ static int tcp_splice_connect_ns(void *arg)
 }
 
 /**
- * tcp_splice_new() - Handle new inbound, spliced connection
+ * tcp_splice_new() - Handle new spliced connection
  * @c:		Execution context
  * @conn:	Connection pointer
  * @port:	Destination port, host order
