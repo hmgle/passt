@@ -693,14 +693,14 @@ static void usage(const char *name)
 		info(   "    default: use search list from /etc/resolv.conf");
 
 	if (strstr(name, "pasta"))
-		info("  --dhcp-dns:	\tPass DNS list via DHCP/DHCPv6/NDP");
+		info("  --dhcp-dns	\tPass DNS list via DHCP/DHCPv6/NDP");
 	else
-		info("  --no-dhcp-dns:	No DNS list in DHCP/DHCPv6/NDP");
+		info("  --no-dhcp-dns	No DNS list in DHCP/DHCPv6/NDP");
 
 	if (strstr(name, "pasta"))
-		info("  --dhcp-search:	Pass list via DHCP/DHCPv6/NDP");
+		info("  --dhcp-search	Pass list via DHCP/DHCPv6/NDP");
 	else
-		info("  --no-dhcp-search:	No list in DHCP/DHCPv6/NDP");
+		info("  --no-dhcp-search	No list in DHCP/DHCPv6/NDP");
 
 	info(   "  --dns-forward ADDR	Forward DNS queries sent to ADDR");
 	info(   "    can be specified zero to two times (for IPv4 and IPv6)");
