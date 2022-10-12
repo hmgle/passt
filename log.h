@@ -17,10 +17,10 @@ void debug(const char *format, ...);
 
 extern int log_trace;
 void trace_init(int enable);
-#define trace(format, ...)						\
+#define trace(...)							\
 	do {								\
 		if (log_trace)						\
-			debug(format, ##__VA_ARGS__);			\
+			debug(__VA_ARGS__);				\
 	} while (0)
 
 void __openlog(const char *ident, int option, int facility);
