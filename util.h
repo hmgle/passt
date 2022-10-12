@@ -165,6 +165,7 @@
 struct ctx;
 
 struct ipv6hdr {
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 #if __BYTE_ORDER == __BIG_ENDIAN
 	uint8_t			version:4,
