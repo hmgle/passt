@@ -275,6 +275,7 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
 #include <sys/epoll.h>
@@ -2906,8 +2907,8 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		memset(&conn->a.a4.zero,   0, sizeof(conn->a.a4.zero));
 		memset(&conn->a.a4.one, 0xff, sizeof(conn->a.a4.one));
 
-		if (s_addr >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
-		    s_addr == INADDR_ANY || htonl(s_addr) == c->ip4.addr_seen)
+		if (IPV4_IS_LOOPBACK(s_addr) || s_addr == INADDR_ANY ||
+		    htonl(s_addr) == c->ip4.addr_seen)
 			s_addr = ntohl(c->ip4.gw);
 
 		s_addr = htonl(s_addr);
@@ -3073,6 +3074,136 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 }
 
 /**
+ * tcp_sock_init4() - Initialise listening sockets for a given IPv4 port
+ * @c:		Execution context
+ * @ns:		In pasta mode, if set, bind with loopback address in namespace
+ * @addr:	Pointer to address for binding, NULL if not configured
+ * @ifname:	Name of interface to bind to, NULL if not configured
+ * @port:	Port, host order
+ */
+static void tcp_sock_init4(const struct ctx *c, int ns, const in_addr_t *addr,
+			   const char *ifname, in_port_t port)
+{
+	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = ns };
+	bool spliced = false, tap = true;
+	int s;
+
+	if (c->mode == MODE_PASTA) {
+		spliced = !addr ||
+			  ntohl(*addr) == INADDR_ANY ||
+			  IPV4_IS_LOOPBACK(ntohl(*addr));
+
+		if (!addr)
+			addr = &c->ip4.addr;
+
+		tap = !ns && !IPV4_IS_LOOPBACK(ntohl(*addr));
+	}
+
+	if (ns)
+		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_out.delta[port]);
+	else
+		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_in.delta[port]);
+
+	if (tap) {
+		s = sock_l4(c, AF_INET, IPPROTO_TCP, addr, ifname, port,
+			    tref.u32);
+		if (s >= 0)
+			tcp_sock_set_bufsize(c, s);
+		else
+			s = -1;
+
+		if (c->tcp.fwd_in.mode == FWD_AUTO)
+			tcp_sock_init_ext[port][V4] = s;
+	}
+
+	if (spliced) {
+		tref.tcp.splice = 1;
+
+		addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
+
+		s = sock_l4(c, AF_INET, IPPROTO_TCP, addr, ifname, port,
+			    tref.u32);
+		if (s >= 0)
+			tcp_sock_set_bufsize(c, s);
+		else
+			s = -1;
+
+		if (c->tcp.fwd_out.mode == FWD_AUTO) {
+			if (ns)
+				tcp_sock_ns[port][V4] = s;
+			else
+				tcp_sock_init_lo[port][V4] = s;
+		}
+	}
+}
+
+/**
+ * tcp_sock_init6() - Initialise listening sockets for a given IPv6 port
+ * @c:		Execution context
+ * @ns:		In pasta mode, if set, bind with loopback address in namespace
+ * @addr:	Pointer to address for binding, NULL if not configured
+ * @ifname:	Name of interface to bind to, NULL if not configured
+ * @port:	Port, host order
+ */
+static void tcp_sock_init6(const struct ctx *c, int ns,
+			   const struct in6_addr *addr, const char *ifname,
+			   in_port_t port)
+{
+	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = ns,
+				     .tcp.v6 = 1 };
+	bool spliced = false, tap = true;
+	int s;
+
+	if (c->mode == MODE_PASTA) {
+		spliced = !addr ||
+			  IN6_IS_ADDR_UNSPECIFIED(addr) ||
+			  IN6_IS_ADDR_LOOPBACK(addr);
+
+		if (!addr)
+			addr = &c->ip6.addr;
+
+		tap = !ns && !IN6_IS_ADDR_LOOPBACK(addr);
+	}
+
+	if (ns)
+		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_out.delta[port]);
+	else
+		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_in.delta[port]);
+
+	if (tap) {
+		s = sock_l4(c, AF_INET6, IPPROTO_TCP, addr, ifname, port,
+			    tref.u32);
+		if (s >= 0)
+			tcp_sock_set_bufsize(c, s);
+		else
+			s = -1;
+
+		if (c->tcp.fwd_in.mode == FWD_AUTO)
+			tcp_sock_init_ext[port][V6] = s;
+	}
+
+	if (spliced) {
+		tref.tcp.splice = 1;
+
+		addr = &in6addr_loopback;
+
+		s = sock_l4(c, AF_INET6, IPPROTO_TCP, addr, ifname, port,
+			    tref.u32);
+		if (s >= 0)
+			tcp_sock_set_bufsize(c, s);
+		else
+			s = -1;
+
+		if (c->tcp.fwd_out.mode == FWD_AUTO) {
+			if (ns)
+				tcp_sock_ns[port][V6] = s;
+			else
+				tcp_sock_init_lo[port][V6] = s;
+		}
+	}
+}
+
+/**
  * tcp_sock_init() - Initialise listening sockets for a given port
  * @c:		Execution context
  * @ns:		In pasta mode, if set, bind with loopback address in namespace
@@ -3084,96 +3215,10 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		   const void *addr, const char *ifname, in_port_t port)
 {
-	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = ns };
-	const void *bind_addr;
-	int s;
-
-	if (ns)
-		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_out.delta[port]);
-	else
-		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_in.delta[port]);
-
-	if (af == AF_INET || af == AF_UNSPEC) {
-		if (!addr && c->mode == MODE_PASTA)
-			bind_addr = &c->ip4.addr;
-		else
-			bind_addr = addr;
-
-		tref.tcp.v6 = 0;
-		tref.tcp.splice = 0;
-
-		if (!ns) {
-			s = sock_l4(c, AF_INET, IPPROTO_TCP, bind_addr, ifname,
-				    port, tref.u32);
-			if (s >= 0)
-				tcp_sock_set_bufsize(c, s);
-			else
-				s = -1;
-
-			if (c->tcp.fwd_in.mode == FWD_AUTO)
-				tcp_sock_init_ext[port][V4] = s;
-		}
-
-		if (c->mode == MODE_PASTA) {
-			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
-
-			tref.tcp.splice = 1;
-			s = sock_l4(c, AF_INET, IPPROTO_TCP, bind_addr, ifname,
-				    port, tref.u32);
-			if (s >= 0)
-				tcp_sock_set_bufsize(c, s);
-			else
-				s = -1;
-
-			if (c->tcp.fwd_out.mode == FWD_AUTO) {
-				if (ns)
-					tcp_sock_ns[port][V4] = s;
-				else
-					tcp_sock_init_lo[port][V4] = s;
-			}
-		}
-	}
-
-	if (af == AF_INET6 || af == AF_UNSPEC) {
-		if (!addr && c->mode == MODE_PASTA)
-			bind_addr = &c->ip6.addr;
-		else
-			bind_addr = addr;
-
-		tref.tcp.v6 = 1;
-
-		tref.tcp.splice = 0;
-		if (!ns) {
-			s = sock_l4(c, AF_INET6, IPPROTO_TCP, bind_addr, ifname,
-				    port, tref.u32);
-			if (s >= 0)
-				tcp_sock_set_bufsize(c, s);
-			else
-				s = -1;
-
-			if (c->tcp.fwd_in.mode == FWD_AUTO)
-				tcp_sock_init_ext[port][V6] = s;
-		}
-
-		if (c->mode == MODE_PASTA) {
-			bind_addr = &in6addr_loopback;
-
-			tref.tcp.splice = 1;
-			s = sock_l4(c, AF_INET6, IPPROTO_TCP, bind_addr, ifname,
-				    port, tref.u32);
-			if (s >= 0)
-				tcp_sock_set_bufsize(c, s);
-			else
-				s = -1;
-
-			if (c->tcp.fwd_out.mode == FWD_AUTO) {
-				if (ns)
-					tcp_sock_ns[port][V6] = s;
-				else
-					tcp_sock_init_lo[port][V6] = s;
-			}
-		}
-	}
+	if (af == AF_INET || af == AF_UNSPEC)
+		tcp_sock_init4(c, ns, addr, ifname, port);
+	if (af == AF_INET6 || af == AF_UNSPEC)
+		tcp_sock_init6(c, ns, addr, ifname, port);
 }
 
 /**

@@ -81,6 +81,9 @@
 #define MAC_ZERO		((uint8_t [ETH_ALEN]){ 0 })
 #define MAC_IS_ZERO(addr)	(!memcmp((addr), MAC_ZERO, ETH_ALEN))
 
+#define IPV4_IS_LOOPBACK(addr)						\
+	((addr) >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET)
+
 #define NS_FN_STACK_SIZE	(RLIMIT_STACK_VAL * 1024 / 4)
 #define NS_CALL(fn, arg)						\
 	do {								\
