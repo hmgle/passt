@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/uio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <netinet/ip.h>

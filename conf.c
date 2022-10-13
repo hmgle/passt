@@ -1530,6 +1530,11 @@ void conf(struct ctx *c, int argc, char **argv)
 		}
 	} while (name != -1);
 
+	if (v4_only && v6_only) {
+		err("Options ipv4-only and ipv6-only are mutually exclusive");
+		usage(argv[0]);
+	}
+
 	ret = conf_ugid(runas, &uid, &gid);
 	if (ret)
 		usage(argv[0]);
@@ -1538,6 +1543,30 @@ void conf(struct ctx *c, int argc, char **argv)
 		logfile_init(c->mode == MODE_PASST ? "passt" : "pasta",
 			     logfile, logsize);
 	}
+
+	nl_sock_init(c, false);
+	if (!v6_only)
+		c->ifi4 = conf_ip4(ifi, &c->ip4, c->mac);
+	if (!v4_only)
+		c->ifi6 = conf_ip6(ifi, &c->ip6, c->mac);
+	if (!c->ifi4 && !c->ifi6) {
+		err("External interface not usable");
+		exit(EXIT_FAILURE);
+	}
+
+	/* Inbound port options can be parsed now (after IPv4/IPv6 settings) */
+	optind = 1;
+	do {
+		struct port_fwd *fwd;
+
+		name = getopt_long(argc, argv, optstring, options, NULL);
+
+		if ((name == 't' && (fwd = &c->tcp.fwd_in)) ||
+		    (name == 'u' && (fwd = &c->udp.fwd_in.f))) {
+			if (!optarg || conf_ports(c, name, optarg, fwd))
+				usage(argv[0]);
+		}
+	} while (name != -1);
 
 	if (c->mode == MODE_PASTA) {
 		if (conf_pasta_ns(&netns_only, userns, netns,
@@ -1561,50 +1590,20 @@ void conf(struct ctx *c, int argc, char **argv)
 		}
 	}
 
-	if (nl_sock_init(c)) {
-		err("Failed to get netlink socket");
-		exit(EXIT_FAILURE);
-	}
+	if (c->mode == MODE_PASTA)
+		nl_sock_init(c, true);
 
-	if (v4_only && v6_only) {
-		err("Options ipv4-only and ipv6-only are mutually exclusive");
-		usage(argv[0]);
-	}
-	if (!v6_only)
-		c->ifi4 = conf_ip4(ifi, &c->ip4, c->mac);
-	if (!v4_only)
-		c->ifi6 = conf_ip6(ifi, &c->ip6, c->mac);
-	if (!c->ifi4 && !c->ifi6) {
-		err("External interface not usable");
-		exit(EXIT_FAILURE);
-	}
-
-	/* Now we can process port configuration options */
+	/* ...and outbound port options now that namespaces are set up. */
 	optind = 1;
 	do {
-		struct port_fwd *fwd = NULL;
+		struct port_fwd *fwd;
 
 		name = getopt_long(argc, argv, optstring, options, NULL);
-		switch (name) {
-		case 't':
-		case 'u':
-		case 'T':
-		case 'U':
-			if (name == 't')
-				fwd = &c->tcp.fwd_in;
-			else if (name == 'T')
-				fwd = &c->tcp.fwd_out;
-			else if (name == 'u')
-				fwd = &c->udp.fwd_in.f;
-			else if (name == 'U')
-				fwd = &c->udp.fwd_out.f;
 
+		if ((name == 'T' && (fwd = &c->tcp.fwd_out)) ||
+		    (name == 'U' && (fwd = &c->udp.fwd_out.f))) {
 			if (!optarg || conf_ports(c, name, optarg, fwd))
 				usage(argv[0]);
-
-			break;
-		default:
-			break;
 		}
 	} while (name != -1);
 

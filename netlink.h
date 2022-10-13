@@ -6,7 +6,7 @@
 #ifndef NETLINK_H
 #define NETLINK_H
 
-int nl_sock_init(const struct ctx *c);
+void nl_sock_init(const struct ctx *c, bool ns);
 unsigned int nl_get_ext_if(sa_family_t af);
 void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw);
 void nl_addr(int ns, unsigned int ifi, sa_family_t af,

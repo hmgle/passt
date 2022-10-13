@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -39,57 +40,58 @@ static int nl_sock_ns	= -1;
 static int nl_seq;
 
 /**
- * nl_sock_init_do() - Set up netlink sockets in init and target namespace
- * @arg:	Execution context
+ * nl_sock_init_do() - Set up netlink sockets in init or target namespace
+ * @arg:	Execution context, if running from namespace, NULL otherwise
  *
  * Return: 0
  */
 static int nl_sock_init_do(void *arg)
 {
 	struct sockaddr_nl addr = { .nl_family = AF_NETLINK, };
-	int *s = &nl_sock;
+	int *s = arg ? &nl_sock_ns : &nl_sock;
 #ifdef NETLINK_GET_STRICT_CHK
 	int y = 1;
 #endif
 
-ns:
-	if (((*s) = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE)) < 0 ||
-	    bind(*s, (struct sockaddr *)&addr, sizeof(addr)))
-		*s = -1;
+	if (arg)
+		ns_enter((struct ctx *)arg);
 
-	if (*s == -1 || !arg || s == &nl_sock_ns)
+	if (((*s) = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE)) < 0 ||
+	    bind(*s, (struct sockaddr *)&addr, sizeof(addr))) {
+		*s = -1;
 		return 0;
+	}
 
 #ifdef NETLINK_GET_STRICT_CHK
 	if (setsockopt(*s, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &y, sizeof(y)))
 		debug("netlink: cannot set NETLINK_GET_STRICT_CHK on %i", *s);
 #endif
-
-	ns_enter((struct ctx *)arg);
-	s = &nl_sock_ns;
-	goto ns;
+	return 0;
 }
 
 /**
- * nl_sock_init() - Call nl_sock_init_do() and check for failures
+ * nl_sock_init() - Call nl_sock_init_do(), won't return on failure
  * @c:		Execution context
- *
- * Return: -EIO if sockets couldn't be set up, 0 otherwise
+ * @ns:		Get socket in namespace, not in init
  */
-int nl_sock_init(const struct ctx *c)
+void nl_sock_init(const struct ctx *c, bool ns)
 {
-	if (c->mode == MODE_PASTA) {
+	if (ns) {
 		NS_CALL(nl_sock_init_do, c);
 		if (nl_sock_ns == -1)
-			return -EIO;
+			goto fail;
 	} else {
 		nl_sock_init_do(NULL);
 	}
 
 	if (nl_sock == -1)
-		return -EIO;
+		goto fail;
 
-	return 0;
+	return;
+
+fail:
+	err("Failed to get netlink socket");
+	exit(EXIT_FAILURE);
 }
 
 /**

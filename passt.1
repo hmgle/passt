@@ -771,14 +771,47 @@ possible to bind sockets to foreign addresses.
 
 .SS Binding to low numbered ports (well-known or system ports, up to 1023)
 
-If the port forwarding configuration requires binding to port numbers lower than
-1024, \fBpasst\fR and \fBpasta\fR will try to bind to them, but will fail if not
-running as root, or without the \fICAP_NET_BIND_SERVICE\fR Linux capability, see
-\fBservices\fR(5) and \fBcapabilities\fR(7). To grant the
-\fICAP_NET_BIND_SERVICE\fR capability to passt, you can issue, as root:
+If the port forwarding configuration requires binding to ports with numbers
+lower than 1024, \fBpasst\fR and \fBpasta\fR will try to bind to them, but will
+fail, unless, either:
 
-.RS
-setcap 'cap_net_bind_service=+ep' $(which passt)
+.IP \(bu 2
+the \fIsys.net.ipv4.ip_unprivileged_port_start\fR sysctl is set to the number
+of the lowest port \fBpasst\fR and \fBpasta\fR need. For example, as root:
+
+.nf
+	sysctl -w net.ipv4.ip_unprivileged_port_start=443
+.fi
+
+\fBNote\fR: this is the recommended way of enabling \fBpasst\fR and \fBpasta\fR
+to bind to ports with numbers below 1024.
+
+.IP \(bu
+or the \fICAP_NET_BIND_SERVICE\fR Linux capability is granted, see
+\fBservices\fR(5) and \fBcapabilities\fR(7).
+
+This is, in general, \fBnot the recommended way\fR, because \fBpasst\fR and
+\fBpasta\fR might be used as vector to effectively use this capability from
+another process.
+
+However, if your environment is sufficiently controlled by an LSM (Linux
+Security Module) such as \fIAppArmor\fR, \fISELinux\fR, \fISmack\fR or
+\fITOMOYO\fR, and no other processes can interact in such a way in virtue of
+this, granting this capability to \fBpasst\fR and \fBpasta\fR only can
+effectively prevent other processes from utilising it.
+
+Note that this will not work for automatic detection and forwarding of ports
+with \fBpasta\fR, because \fBpasta\fR will relinquish this capability at
+runtime.
+
+To grant this capability, you can issue, as root:
+
+.nf
+	for p in $(which passt passt.avx2); do
+		setcap 'cap_net_bind_service=+ep' "${p}"
+	done
+.fi
+
 .RE
 
 .SS ICMP/ICMPv6 Echo sockets
