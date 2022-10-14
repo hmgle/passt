@@ -130,9 +130,6 @@ void isolate_initial(void)
  */
 void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 {
-	char uidmap[BUFSIZ];
-	char gidmap[BUFSIZ];
-
 	/* First set our UID & GID in the original namespace */
 	if (setgroups(0, NULL)) {
 		/* If we don't have CAP_SETGID, this will EPERM */
@@ -153,12 +150,7 @@ void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 		exit(EXIT_FAILURE);
 	}
 
-	/* If we're told not to use a userns, nothing more to do */
-	if (!use_userns)
-		return;
-
-	/* Otherwise, if given a userns, join it */
-	if (*userns) {
+	if (*userns) { /* If given a userns, join it */
 		int ufd;
 
 		ufd = open(userns, O_RDONLY | O_CLOEXEC);
@@ -175,24 +167,24 @@ void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 		}
 
 		close(ufd);
+	} else if (use_userns) { /* Create and join a new userns */
+		char uidmap[BUFSIZ];
+		char gidmap[BUFSIZ];
 
-		return;
-	}
+		if (unshare(CLONE_NEWUSER) != 0) {
+			err("Couldn't create user namespace: %s", strerror(errno));
+			exit(EXIT_FAILURE);
+		}
 
-	/* Otherwise, create our own userns */
-	if (unshare(CLONE_NEWUSER) != 0) {
-		err("Couldn't create user namespace: %s", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+		/* Configure user and group mappings */
+		snprintf(uidmap, BUFSIZ, "0 %u 1", uid);
+		snprintf(gidmap, BUFSIZ, "0 %u 1", gid);
 
-	/* Configure user and group mappings */
-	snprintf(uidmap, BUFSIZ, "0 %u 1", uid);
-	snprintf(gidmap, BUFSIZ, "0 %u 1", gid);
-
-	if (write_file("/proc/self/uid_map", uidmap) ||
-	    write_file("/proc/self/setgroups", "deny") ||
-	    write_file("/proc/self/gid_map", gidmap)) {
-		warn("Couldn't configure user namespace");
+		if (write_file("/proc/self/uid_map", uidmap) ||
+		    write_file("/proc/self/setgroups", "deny") ||
+		    write_file("/proc/self/gid_map", gidmap)) {
+			warn("Couldn't configure user namespace");
+		}
 	}
 }
 
