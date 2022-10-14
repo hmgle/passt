@@ -226,10 +226,7 @@ void pasta_start_ns(struct ctx *c, int argc, char *argv[])
 
 	drop_caps();
 
-	if (pasta_child_pid) {
-		NS_CALL(pasta_wait_for_ns, c);
-		return;
-	}
+	NS_CALL(pasta_wait_for_ns, c);
 }
 
 /**
