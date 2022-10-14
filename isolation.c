@@ -122,6 +122,61 @@ static void drop_caps_ep_except(uint64_t keep)
 }
 
 /**
+ * clamp_caps() - Prevent any children from gaining caps
+ *
+ * This drops all capabilities from both the inheritable and the
+ * bounding set.  This means that any exec()ed processes can't gain
+ * capabilities, even if they have file capabilities which would grant
+ * them.  We shouldn't ever exec() in any case, but this provides an
+ * additional layer of protection.  Executing this requires
+ * CAP_SETPCAP, which we will have within our userns.
+ *
+ * Note that dropping capabilites from the bounding set limits
+ * exec()ed processes, but does not remove them from the effective or
+ * permitted sets, so it doesn't reduce our own capabilities.
+ */
+static void clamp_caps(void)
+{
+	struct __user_cap_data_struct data[CAP_WORDS];
+	struct __user_cap_header_struct hdr = {
+		.version = CAP_VERSION,
+		.pid = 0,
+	};
+	int i;
+
+	for (i = 0; i < 64; i++) {
+		/* Some errors can be ignored:
+		 * - EINVAL, we'll get this for all values in 0..63
+		 *   that are not actually allocated caps
+		 * - EPERM, we'll get this if we don't have
+		 *   CAP_SETPCAP, which can happen if using
+		 *   --netns-only.  We don't need CAP_SETPCAP for
+		 *   normal operation, so carry on without it.
+		 */
+		if (prctl(PR_CAPBSET_DROP, i, 0, 0, 0) &&
+		    errno != EINVAL && errno != EPERM) {
+			err("Couldn't drop cap %i from bounding set: %s",
+			    i, strerror(errno));
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	if (syscall(SYS_capget, &hdr, data)) {
+		err("Couldn't get current capabilities: %s", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	for (i = 0; i < CAP_WORDS; i++)
+		data[i].inheritable = 0;
+
+	if (syscall(SYS_capset, &hdr, data)) {
+		err("Couldn't drop inheritable capabilities: %s",
+		    strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+}
+
+/**
  * isolate_initial() - Early, config independent self isolation
  *
  * Should:
@@ -324,6 +379,7 @@ int isolate_prefork(struct ctx *c)
 		ns_caps |= BIT(CAP_NET_BIND_SERVICE);
 	}
 
+	clamp_caps();
 	drop_caps_ep_except(ns_caps);
 
 	return 0;
