@@ -185,7 +185,7 @@ int main(int argc, char **argv)
 
 	arch_avx2_exec(argv);
 
-	drop_caps();
+	isolate_initial();
 
 	c.pasta_netns_fd = c.fd_tap = c.fd_tap_listen = -1;
 
@@ -289,7 +289,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (sandbox(&c)) {
+	if (isolate_prefork(&c)) {
 		err("Failed to sandbox process, exiting\n");
 		exit(EXIT_FAILURE);
 	}
@@ -299,9 +299,7 @@ int main(int argc, char **argv)
 	else
 		write_pidfile(pidfile_fd, getpid());
 
-	prctl(PR_SET_DUMPABLE, 0);
-
-	seccomp(&c);
+	isolate_postfork(&c);
 
 	timer_init(&c, &now);
 

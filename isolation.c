@@ -12,6 +12,48 @@
  * Author: Stefano Brivio <sbrivio@redhat.com>
  * Author: David Gibson <david@gibson.dropbear.id.au>
  */
+/**
+ * DOC: Theory of Operation
+ *
+ * For security the passt/pasta process performs a number of
+ * self-isolations steps, dropping capabilities, setting namespaces
+ * and otherwise minimising the impact we can have on the system at
+ * large if we were compromised.
+ *
+ * Obviously we can't isolate ourselves from resources before we've
+ * done anything we need to do with those resources, so we have
+ * multiple stages of self-isolation.  In order these are:
+ *
+ * 1. isolate_initial()
+ * ====================
+ *
+ * Executed immediately after startup, drops capabilities we don't
+ * need at any point during execution (or which we gain back when we
+ * need by joining other namespaces).
+ *
+ * 2. isolate_user()
+ * =================
+ *
+ * Executed once we know what user and user namespace we want to
+ * operate in.  Sets our final UID & GID, and enters the correct user
+ * namespace.
+ *
+ * 3. isolate_prefork()
+ * ====================
+ *
+ * Executed after all setup, but before daemonising (fork()ing into
+ * the background).  Uses mount namespace and pivot_root() to remove
+ * our access to the filesystem.
+ *
+ * 4. isolate_postfork()
+ * =====================
+ *
+ * Executed immediately after daemonizing, but before entering the
+ * actual packet forwarding phase of operation.  Or, if not
+ * daemonizing, immediately after isolate_prefork().  Uses seccomp()
+ * to restrict ourselves to the handful of syscalls we need during
+ * runtime operation.
+ */
 
 #include <errno.h>
 #include <fcntl.h>
@@ -48,7 +90,7 @@
 /**
  * drop_caps() - Drop capabilities we might have except for CAP_NET_BIND_SERVICE
  */
-void drop_caps(void)
+static void drop_caps(void)
 {
 	int i;
 
@@ -61,11 +103,30 @@ void drop_caps(void)
 }
 
 /**
+ * isolate_initial() - Early, config independent self isolation
+ *
+ * Should:
+ *  - drop unneeded capabilities
+ * Musn't:
+ *  - remove filesytem access (we need to access files during setup)
+ */
+void isolate_initial(void)
+{
+	drop_caps();
+}
+
+/**
  * isolate_user() - Switch to final UID/GID and move into userns
  * @uid:	User ID to run as (in original userns)
  * @gid:	Group ID to run as (in original userns)
  * @use_userns:	Whether to join or create a userns
  * @userns:	userns path to enter, may be empty
+ *
+ * Should:
+ *  - set our final UID and GID
+ *  - enter our final user namespace
+ * Mustn't:
+ *  - remove filesystem access (we need that for further setup)
  */
 void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 {
@@ -135,11 +196,19 @@ void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 }
 
 /**
- * sandbox() - Unshare IPC, mount, PID, UTS, and user namespaces, "unmount" root
+ * isolate_prefork() - Self isolation before daemonizing
+ * @c:		Execution context
  *
  * Return: negative error code on failure, zero on success
+ *
+ * Should:
+ *  - Move us to our own IPC and UTS namespaces
+ *  - Move us to a mount namespace with only an empty directory
+ *  - Drop unneeded capabilities (in the new user namespace)
+ * Mustn't:
+ *  - Remove syscalls we need to daemonise
  */
-int sandbox(struct ctx *c)
+int isolate_prefork(struct ctx *c)
 {
 	int flags = CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
 
@@ -188,12 +257,18 @@ int sandbox(struct ctx *c)
 }
 
 /**
- * seccomp() - Set up seccomp filters depending on mode, won't return on failure
+ * isolate_postfork() - Self isolation after daemonizing
  * @c:		Execution context
+ *
+ * Should:
+ *  - disable core dumps
+ *  - limit to a minimal set of syscalls
  */
-void seccomp(const struct ctx *c)
+void isolate_postfork(const struct ctx *c)
 {
 	struct sock_fprog prog;
+
+	prctl(PR_SET_DUMPABLE, 0);
 
 	if (c->mode == MODE_PASST) {
 		prog.len = (unsigned short)ARRAY_SIZE(filter_passt);
