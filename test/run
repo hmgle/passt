@@ -65,13 +65,6 @@ run() {
 	test build/clang_tidy
 	teardown build
 
-	setup distro
-	test distro/debian
-	test distro/fedora
-	test distro/opensuse
-	test distro/ubuntu
-	teardown distro
-
 	setup pasta
 	test pasta/ndp
 	test pasta/dhcp
@@ -98,6 +91,10 @@ run() {
 	test passt_in_ns/shutdown
 	teardown passt_in_ns
 
+	setup two_guests
+	test two_guests/basic
+	teardown two_guests
+
 	VALGRIND=0
 	setup passt_in_ns
 	test passt/ndp
@@ -109,9 +106,12 @@ run() {
 	test passt_in_ns/shutdown
 	teardown passt_in_ns
 
-	setup two_guests
-	test two_guests/basic
-	teardown two_guests
+	setup distro
+	test distro/debian
+	test distro/fedora
+	test distro/opensuse
+	test distro/ubuntu
+	teardown distro
 
 	perf_finish
 	[ ${CI} -eq 1 ] && video_stop
