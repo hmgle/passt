@@ -149,10 +149,12 @@ void pasta_open_ns(struct ctx *c, const char *netns)
 
 /**
  * struct pasta_setup_ns_arg - Argument for pasta_setup_ns()
+ * @exe:	Executable to run
  * @argv:	Command and arguments to run
  */
 struct pasta_setup_ns_arg {
-	char **argv;
+	const char *exe;
+	char *const *argv;
 };
 
 /**
@@ -163,12 +165,13 @@ struct pasta_setup_ns_arg {
  */
 static int pasta_setup_ns(void *arg)
 {
-	struct pasta_setup_ns_arg *a = (struct pasta_setup_ns_arg *)arg;
+	const struct pasta_setup_ns_arg *a;
 
 	FWRITE("/proc/sys/net/ipv4/ping_group_range", "0 0",
 	       "Cannot set ping_group_range, ICMP requests might fail");
 
-	execvp(a->argv[0], a->argv);
+	a = (const struct pasta_setup_ns_arg *)arg;
+	execvp(a->exe, a->argv);
 
 	perror("execvp");
 	exit(EXIT_FAILURE);
@@ -183,26 +186,31 @@ static int pasta_setup_ns(void *arg)
 void pasta_start_ns(struct ctx *c, int argc, char *argv[])
 {
 	struct pasta_setup_ns_arg arg = {
+		.exe = argv[0],
 		.argv = argv,
 	};
-	char *shell = getenv("SHELL");
-	char *sh_argv[] = { shell, NULL };
-	char *bash_argv[] = { shell, "-l", NULL };
 	char ns_fn_stack[NS_FN_STACK_SIZE];
+	char *sh_argv[] = { NULL, NULL };
+	char sh_arg0[PATH_MAX + 1];
 
 	c->foreground = 1;
 	if (!c->debug)
 		c->quiet = 1;
 
-	if (!shell)
-		shell = "/bin/sh";
 
 	if (argc == 0) {
-		if (strstr(shell, "/bash")) {
-			arg.argv = bash_argv;
-		} else {
-			arg.argv = sh_argv;
+		arg.exe = getenv("SHELL");
+		if (!arg.exe)
+			arg.exe = "/bin/sh";
+
+		if ((size_t)snprintf(sh_arg0, sizeof(sh_arg0),
+				     "-%s", arg.exe) >= sizeof(sh_arg0)) {
+			err("$SHELL is too long (%u bytes)",
+			    strlen(arg.exe));
+			exit(EXIT_FAILURE);
 		}
+		sh_argv[0] = sh_arg0;
+		arg.argv = sh_argv;
 	}
 
 	pasta_child_pid = clone(pasta_setup_ns,
