@@ -167,8 +167,8 @@ static int pasta_setup_ns(void *arg)
 {
 	const struct pasta_setup_ns_arg *a;
 
-	FWRITE("/proc/sys/net/ipv4/ping_group_range", "0 0",
-	       "Cannot set ping_group_range, ICMP requests might fail");
+	if (write_file("/proc/sys/net/ipv4/ping_group_range", "0 0"))
+		warn("Cannot set ping_group_range, ICMP requests might fail");
 
 	a = (const struct pasta_setup_ns_arg *)arg;
 	execvp(a->exe, a->argv);

@@ -130,7 +130,8 @@ void isolate_initial(void)
  */
 void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 {
-	char nsmap[BUFSIZ];
+	char uidmap[BUFSIZ];
+	char gidmap[BUFSIZ];
 
 	/* First set our UID & GID in the original namespace */
 	if (setgroups(0, NULL)) {
@@ -185,14 +186,14 @@ void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 	}
 
 	/* Configure user and group mappings */
-	snprintf(nsmap, BUFSIZ, "0 %u 1", uid);
-	FWRITE("/proc/self/uid_map", nsmap, "Cannot set uid_map in namespace");
+	snprintf(uidmap, BUFSIZ, "0 %u 1", uid);
+	snprintf(gidmap, BUFSIZ, "0 %u 1", gid);
 
-	FWRITE("/proc/self/setgroups", "deny",
-	       "Cannot write to setgroups in namespace");
-
-	snprintf(nsmap, BUFSIZ, "0 %u 1", gid);
-	FWRITE("/proc/self/gid_map", nsmap, "Cannot set gid_map in namespace");
+	if (write_file("/proc/self/uid_map", uidmap) ||
+	    write_file("/proc/self/setgroups", "deny") ||
+	    write_file("/proc/self/gid_map", gidmap)) {
+		warn("Couldn't configure user namespace");
+	}
 }
 
 /**

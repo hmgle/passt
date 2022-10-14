@@ -449,3 +449,36 @@ int fls(unsigned long x)
 
 	return y;
 }
+
+/**
+ * write_file() - Replace contents of file with a string
+ * @path:	File to write
+ * @buf:	String to write
+ *
+ * Return: 0 on success, -1 on any error
+ */
+int write_file(const char *path, const char *buf)
+{
+	int fd = open(path, O_WRONLY | O_TRUNC | O_CLOEXEC);
+	size_t len = strlen(buf);
+
+	if (fd < 0) {
+		warn("Could not open %s: %s", path, strerror(errno));
+		return -1;
+	}
+
+	while (len) {
+		ssize_t rc = write(fd, buf, len);
+
+		if (rc <= 0) {
+			warn("Couldn't write to %s: %s", path, strerror(errno));
+			break;
+		}
+
+		buf += rc;
+		len -= rc;
+	}
+
+	close(fd);
+	return len == 0 ? 0 : -1;
+}

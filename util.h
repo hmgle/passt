@@ -53,18 +53,6 @@
 #define TMPDIR		"/tmp"
 #endif
 
-#define FWRITE(path, buf, str)						\
-	do {								\
-		int flags = O_WRONLY | O_CLOEXEC;			\
-		int fd = open(path, flags);				\
-									\
-		if (fd < 0 ||						\
-		    write(fd, buf, strlen(buf)) != (int)strlen(buf))	\
-			warn(str);					\
-		if (fd >= 0)						\
-			close(fd);					\
-	} while (0)
-
 #define V4		0
 #define V6		1
 #define IP_VERSIONS	2
@@ -212,5 +200,6 @@ int ns_enter(const struct ctx *c);
 void write_pidfile(int fd, pid_t pid);
 int __daemon(int pidfile_fd, int devnull_fd);
 int fls(unsigned long x);
+int write_file(const char *path, const char *buf);
 
 #endif /* UTIL_H */
