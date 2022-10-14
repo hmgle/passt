@@ -180,15 +180,19 @@ static int pasta_setup_ns(void *arg)
 /**
  * pasta_start_ns() - Fork command in new namespace if target ns is not given
  * @c:		Execution context
+ * @uid:	UID we're running as in the init namespace
+ * @gid:	GID we're running as in the init namespace
  * @argc:	Number of arguments for spawned command
  * @argv:	Command to spawn and arguments
  */
-void pasta_start_ns(struct ctx *c, int argc, char *argv[])
+void pasta_start_ns(struct ctx *c, uid_t uid, gid_t gid,
+		    int argc, char *argv[])
 {
 	struct pasta_setup_ns_arg arg = {
 		.exe = argv[0],
 		.argv = argv,
 	};
+	char uidmap[BUFSIZ], gidmap[BUFSIZ];
 	char ns_fn_stack[NS_FN_STACK_SIZE];
 	char *sh_argv[] = { NULL, NULL };
 	char sh_arg0[PATH_MAX + 1];
@@ -197,6 +201,15 @@ void pasta_start_ns(struct ctx *c, int argc, char *argv[])
 	if (!c->debug)
 		c->quiet = 1;
 
+	/* Configure user and group mappings */
+	snprintf(uidmap, BUFSIZ, "0 %u 1", uid);
+	snprintf(gidmap, BUFSIZ, "0 %u 1", gid);
+
+	if (write_file("/proc/self/uid_map", uidmap) ||
+	    write_file("/proc/self/setgroups", "deny") ||
+	    write_file("/proc/self/gid_map", gidmap)) {
+		warn("Couldn't configure user mappings");
+	}
 
 	if (argc == 0) {
 		arg.exe = getenv("SHELL");

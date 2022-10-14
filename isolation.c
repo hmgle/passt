@@ -265,22 +265,9 @@ void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns,
 		close(ufd);
 
 	} else if (use_userns) { /* Create and join a new userns */
-		char uidmap[BUFSIZ];
-		char gidmap[BUFSIZ];
-
 		if (unshare(CLONE_NEWUSER) != 0) {
 			err("Couldn't create user namespace: %s", strerror(errno));
 			exit(EXIT_FAILURE);
-		}
-
-		/* Configure user and group mappings */
-		snprintf(uidmap, BUFSIZ, "0 %u 1", uid);
-		snprintf(gidmap, BUFSIZ, "0 %u 1", gid);
-
-		if (write_file("/proc/self/uid_map", uidmap) ||
-		    write_file("/proc/self/setgroups", "deny") ||
-		    write_file("/proc/self/gid_map", gidmap)) {
-			warn("Couldn't configure user namespace");
 		}
 	}
 
