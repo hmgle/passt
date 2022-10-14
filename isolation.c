@@ -87,18 +87,37 @@
 #include "log.h"
 #include "isolation.h"
 
+#define CAP_VERSION	_LINUX_CAPABILITY_VERSION_3
+#define CAP_WORDS	_LINUX_CAPABILITY_U32S_3
+
 /**
- * drop_caps() - Drop capabilities we might have except for CAP_NET_BIND_SERVICE
+ * drop_caps_ep_except() - Drop capabilities from effective & permitted sets
+ * @keep:	Capabilities to keep
  */
-static void drop_caps(void)
+static void drop_caps_ep_except(uint64_t keep)
 {
+	struct __user_cap_header_struct hdr = {
+		.version = CAP_VERSION,
+		.pid = 0,
+	};
+	struct __user_cap_data_struct data[CAP_WORDS];
 	int i;
 
-	for (i = 0; i < 64; i++) {
-		if (i == CAP_NET_BIND_SERVICE)
-			continue;
+	if (syscall(SYS_capget, &hdr, data)) {
+		err("Couldn't get current capabilities: %s", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
 
-		prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
+	for (i = 0; i < CAP_WORDS; i++) {
+		uint32_t mask = keep >> (32 * i);
+
+		data[i].effective &= mask;
+		data[i].permitted &= mask;
+	}
+
+	if (syscall(SYS_capset, &hdr, data)) {
+		err("Couldn't drop capabilities: %s", strerror(errno));
+		exit(EXIT_FAILURE);
 	}
 }
 
@@ -112,7 +131,25 @@ static void drop_caps(void)
  */
 void isolate_initial(void)
 {
-	drop_caps();
+	/* We want to keep CAP_NET_BIND_SERVICE in the initial
+	 * namespace if we have it, so that we can forward low ports
+	 * into the guest/namespace
+	 *
+	 * We have to keep CAP_SETUID and CAP_SETGID at this stage, so
+	 * that we can switch user away from root.
+	 *
+	 * We have to keep some capabilities for the --netns-only case:
+	 *  - CAP_SYS_ADMIN, so that we can setns() to the netns.
+	 *  - Keep CAP_NET_ADMIN, so that we can configure interfaces
+	 *
+	 * It's debatable whether it's useful to drop caps when we
+	 * retain SETUID and SYS_ADMIN, but we might as well.  We drop
+	 * further capabilites in isolate_user() and
+	 * isolate_prefork().
+	 */
+	drop_caps_ep_except(BIT(CAP_NET_BIND_SERVICE) |
+			    BIT(CAP_SETUID) | BIT(CAP_SETGID) |
+			    BIT(CAP_SYS_ADMIN) | BIT(CAP_NET_ADMIN));
 }
 
 /**
@@ -121,6 +158,7 @@ void isolate_initial(void)
  * @gid:	Group ID to run as (in original userns)
  * @use_userns:	Whether to join or create a userns
  * @userns:	userns path to enter, may be empty
+ * @mode:	Mode (passt or pasta)
  *
  * Should:
  *  - set our final UID and GID
@@ -128,8 +166,11 @@ void isolate_initial(void)
  * Mustn't:
  *  - remove filesystem access (we need that for further setup)
  */
-void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
+void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns,
+		  enum passt_modes mode)
 {
+	uint64_t ns_caps = 0;
+
 	/* First set our UID & GID in the original namespace */
 	if (setgroups(0, NULL)) {
 		/* If we don't have CAP_SETGID, this will EPERM */
@@ -167,6 +208,7 @@ void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 		}
 
 		close(ufd);
+
 	} else if (use_userns) { /* Create and join a new userns */
 		char uidmap[BUFSIZ];
 		char gidmap[BUFSIZ];
@@ -186,6 +228,31 @@ void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 			warn("Couldn't configure user namespace");
 		}
 	}
+
+	/* Joining a new userns gives us full capabilities; drop the
+	 * ones we don't need.  With --netns-only we haven't changed
+	 * userns but we can drop more capabilities now than at
+	 * isolate_initial()
+	 */
+	/* Keep CAP_SYS_ADMIN, so we can unshare() further in
+	 * isolate_prefork(), pasta also needs it to setns() into the
+	 * netns
+	 */
+	ns_caps |= BIT(CAP_SYS_ADMIN);
+	if (mode == MODE_PASTA) {
+		/* Keep CAP_NET_ADMIN, so we can configure the if */
+		ns_caps |= BIT(CAP_NET_ADMIN);
+		/* Keep CAP_NET_BIND_SERVICE, so we can splice
+		 * outbound connections to low port numbers
+		 */
+		ns_caps |= BIT(CAP_NET_BIND_SERVICE);
+		/* Keep CAP_SYS_PTRACE to join the netns of an
+		 * existing process */
+		if (*userns || !use_userns)
+			ns_caps |= BIT(CAP_SYS_PTRACE);
+	}
+
+	drop_caps_ep_except(ns_caps);
 }
 
 /**
@@ -204,6 +271,7 @@ void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns)
 int isolate_prefork(struct ctx *c)
 {
 	int flags = CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
+	uint64_t ns_caps = 0;
 
 	/* If we run in foreground, we have no chance to actually move to a new
 	 * PID namespace. For passt, use CLONE_NEWPID anyway, in case somebody
@@ -244,7 +312,19 @@ int isolate_prefork(struct ctx *c)
 		return -errno;
 	}
 
-	drop_caps();	/* Relative to the new user namespace this time. */
+	/* Now that initialization is more-or-less complete, we can
+	 * drop further capabilities
+	 */
+	if (c->mode == MODE_PASTA) {
+		/* Keep CAP_SYS_ADMIN, so we can enter the netns */
+		ns_caps |= BIT(CAP_SYS_ADMIN);
+		/* Keep CAP_NET_BIND_SERVICE, so we can splice
+		 * outbound connections to low port numbers
+		 */
+		ns_caps |= BIT(CAP_NET_BIND_SERVICE);
+	}
+
+	drop_caps_ep_except(ns_caps);
 
 	return 0;
 }
