@@ -148,29 +148,29 @@ void pasta_open_ns(struct ctx *c, const char *netns)
 }
 
 /**
- * struct pasta_setup_ns_arg - Argument for pasta_setup_ns()
+ * struct pasta_spawn_cmd_arg - Argument for pasta_spawn_cmd()
  * @exe:	Executable to run
  * @argv:	Command and arguments to run
  */
-struct pasta_setup_ns_arg {
+struct pasta_spawn_cmd_arg {
 	const char *exe;
 	char *const *argv;
 };
 
 /**
- * pasta_setup_ns() - Map credentials, enable access to ping sockets, run shell
- * @arg:	See @pasta_setup_ns_arg
+ * pasta_spawn_cmd() - Prepare new netns, start command or shell
+ * @arg:	See @pasta_spawn_cmd_arg
  *
  * Return: this function never returns
  */
-static int pasta_setup_ns(void *arg)
+static int pasta_spawn_cmd(void *arg)
 {
-	const struct pasta_setup_ns_arg *a;
+	const struct pasta_spawn_cmd_arg *a;
 
 	if (write_file("/proc/sys/net/ipv4/ping_group_range", "0 0"))
 		warn("Cannot set ping_group_range, ICMP requests might fail");
 
-	a = (const struct pasta_setup_ns_arg *)arg;
+	a = (const struct pasta_spawn_cmd_arg *)arg;
 	execvp(a->exe, a->argv);
 
 	perror("execvp");
@@ -188,7 +188,7 @@ static int pasta_setup_ns(void *arg)
 void pasta_start_ns(struct ctx *c, uid_t uid, gid_t gid,
 		    int argc, char *argv[])
 {
-	struct pasta_setup_ns_arg arg = {
+	struct pasta_spawn_cmd_arg arg = {
 		.exe = argv[0],
 		.argv = argv,
 	};
@@ -226,7 +226,7 @@ void pasta_start_ns(struct ctx *c, uid_t uid, gid_t gid,
 		arg.argv = sh_argv;
 	}
 
-	pasta_child_pid = clone(pasta_setup_ns,
+	pasta_child_pid = clone(pasta_spawn_cmd,
 				ns_fn_stack + sizeof(ns_fn_stack) / 2,
 				CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWNET |
 				CLONE_NEWUTS,
