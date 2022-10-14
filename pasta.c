@@ -224,8 +224,6 @@ void pasta_start_ns(struct ctx *c, int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	drop_caps();
-
 	NS_CALL(pasta_wait_for_ns, c);
 }
 
