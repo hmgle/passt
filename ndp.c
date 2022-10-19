@@ -47,6 +47,7 @@
  */
 int ndp(struct ctx *c, const struct icmp6hdr *ih, const struct in6_addr *saddr)
 {
+	const struct in6_addr *rsaddr; /* src addr for reply */
 	char buf[BUFSIZ] = { 0 };
 	struct ipv6hdr *ip6hr;
 	struct icmp6hdr *ihr;
@@ -180,26 +181,12 @@ dns_done:
 	else
 		c->ip6.addr_seen = *saddr;
 
-	ip6hr->daddr = *saddr;
 	if (IN6_IS_ADDR_LINKLOCAL(&c->ip6.gw))
-		ip6hr->saddr = c->ip6.gw;
+		rsaddr = &c->ip6.gw;
 	else
-		ip6hr->saddr = c->ip6.addr_ll;
+		rsaddr = &c->ip6.addr_ll;
 
-	ip6hr->payload_len = htons(sizeof(*ihr) + len);
-	csum_icmp6(ihr, &ip6hr->saddr, &ip6hr->daddr, ihr + 1, len);
-
-	ip6hr->version = 6;
-	ip6hr->nexthdr = IPPROTO_ICMPV6;
-	ip6hr->hop_limit = 255;
-
-	len += sizeof(*ehr) + sizeof(*ip6hr) + sizeof(*ihr);
-	memcpy(ehr->h_dest, c->mac_guest, ETH_ALEN);
-	memcpy(ehr->h_source, c->mac, ETH_ALEN);
-	ehr->h_proto = htons(ETH_P_IPV6);
-
-	if (tap_send(c, ehr, len) < 0)
-		perror("NDP: send");
+	tap_icmp6_send(c, rsaddr, saddr, ihr, len + sizeof(*ihr));
 
 	return 1;
 }
