@@ -52,6 +52,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <linux/icmp.h>
 #include <linux/icmpv6.h>
 
 /**
@@ -105,6 +106,21 @@ __attribute__((__noipa__))	/* See comment in Makefile */
 uint16_t csum_unaligned(const void *buf, size_t len, uint32_t init)
 {
 	return (uint16_t)~csum_fold(sum_16b(buf, len) + init);
+}
+
+/**
+ * csum_icmp4() - Calculate and set checksum for an ICMP packet
+ * @icmp4hr:	ICMP header, initialised apart from checksum
+ * @payload:	ICMP packet payload
+ * @len:	Length of @payload (not including ICMP header)
+ */
+void csum_icmp4(struct icmphdr *icmp4hr, const void *payload, size_t len)
+{
+	/* Partial checksum for ICMP header alone */
+	uint32_t psum = sum_16b(icmp4hr, sizeof(*icmp4hr));
+
+	icmp4hr->checksum = 0;
+	icmp4hr->checksum = csum_unaligned(payload, len, psum);
 }
 
 /**
