@@ -41,13 +41,11 @@
  * ndp() - Check for NDP solicitations, reply as needed
  * @c:		Execution context
  * @ih:		ICMPv6 header
- * @eh_source:	Source Ethernet address
  * @saddr	Source IPv6 address
  *
  * Return: 0 if not handled here, 1 if handled, -1 on failure
  */
-int ndp(struct ctx *c, const struct icmp6hdr *ih,
-	const unsigned char *eh_source, const struct in6_addr *saddr)
+int ndp(struct ctx *c, const struct icmp6hdr *ih, const struct in6_addr *saddr)
 {
 	char buf[BUFSIZ] = { 0 };
 	struct ipv6hdr *ip6hr;
@@ -196,7 +194,7 @@ dns_done:
 	ip6hr->hop_limit = 255;
 
 	len += sizeof(*ehr) + sizeof(*ip6hr) + sizeof(*ihr);
-	memcpy(ehr->h_dest, eh_source, ETH_ALEN);
+	memcpy(ehr->h_dest, c->mac_guest, ETH_ALEN);
 	memcpy(ehr->h_source, c->mac, ETH_ALEN);
 	ehr->h_proto = htons(ETH_P_IPV6);
 

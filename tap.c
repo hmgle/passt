@@ -576,7 +576,7 @@ resume:
 			if (l4_len < sizeof(struct icmp6hdr))
 				continue;
 
-			if (ndp(c, (struct icmp6hdr *)l4h, eh->h_source, saddr))
+			if (ndp(c, (struct icmp6hdr *)l4h, saddr))
 				continue;
 
 			tap_packet_debug(NULL, ip6h, NULL, proto, NULL, 1);
