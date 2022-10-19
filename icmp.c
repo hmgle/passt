@@ -69,10 +69,6 @@ static uint8_t icmp_act[IP_VERSIONS][DIV_ROUND_UP(ICMP_NUM_IDS, 8)];
 void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
 		       uint32_t events, const struct timespec *now)
 {
-	struct in6_addr a6 = { .s6_addr = {    0,    0,    0,    0,
-					       0,    0,    0,    0,
-					       0,    0, 0xff, 0xff,
-					       0,    0,    0,    0 } };
 	union icmp_epoll_ref *iref = &ref.r.p.icmp;
 	struct sockaddr_storage sr;
 	socklen_t sl = sizeof(sr);
@@ -109,7 +105,7 @@ void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
 			icmp_id_map[V6][id].seq = seq;
 		}
 
-		tap_ip_send(c, &sr6->sin6_addr, IPPROTO_ICMPV6, buf, n, 0);
+		tap_ip6_send(c, &sr6->sin6_addr, IPPROTO_ICMPV6, buf, n, 0);
 	} else {
 		struct sockaddr_in *sr4 = (struct sockaddr_in *)&sr;
 		struct icmphdr *ih = (struct icmphdr *)buf;
@@ -127,9 +123,7 @@ void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
 			icmp_id_map[V4][id].seq = seq;
 		}
 
-		memcpy(&a6.s6_addr[12], &sr4->sin_addr, sizeof(sr4->sin_addr));
-
-		tap_ip_send(c, &a6, IPPROTO_ICMP, buf, n, 0);
+		tap_ip4_send(c, sr4->sin_addr.s_addr, IPPROTO_ICMP, buf, n);
 	}
 }
 

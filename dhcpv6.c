@@ -531,8 +531,8 @@ int dhcpv6(struct ctx *c, const struct pool *p,
 
 			resp_not_on_link.hdr.xid = mh->xid;
 
-			tap_ip_send(c, src, IPPROTO_UDP,
-				    (char *)&resp_not_on_link, n, mh->xid);
+			tap_ip6_send(c, src, IPPROTO_UDP,
+				     (char *)&resp_not_on_link, n, mh->xid);
 
 			return 1;
 		}
@@ -580,7 +580,7 @@ int dhcpv6(struct ctx *c, const struct pool *p,
 
 	resp.hdr.xid = mh->xid;
 
-	tap_ip_send(c, src, IPPROTO_UDP, (char *)&resp, n, mh->xid);
+	tap_ip6_send(c, src, IPPROTO_UDP, (char *)&resp, n, mh->xid);
 	c->ip6.addr_seen = c->ip6.addr;
 
 	return 1;

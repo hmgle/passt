@@ -113,100 +113,111 @@ const struct in6_addr *tap_ip6_daddr(const struct ctx *c,
 }
 
 /**
- * tap_ip_send() - Send IP packet, with L2 headers, calculating L3/L4 checksums
+ * tap_push_l2h() - Build an L2 header for an inbound packet
  * @c:		Execution context
- * @src:	IPv6 source address, IPv4-mapped for IPv4 sources
- * @proto:	L4 protocol number
- * @in:		Payload
- * @len:	L4 payload length
- * @flow:	Flow label for TCP over IPv6
+ * @buf:	Buffer address at which to generate header
+ * @proto:	Ethernet protocol number for L3
+ *
+ * Return: pointer at which to write the packet's payload
  */
-void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
-		 const char *in, size_t len, uint32_t flow)
+static void *tap_push_l2h(const struct ctx *c, void *buf, uint16_t proto)
 {
-	char buf[USHRT_MAX];
-	struct ethhdr *eh;
-
-	eh = (struct ethhdr *)buf;
+	struct ethhdr *eh = (struct ethhdr *)buf;
 
 	/* TODO: ARP table lookup */
 	memcpy(eh->h_dest, c->mac_guest, ETH_ALEN);
 	memcpy(eh->h_source, c->mac, ETH_ALEN);
+	eh->h_proto = ntohs(proto);
+	return eh + 1;
+}
 
-	if (IN6_IS_ADDR_V4MAPPED(src)) {
-		struct iphdr *iph = (struct iphdr *)(eh + 1);
-		char *data = (char *)(iph + 1);
+/**
+ * tap_ip4_send() - Send IPv4 packet, with L2 headers, calculating L3/L4 checksums
+ * @c:		Execution context
+ * @src:	IPv4 source address
+ * @proto:	L4 protocol number
+ * @in:		Payload
+ * @len:	L4 payload length
+ */
+void tap_ip4_send(const struct ctx *c, in_addr_t src, uint8_t proto,
+		  const char *in, size_t len)
+{
+	char buf[USHRT_MAX];
+	struct iphdr *ip4h = (struct iphdr *)tap_push_l2h(c, buf, ETH_P_IP);
+	char *data = (char *)(ip4h + 1);
 
-		eh->h_proto = ntohs(ETH_P_IP);
+	ip4h->version = 4;
+	ip4h->ihl = sizeof(struct iphdr) / 4;
+	ip4h->tos = 0;
+	ip4h->tot_len = htons(len + sizeof(*ip4h));
+	ip4h->id = 0;
+	ip4h->frag_off = 0;
+	ip4h->ttl = 255;
+	ip4h->protocol = proto;
+	ip4h->saddr = src;
+	ip4h->daddr = tap_ip4_daddr(c);
+	csum_ip4_header(ip4h);
 
-		iph->version = 4;
-		iph->ihl = 5;
-		iph->tos = 0;
-		iph->tot_len = htons(len + 20);
-		iph->id = 0;
-		iph->frag_off = 0;
-		iph->ttl = 255;
-		iph->protocol = proto;
-		iph->daddr = tap_ip4_daddr(c);
-		memcpy(&iph->saddr, &src->s6_addr[12], 4);
+	memcpy(data, in, len);
 
-		csum_ip4_header(iph);
+	if (ip4h->protocol == IPPROTO_UDP) {
+		struct udphdr *uh = (struct udphdr *)(ip4h + 1);
 
-		memcpy(data, in, len);
-
-		if (iph->protocol == IPPROTO_UDP) {
-			struct udphdr *uh = (struct udphdr *)(iph + 1);
-
-			csum_udp4(uh, iph->saddr, iph->daddr, uh + 1, len - sizeof(*uh));
-		} else if (iph->protocol == IPPROTO_ICMP) {
-			struct icmphdr *ih = (struct icmphdr *)(iph + 1);
-			csum_icmp4(ih, ih + 1, len - sizeof(*ih));
-		}
-
-		if (tap_send(c, buf, len + sizeof(*iph) + sizeof(*eh)) < 0)
-			debug("tap: failed to send %lu bytes (IPv4)", len);
-	} else {
-		struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1);
-		char *data = (char *)(ip6h + 1);
-
-		eh->h_proto = ntohs(ETH_P_IPV6);
-
-		memset(ip6h->flow_lbl, 0, 3);
-		ip6h->payload_len = htons(len);
-		ip6h->priority = 0;
-
-		ip6h->saddr = *src;
-		ip6h->daddr = *tap_ip6_daddr(c, src);
-
-		memcpy(data, in, len);
-
-		ip6h->hop_limit = proto;
-		ip6h->version = 0;
-		ip6h->nexthdr = 0;
-
-		if (proto == IPPROTO_UDP) {
-			struct udphdr *uh = (struct udphdr *)(ip6h + 1);
-
-			csum_udp6(uh, &ip6h->saddr, &ip6h->daddr,
-				  uh + 1, len - sizeof(*uh));
-		} else if (proto == IPPROTO_ICMPV6) {
-			struct icmp6hdr *ih = (struct icmp6hdr *)(ip6h + 1);
-
-			csum_icmp6(ih, &ip6h->saddr, &ip6h->daddr,
-				   ih + 1, len - sizeof(*ih));
-		}
-		ip6h->version = 6;
-		ip6h->nexthdr = proto;
-		ip6h->hop_limit = 255;
-		if (flow) {
-			ip6h->flow_lbl[0] = (flow >> 16) & 0xf;
-			ip6h->flow_lbl[1] = (flow >> 8) & 0xff;
-			ip6h->flow_lbl[2] = (flow >> 0) & 0xff;
-		}
-
-		if (tap_send(c, buf, len + sizeof(*ip6h) + sizeof(*eh)) < 1)
-			debug("tap: failed to send %lu bytes (IPv6)", len);
+		csum_udp4(uh, ip4h->saddr, ip4h->daddr,
+			  uh + 1, len - sizeof(*uh));
+	} else if (ip4h->protocol == IPPROTO_ICMP) {
+		struct icmphdr *ih = (struct icmphdr *)(ip4h + 1);
+		csum_icmp4(ih, ih + 1, len - sizeof(*ih));
 	}
+
+	if (tap_send(c, buf, len + (data - buf)) < 0)
+		debug("tap: failed to send %lu bytes (IPv4)", len);
+}
+
+/**
+ * tap_ip6_send() - Send IPv6 packet, with L2 headers, calculating L3/L4 checksums
+ * @c:		Execution context
+ * @src:	IPv6 source address
+ * @proto:	L4 protocol number
+ * @in:		Payload
+ * @len:	L4 payload length
+ * @flow:	Flow label
+ */
+void tap_ip6_send(const struct ctx *c, const struct in6_addr *src,
+		  uint8_t proto, const char *in, size_t len, uint32_t flow)
+{
+	char buf[USHRT_MAX];
+	struct ipv6hdr *ip6h =
+		(struct ipv6hdr *)tap_push_l2h(c, buf, ETH_P_IPV6);
+	char *data = (char *)(ip6h + 1);
+
+	ip6h->payload_len = htons(len);
+	ip6h->priority = 0;
+	ip6h->version = 6;
+	ip6h->nexthdr = proto;
+	ip6h->hop_limit = 255;
+	ip6h->saddr = *src;
+	ip6h->daddr = *tap_ip6_daddr(c, src);
+	ip6h->flow_lbl[0] = (flow >> 16) & 0xf;
+	ip6h->flow_lbl[1] = (flow >> 8) & 0xff;
+	ip6h->flow_lbl[2] = (flow >> 0) & 0xff;
+
+	memcpy(data, in, len);
+
+	if (proto == IPPROTO_UDP) {
+		struct udphdr *uh = (struct udphdr *)(ip6h + 1);
+
+		csum_udp6(uh, &ip6h->saddr, &ip6h->daddr,
+			  uh + 1, len - sizeof(*uh));
+	} else if (proto == IPPROTO_ICMPV6) {
+		struct icmp6hdr *ih = (struct icmp6hdr *)(ip6h + 1);
+
+		csum_icmp6(ih, &ip6h->saddr, &ip6h->daddr,
+			   ih + 1, len - sizeof(*ih));
+	}
+
+	if (tap_send(c, buf, len + (data - buf)) < 1)
+		debug("tap: failed to send %lu bytes (IPv6)", len);
 }
 
 PACKET_POOL_DECL(pool_l4, UIO_MAXIOV, pkt_buf);

@@ -9,8 +9,10 @@
 in_addr_t tap_ip4_daddr(const struct ctx *c);
 const struct in6_addr *tap_ip6_daddr(const struct ctx *c,
 				     const struct in6_addr *src);
-void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
-		 const char *in, size_t len, uint32_t flow);
+void tap_ip4_send(const struct ctx *c, in_addr_t src, uint8_t proto,
+		  const char *in, size_t len);
+void tap_ip6_send(const struct ctx *c, const struct in6_addr *src,
+		  uint8_t proto, const char *in, size_t len, uint32_t flow);
 int tap_send(const struct ctx *c, const void *data, size_t len);
 void tap_handler(struct ctx *c, int fd, uint32_t events,
 		 const struct timespec *now);
