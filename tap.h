@@ -7,10 +7,13 @@
 #define TAP_H
 
 in_addr_t tap_ip4_daddr(const struct ctx *c);
+void tap_udp4_send(const struct ctx *c, in_addr_t src, in_port_t sport,
+		   in_addr_t dst, in_port_t dport,
+		   const void *in, size_t len);
+void tap_icmp4_send(const struct ctx *c, in_addr_t src, in_addr_t dst,
+		    void *in, size_t len);
 const struct in6_addr *tap_ip6_daddr(const struct ctx *c,
 				     const struct in6_addr *src);
-void tap_ip4_send(const struct ctx *c, in_addr_t src, uint8_t proto,
-		  const char *in, size_t len);
 void tap_udp6_send(const struct ctx *c,
 		   const struct in6_addr *src, in_port_t sport,
 		   const struct in6_addr *dst, in_port_t dport,

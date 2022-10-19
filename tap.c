@@ -132,19 +132,19 @@ static void *tap_push_l2h(const struct ctx *c, void *buf, uint16_t proto)
 }
 
 /**
- * tap_ip4_send() - Send IPv4 packet, with L2 headers, calculating L3/L4 checksums
+ * tap_push_ip4h() - Build IPv4 header for inbound packet, with checksum
  * @c:		Execution context
- * @src:	IPv4 source address
- * @proto:	L4 protocol number
- * @in:		Payload
+ * @src:	IPv4 source address, network order
+ * @dst:	IPv4 destination address, network order
  * @len:	L4 payload length
+ * @proto:	L4 protocol number
+ *
+ * Return: pointer at which to write the packet's payload
  */
-void tap_ip4_send(const struct ctx *c, in_addr_t src, uint8_t proto,
-		  const char *in, size_t len)
+static void *tap_push_ip4h(char *buf, in_addr_t src, in_addr_t dst,
+			   size_t len, uint8_t proto)
 {
-	char buf[USHRT_MAX];
-	struct iphdr *ip4h = (struct iphdr *)tap_push_l2h(c, buf, ETH_P_IP);
-	char *data = (char *)(ip4h + 1);
+	struct iphdr *ip4h = (struct iphdr *)buf;
 
 	ip4h->version = 4;
 	ip4h->ihl = sizeof(struct iphdr) / 4;
@@ -155,20 +155,61 @@ void tap_ip4_send(const struct ctx *c, in_addr_t src, uint8_t proto,
 	ip4h->ttl = 255;
 	ip4h->protocol = proto;
 	ip4h->saddr = src;
-	ip4h->daddr = tap_ip4_daddr(c);
+	ip4h->daddr = dst;
 	csum_ip4_header(ip4h);
+	return ip4h + 1;
+}
 
+/**
+ * tap_udp4_send() - Send UDP over IPv4 packet
+ * @c:		Execution context
+ * @src:	IPv4 source address
+ * @sport:	UDP source port
+ * @dst:	IPv4 destination address
+ * @dport:	UDP destination port
+ * @in:		UDP payload contents (not including UDP header)
+ * @len:	UDP payload length (not including UDP header)
+ */
+/* cppcheck-suppress unusedFunction */
+void tap_udp4_send(const struct ctx *c, in_addr_t src, in_port_t sport,
+		   in_addr_t dst, in_port_t dport,
+		   const void *in, size_t len)
+{
+	size_t udplen = len + sizeof(struct udphdr);
+	char buf[USHRT_MAX];
+	void *ip4h = tap_push_l2h(c, buf, ETH_P_IP);
+	void *uhp = tap_push_ip4h(ip4h, src, dst, udplen, IPPROTO_UDP);
+	struct udphdr *uh = (struct udphdr *)uhp;
+	char *data = (char *)(uh + 1);
+
+	uh->source = htons(sport);
+	uh->dest = htons(dport);
+	uh->len = htons(udplen);
+	csum_udp4(uh, src, dst, in, len);
 	memcpy(data, in, len);
 
-	if (ip4h->protocol == IPPROTO_UDP) {
-		struct udphdr *uh = (struct udphdr *)(ip4h + 1);
+	if (tap_send(c, buf, len + (data - buf)) < 0)
+		debug("tap: failed to send %lu bytes (IPv4)", len);
+}
 
-		csum_udp4(uh, ip4h->saddr, ip4h->daddr,
-			  uh + 1, len - sizeof(*uh));
-	} else if (ip4h->protocol == IPPROTO_ICMP) {
-		struct icmphdr *ih = (struct icmphdr *)(ip4h + 1);
-		csum_icmp4(ih, ih + 1, len - sizeof(*ih));
-	}
+/**
+ * tap_icmp4_send() - Send ICMPv4 packet
+ * @c:		Execution context
+ * @src:	IPv4 source address
+ * @dst:	IPv4 destination address
+ * @in:		ICMP packet, including ICMP header
+ * @len:	ICMP packet length, including ICMP header
+ */
+void tap_icmp4_send(const struct ctx *c, in_addr_t src, in_addr_t dst,
+		    void *in, size_t len)
+{
+	char buf[USHRT_MAX];
+	void *ip4h = tap_push_l2h(c, buf, ETH_P_IP);
+	char *data = tap_push_ip4h(ip4h, src, dst, len, IPPROTO_ICMP);
+	struct icmphdr *icmp4h = (struct icmphdr *)data;
+
+	memcpy(data, in, len);
+	csum_icmp4(icmp4h, icmp4h + 1, len - sizeof(*icmp4h));
 
 	if (tap_send(c, buf, len + (data - buf)) < 0)
 		debug("tap: failed to send %lu bytes (IPv4)", len);

@@ -124,7 +124,8 @@ void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
 			icmp_id_map[V4][id].seq = seq;
 		}
 
-		tap_ip4_send(c, sr4->sin_addr.s_addr, IPPROTO_ICMP, buf, n);
+		tap_icmp4_send(c, sr4->sin_addr.s_addr, tap_ip4_daddr(c),
+			       buf, n);
 	}
 }
 
