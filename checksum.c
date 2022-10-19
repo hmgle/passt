@@ -52,6 +52,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <linux/icmpv6.h>
+
 /**
  * sum_16b() - Calculate sum of 16-bit words
  * @buf:	Input buffer
@@ -103,6 +105,29 @@ __attribute__((__noipa__))	/* See comment in Makefile */
 uint16_t csum_unaligned(const void *buf, size_t len, uint32_t init)
 {
 	return (uint16_t)~csum_fold(sum_16b(buf, len) + init);
+}
+
+/**
+ * csum_icmp6() - Calculate and set checksum for an ICMPv6 packet
+ * @icmp6hr:	ICMPv6 header, initialised apart from checksum
+ * @saddr:	IPv6 source address
+ * @daddr:	IPv6 destination address
+ * @payload:	ICMP packet payload
+ * @len:	Length of @payload (not including ICMPv6 header)
+ */
+void csum_icmp6(struct icmp6hdr *icmp6hr,
+		const struct in6_addr *saddr, const struct in6_addr *daddr,
+		const void *payload, size_t len)
+{
+	/* Partial checksum for the pseudo-IPv6 header */
+	uint32_t psum = sum_16b(saddr, sizeof(*saddr)) +
+		        sum_16b(daddr, sizeof(*daddr)) +
+		        htons(len + sizeof(*icmp6hr)) + htons(IPPROTO_ICMPV6);
+
+	icmp6hr->icmp6_cksum = 0;
+	/* Add in partial checksum for the ICMPv6 header alone */
+	psum += sum_16b(icmp6hr, sizeof(*icmp6hr));
+	icmp6hr->icmp6_cksum = csum_unaligned(payload, len, psum);
 }
 
 /**

@@ -189,10 +189,7 @@ dns_done:
 		ip6hr->saddr = c->ip6.addr_ll;
 
 	ip6hr->payload_len = htons(sizeof(*ihr) + len);
-	ip6hr->hop_limit = IPPROTO_ICMPV6;
-	ihr->icmp6_cksum = 0;
-	ihr->icmp6_cksum = csum_unaligned(ip6hr, sizeof(*ip6hr) +
-						 sizeof(*ihr) + len, 0);
+	csum_icmp6(ihr, &ip6hr->saddr, &ip6hr->daddr, ihr + 1, len);
 
 	ip6hr->version = 6;
 	ip6hr->nexthdr = IPPROTO_ICMPV6;

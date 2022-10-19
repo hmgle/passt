@@ -191,10 +191,8 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 		} else if (proto == IPPROTO_ICMPV6) {
 			struct icmp6hdr *ih = (struct icmp6hdr *)(ip6h + 1);
 
-			ih->icmp6_cksum = 0;
-			ih->icmp6_cksum = csum_unaligned(ip6h,
-							 len + sizeof(*ip6h),
-							 0);
+			csum_icmp6(ih, &ip6h->saddr, &ip6h->daddr,
+				   ih + 1, len - sizeof(*ih));
 		}
 		ip6h->version = 6;
 		ip6h->nexthdr = proto;
