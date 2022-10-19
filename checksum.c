@@ -211,40 +211,6 @@ void csum_icmp6(struct icmp6hdr *icmp6hr,
 	icmp6hr->icmp6_cksum = csum_unaligned(payload, len, psum);
 }
 
-/**
- * csum_tcp4() - Calculate TCP checksum for IPv4 and set in place
- * @iph:	Packet buffer, IP header
- */
-void csum_tcp4(struct iphdr *iph)
-{
-	uint16_t tlen = ntohs(iph->tot_len) - iph->ihl * 4, *p;
-	struct tcphdr *th;
-	uint32_t sum = 0;
-
-	th = (struct tcphdr *)((char *)iph + (intptr_t)(iph->ihl * 4));
-	p = (uint16_t *)th;
-
-	sum += (iph->saddr >> 16) & 0xffff;
-	sum += iph->saddr & 0xffff;
-	sum += (iph->daddr >> 16) & 0xffff;
-	sum += iph->daddr & 0xffff;
-
-	sum += htons(IPPROTO_TCP);
-	sum += htons(tlen);
-
-	th->check = 0;
-	while (tlen > 1) {
-		sum += *p++;
-		tlen -= 2;
-	}
-
-	if (tlen > 0) {
-		sum += *p & htons(0xff00);
-	}
-
-	th->check = (uint16_t)~csum_fold(sum);
-}
-
 #ifdef __AVX2__
 #include <immintrin.h>
 

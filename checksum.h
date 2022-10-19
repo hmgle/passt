@@ -23,7 +23,6 @@ void csum_udp6(struct udphdr *udp6hr,
 void csum_icmp6(struct icmp6hdr *icmp6hr,
 		const struct in6_addr *saddr, const struct in6_addr *daddr,
 		const void *payload, size_t len);
-void csum_tcp4(struct iphdr *iph);
 uint16_t csum(const void *buf, size_t len, uint32_t init);
 
 #endif /* CHECKSUM_H */

@@ -165,9 +165,7 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 
 		memcpy(data, in, len);
 
-		if (iph->protocol == IPPROTO_TCP) {
-			csum_tcp4(iph);
-		} else if (iph->protocol == IPPROTO_UDP) {
+		if (iph->protocol == IPPROTO_UDP) {
 			struct udphdr *uh = (struct udphdr *)(iph + 1);
 
 			csum_udp4(uh, iph->saddr, iph->daddr, uh + 1, len - sizeof(*uh));
@@ -196,13 +194,8 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 		ip6h->hop_limit = proto;
 		ip6h->version = 0;
 		ip6h->nexthdr = 0;
-		if (proto == IPPROTO_TCP) {
-			struct tcphdr *th = (struct tcphdr *)(ip6h + 1);
 
-			th->check = 0;
-			th->check = csum_unaligned(ip6h, len + sizeof(*ip6h),
-						   0);
-		} else if (proto == IPPROTO_UDP) {
+		if (proto == IPPROTO_UDP) {
 			struct udphdr *uh = (struct udphdr *)(ip6h + 1);
 
 			csum_udp6(uh, &ip6h->saddr, &ip6h->daddr,
