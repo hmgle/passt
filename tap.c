@@ -183,9 +183,8 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 		} else if (proto == IPPROTO_UDP) {
 			struct udphdr *uh = (struct udphdr *)(ip6h + 1);
 
-			uh->check = 0;
-			uh->check = csum_unaligned(ip6h, len + sizeof(*ip6h),
-						   0);
+			csum_udp6(uh, &ip6h->saddr, &ip6h->daddr,
+				  uh + 1, len - sizeof(*uh));
 		} else if (proto == IPPROTO_ICMPV6) {
 			struct icmp6hdr *ih = (struct icmp6hdr *)(ip6h + 1);
 

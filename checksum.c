@@ -52,6 +52,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <linux/udp.h>
 #include <linux/icmp.h>
 #include <linux/icmpv6.h>
 
@@ -121,6 +122,27 @@ void csum_icmp4(struct icmphdr *icmp4hr, const void *payload, size_t len)
 
 	icmp4hr->checksum = 0;
 	icmp4hr->checksum = csum_unaligned(payload, len, psum);
+}
+
+/**
+ * csum_udp6() - Calculate and set checksum for a UDP over IPv6 packet
+ * @udp6hr:	UDP header, initialised apart from checksum
+ * @payload:	UDP packet payload
+ * @len:	Length of @payload (not including UDP header)
+ */
+void csum_udp6(struct udphdr *udp6hr,
+	       const struct in6_addr *saddr, const struct in6_addr *daddr,
+	       const void *payload, size_t len)
+{
+	/* Partial checksum for the pseudo-IPv6 header */
+	uint32_t psum = sum_16b(saddr, sizeof(*saddr)) +
+		        sum_16b(daddr, sizeof(*daddr)) +
+		        htons(len + sizeof(*udp6hr)) + htons(IPPROTO_UDP);
+
+	udp6hr->check = 0;
+	/* Add in partial checksum for the UDP header alone */
+	psum += sum_16b(udp6hr, sizeof(*udp6hr));
+	udp6hr->check = csum_unaligned(payload, len, psum);
 }
 
 /**
