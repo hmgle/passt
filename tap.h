@@ -6,6 +6,9 @@
 #ifndef TAP_H
 #define TAP_H
 
+in_addr_t tap_ip4_daddr(const struct ctx *c);
+const struct in6_addr *tap_ip6_daddr(const struct ctx *c,
+				     const struct in6_addr *src);
 void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 		 const char *in, size_t len, uint32_t flow);
 int tap_send(const struct ctx *c, const void *data, size_t len, int vnet_pre);

@@ -97,6 +97,32 @@ int tap_send(const struct ctx *c, const void *data, size_t len, int vnet_pre)
 }
 
 /**
+ * tap_ip4_daddr() - Normal IPv4 destination address for inbound packets
+ * @c:		Execution context
+ *
+ * Returns: IPv4 address, network order
+ */
+in_addr_t tap_ip4_daddr(const struct ctx *c)
+{
+	return c->ip4.addr_seen;
+}
+
+/**
+ * tap_ip6_daddr() - Normal IPv4 destination address for inbound packets
+ * @c:		Execution context
+ * @src:	Source address
+ *
+ * Returns: pointer to IPv6 address
+ */
+const struct in6_addr *tap_ip6_daddr(const struct ctx *c,
+				     const struct in6_addr *src)
+{
+	if (IN6_IS_ADDR_LINKLOCAL(src))
+		return &c->ip6.addr_ll_seen;
+	return &c->ip6.addr_seen;
+}
+
+/**
  * tap_ip_send() - Send IP packet, with L2 headers, calculating L3/L4 checksums
  * @c:		Execution context
  * @src:	IPv6 source address, IPv4-mapped for IPv4 sources
@@ -132,7 +158,7 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 		iph->frag_off = 0;
 		iph->ttl = 255;
 		iph->protocol = proto;
-		iph->daddr = c->ip4.addr_seen;
+		iph->daddr = tap_ip4_daddr(c);
 		memcpy(&iph->saddr, &src->s6_addr[12], 4);
 
 		csum_ip4_header(iph);
@@ -163,10 +189,7 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 		ip6h->priority = 0;
 
 		ip6h->saddr = *src;
-		if (IN6_IS_ADDR_LINKLOCAL(src))
-			ip6h->daddr = c->ip6.addr_ll_seen;
-		else
-			ip6h->daddr = c->ip6.addr_seen;
+		ip6h->daddr = *tap_ip6_daddr(c, src);
 
 		memcpy(data, in, len);
 
