@@ -377,7 +377,7 @@ int dhcp(const struct ctx *c, const struct pool *p)
 	memcpy(eh->h_dest, eh->h_source, ETH_ALEN);
 	memcpy(eh->h_source, c->mac, ETH_ALEN);
 
-	if (tap_send(c, eh, len, 0) < 0)
+	if (tap_send(c, eh, len) < 0)
 		perror("DHCP: send");
 
 	return 1;

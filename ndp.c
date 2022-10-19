@@ -200,7 +200,7 @@ dns_done:
 	memcpy(ehr->h_source, c->mac, ETH_ALEN);
 	ehr->h_proto = htons(ETH_P_IPV6);
 
-	if (tap_send(c, ehr, len, 0) < 0)
+	if (tap_send(c, ehr, len) < 0)
 		perror("NDP: send");
 
 	return 1;

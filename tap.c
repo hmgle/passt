@@ -66,34 +66,24 @@ static PACKET_POOL_NOINIT(pool_tap6, TAP_MSGS, pkt_buf);
  * @c:		Execution context
  * @data:	Packet buffer
  * @len:	Total L2 packet length
- * @vnet_pre:	Buffer has four-byte headroom
  *
  * Return: return code from send() or write()
  */
-int tap_send(const struct ctx *c, const void *data, size_t len, int vnet_pre)
+int tap_send(const struct ctx *c, const void *data, size_t len)
 {
-	if (vnet_pre)
-		pcap((char *)data + 4, len);
-	else
-		pcap(data, len);
+	pcap(data, len);
 
 	if (c->mode == MODE_PASST) {
 		int flags = MSG_NOSIGNAL | MSG_DONTWAIT;
+		uint32_t vnet_len = htonl(len);
 
-		if (vnet_pre) {
-			*((uint32_t *)data) = htonl(len);
-			len += 4;
-		} else {
-			uint32_t vnet_len = htonl(len);
-
-			if (send(c->fd_tap, &vnet_len, 4, flags) < 0)
-				return -1;
-		}
+		if (send(c->fd_tap, &vnet_len, 4, flags) < 0)
+			return -1;
 
 		return send(c->fd_tap, data, len, flags);
 	}
 
-	return write(c->fd_tap, (char *)data + (vnet_pre ? 4 : 0), len);
+	return write(c->fd_tap, (char *)data, len);
 }
 
 /**
@@ -135,10 +125,9 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 		 const char *in, size_t len, uint32_t flow)
 {
 	char buf[USHRT_MAX];
-	char *pkt = buf + 4;
 	struct ethhdr *eh;
 
-	eh = (struct ethhdr *)pkt;
+	eh = (struct ethhdr *)buf;
 
 	/* TODO: ARP table lookup */
 	memcpy(eh->h_dest, c->mac_guest, ETH_ALEN);
@@ -174,7 +163,7 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 			csum_icmp4(ih, ih + 1, len - sizeof(*ih));
 		}
 
-		if (tap_send(c, buf, len + sizeof(*iph) + sizeof(*eh), 1) < 0)
+		if (tap_send(c, buf, len + sizeof(*iph) + sizeof(*eh)) < 0)
 			debug("tap: failed to send %lu bytes (IPv4)", len);
 	} else {
 		struct ipv6hdr *ip6h = (struct ipv6hdr *)(eh + 1);
@@ -215,7 +204,7 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 			ip6h->flow_lbl[2] = (flow >> 0) & 0xff;
 		}
 
-		if (tap_send(c, buf, len + sizeof(*ip6h) + sizeof(*eh), 1) < 1)
+		if (tap_send(c, buf, len + sizeof(*ip6h) + sizeof(*eh)) < 1)
 			debug("tap: failed to send %lu bytes (IPv6)", len);
 	}
 }

@@ -81,7 +81,7 @@ int arp(const struct ctx *c, const struct pool *p)
 	memcpy(eh->h_dest,	eh->h_source,	sizeof(eh->h_dest));
 	memcpy(eh->h_source,	c->mac,		sizeof(eh->h_source));
 
-	if (tap_send(c, eh, len, 0) < 0)
+	if (tap_send(c, eh, len) < 0)
 		perror("ARP: send");
 
 	return 1;
