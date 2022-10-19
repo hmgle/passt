@@ -364,9 +364,9 @@ int dhcp(const struct ctx *c, const struct pool *p)
 		opt_set_dns_search(c, sizeof(m->o));
 
 	uh->len = htons(len = offsetof(struct msg, o) + fill(m) + sizeof(*uh));
-	uh->check = 0;
 	uh->source = htons(67);
 	uh->dest = htons(68);
+	csum_udp4(uh, c->ip4.gw, c->ip4.addr, uh + 1, len - sizeof(*uh));
 
 	iph->tot_len = htons(len += sizeof(*iph));
 	iph->daddr = c->ip4.addr;

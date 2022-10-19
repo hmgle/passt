@@ -145,7 +145,7 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 		} else if (iph->protocol == IPPROTO_UDP) {
 			struct udphdr *uh = (struct udphdr *)(iph + 1);
 
-			uh->check = 0;
+			csum_udp4(uh, iph->saddr, iph->daddr, uh + 1, len - sizeof(*uh));
 		} else if (iph->protocol == IPPROTO_ICMP) {
 			struct icmphdr *ih = (struct icmphdr *)(iph + 1);
 			csum_icmp4(ih, ih + 1, len - sizeof(*ih));

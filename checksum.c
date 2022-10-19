@@ -56,6 +56,12 @@
 #include <linux/icmp.h>
 #include <linux/icmpv6.h>
 
+/* Checksums are optional for UDP over IPv4, so we usually just set
+ * them to 0.  Change this to 1 to calculate real UDP over IPv4
+ * checksums
+ */
+#define UDP4_REAL_CHECKSUMS	0
+
 /**
  * sum_16b() - Calculate sum of 16-bit words
  * @buf:	Input buffer
@@ -107,6 +113,33 @@ __attribute__((__noipa__))	/* See comment in Makefile */
 uint16_t csum_unaligned(const void *buf, size_t len, uint32_t init)
 {
 	return (uint16_t)~csum_fold(sum_16b(buf, len) + init);
+}
+
+/**
+ * csum_udp4() - Calculate and set checksum for a UDP over IPv4 packet
+ * @udp4hr:	UDP header, initialised apart from checksum
+ * @saddr:	IPv4 source address
+ * @daddr:	IPv4 destination address
+ * @payload:	ICMPv4 packet payload
+ * @len:	Length of @payload (not including UDP)
+ */
+void csum_udp4(struct udphdr *udp4hr, in_addr_t saddr, in_addr_t daddr,
+	       const void *payload, size_t len)
+{
+	/* UDP checksums are optional, so don't bother */
+	udp4hr->check = 0;
+
+	if (UDP4_REAL_CHECKSUMS) {
+		/* UNTESTED: if we did want real UDPv4 checksums, this
+		 * is roughly what we'd need */
+		uint32_t psum = csum_fold(htonl(saddr))
+			+ csum_fold(htonl(daddr))
+			+ htons(len + sizeof(*udp4hr))
+			+ htons(IPPROTO_UDP);
+		/* Add in partial checksum for the UDP header alone */
+		psum += sum_16b(udp4hr, sizeof(*udp4hr));
+		udp4hr->check = csum_unaligned(payload, len, psum);
+	}
 }
 
 /**
