@@ -208,15 +208,8 @@ struct msg_hdr {
 	uint32_t xid:24;
 } __attribute__((__packed__));
 
-#if __BYTE_ORDER == __BIG_ENDIAN
-#define UH_RESP {{{ 547, 546, 0, 0, }}}
-#else
-#define UH_RESP {{{ __bswap_constant_16(547), __bswap_constant_16(546), 0, 0 }}}
-#endif
-
 /**
  * struct resp_t - Normal advertise and reply message
- * @uh:			UDP header
  * @hdr:		DHCP message header
  * @server_id:		Server Identifier option
  * @ia_na:		Non-temporary Address option
@@ -226,7 +219,6 @@ struct msg_hdr {
  * @dns_search:		Domain Search List, here just for storage size
  */
 static struct resp_t {
-	struct udphdr  uh;
 	struct msg_hdr hdr;
 
 	struct opt_server_id server_id;
@@ -236,7 +228,6 @@ static struct resp_t {
 	struct opt_dns_servers dns_servers;
 	struct opt_dns_search dns_search;
 } __attribute__((__packed__)) resp = {
-	UH_RESP,
 	{ 0 },
 	SERVER_ID,
 
@@ -270,13 +261,11 @@ static const struct opt_status_code sc_not_on_link = {
 
 /**
  * struct resp_not_on_link_t - NotOnLink error (mandated by RFC 8415, 18.3.2.)
- * @uh:		UDP header
  * @hdr:	DHCP message header
  * @server_id:	Server Identifier option
  * @var:	Payload: IA_NA from client, status code, client ID
  */
 static struct resp_not_on_link_t {
-	struct udphdr  uh;
 	struct msg_hdr hdr;
 
 	struct opt_server_id server_id;
@@ -284,7 +273,6 @@ static struct resp_not_on_link_t {
 	uint8_t var[sizeof(struct opt_ia_na) + sizeof(struct opt_status_code) +
 		    sizeof(struct opt_client_id)];
 } __attribute__((__packed__)) resp_not_on_link = {
-	UH_RESP,
 	{ TYPE_REPLY, 0 },
 	SERVER_ID,
 	{ 0, },
@@ -527,12 +515,11 @@ int dhcpv6(struct ctx *c, const struct pool *p,
 			n += sizeof(struct opt_hdr) + ntohs(client_id->l);
 
 			n = offsetof(struct resp_not_on_link_t, var) + n;
-			resp_not_on_link.uh.len = htons(n);
 
 			resp_not_on_link.hdr.xid = mh->xid;
 
-			tap_ip6_send(c, src, IPPROTO_UDP,
-				     (char *)&resp_not_on_link, n, mh->xid);
+			tap_udp6_send(c, src, 547, tap_ip6_daddr(c, src), 546,
+				      mh->xid, &resp_not_on_link, n);
 
 			return 1;
 		}
@@ -576,11 +563,11 @@ int dhcpv6(struct ctx *c, const struct pool *p,
 	n = offsetof(struct resp_t, client_id) +
 	    sizeof(struct opt_hdr) + ntohs(client_id->l);
 	n = dhcpv6_dns_fill(c, (char *)&resp, n);
-	resp.uh.len = htons(n);
 
 	resp.hdr.xid = mh->xid;
 
-	tap_ip6_send(c, src, IPPROTO_UDP, (char *)&resp, n, mh->xid);
+	tap_udp6_send(c, src, 547, tap_ip6_daddr(c, src), 546,
+		      mh->xid, &resp, n);
 	c->ip6.addr_seen = c->ip6.addr;
 
 	return 1;
