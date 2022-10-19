@@ -371,8 +371,7 @@ int dhcp(const struct ctx *c, const struct pool *p)
 	iph->tot_len = htons(len += sizeof(*iph));
 	iph->daddr = c->ip4.addr;
 	iph->saddr = c->ip4.gw;
-	iph->check = 0;
-	iph->check = csum_unaligned(iph, (intptr_t)(iph->ihl * 4), 0);
+	csum_ip4_header(iph);
 
 	len += sizeof(*eh);
 	memcpy(eh->h_dest, eh->h_source, ETH_ALEN);

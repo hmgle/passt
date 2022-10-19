@@ -135,8 +135,7 @@ void tap_ip_send(const struct ctx *c, const struct in6_addr *src, uint8_t proto,
 		iph->daddr = c->ip4.addr_seen;
 		memcpy(&iph->saddr, &src->s6_addr[12], 4);
 
-		iph->check = 0;
-		iph->check = csum_unaligned(iph, (size_t)iph->ihl * 4, 0);
+		csum_ip4_header(iph);
 
 		memcpy(data, in, len);
 

@@ -116,6 +116,16 @@ uint16_t csum_unaligned(const void *buf, size_t len, uint32_t init)
 }
 
 /**
+ * csum_ip4_header() - Calculate and set IPv4 header checksum
+ * @ip4h:	IPv4 header
+ */
+void csum_ip4_header(struct iphdr *ip4h)
+{
+	ip4h->check = 0;
+	ip4h->check = csum_unaligned(ip4h, (size_t)ip4h->ihl * 4, 0);
+}
+
+/**
  * csum_udp4() - Calculate and set checksum for a UDP over IPv4 packet
  * @udp4hr:	UDP header, initialised apart from checksum
  * @saddr:	IPv4 source address
