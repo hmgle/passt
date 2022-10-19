@@ -363,22 +363,8 @@ int dhcp(const struct ctx *c, const struct pool *p)
 	if (!c->no_dhcp_dns_search)
 		opt_set_dns_search(c, sizeof(m->o));
 
-	uh->len = htons(len = offsetof(struct msg, o) + fill(m) + sizeof(*uh));
-	uh->source = htons(67);
-	uh->dest = htons(68);
-	csum_udp4(uh, c->ip4.gw, c->ip4.addr, uh + 1, len - sizeof(*uh));
-
-	iph->tot_len = htons(len += sizeof(*iph));
-	iph->daddr = c->ip4.addr;
-	iph->saddr = c->ip4.gw;
-	csum_ip4_header(iph);
-
-	len += sizeof(*eh);
-	memcpy(eh->h_dest, eh->h_source, ETH_ALEN);
-	memcpy(eh->h_source, c->mac, ETH_ALEN);
-
-	if (tap_send(c, eh, len) < 0)
-		perror("DHCP: send");
+	len = offsetof(struct msg, o) + fill(m);
+	tap_udp4_send(c, c->ip4.gw, 67, c->ip4.addr, 68, m, len);
 
 	return 1;
 }

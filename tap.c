@@ -170,7 +170,6 @@ static void *tap_push_ip4h(char *buf, in_addr_t src, in_addr_t dst,
  * @in:		UDP payload contents (not including UDP header)
  * @len:	UDP payload length (not including UDP header)
  */
-/* cppcheck-suppress unusedFunction */
 void tap_udp4_send(const struct ctx *c, in_addr_t src, in_port_t sport,
 		   in_addr_t dst, in_port_t dport,
 		   const void *in, size_t len)
