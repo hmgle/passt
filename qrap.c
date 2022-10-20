@@ -69,6 +69,8 @@ static const struct drop_arg {
  * @name:		Device ("-device") name to insert
  * @template:		Prefix for device specification (first part of address)
  * @template_post:	Suffix for device specification (last part of address)
+ * @template_json:		Device prefix for when JSON is used
+ * @template_json_post:	Device suffix for when JSON is used
  * @first:		First usable PCI address
  * @last:		Last usable PCI address
  */
@@ -77,15 +79,29 @@ static const struct pci_dev {
 	char *name;
 	char *template;
 	char *template_post;
+	char *template_json;
+	char *template_json_post;
 	int first;
 	int last;
 } pci_devs[] = {
-	{ "pc-q35",	"virtio-net-pci",
-		"bus=pci.", ",addr=0x0",	3, /* 2: hotplug bus */	16 },
-	{ "pc-",	"virtio-net-pci",
-		"bus=pci.0,addr=0x", "",	2, /* 1: ISA bridge */	16 },
-	{ "s390-ccw",	"virtio-net-ccw",
-		"devno=fe.0.", "",		1,			16 },
+	{
+		"pc-q35", "virtio-net-pci",
+		"bus=pci.", ",addr=0x0",
+		"\"bus\":\"pci.", ",\"addr\":\"0x0\"",
+		3, /* 2: hotplug bus */ 16
+	},
+	{
+		"pc-", "virtio-net-pci",
+		"bus=pci.0,addr=0x", "",
+		"\"bus\":\"pci.0\",\"addr=0x", "",
+		2, /* 1: ISA bridge */ 16
+	},
+	{
+		"s390-ccw", "virtio-net-ccw",
+		"devno=fe.0.", "",
+		"\"devno\":\"fe.0.", "",
+		1, 16
+	},
 	{ 0 },
 };
 
@@ -115,7 +131,7 @@ void usage(const char *name)
  */
 int main(int argc, char **argv)
 {
-	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0, retry_on_reset, rc;
+	int i, s, qemu_argc = 0, addr_map = 0, has_dev = 0, has_json = 0, retry_on_reset, rc;
 	struct timeval tv = { .tv_sec = 0, .tv_usec = (long)(500 * 1000) };
 	char *qemu_argv[ARG_MAX], dev_str[ARG_MAX];
 	struct sockaddr_un addr = {
@@ -227,14 +243,22 @@ int main(int argc, char **argv)
 		}
 
 		if (!strcmp(argv[i], "-device") && i + 1 < argc) {
+			char *template = NULL;
 			char *p;
 
 			has_dev = 1;
 
 			if ((p = strstr(argv[i + 1], dev->template))) {
+				template = dev->template;
+			} else if ((p = strstr(argv[i + 1], dev->template_json))) {
+				template = dev->template_json;
+				has_json = 1;
+			}
+
+			if (template) {
 				long n;
 
-				n = strtol(p + strlen(dev->template), NULL, 16);
+				n = strtol(p + strlen(template), NULL, 16);
 				if (!errno)
 					addr_map |= (1 << n);
 			}
@@ -254,8 +278,15 @@ int main(int argc, char **argv)
 
 	if (has_dev) {
 		qemu_argv[qemu_argc++] = "-device";
-		snprintf(dev_str, ARG_MAX, "%s,%s%x%s,netdev=hostnet0,x-txburst=4096",
-			 dev->name, dev->template, i, dev->template_post);
+		if (!has_json) {
+			snprintf(dev_str, ARG_MAX,
+			         "%s,%s%x%s,netdev=hostnet0,x-txburst=4096",
+			         dev->name, dev->template, i, dev->template_post);
+		} else {
+			snprintf(dev_str, ARG_MAX,
+			         "{\"driver\":\"%s\",%s%x\"%s,\"netdev\":\"hostnet0\",\"x-txburst\":4096}",
+			         dev->name, dev->template_json, i, dev->template_json_post);
+		}
 		qemu_argv[qemu_argc++] = dev_str;
 	}
 
