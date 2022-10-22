@@ -72,7 +72,7 @@
 #define IPV4_IS_LOOPBACK(addr)						\
 	((addr) >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET)
 
-#define NS_FN_STACK_SIZE	(RLIMIT_STACK_VAL * 1024 / 4)
+#define NS_FN_STACK_SIZE	(RLIMIT_STACK_VAL * 1024 / 8)
 #define NS_CALL(fn, arg)						\
 	do {								\
 		char ns_fn_stack[NS_FN_STACK_SIZE];			\
