@@ -262,6 +262,7 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 			exclude_only = false;
 			continue;
 		}
+		p++;
 
 		if (parse_port_range(p, &p, &xrange))
 			goto bad;
