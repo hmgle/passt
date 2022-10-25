@@ -160,10 +160,13 @@ void csum_udp4(struct udphdr *udp4hr, in_addr_t saddr, in_addr_t daddr,
  */
 void csum_icmp4(struct icmphdr *icmp4hr, const void *payload, size_t len)
 {
-	/* Partial checksum for ICMP header alone */
-	uint32_t psum = sum_16b(icmp4hr, sizeof(*icmp4hr));
+	uint32_t psum;
 
 	icmp4hr->checksum = 0;
+
+	/* Partial checksum for ICMP header alone */
+	psum = sum_16b(icmp4hr, sizeof(*icmp4hr));
+
 	icmp4hr->checksum = csum_unaligned(payload, len, psum);
 }
 
