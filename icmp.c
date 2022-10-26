@@ -88,6 +88,7 @@ void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
 		struct icmp6hdr *ih = (struct icmp6hdr *)buf;
 
 		id = ntohs(ih->icmp6_identifier);
+		seq = ntohs(ih->icmp6_sequence);
 
 		/* If bind() fails e.g. because of a broken SELinux policy, this
 		 * might happen. Fix up the identifier to match the sent one.
@@ -97,13 +98,14 @@ void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
 
 		/* In PASTA mode, we'll get any reply we send, discard them. */
 		if (c->mode == MODE_PASTA) {
-			seq = ntohs(ih->icmp6_sequence);
-
 			if (icmp_id_map[V6][id].seq == seq)
 				return;
 
 			icmp_id_map[V6][id].seq = seq;
 		}
+
+		debug("ICMPv6: echo %s to tap, ID: %i, seq: %i",
+		      (ih->icmp6_type == 128) ? "request" : "reply", id, seq);
 
 		tap_icmp6_send(c, &sr6->sin6_addr,
 			       tap_ip6_daddr(c, &sr6->sin6_addr), buf, n);
@@ -112,17 +114,21 @@ void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
 		struct icmphdr *ih = (struct icmphdr *)buf;
 
 		id = ntohs(ih->un.echo.id);
+		seq = ntohs(ih->un.echo.sequence);
+
 		if (id != iref->icmp.id)
 			ih->un.echo.id = htons(iref->icmp.id);
 
 		if (c->mode == MODE_PASTA) {
-			seq = ntohs(ih->un.echo.sequence);
 
 			if (icmp_id_map[V4][id].seq == seq)
 				return;
 
 			icmp_id_map[V4][id].seq = seq;
 		}
+
+		debug("ICMP: echo %s to tap, ID: %i, seq: %i",
+		      (ih->type == ICMP_ECHO) ? "request" : "reply", id, seq);
 
 		tap_icmp4_send(c, sr4->sin_addr.s_addr, tap_ip4_daddr(c),
 			       buf, n);
@@ -175,14 +181,21 @@ int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 			}
 
 			icmp_id_map[V4][id].sock = s;
+
+			debug("ICMP: new socket %i for echo ID %i", s, id);
 		}
 		icmp_id_map[V4][id].ts = now->tv_sec;
 		bitmap_set(icmp_act[V4], id);
 
 		sa.sin_addr = *(struct in_addr *)addr;
 		if (sendto(s, ih, sizeof(*ih) + plen, MSG_NOSIGNAL,
-			   (struct sockaddr *)&sa, sizeof(sa)) < 0)
+			   (struct sockaddr *)&sa, sizeof(sa)) < 0) {
 			debug("ICMP: failed to relay request to socket");
+		} else {
+			debug("ICMP: echo %s to socket, ID: %i, seq: %i",
+			      (ih->type == ICMP_ECHO) ? "request" : "reply",
+			      id, ntohs(ih->un.echo.sequence));
+		}
 	} else if (af == AF_INET6) {
 		union icmp_epoll_ref iref = { .icmp.v6 = 1 };
 		struct sockaddr_in6 sa = {
@@ -214,14 +227,21 @@ int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 			}
 
 			icmp_id_map[V6][id].sock = s;
+
+			debug("ICMPv6: new socket %i for echo ID %i", s, id);
 		}
 		icmp_id_map[V6][id].ts = now->tv_sec;
 		bitmap_set(icmp_act[V6], id);
 
 		sa.sin6_addr = *(struct in6_addr *)addr;
 		if (sendto(s, ih, sizeof(*ih) + plen, MSG_NOSIGNAL,
-			   (struct sockaddr *)&sa, sizeof(sa)) < 1)
+			   (struct sockaddr *)&sa, sizeof(sa)) < 1) {
 			debug("ICMPv6: failed to relay request to socket");
+		} else {
+			debug("ICMPv6: echo %s to socket, ID: %i, seq: %i",
+			      (ih->icmp6_type == 128) ? "request" : "reply",
+			      id, ntohs(ih->icmp6_sequence));
+		}
 	}
 
 	return 1;
