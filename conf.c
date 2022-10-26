@@ -636,7 +636,7 @@ static void usage(const char *name)
 	info("");
 
 
-	info(   "  -d, --debug		Be verbose, don't run in background");
+	info(   "  -d, --debug		Be verbose");
 	info(   "      --trace		Be extra verbose, implies --debug");
 	info(   "  -q, --quiet		Don't print informational messages");
 	info(   "  -f, --foreground	Don't run in background");
@@ -1192,7 +1192,7 @@ void conf(struct ctx *c, int argc, char **argv)
 				usage(argv[0]);
 			}
 
-			c->trace = c->debug = c->foreground = 1;
+			c->trace = c->debug = 1;
 			break;
 		case 12:
 			if (runas) {
@@ -1233,7 +1233,6 @@ void conf(struct ctx *c, int argc, char **argv)
 			}
 
 			c->debug = 1;
-			c->foreground = 1;
 			break;
 		case 'e':
 			if (logfile) {
@@ -1275,7 +1274,7 @@ void conf(struct ctx *c, int argc, char **argv)
 			c->quiet = 1;
 			break;
 		case 'f':
-			if (c->foreground && !c->debug) {
+			if (c->foreground) {
 				err("Multiple --foreground options given");
 				usage(argv[0]);
 			}
