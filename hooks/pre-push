@@ -21,13 +21,13 @@ BASE="/var/www/passt"
 BUILDS="${BASE}/builds"
 LATEST="${BUILDS}/latest"
 TEMP="${BUILDS}/temp"
-AWAY="${BUILDS}/away"
 
 WEB="${TEMP}/web"
 TEST="${TEMP}/test"
 
 ARCH="$(uname -m)"
 BIN="${TEMP}/${ARCH}"
+OLD_BIN="${LATEST}/${ARCH}"
 
 ssh "${USER_HOST}" 				"mkdir -p ${WEB} ${TEST} ${BIN}"
 
@@ -41,12 +41,15 @@ for f in test_logs/web/*.cast test_logs/web/*.js; do
 	scp "${f}.gz"			 	"${USER_HOST}:${WEB}/"
 done
 
+# TODO: Re-enable demos once we have pasta support in upstream Podman
+skip() {
 ./run_demo
 for f in test_logs/web/*.cast test_logs/web/*.js; do
 	gzip -fk9 "${f}"
 	scp "${f}"			 	"${USER_HOST}:${WEB}/"
 	scp "${f}.gz"			 	"${USER_HOST}:${WEB}/"
 done
+}
 
 cd ..
 
@@ -68,6 +71,10 @@ for pic in passt_overview pasta_overview; do
 done
 scp doc/*.html					"${USER_HOST}:${WEB}/"
 
-ssh "${USER_HOST}"				"mv ${LATEST} ${AWAY}"
-ssh "${USER_HOST}"				"mv ${TEMP} ${LATEST}"
-ssh "${USER_HOST}"				"rm -rf ${AWAY}"
+ssh "${USER_HOST}"				"cp ${WEB}/* ${LATEST}/web/"
+ssh "${USER_HOST}"				"cp ${TEST}/* ${LATEST}/test/"
+
+ssh "${USER_HOST}" 				"rm -f ${OLD_BIN}/*"
+ssh "${USER_HOST}"				"cp ${BIN}/* ${LATEST}/${ARCH}/"
+
+ssh "${USER_HOST}"				"rm -rf ${TEMP}"
