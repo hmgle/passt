@@ -15,6 +15,7 @@ void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
 int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 		     const struct pool *p, const struct timespec *now);
 void icmp_timer(const struct ctx *c, const struct timespec *ts);
+void icmp_init(void);
 
 /**
  * union icmp_epoll_ref - epoll reference portion for ICMP tracking

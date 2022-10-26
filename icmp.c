@@ -44,12 +44,12 @@
 /**
  * struct icmp_id_sock - Tracking information for single ICMP echo identifier
  * @sock:	Bound socket for identifier
- * @seq:	Last sequence number sent to tap, host order
+ * @seq:	Last sequence number sent to tap, host order, -1: not sent yet
  * @ts:		Last associated activity from tap, seconds
  */
 struct icmp_id_sock {
 	int sock;
-	uint16_t seq;
+	int seq;
 	time_t ts;
 };
 
@@ -273,6 +273,7 @@ static void icmp_timer_one(const struct ctx *c, int v6, uint16_t id,
 	epoll_ctl(c->epollfd, EPOLL_CTL_DEL, id_map->sock, NULL);
 	close(id_map->sock);
 	id_map->sock = 0;
+	id_map->seq = -1;
 }
 
 /**
@@ -300,4 +301,15 @@ v6:
 		v6 = 1;
 		goto v6;
 	}
+}
+
+/**
+ * icmp_init() - Initialise sequences in ID map to -1 (no sequence sent yet)
+ */
+void icmp_init(void)
+{
+	unsigned i;
+
+	for (i = 0; i < ICMP_NUM_IDS; i++)
+		icmp_id_map[V4][i].seq = icmp_id_map[V6][i].seq = -1;
 }

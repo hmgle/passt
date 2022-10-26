@@ -256,6 +256,9 @@ int main(int argc, char **argv)
 	if ((!c.no_udp && udp_init(&c)) || (!c.no_tcp && tcp_init(&c)))
 		exit(EXIT_FAILURE);
 
+	if (!c.no_icmp)
+		icmp_init();
+
 	proto_update_l2_buf(c.mac_guest, c.mac, &c.ip4.addr);
 
 	if (c.ifi4 && !c.no_dhcp)
