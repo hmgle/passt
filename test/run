@@ -110,12 +110,16 @@ run() {
 	test passt_in_ns/shutdown
 	teardown passt_in_ns
 
+	# TODO: Make those faster by at least pre-installing gcc and make on
+	# non-x86 images, then re-enable.
+skip_distro() {
 	setup distro
 	test distro/debian
 	test distro/fedora
 	test distro/opensuse
 	test distro/ubuntu
 	teardown distro
+}
 
 	perf_finish
 	[ ${CI} -eq 1 ] && video_stop
