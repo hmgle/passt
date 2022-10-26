@@ -463,6 +463,8 @@ resume:
 			if (c->no_icmp)
 				continue;
 
+			tap_packet_debug(iph, NULL, NULL, 0, NULL, 1);
+
 			packet_add(pkt, l4_len, l4h);
 			icmp_tap_handler(c, AF_INET, &iph->daddr, pkt, now);
 			continue;
