@@ -319,8 +319,8 @@ speeding up local connections, and usually requiring NAT. _pasta_:
   protocol
 * ✅ 4 to 50 times IPv4 TCP throughput of existing, conceptually similar
   solutions depending on MTU (UDP and IPv6 hard to compare)
-* 🛠 _vhost-user_ support for maximum one copy on every data path and lower
-  request-response latency
+* 🛠 [_vhost-user_ support](https://bugs.passt.top/show_bug.cgi?id=25) for
+  maximum one copy on every data path and lower request-response latency
 * ⌚ [multithreading](https://bugs.passt.top/show_bug.cgi?id=13)
 * ⌚ [raw IP socket support](https://bugs.passt.top/show_bug.cgi?id=14) if
   `CAP_NET_RAW` is granted
@@ -338,7 +338,8 @@ speeding up local connections, and usually requiring NAT. _pasta_:
   [Kata Containers](/passt/tree/contrib/kata-containers) available
 * 🛠 native [qemu](https://bugs.passt.top/show_bug.cgi?id=11),
   [libvirt](https://bugs.passt.top/show_bug.cgi?id=12) support
-* 🛠 native Podman integration
+* 🛠 native
+  [Podman integration](https://github.com/containers/podman/pull/16141)
 * ⌚ drop-in replacement for VPNKit (rootless Docker)
 
 ### Availability
@@ -645,7 +646,10 @@ See also the [test logs](/builds/latest/test/).
   [`passt-user`](https://lists.passt.top/postorius/lists/passt-user.passt.top/)
 
 ### [Bug Reports and Feature Requests](/passt/bugs)
-* [File a bug](https://bugs.passt.top/enter_bug.cgi) for those
+* **Pick up an [open bug](https://bugs.passt.top/buglist.cgi?bug_severity=blocker&bug_severity=quite%20bad&bug_severity=normal&bug_severity=minor&columnlist=bug_status%2Ccomponent%2Cpriority%2Cbug_severity%2Cassigned_to%2Cshort_desc%2Cchangeddate&known_name=Open%20bugs%2C%20by%20priority&list_id=85&query_based_on=Open%20bugs%2C%20by%20priority&query_format=advanced&resolution=---)**
+* **Implement a [feature request](https://bugs.passt.top/buglist.cgi?bug_severity=enhancement&bug_severity=feature&columnlist=bug_status%2Ccomponent%2Cpriority%2Cbug_severity%2Cassigned_to%2Cshort_desc%2Cchangeddate&known_name=Features%2C%20by%20priority&list_id=81&order=priority%2Cbug_status%2Cassigned_to%2Cbug_id&query_based_on=Features%2C%20by%20priority&query_format=advanced&resolution=---)**
+* Browse all [open items](https://bugs.passt.top/buglist.cgi?columnlist=bug_status%2Ccomponent%2Cpriority%2Cbug_severity%2Cassigned_to%2Cshort_desc%2Cchangeddate&known_name=All%20items%2C%20by%20priority&list_id=83&query_based_on=All%20items%2C%20by%20priority&query_format=advanced&resolution=---)
+* ...or [file a bug](https://bugs.passt.top/enter_bug.cgi)
 
 ### [Chat](/passt/chat)
 * Somebody might be available on [IRC](https://irc.passt.top)
