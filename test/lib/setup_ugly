@@ -13,6 +13,8 @@
 # Copyright (c) 2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
+INITRAMFS_MEM="${BASEPATH}/mbuto.mem.img"
+
 # setup_distro() - Set up pane layout for distro tests
 setup_distro() {
 	layout_host
@@ -23,6 +25,20 @@ setup_pasta_options() {
 	context_setup_host host
 
 	layout_pasta_simple
+}
+
+# setup_memory() - Start qemu in guest pane, and passt in passt context
+setup_memory() {
+	layout_memory
+
+	pane_or_context_run guest 'qemu-system-$(uname -m)'		   \
+		' -machine accel=kvm'                                      \
+		' -m '${VMEM}' -cpu host -smp '${VCPUS}                    \
+		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
+		' -initrd '${INITRAMFS_MEM}' -nographic -serial stdio'	   \
+		' -nodefaults'						   \
+		' -append "console=ttyS0 mitigations=off apparmor=0"'	   \
+		" -pidfile ${STATESETUP}/qemu.pid"
 }
 
 # teardown_distro() - Nothing to do, yet
@@ -36,3 +52,7 @@ teardown_pasta_options() {
 	teardown_context_watch ${PANE_PASST} passt
 }
 
+# teardown_passt() - Kill qemu with ^C, remove passt PID file
+teardown_memory() {
+	kill $(cat "${STATESETUP}/qemu.pid")
+}

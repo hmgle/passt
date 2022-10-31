@@ -55,7 +55,7 @@ UBUNTU_IMGS = $(UBUNTU_OLD_IMGS) $(UBUNTU_NEW_IMGS)
 DOWNLOAD_ASSETS = mbuto \
 	$(DEBIAN_IMGS) $(FEDORA_IMGS) $(OPENSUSE_IMGS) $(UBUNTU_IMGS)
 TESTDATA_ASSETS = small.bin big.bin medium.bin
-LOCAL_ASSETS = mbuto.img QEMU_EFI.fd \
+LOCAL_ASSETS = mbuto.img mbuto.mem.img QEMU_EFI.fd \
 	$(DEBIAN_IMGS:%=prepared-%) $(FEDORA_IMGS:%=prepared-%) \
 	$(UBUNTU_NEW_IMGS:%=prepared-%) \
 	nsholder guest-key guest-key.pub \
@@ -74,6 +74,9 @@ guest-key guest-key.pub:
 	ssh-keygen -f guest-key -N ''
 
 mbuto.img: passt.mbuto mbuto guest-key.pub $(TESTDATA_ASSETS)
+	./mbuto/mbuto -p ./$< -c lz4 -f $@
+
+mbuto.mem.img: passt.mem.mbuto mbuto ../passt.avx2
 	./mbuto/mbuto -p ./$< -c lz4 -f $@
 
 nsholder: nsholder.c

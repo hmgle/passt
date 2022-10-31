@@ -81,3 +81,33 @@ layout_pasta_simple() {
 
 	sleep 1
 }
+
+# layout_memory() - Screen-scraped panes for memory usage tests, big guest pane
+layout_memory() {
+	sleep 3
+
+	tmux kill-pane -a -t 0
+	cmd_write 0 clear
+
+	tmux split-window -h -l '35%' -t passt_test
+
+	PANE_GUEST=0
+	PANE_INFO=1
+
+	get_info_cols
+
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
+	tmux send-keys -t ${PANE_INFO} -N 100 C-m
+	tmux select-pane -t ${PANE_INFO} -T "test log"
+
+	if context_exists guest; then
+		pane_watch_contexts ${PANE_GUEST} guest guest
+	else
+		tmux pipe-pane -O -t ${PANE_GUEST} "cat >> ${LOGDIR}/pane_guest.log"
+		tmux select-pane -t ${PANE_GUEST} -T "guest"
+	fi
+
+	info_layout "memory usage"
+
+	sleep 1
+}

@@ -1,0 +1,187 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/memory/passt - Show memory usage of passt in kernel and userspace
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+gtools	sed cat diff nm sort kill tee head tail chroot unshare mount mkdir cp 
+
+def	meminfo_row
+gout	DIFF meminfo_diff /tmp/meminfo.before /tmp/meminfo.after __WHAT__
+tl	__NAME__
+td	__DIFF__ 3 0 0
+endef
+
+def	meminfo_reverse_row
+gout	DIFF meminfo_diff /tmp/meminfo.after /tmp/meminfo.before __WHAT__
+tl	__NAME__
+td	__DIFF__ 3 0 0
+endef
+
+def	nm_row
+gout	SIZE nm_size /tmp/nm.size __WHAT__
+tl	__WHAT__
+td	__SIZE__ 6 0 0
+endef
+
+def	slab_row
+gout	COUNT slab_diff_count /tmp/slabinfo.before /tmp/slabinfo.after __WHAT__
+gout	SIZE slab_size /tmp/slabinfo.before __WHAT__
+gout	DIFF slab_diff_size /tmp/slabinfo.before /tmp/slabinfo.after __WHAT__
+tl	__WHAT__
+td	__COUNT__ 0 0 0
+td	__SIZE__ 0 0 0
+td	__DIFF__ 6 0 0
+endef
+
+def	start_stop_diff
+guest	sed /proc/slabinfo -ne 's/^\([^ ]* *[^ ]* *[^ ]* *[^ ]*\).*/\\\1/p' > /tmp/slabinfo.before
+guest	cat /proc/meminfo > /tmp/meminfo.before
+guest	/usr/bin/passt.avx2 -l /tmp/log -s /tmp/sock -P /tmp/pid __OPTS__ --netns-only
+sleep	2
+guest	cat /proc/meminfo > /tmp/meminfo.after
+guest	sed /proc/slabinfo -ne 's/^\([^ ]* *[^ ]* *[^ ]* *[^ ]*\).*/\\\1/p' > /tmp/slabinfo.after
+guest	kill \$(cat /tmp/pid)
+guest	diff -y --suppress-common-lines /tmp/meminfo.before /tmp/meminfo.after || :
+guest	nm -td -Sr --size-sort -P /usr/bin/passt.avx2 | head -30 | tee /tmp/nm.size
+guest	sed /proc/slabinfo -ne 's/\(.*<objsize>\).*$/\1/p' | tail -1; (diff -y --suppress-common-lines /tmp/slabinfo.before /tmp/slabinfo.after | sort -grk8)
+endef
+
+def	summary
+info	Memory usage summary
+info	
+th	type MiB
+set	WHAT MemFree
+set	NAME used
+meminfo_reverse_row
+set	WHAT AnonPages
+set	NAME userspace
+meminfo_row
+set	WHAT Slab
+set	NAME kernel
+meminfo_row
+te
+endef
+
+
+guest	mkdir /test
+guest	mount -t tmpfs none /test
+guest	mkdir /test/proc /test/dev /test/tmp
+guest	mount -o bind /proc /test/proc
+guest	mount -o bind /dev /test/dev
+guest	cp -Lr /bin /lib /lib64 /usr /sbin /test/
+
+guest	ulimit -Hn 300000
+guest	unshare -rUm -R /test
+guest	chroot .
+
+guest	meminfo_size() { grep "^$2:" $1 | tr -s ' ' | cut -f2 -d ' '; }
+guest	meminfo_diff() { echo $(( $(meminfo_size $2 $3) - $(meminfo_size $1 $3) )); }
+
+guest	nm_size() { grep -m1 "^$2 " $1 | cut -f4 -d ' '; }
+
+guest	slab_count() { grep "^$2 " $1 | tr -s ' ' | cut -f3 -d ' '; }
+guest	slab_size() { grep "^$2 " $1 | tr -s ' ' | cut -f4 -d ' '; }
+guest	slab_diff_count() { echo $(( $(slab_count $2 $3) - $(slab_count $1 $3) )); }
+guest	slab_diff_size() { echo $(( $(slab_count $2 $3) * $(slab_size $2 $3) - $(slab_count $1 $3) * $(slab_size $1 $3) )); }
+
+
+test	Memory usage: all TCP and UDP ports forwarded, IPv4 and IPv6
+set	OPTS -t all -u all
+start_stop_diff
+summary
+
+info	Userspace memory detail
+info	
+th	symbol MiB
+set	WHAT tcp_buf_discard
+nm_row
+set	WHAT tcp6_l2_buf
+nm_row
+set	WHAT tcp4_l2_buf
+nm_row
+set	WHAT tc
+nm_row
+set	WHAT pkt_buf
+nm_row
+set	WHAT udp_splice_map
+nm_row
+set	WHAT udp6_l2_buf
+nm_row
+set	WHAT udp4_l2_buf
+nm_row
+set	WHAT udp_tap_map
+nm_row
+set	WHAT icmp_id_map
+nm_row
+set	WHAT udp_splice_buf
+nm_row
+set	WHAT tc_hash
+nm_row
+set	WHAT pool_tap6_storage
+nm_row
+set	WHAT pool_tap4_storage
+nm_row
+set	WHAT tap6_l4
+nm_row
+set	WHAT tap4_l4
+nm_row
+te
+
+info	Kernel memory detail
+info	
+th	objects count size MiB
+set	WHAT pid
+slab_row
+set	WHAT dentry
+slab_row
+set	WHAT Acpi-Parse
+slab_row
+set	WHAT kmalloc-64
+slab_row
+set	WHAT kmalloc-32
+slab_row
+set	WHAT lsm_file_cache
+slab_row
+set	WHAT filp
+slab_row
+set	WHAT anon_vma_chain
+slab_row
+set	WHAT ep_head
+slab_row
+set	WHAT sock_inode_cache
+slab_row
+set	WHAT signal_cache
+slab_row
+set	WHAT TCPv6
+slab_row
+set	WHAT TCP
+slab_row
+set	WHAT UDPv6
+slab_row
+te
+
+
+test	Memory usage: all TCP ports forwarded, IPv4
+set	OPTS -t all -4
+start_stop_diff
+summary
+
+
+test	Memory usage: all TCP and UDP ports forwarded, IPv4
+set	OPTS -t all -u all -4
+start_stop_diff
+summary
+
+
+test	Memory usage: no ports forwarded
+set	OPTS -t none -u none
+start_stop_diff
+summary

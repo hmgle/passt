@@ -79,6 +79,10 @@ run() {
 	test pasta_options/log_to_file
 	teardown pasta_options
 
+	setup memory
+	test memory/passt
+	teardown memory
+
 	setup passt
 	test passt/ndp
 	test passt/dhcp
