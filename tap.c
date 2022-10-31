@@ -912,7 +912,8 @@ static void tap_sock_unix_init(struct ctx *c)
 		}
 
 		ret = connect(ex, (const struct sockaddr *)&addr, sizeof(addr));
-		if (!ret || (errno != ENOENT && errno != ECONNREFUSED)) {
+		if (!ret || (errno != ENOENT && errno != ECONNREFUSED &&
+			     errno != EACCES)) {
 			if (*c->sock_path) {
 				err("Socket path %s already in use", path);
 				exit(EXIT_FAILURE);
