@@ -552,6 +552,34 @@ table_end() {
 	info_n "\n${__buf}'\n"
 }
 
+# table_value() - Print generic table value in its own cell
+# $1:	Value, can be '-' to indicate a filler
+# $2:	Scale, exponent of 10
+# $3:	Error value, scaled: if value is less than this, print in red
+# $4:	Warning value, scaled: if value is less than this, print in yellow
+table_value() {
+	[ "${1}" = "-" ] && table_cell 1 "-" && perf_td 0 "" && return 0
+	if [ "${2}" != "0" ]; then
+		__v="$(echo "scale=1; x=( ${1} + 10^$((${2} - 1)) / 2 ) / 10^${2}; if ( x < 1 && x > 0 ) print 0; x" | bc -l)"
+	else
+		__v="${1}"
+	fi
+	perf_td 0 "${__v}"
+
+	__red="${3}"
+	__yellow="${4}"
+	if [ "$(echo "${__v} < ${__red}" | bc -l)" = "1" ]; then
+		table_cell ${#__v} "${PR_RED}${__v}${PR_NC}"
+		return 1
+	elif [ "$(echo "${__v} < ${__yellow}" | bc -l)" = "1" ]; then
+		table_cell ${#__v} "${PR_YELLOW}${__v}${PR_NC}"
+		return 1
+	else
+		table_cell ${#__v} "${PR_GREEN}${__v}${PR_NC}"
+		return 0
+	fi
+}
+
 table_value_throughput() {
 	[ "${1}" = "-" ] && table_cell 1 "-" && perf_td 0 "" && return 0
 	__v="$(echo "scale=1; x=( ${1} + 10^8 / 2 ) / 10^9; if ( x < 1 && x > 0 ) print 0; x" | bc -l)"

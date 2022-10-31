@@ -278,6 +278,9 @@ test_one_line() {
 	"te")
 		table_end
 		;;
+	"td")
+		table_value ${__arg} || TEST_ONE_perf_nok=1
+		;;
 	"bw")
 		table_value_throughput ${__arg} || TEST_ONE_perf_nok=1
 		;;
