@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/setup_ugly - Setup functions using screen-scraping instead of context
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+# setup_distro() - Set up pane layout for distro tests
+setup_distro() {
+	layout_host
+}
+
+# setup_pasta_options() - Set up layout and host context without starting pasta
+setup_pasta_options() {
+	context_setup_host host
+
+	layout_pasta_simple
+}
+
+# teardown_distro() - Nothing to do, yet
+teardown_distro() {
+	:
+}
+
+# teardown_pasta_options() - Tear down pasta and host context, no namespace
+teardown_pasta_options() {
+	teardown_context_watch ${PANE_HOST} host
+	teardown_context_watch ${PANE_PASST} passt
+}
+

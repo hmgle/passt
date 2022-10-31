@@ -39,10 +39,12 @@ COMMIT="$(git log --oneline --no-decorate -1)"
 
 . lib/util
 . lib/setup
+. lib/setup_ugly
 . lib/context
 . lib/term
 . lib/perf_report
 . lib/layout
+. lib/layout_ugly
 . lib/test
 . lib/video
 
