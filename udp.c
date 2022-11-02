@@ -678,9 +678,13 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 
 	src_port = ntohs(b->s_in.sin_port);
 
-	if (IN4_IS_ADDR_LOOPBACK(&b->s_in.sin_addr) ||
-	    IN4_IS_ADDR_UNSPECIFIED(&b->s_in.sin_addr)||
-	    IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.addr_seen)) {
+	if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_fwd) &&
+	    IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.dns[0]) &&
+	    src_port == 53) {
+		b->iph.saddr = c->ip4.dns_fwd.s_addr;
+	} else if (IN4_IS_ADDR_LOOPBACK(&b->s_in.sin_addr) ||
+		   IN4_IS_ADDR_UNSPECIFIED(&b->s_in.sin_addr)||
+		   IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.addr_seen)) {
 		b->iph.saddr = c->ip4.gw.s_addr;
 		udp_tap_map[V4][src_port].ts = now->tv_sec;
 		udp_tap_map[V4][src_port].flags |= PORT_LOCAL;
@@ -691,10 +695,6 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 			udp_tap_map[V4][src_port].flags |= PORT_LOOPBACK;
 
 		bitmap_set(udp_act[V4][UDP_ACT_TAP], src_port);
-	} else if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_fwd) &&
-		   IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.dns[0]) &&
-		   src_port == 53) {
-		b->iph.saddr = c->ip4.dns_fwd.s_addr;
 	} else {
 		b->iph.saddr = b->s_in.sin_addr.s_addr;
 	}
@@ -770,6 +770,10 @@ static void udp_sock_fill_data_v6(const struct ctx *c, int n,
 	if (IN6_IS_ADDR_LINKLOCAL(src)) {
 		b->ip6h.daddr = c->ip6.addr_ll_seen;
 		b->ip6h.saddr = b->s_in6.sin6_addr;
+	} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_fwd) &&
+		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.dns[0]) && src_port == 53) {
+		b->ip6h.daddr = c->ip6.addr_seen;
+		b->ip6h.saddr = c->ip6.dns_fwd;
 	} else if (IN6_IS_ADDR_LOOPBACK(src)			||
 		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.addr_seen)	||
 		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.addr)) {
@@ -794,10 +798,6 @@ static void udp_sock_fill_data_v6(const struct ctx *c, int n,
 			udp_tap_map[V6][src_port].flags &= ~PORT_GUA;
 
 		bitmap_set(udp_act[V6][UDP_ACT_TAP], src_port);
-	} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_fwd) &&
-		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.dns[0]) && src_port == 53) {
-		b->ip6h.daddr = c->ip6.addr_seen;
-		b->ip6h.saddr = c->ip6.dns_fwd;
 	} else {
 		b->ip6h.daddr = c->ip6.addr_seen;
 		b->ip6h.saddr = b->s_in6.sin6_addr;
