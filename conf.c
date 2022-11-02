@@ -558,6 +558,9 @@ static int conf_ip4_prefix(const char *arg)
 static unsigned int conf_ip4(unsigned int ifi,
 			     struct ip4_ctx *ip4, unsigned char *mac)
 {
+	in_addr_t addr, gw;
+	int shift;
+
 	if (!ifi)
 		ifi = nl_get_ext_if(AF_INET);
 
@@ -572,8 +575,10 @@ static unsigned int conf_ip4(unsigned int ifi,
 	if (IN4_IS_ADDR_UNSPECIFIED(&ip4->addr))
 		nl_addr(0, ifi, AF_INET, &ip4->addr, &ip4->prefix_len, NULL);
 
+	addr = ntohl(ip4->addr.s_addr);
+	gw = ntohl(ip4->gw.s_addr);
+
 	if (!ip4->prefix_len) {
-		in_addr_t addr = ntohl(ip4->addr.s_addr);
 		if (IN_CLASSA(addr))
 			ip4->prefix_len = (32 - IN_CLASSA_NSHIFT);
 		else if (IN_CLASSB(addr))
@@ -583,6 +588,24 @@ static unsigned int conf_ip4(unsigned int ifi,
 		else
 			ip4->prefix_len = 32;
 	}
+
+	/* We might get an address with a netmask that makes the default
+	 * gateway unreachable, and in that case we would fail to configure
+	 * the default route, with --config-net, or presumably a DHCP client
+	 * in the guest or container would face the same issue.
+	 *
+	 * The host might have another route, to the default gateway itself,
+	 * fixing the situation, but we only read default routes.
+	 *
+	 * Fix up the mask to allow reaching the default gateway from our
+	 * configured address, if needed, and only if we find a non-zero
+	 * mask that makes the gateway reachable.
+	 */
+	shift = 32 - ip4->prefix_len;
+	while (shift < 32 && addr >> shift != gw >> shift)
+		shift++;
+	if (shift < 32)
+		ip4->prefix_len = 32 - shift;
 
 	memcpy(&ip4->addr_seen, &ip4->addr, sizeof(ip4->addr_seen));
 
