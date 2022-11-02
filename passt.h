@@ -101,7 +101,8 @@ enum passt_modes {
  * @addr_seen:		Latest IPv4 address seen as source from tap
  * @prefixlen:		IPv4 prefix length (netmask)
  * @gw:			Default IPv4 gateway, network order
- * @dns:		IPv4 DNS addresses, zero-terminated, network order
+ * @dns:		Host IPv4 DNS addresses, zero-terminated, network order
+ * @dns_send:		Offered IPv4 DNS, zero-terminated, network order
  * @dns_fwd:		Address forwarded (UDP) to first IPv4 DNS, network order
  */
 struct ip4_ctx {
@@ -110,6 +111,7 @@ struct ip4_ctx {
 	int prefix_len;
 	struct in_addr gw;
 	struct in_addr dns[MAXNS + 1];
+	struct in_addr dns_send[MAXNS + 1];
 	struct in_addr dns_fwd;
 };
 
@@ -120,7 +122,8 @@ struct ip4_ctx {
  * @addr_seen:		Latest IPv6 global/site address seen as source from tap
  * @addr_ll_seen:	Latest IPv6 link-local address seen as source from tap
  * @gw:			Default IPv6 gateway
- * @dns:		IPv6 DNS addresses, zero-terminated
+ * @dns:		Host IPv6 DNS addresses, zero-terminated
+ * @dns_send:		Offered IPv6 DNS addresses, zero-terminated
  * @dns_fwd:		Address forwarded (UDP) to first IPv6 DNS, network order
  */
 struct ip6_ctx {
@@ -130,6 +133,7 @@ struct ip6_ctx {
 	struct in6_addr addr_ll_seen;
 	struct in6_addr gw;
 	struct in6_addr dns[MAXNS + 1];
+	struct in6_addr dns_send[MAXNS + 1];
 	struct in6_addr dns_fwd;
 };
 
