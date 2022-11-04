@@ -1277,7 +1277,7 @@ static int tcp_opt_get(const char *opts, size_t len, uint8_t type_find,
  * tcp_hash_match() - Check if a connection entry matches address and ports
  * @conn:	Connection entry to match against
  * @af:		Address family, AF_INET or AF_INET6
- * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @addr:	Remote address, pointer to in_addr or in6_addr
  * @tap_port:	tap-facing port
  * @sock_port:	Socket-facing port
  *
@@ -1303,7 +1303,7 @@ static int tcp_hash_match(const struct tcp_conn *conn, int af, const void *addr,
  * tcp_hash() - Calculate hash value for connection given address and ports
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
- * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @addr:	Remote address, pointer to in_addr or in6_addr
  * @tap_port:	tap-facing port
  * @sock_port:	Socket-facing port
  *
@@ -1347,7 +1347,7 @@ static unsigned int tcp_hash(const struct ctx *c, int af, const void *addr,
  * @c:		Execution context
  * @conn:	Connection pointer
  * @af:		Address family, AF_INET or AF_INET6
- * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @addr:	Remote address, pointer to in_addr or in6_addr
  */
 static void tcp_hash_insert(const struct ctx *c, struct tcp_conn *conn,
 			    int af, const void *addr)
@@ -1418,7 +1418,7 @@ static void tcp_hash_update(struct tcp_conn *old, struct tcp_conn *new)
  * tcp_hash_lookup() - Look up connection given remote address and ports
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
- * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @addr:	Remote address, pointer to in_addr or in6_addr
  * @tap_port:	tap-facing port
  * @sock_port:	Socket-facing port
  *
@@ -2026,7 +2026,7 @@ static void tcp_clamp_window(const struct ctx *c, struct tcp_conn *conn,
  * tcp_seq_init() - Calculate initial sequence number according to RFC 6528
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
- * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @addr:	Remote address, pointer to in_addr or in6_addr
  * @dstport:	Destination port, connection-wise, network order
  * @srcport:	Source port, connection-wise, network order
  * @now:	Current timestamp
@@ -2144,7 +2144,7 @@ static uint16_t tcp_conn_tap_mss(const struct ctx *c,
  * tcp_conn_from_tap() - Handle connection request (SYN segment) from tap
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
- * @addr:	Remote address, pointer to sin_addr or sin6_addr
+ * @addr:	Remote address, pointer to in_addr or in6_addr
  * @th:		TCP header from tap: caller MUST ensure it's there
  * @opts:	Pointer to start of options
  * @optlen:	Bytes in options: caller MUST ensure available length
