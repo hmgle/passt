@@ -99,7 +99,7 @@ enum passt_modes {
  * struct ip4_ctx - IPv4 execution context
  * @addr:		IPv4 address for external, routable interface
  * @addr_seen:		Latest IPv4 address seen as source from tap
- * @mask:		IPv4 netmask, network order
+ * @prefixlen:		IPv4 prefix length (netmask)
  * @gw:			Default IPv4 gateway, network order
  * @dns:		IPv4 DNS addresses, zero-terminated, network order
  * @dns_fwd:		Address forwarded (UDP) to first IPv4 DNS, network order
@@ -107,7 +107,7 @@ enum passt_modes {
 struct ip4_ctx {
 	uint32_t addr;
 	uint32_t addr_seen;
-	uint32_t mask;
+	int prefix_len;
 	uint32_t gw;
 	uint32_t dns[MAXNS + 1];
 	uint32_t dns_fwd;

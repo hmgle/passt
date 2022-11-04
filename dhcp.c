@@ -268,6 +268,7 @@ static void opt_set_dns_search(const struct ctx *c, size_t max_len)
 int dhcp(const struct ctx *c, const struct pool *p)
 {
 	size_t mlen, len, offset = 0, opt_len, opt_off = 0;
+	struct in_addr mask;
 	struct ethhdr *eh;
 	struct iphdr *iph;
 	struct udphdr *uh;
@@ -334,14 +335,15 @@ int dhcp(const struct ctx *c, const struct pool *p)
 	     m->chaddr[3], m->chaddr[4], m->chaddr[5]);
 
 	m->yiaddr = c->ip4.addr;
-	memcpy(opts[1].s,  &c->ip4.mask, sizeof(c->ip4.mask));
+	mask.s_addr = htonl(0xffffffff << c->ip4.prefix_len);
+	memcpy(opts[1].s,  &mask,        sizeof(mask));
 	memcpy(opts[3].s,  &c->ip4.gw,   sizeof(c->ip4.gw));
 	memcpy(opts[54].s, &c->ip4.gw,   sizeof(c->ip4.gw));
 
 	/* If the gateway is not on the assigned subnet, send an option 121
 	 * (Classless Static Routing) adding a dummy route to it.
 	 */
-	if ((c->ip4.addr & c->ip4.mask) != (c->ip4.gw & c->ip4.mask)) {
+	if ((c->ip4.addr & mask.s_addr) != (c->ip4.gw & mask.s_addr)) {
 		/* a.b.c.d/32:0.0.0.0, 0:a.b.c.d */
 		opts[121].slen = 14;
 		opts[121].s[0] = 32;

@@ -522,6 +522,31 @@ static int conf_pasta_ns(int *netns_only, char *userns, char *netns,
 	return 0;
 }
 
+/** conf_ip4_prefix() - Parse an IPv4 prefix length or netmask
+ * @arg:	Netmask in dotted decimal or prefix length
+ *
+ * Return: Validated prefix length on success, -1 on failure
+ */
+static int conf_ip4_prefix(const char *arg)
+{
+	struct in_addr mask;
+	unsigned long len;
+
+	if (inet_pton(AF_INET, arg, &mask)) {
+		in_addr_t hmask = ntohl(mask.s_addr);
+		len = __builtin_popcount(hmask);
+		if ((hmask << len) != 0)
+			return -1;
+	} else {
+		errno = 0;
+		len = strtoul(optarg, NULL, 0);
+		if (len > 32 || errno)
+			return -1;
+	}
+
+	return len;
+}
+
 /**
  * conf_ip4() - Verify or detect IPv4 support, get relevant addresses
  * @ifi:	Host interface to attempt (0 to determine one)
@@ -544,22 +569,18 @@ static unsigned int conf_ip4(unsigned int ifi,
 	if (!ip4->gw)
 		nl_route(0, ifi, AF_INET, &ip4->gw);
 
-	if (!ip4->addr) {
-		int mask_len = 0;
+	if (!ip4->addr)
+		nl_addr(0, ifi, AF_INET, &ip4->addr, &ip4->prefix_len, NULL);
 
-		nl_addr(0, ifi, AF_INET, &ip4->addr, &mask_len, NULL);
-		ip4->mask = htonl(0xffffffff << (32 - mask_len));
-	}
-
-	if (!ip4->mask) {
+	if (!ip4->prefix_len) {
 		if (IN_CLASSA(ntohl(ip4->addr)))
-			ip4->mask = htonl(IN_CLASSA_NET);
+			ip4->prefix_len = (32 - IN_CLASSA_NSHIFT);
 		else if (IN_CLASSB(ntohl(ip4->addr)))
-			ip4->mask = htonl(IN_CLASSB_NET);
+			ip4->prefix_len = (32 - IN_CLASSB_NSHIFT);
 		else if (IN_CLASSC(ntohl(ip4->addr)))
-			ip4->mask = htonl(IN_CLASSC_NET);
+			ip4->prefix_len = (32 - IN_CLASSC_NSHIFT);
 		else
-			ip4->mask = 0xffffffff;
+			ip4->prefix_len = 32;
 	}
 
 	memcpy(&ip4->addr_seen, &ip4->addr, sizeof(ip4->addr_seen));
@@ -819,11 +840,12 @@ static void conf_print(const struct ctx *c)
 
 	if (c->ifi4) {
 		if (!c->no_dhcp) {
+			uint32_t mask = htonl(0xffffffff << c->ip4.prefix_len);
 			info("DHCP:");
 			info("    assign: %s",
 			     inet_ntop(AF_INET, &c->ip4.addr, buf4, sizeof(buf4)));
 			info("    mask: %s",
-			     inet_ntop(AF_INET, &c->ip4.mask, buf4, sizeof(buf4)));
+			     inet_ntop(AF_INET, &mask,        buf4, sizeof(buf4)));
 			info("    router: %s",
 			     inet_ntop(AF_INET, &c->ip4.gw,   buf4, sizeof(buf4)));
 		}
@@ -1067,9 +1089,9 @@ void conf(struct ctx *c, int argc, char **argv)
 	struct in6_addr *dns6 = c->ip6.dns;
 	struct fqdn *dnss = c->dns_search;
 	uint32_t *dns4 = c->ip4.dns;
-	int name, ret, mask, b, i;
 	const char *optstring;
 	unsigned int ifi = 0;
+	int name, ret, b, i;
 	size_t logsize = 0;
 	uid_t uid;
 	gid_t gid;
@@ -1374,18 +1396,11 @@ void conf(struct ctx *c, int argc, char **argv)
 			usage(argv[0]);
 			break;
 		case 'n':
-			if (inet_pton(AF_INET, optarg, &c->ip4.mask))
-				break;
-
-			errno = 0;
-			mask = strtol(optarg, NULL, 0);
-			if (mask > 0 && mask <= 32 && !errno) {
-				c->ip4.mask = htonl(0xffffffff << (32 - mask));
-				break;
+			c->ip4.prefix_len = conf_ip4_prefix(optarg);
+			if (c->ip4.prefix_len < 0) {
+				err("Invalid netmask: %s", optarg);
+				usage(argv[0]);
 			}
-
-			err("Invalid netmask: %s", optarg);
-			usage(argv[0]);
 			break;
 		case 'M':
 			for (i = 0; i < ETH_ALEN; i++) {
