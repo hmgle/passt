@@ -680,7 +680,7 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 	src = ntohl(b->s_in.sin_addr.s_addr);
 	src_port = ntohs(b->s_in.sin_port);
 
-	if (src >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET ||
+	if (IPV4_IS_LOOPBACK(src) ||
 	    src == INADDR_ANY || src == ntohl(c->ip4.addr_seen)) {
 		b->iph.saddr = c->ip4.gw;
 		udp_tap_map[V4][src_port].ts = now->tv_sec;

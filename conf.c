@@ -389,7 +389,7 @@ static void get_dns(struct ctx *c)
 			    dns4 - &c->ip4.dns[0] < ARRAY_SIZE(c->ip4.dns) - 1 &&
 			    inet_pton(AF_INET, p + 1, dns4)) {
 				/* We can only access local addresses via the gw redirect */
-				if (ntohl(*dns4) >> IN_CLASSA_NSHIFT == IN_LOOPBACKNET) {
+				if (IPV4_IS_LOOPBACK(ntohl(*dns4))) {
 					if (c->no_map_gw) {
 						*dns4 = 0;
 						continue;
@@ -1190,7 +1190,7 @@ void conf(struct ctx *c, int argc, char **argv)
 			    inet_pton(AF_INET, optarg, &c->ip4.dns_fwd)	&&
 			    c->ip4.dns_fwd != htonl(INADDR_ANY)		&&
 			    c->ip4.dns_fwd != htonl(INADDR_BROADCAST)	&&
-			    c->ip4.dns_fwd != htonl(INADDR_LOOPBACK))
+			    !IPV4_IS_LOOPBACK(ntohl(c->ip4.dns_fwd)))
 				break;
 
 			err("Invalid DNS forwarding address: %s", optarg);
@@ -1388,7 +1388,7 @@ void conf(struct ctx *c, int argc, char **argv)
 			    inet_pton(AF_INET, optarg, &c->ip4.addr)	&&
 			    c->ip4.addr != htonl(INADDR_ANY)		&&
 			    c->ip4.addr != htonl(INADDR_BROADCAST)	&&
-			    c->ip4.addr != htonl(INADDR_LOOPBACK)	&&
+			    !IPV4_IS_LOOPBACK(ntohl(c->ip4.addr))	&&
 			    !IN_MULTICAST(ntohl(c->ip4.addr)))
 				break;
 
@@ -1424,7 +1424,7 @@ void conf(struct ctx *c, int argc, char **argv)
 			    inet_pton(AF_INET, optarg, &c->ip4.gw)	&&
 			    c->ip4.gw != htonl(INADDR_ANY)		&&
 			    c->ip4.gw != htonl(INADDR_BROADCAST)	&&
-			    c->ip4.gw != htonl(INADDR_LOOPBACK))
+			    !IPV4_IS_LOOPBACK(ntohl(c->ip4.gw)))
 				break;
 
 			err("Invalid gateway address: %s", optarg);
