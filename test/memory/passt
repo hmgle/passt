@@ -44,13 +44,13 @@ endef
 def	start_stop_diff
 guest	sed /proc/slabinfo -ne 's/^\([^ ]* *[^ ]* *[^ ]* *[^ ]*\).*/\\\1/p' > /tmp/slabinfo.before
 guest	cat /proc/meminfo > /tmp/meminfo.before
-guest	/usr/bin/passt.avx2 -l /tmp/log -s /tmp/sock -P /tmp/pid __OPTS__ --netns-only
+guest	/bin/passt.avx2 -l /tmp/log -s /tmp/sock -P /tmp/pid __OPTS__ --netns-only
 sleep	2
 guest	cat /proc/meminfo > /tmp/meminfo.after
 guest	sed /proc/slabinfo -ne 's/^\([^ ]* *[^ ]* *[^ ]* *[^ ]*\).*/\\\1/p' > /tmp/slabinfo.after
 guest	kill \$(cat /tmp/pid)
 guest	diff -y --suppress-common-lines /tmp/meminfo.before /tmp/meminfo.after || :
-guest	nm -td -Sr --size-sort -P /usr/bin/passt.avx2 | head -30 | tee /tmp/nm.size
+guest	nm -td -Sr --size-sort -P /bin/passt.avx2 | head -30 | tee /tmp/nm.size
 guest	sed /proc/slabinfo -ne 's/\(.*<objsize>\).*$/\1/p' | tail -1; (diff -y --suppress-common-lines /tmp/slabinfo.before /tmp/slabinfo.after | sort -grk8)
 endef
 
