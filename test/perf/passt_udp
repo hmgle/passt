@@ -15,11 +15,6 @@ gtools	/sbin/sysctl ip jq nproc sleep iperf3 udp_rr # From neper
 nstools	ip jq sleep iperf3 udp_rr
 htools	bc head sed
 
-# In this setup, virtio_net TX queue sometimes hangs, still under investigation
-def	virtio_net_workaround
-guest	modprobe -r virtio_net; modprobe virtio_net napi_tx=1; ip link set dev eth0 up; dhclient -4; dhclient -6; sleep 3
-endef
-
 test	passt: throughput and latency
 
 guest	/sbin/sysctl -w net.core.rmem_max=16777216
@@ -50,19 +45,15 @@ th	MTU 256B 576B 1280B 1500B 9000B 65520B
 tr	UDP throughput over IPv6: guest to host
 bw	-
 bw	-
-virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 1280
 iperf3	BW guest ns __GW6__%__IFNAME__ 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 2G
 bw	__BW__ 0.8 1.2
-virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 1500
 iperf3	BW guest ns __GW6__%__IFNAME__ 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 3G
 bw	__BW__ 1.0 1.5
-virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 9000
 iperf3	BW guest ns __GW6__%__IFNAME__ 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 5G
 bw	__BW__ 4.0 5.0
-virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 65520
 iperf3	BW guest ns __GW6__%__IFNAME__ 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 7G
 bw	__BW__ 4.0 5.0
@@ -79,27 +70,21 @@ lat	__LAT__ 200 150
 
 
 tr	UDP throughput over IPv4: guest to host
-virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 256
 iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 500M
 bw	__BW__ 0.0 0.0
-virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 576
 iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 1G
 bw	__BW__ 0.4 0.6
-virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 1280
 iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 2G
 bw	__BW__ 0.8 1.2
-virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 1500
 iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 3G
 bw	__BW__ 1.0 1.5
-virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 9000
 iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 6G
 bw	__BW__ 4.0 5.0
-virtio_net_workaround
 guest	ip link set dev __IFNAME__ mtu 65520
 iperf3	BW guest ns __GW__ 100${i}2 __THREADS__ __TIME__ __OPTS__ -b 7G
 bw	__BW__ 4.0 5.0
