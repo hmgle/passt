@@ -208,6 +208,8 @@ setup_two_guests() {
 
 	__ifname="$(context_run qemu_1 "ip -j link show | jq -rM '.[] | select(.link_type == \"ether\").ifname'")"
 
+	sleep 1
+
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/passt_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
