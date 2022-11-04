@@ -33,6 +33,11 @@ Example for Debian, and possibly most Debian-based distributions:
     netcat-openbsd fakeroot lz4 lm-sensors qemu-system-arm qemu-system-ppc
     qemu-system-misc qemu-system-x86 valgrind
 
+NOTE: the tests need a qemu version >= 7.2, or one that contains commit
+13c6be96618c ("net: stream: add unix socket"): this change introduces support
+for UNIX domain sockets as network device back-end, which qemu uses to connect
+to passt.
+
 ### Other tools
 
 Test measuring request-response and connect-request-response latencies use

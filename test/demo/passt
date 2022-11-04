@@ -85,7 +85,7 @@ guest	cd passt
 gout	TARGET_PID pgrep -P $(cat pasta.pid)
 sleep	1
 
-passtb	./passt -f -t 10001,10003
+passtb	./passt -f -t 10001,10003 -s __STATEDIR__/passt.socket
 sleep	2
 
 guest	nsenter -t __TARGET_PID__ -U -n --preserve-credentials
@@ -93,14 +93,11 @@ sleep	5
 
 nl
 nl
-say	We're ready to start qemu with the qrap wrapper,
+say	We're ready to start qemu
 nl
-say	  that we currently need to connect the netdev
-nl
-say	  back-end to passt's UNIX domain socket.
 sleep	2
 hout	VMLINUZ echo "/boot/vmlinuz-$(uname -r)"
-guest	./qrap 5 qemu-system-x86_64 -enable-kvm -m 4096 -cpu host -smp 4 -kernel __VMLINUZ__ -initrd ../passt.img -nographic -serial stdio -nodefaults -append "console=ttyS0 virtio-net.napi_tx=1" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384 -netdev socket,fd=5,id=hostnet0
+guest	qemu-system-x86_64 -enable-kvm -m 4096 -cpu host -smp 4 -kernel __VMLINUZ__ -initrd ../passt.img -nographic -serial stdio -nodefaults -append "console=ttyS0" -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket
 sleep	10
 
 nl

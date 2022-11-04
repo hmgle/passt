@@ -48,22 +48,21 @@ setup_passt() {
 
 	context_run passt "make clean"
 	context_run passt "make valgrind"
-	context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt ${__opts} -f -t 10001 -u 10001 -P ${STATESETUP}/passt.pid"
+	context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt ${__opts} -s ${STATESETUP}/passt.socket -f -t 10001 -u 10001 -P ${STATESETUP}/passt.pid"
 
 	# pidfile isn't created until passt is listening
 	wait_for [ -f "${STATESETUP}/passt.pid" ]
 
 	GUEST_CID=94557
-	context_run_bg qemu './qrap 5 qemu-system-$(uname -m)'		   \
+	context_run_bg qemu 'qemu-system-$(uname -m)'			   \
 		' -machine accel=kvm'                                      \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                    \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
 		' -initrd '${INITRAMFS}' -nographic -serial stdio'	   \
 		' -nodefaults'						   \
-		' -append "console=ttyS0 mitigations=off apparmor=0 '	   \
-		'virtio-net.napi_tx=1"'					   \
-		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"  \
-		" -netdev socket,fd=5,id=hostnet0"			   \
+		' -append "console=ttyS0 mitigations=off apparmor=0" '	   \
+		' -device virtio-net-pci,netdev=s0 '			   \
+		" -netdev stream,id=s0,server=off,addr.type=unix,addr.path=${STATESETUP}/passt.socket " \
 		" -pidfile ${STATESETUP}/qemu.pid"			   \
 		" -device vhost-vsock-pci,guest-cid=$GUEST_CID"
 
@@ -143,26 +142,25 @@ setup_passt_in_ns() {
 	if [ ${VALGRIND} -eq 1 ]; then
 		context_run passt "make clean"
 		context_run passt "make valgrind"
-		context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P ${STATESETUP}/passt.pid"
+		context_run_bg passt "valgrind --max-stackframe=$((4 * 1024 * 1024)) --trace-children=yes --vgdb=no --error-exitcode=1 --suppressions=test/valgrind.supp ./passt -f ${__opts} -s ${STATESETUP}/passt.socket -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P ${STATESETUP}/passt.pid"
 	else
 		context_run passt "make clean"
 		context_run passt "make"
-		context_run_bg passt "./passt -f ${__opts} -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P ${STATESETUP}/passt.pid"
+		context_run_bg passt "./passt -f ${__opts} -s ${STATESETUP}/passt.socket -t 10001,10011,10021,10031 -u 10001,10011,10021,10031 -P ${STATESETUP}/passt.pid"
 	fi
 	wait_for [ -f "${STATESETUP}/passt.pid" ]
 
 	GUEST_CID=94557
-	context_run_bg qemu './qrap 5 qemu-system-$(uname -m)'                \
+	context_run_bg qemu 'qemu-system-$(uname -m)'			   \
 		' -machine accel=kvm'                                      \
 		' -M accel=kvm:tcg'                                        \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                    \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
 		' -initrd '${INITRAMFS}' -nographic -serial stdio'	   \
 		' -nodefaults'						   \
-		' -append "console=ttyS0 mitigations=off apparmor=0 '	   \
-		'virtio-net.napi_tx=1"'					   \
-		" -device virtio-net-pci,netdev=hostnet0,x-txburst=524288" \
-		" -netdev socket,fd=5,id=hostnet0"			   \
+		' -append "console=ttyS0 mitigations=off apparmor=0" '	   \
+		' -device virtio-net-pci,netdev=s0 '			   \
+		" -netdev stream,id=s0,server=off,addr.type=unix,addr.path=${STATESETUP}/passt.socket " \
 		" -pidfile ${STATESETUP}/qemu.pid"			   \
 		" -device vhost-vsock-pci,guest-cid=$GUEST_CID"
 
@@ -191,7 +189,7 @@ setup_two_guests() {
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta_1.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
-	context_run_bg pasta_1 "./pasta ${__opts} -P ${STATESETUP}/pasta_1.pid -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004 --config-net ${NSHOLDER} ${STATESETUP}/ns1.hold hold"
+	context_run_bg pasta_1 "./pasta ${__opts} --trace -l /tmp/pasta1.log -P ${STATESETUP}/pasta_1.pid -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004 --config-net ${NSHOLDER} ${STATESETUP}/ns1.hold hold"
 	__ns1_pid=$(${NSHOLDER} ${STATESETUP}/ns1.hold pid)
 	context_setup_nsenter passt_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
 
@@ -199,7 +197,7 @@ setup_two_guests() {
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
-	context_run_bg pasta_2 "./pasta ${__opts} -P ${STATESETUP}/pasta_2.pid -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001 --config-net ${NSHOLDER} ${STATESETUP}/ns2.hold hold"
+	context_run_bg pasta_2 "./pasta ${__opts} --trace -l /tmp/pasta2.log -P ${STATESETUP}/pasta_2.pid -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001 --config-net ${NSHOLDER} ${STATESETUP}/ns2.hold hold"
 	__ns2_pid=$(${NSHOLDER} ${STATESETUP}/ns2.hold pid)
 	context_setup_nsenter passt_2 -U -n -p --preserve-credentials -t ${__ns2_pid}
 
@@ -215,7 +213,7 @@ setup_two_guests() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	context_run_bg passt_1 "./passt -P ${STATESETUP}/passt_1.pid -f ${__opts} -t 10001 -u 10001"
+	context_run_bg passt_1 "./passt -s ${STATESETUP}/passt_1.socket -P ${STATESETUP}/passt_1.pid -f ${__opts} -t 10001 -u 10001"
 	wait_for [ -f "${STATESETUP}/passt_1.pid" ]
 
 	__opts=
@@ -223,34 +221,32 @@ setup_two_guests() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	context_run_bg passt_2 "./passt -P ${STATESETUP}/passt_2.pid -f ${__opts} -t 10004 -u 10004"
+	context_run_bg passt_2 "./passt -s ${STATESETUP}/passt_2.socket -P ${STATESETUP}/passt_2.pid -f ${__opts} -t 10004 -u 10004"
 	wait_for [ -f "${STATESETUP}/passt_2.pid" ]
 
 	GUEST_1_CID=94557
-	context_run_bg qemu_1 './qrap 5 qemu-system-$(uname -m)'             \
+	context_run_bg qemu_1 'qemu-system-$(uname -m)'			     \
 		' -M accel=kvm:tcg'                                          \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                      \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			     \
 		' -initrd '${INITRAMFS}' -nographic -serial stdio'	     \
 		' -nodefaults'						     \
-		' -append "console=ttyS0 mitigations=off apparmor=0 '	     \
-		'virtio-net.napi_tx=1"'					     \
-		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
-		" -netdev socket,fd=5,id=hostnet0"			     \
+		' -append "console=ttyS0 mitigations=off apparmor=0" '	     \
+		' -device virtio-net-pci,netdev=s0 '			     \
+		" -netdev stream,id=s0,server=off,addr.type=unix,addr.path=${STATESETUP}/passt_1.socket " \
 		" -pidfile ${STATESETUP}/qemu_1.pid"			     \
 		" -device vhost-vsock-pci,guest-cid=$GUEST_1_CID"
 
 	GUEST_2_CID=94558
-	context_run_bg qemu_2 './qrap 5 qemu-system-$(uname -m)'             \
+	context_run_bg qemu_2 'qemu-system-$(uname -m)'			     \
 		' -M accel=kvm:tcg'                                          \
 		' -m '${VMEM}' -cpu host -smp '${VCPUS}                      \
 		' -kernel ' "/boot/vmlinuz-$(uname -r)"			     \
 		' -initrd '${INITRAMFS}' -nographic -serial stdio'	     \
 		' -nodefaults'						     \
-		' -append "console=ttyS0 mitigations=off apparmor=0 '	     \
-		'virtio-net.napi_tx=1"'					     \
-		" -device virtio-net-pci,netdev=hostnet0,x-txburst=16384"    \
-		" -netdev socket,fd=5,id=hostnet0"			     \
+		' -append "console=ttyS0 mitigations=off apparmor=0" '	     \
+		' -device virtio-net-pci,netdev=s0 '			     \
+		" -netdev stream,id=s0,server=off,addr.type=unix,addr.path=${STATESETUP}/passt_2.socket " \
 		" -pidfile ${STATESETUP}/qemu_2.pid"			     \
 		" -device vhost-vsock-pci,guest-cid=$GUEST_2_CID"
 

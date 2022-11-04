@@ -60,7 +60,7 @@ host	r=10; while [ \${r} -gt 0 ]; do host ubuntu.com && break; sleep 5; r=\$((r 
 endef
 
 # Start passt, set common variables
-hostb	./passt -P __PIDFILE__ &
+hostb	./passt -s __STATEDIR__/passt.socket -P __PIDFILE__ &
 sleep	1
 host	echo
 hout	GUEST_FILES ls -1 *.c *.h *.sh passt.1 qrap.1 Makefile README.md | tr '\n' ' '; echo
@@ -80,7 +80,7 @@ host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init.conf
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-log-shutdown.conf
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__IMG__,if=virtio -net socket,fd=5 -net nic,model=virtio
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__IMG__,if=virtio -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -113,7 +113,7 @@ host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init.conf
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-log-shutdown.conf
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__IMG__,if=virtio -net socket,fd=5 -net nic,model=virtio
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__IMG__,if=virtio -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -143,7 +143,7 @@ host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init.conf
 host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-log-shutdown.conf
 host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
 
-host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -net socket,fd=5 -net nic,model=virtio
+host	qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -164,7 +164,7 @@ host	echo
 
 test	Ubuntu 16.04 LTS (Xenial Xerus), ppc64 (be)
 
-host	./qrap 5 qemu-system-ppc64 -m 1024 -M pseries -nographic -nodefaults -serial stdio -no-reboot -nographic -vga none -hda __BASEPATH__/prepared-xenial-server-cloudimg-powerpc-disk1.img -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-ppc64 -m 1024 -M pseries -nographic -nodefaults -serial stdio -no-reboot -nographic -vga none -hda __BASEPATH__/prepared-xenial-server-cloudimg-powerpc-disk1.img -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 host	dhclient -4
 # Skip apt-get update here: some updates to xenial-updates around 2022-01-30
@@ -188,7 +188,7 @@ host	echo
 
 test	Ubuntu 22.04 (Jammy Jellyfish), s390x
 
-host	./qrap 5 qemu-system-s390x -m 2048 -smp 2 -serial stdio -nodefaults -nographic __BASEPATH__/prepared-jammy-server-cloudimg-s390x.img -net socket,fd=5 -net nic,model=virtio -device virtio-rng-ccw -snapshot
+host	qemu-system-s390x -m 2048 -smp 2 -serial stdio -nodefaults -nographic __BASEPATH__/prepared-jammy-server-cloudimg-s390x.img -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -device virtio-rng-ccw -snapshot
 
 host	export DEBIAN_FRONTEND=noninteractive
 host	service systemd-networkd stop

@@ -56,13 +56,13 @@ check	[ __INIT_MSG__ = "from_ns" ]
 endef
 
 # Start passt, set common variables
-hostb	./passt -P __PIDFILE__ &
+hostb	./passt -s __STATEDIR__/passt.socket -P __PIDFILE__ &
 sleep	1
 host	echo
 
 test	Fedora 26, x86_64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-26-1.5.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-26-1.5.x86_64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -82,7 +82,7 @@ hout	PID cat __PIDFILE__
 
 test	Fedora 27, x86_64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-27-1.6.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-27-1.6.x86_64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -99,7 +99,7 @@ sleep	1
 
 test	Fedora 28, x86_64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-28-1.1.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-28-1.1.x86_64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -116,7 +116,7 @@ sleep	1
 
 test	Fedora 28, aarch64
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-28-1.1.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-28-1.1.aarch64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -136,7 +136,7 @@ host	echo
 
 test	Fedora 29, x86_64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-29-1.2.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-29-1.2.x86_64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -153,7 +153,7 @@ sleep	1
 
 test	Fedora 29, aarch64
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-29-1.2.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-29-1.2.aarch64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -173,7 +173,7 @@ host	echo
 
 test	Fedora 30, x86_64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-30-1.2.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-30-1.2.x86_64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -190,7 +190,7 @@ sleep	1
 
 test	Fedora 30, aarch64
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-30-1.2.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-30-1.2.aarch64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -210,7 +210,7 @@ host	echo
 
 test	Fedora 31, x86_64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-31-1.9.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-31-1.9.x86_64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -227,7 +227,7 @@ sleep	1
 
 test	Fedora 31, aarch64
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-31-1.9.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-31-1.9.aarch64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -247,7 +247,7 @@ host	echo
 
 test	Fedora 32, x86_64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-32-1.6.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-32-1.6.x86_64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -264,7 +264,7 @@ sleep	1
 
 test	Fedora 32, aarch64
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-32-1.6.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-32-1.6.aarch64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -284,7 +284,7 @@ host	echo
 
 test	Fedora 33, x86_64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-33-1.2.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-33-1.2.x86_64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -301,7 +301,7 @@ sleep	1
 
 test	Fedora 33, aarch64
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-33-1.2.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-33-1.2.aarch64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -321,7 +321,7 @@ host	echo
 
 test	Fedora 34, x86_64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-34-1.2.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-34-1.2.x86_64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -338,7 +338,7 @@ sleep	1
 
 test	Fedora 34, aarch64
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-34-1.2.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-34-1.2.aarch64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -358,7 +358,7 @@ host	echo
 
 test	Fedora 35, x86_64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-35-1.2.x86_64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-Fedora-Cloud-Base-35-1.2.x86_64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat
@@ -375,7 +375,7 @@ sleep	1
 
 test	Fedora 35, aarch64
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-35-1.2.aarch64.qcow2 -net socket,fd=5 -net nic,model=virtio -device virtio-rng-pci -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nodefaults -nographic -vga none -serial stdio __BASEPATH__/prepared-Fedora-Cloud-Base-35-1.2.aarch64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -device virtio-rng-pci -snapshot
 host	PS1='$ '
 sleep	2
 host	yum -y install make gcc socat

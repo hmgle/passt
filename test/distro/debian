@@ -36,14 +36,14 @@ check	[ __INIT_MSG__ = "from_ns" ]
 endef
 
 # Start passt, set common variables
-hostb	./passt -P __PIDFILE__ &
+hostb	./passt -s __STATEDIR__/passt.socket -P __PIDFILE__ &
 sleep	1
 host	echo
 
 
 test	Debian GNU/Linux 8 (jessie), amd64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__BASEPATH__/prepared-debian-8.11.0-openstack-amd64.qcow2,if=virtio -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__BASEPATH__/prepared-debian-8.11.0-openstack-amd64.qcow2,if=virtio -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -64,7 +64,7 @@ hout	PID cat __PIDFILE__
 
 test	Debian GNU/Linux 9 (stretch, oldoldstable), amd64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-9-nocloud-amd64-daily-20200210-166.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-9-nocloud-amd64-daily-20200210-166.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -82,7 +82,7 @@ sleep	1
 
 test	Debian GNU/Linux 10 (buster, oldstable), amd64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-nocloud-amd64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-nocloud-amd64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -100,7 +100,7 @@ sleep	1
 
 test	Debian GNU/Linux 10 (buster, oldstable), aarch64
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-generic-arm64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-generic-arm64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -118,7 +118,7 @@ sleep	1
 
 test	Debian GNU/Linux 10 (buster, oldstable), ppc64le
 
-host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-generic-ppc64el.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-generic-ppc64el.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update
@@ -137,7 +137,7 @@ hostb	reset
 
 test	Debian GNU/Linux 11 (bullseye, stable), amd64
 
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-nocloud-amd64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-nocloud-amd64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc socat
@@ -153,7 +153,7 @@ sleep	1
 
 test	Debian GNU/Linux 11 (bullseye, stable), aarch64
 
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-generic-arm64.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-generic-arm64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc socat
@@ -169,7 +169,7 @@ sleep	1
 
 test	Debian GNU/Linux 11 (bullseye, stable), ppc64le
 
-host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-generic-ppc64el.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-generic-ppc64el.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 sleep	2
 host	apt-get update
 host	apt-get -y install make gcc socat
@@ -193,7 +193,7 @@ hostb	reset
 test	Debian GNU/Linux sid (experimental), amd64
 
 host	qemu-img resize __BASEPATH__/prepared-debian-sid-nocloud-amd64-daily.qcow2 4G
-host	./qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-amd64-daily.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-amd64-daily.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 sleep	2
 host	growpart /dev/sda 1
 host	resize2fs -p /dev/sda1
@@ -213,7 +213,7 @@ sleep	1
 test	Debian GNU/Linux sid (experimental), aarch64
 
 host	qemu-img resize __BASEPATH__/prepared-debian-sid-nocloud-arm64-daily.qcow2 4G
-host	./qrap 5 qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-arm64-daily.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-arm64-daily.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 sleep	2
 host	growpart /dev/vda 1
 host	resize2fs -p /dev/vda1
@@ -232,7 +232,7 @@ sleep	1
 
 test	Debian GNU/Linux sid (experimental), ppc64le
 
-host	./qrap 5 qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-ppc64el-daily.qcow2 -net socket,fd=5 -net nic,model=virtio -snapshot
+host	qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-ppc64el-daily.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 sleep	2
 host	export DEBIAN_FRONTEND=noninteractive
 host	apt-get update
