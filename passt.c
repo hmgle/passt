@@ -136,7 +136,7 @@ static void timer_init(struct ctx *c, const struct timespec *now)
  * @ip_da:	Pointer to IPv4 destination address, NULL if unchanged
  */
 void proto_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
-			 const uint32_t *ip_da)
+			 const struct in_addr *ip_da)
 {
 	tcp_update_l2_buf(eth_d, eth_s, ip_da);
 	udp_update_l2_buf(eth_d, eth_s, ip_da);

@@ -17,7 +17,7 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 int udp_init(struct ctx *c);
 void udp_timer(struct ctx *c, const struct timespec *ts);
 void udp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
-		       const uint32_t *ip_da);
+		       const struct in_addr *ip_da);
 
 /**
  * union udp_epoll_ref - epoll reference portion for TCP connections

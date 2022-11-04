@@ -107,7 +107,7 @@ struct msg {
 	uint16_t secs;
 	uint16_t flags;
 	uint32_t ciaddr;
-	uint32_t yiaddr;
+	struct in_addr yiaddr;
 	uint32_t siaddr;
 	uint32_t giaddr;
 	uint8_t chaddr[16];
@@ -343,7 +343,8 @@ int dhcp(const struct ctx *c, const struct pool *p)
 	/* If the gateway is not on the assigned subnet, send an option 121
 	 * (Classless Static Routing) adding a dummy route to it.
 	 */
-	if ((c->ip4.addr & mask.s_addr) != (c->ip4.gw & mask.s_addr)) {
+	if ((c->ip4.addr.s_addr & mask.s_addr)
+	    != (c->ip4.gw.s_addr & mask.s_addr)) {
 		/* a.b.c.d/32:0.0.0.0, 0:a.b.c.d */
 		opts[121].slen = 14;
 		opts[121].s[0] = 32;
@@ -357,8 +358,10 @@ int dhcp(const struct ctx *c, const struct pool *p)
 		opts[26].s[1] = c->mtu % 256;
 	}
 
-	for (i = 0, opts[6].slen = 0; !c->no_dhcp_dns && c->ip4.dns[i]; i++) {
-		((uint32_t *)opts[6].s)[i] = c->ip4.dns[i];
+	for (i = 0, opts[6].slen = 0;
+	     !c->no_dhcp_dns && !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns[i]);
+	     i++) {
+		((struct in_addr *)opts[6].s)[i] = c->ip4.dns[i];
 		opts[6].slen += sizeof(uint32_t);
 	}
 

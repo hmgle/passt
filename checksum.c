@@ -133,7 +133,8 @@ void csum_ip4_header(struct iphdr *ip4h)
  * @payload:	ICMPv4 packet payload
  * @len:	Length of @payload (not including UDP)
  */
-void csum_udp4(struct udphdr *udp4hr, in_addr_t saddr, in_addr_t daddr,
+void csum_udp4(struct udphdr *udp4hr,
+	       struct in_addr saddr, struct in_addr daddr,
 	       const void *payload, size_t len)
 {
 	/* UDP checksums are optional, so don't bother */
@@ -142,8 +143,8 @@ void csum_udp4(struct udphdr *udp4hr, in_addr_t saddr, in_addr_t daddr,
 	if (UDP4_REAL_CHECKSUMS) {
 		/* UNTESTED: if we did want real UDPv4 checksums, this
 		 * is roughly what we'd need */
-		uint32_t psum = csum_fold(htonl(saddr))
-			+ csum_fold(htonl(daddr))
+		uint32_t psum = csum_fold(saddr.s_addr)
+			+ csum_fold(daddr.s_addr)
 			+ htons(len + sizeof(*udp4hr))
 			+ htons(IPPROTO_UDP);
 		/* Add in partial checksum for the UDP header alone */

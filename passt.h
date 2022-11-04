@@ -105,12 +105,12 @@ enum passt_modes {
  * @dns_fwd:		Address forwarded (UDP) to first IPv4 DNS, network order
  */
 struct ip4_ctx {
-	uint32_t addr;
-	uint32_t addr_seen;
+	struct in_addr addr;
+	struct in_addr addr_seen;
 	int prefix_len;
-	uint32_t gw;
-	uint32_t dns[MAXNS + 1];
-	uint32_t dns_fwd;
+	struct in_addr gw;
+	struct in_addr dns[MAXNS + 1];
+	struct in_addr dns_fwd;
 };
 
 /**
@@ -248,6 +248,6 @@ struct ctx {
 };
 
 void proto_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
-			 const uint32_t *ip_da);
+			 const struct in_addr *ip_da);
 
 #endif /* PASST_H */

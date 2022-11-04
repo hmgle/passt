@@ -1107,7 +1107,7 @@ static void tcp_update_check_tcp6(struct tcp6_l2_buf_t *buf)
  * @ip_da:	Pointer to IPv4 destination address, NULL if unchanged
  */
 void tcp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
-		       const uint32_t *ip_da)
+		       const struct in_addr *ip_da)
 {
 	int i;
 
@@ -1134,16 +1134,16 @@ void tcp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 		}
 
 		if (ip_da) {
-			b4f->iph.daddr = b4->iph.daddr = *ip_da;
+			b4f->iph.daddr = b4->iph.daddr = ip_da->s_addr;
 			if (!i) {
 				b4f->iph.saddr = b4->iph.saddr = 0;
 				b4f->iph.tot_len = b4->iph.tot_len = 0;
 				b4f->iph.check = b4->iph.check = 0;
 				b4f->psum = b4->psum = sum_16b(&b4->iph, 20);
 
-				b4->tsum = ((*ip_da >> 16) & 0xffff) +
-					   (*ip_da & 0xffff) +
-					   htons(IPPROTO_TCP);
+				b4->tsum = ((ip_da->s_addr >> 16) & 0xffff) +
+					    (ip_da->s_addr & 0xffff) +
+					    htons(IPPROTO_TCP);
 				b4f->tsum = b4->tsum;
 			} else {
 				b4f->psum = b4->psum = tcp4_l2_buf[0].psum;
@@ -1701,7 +1701,7 @@ do {									\
 		ip_len = plen + sizeof(struct iphdr) + sizeof(struct tcphdr);
 		b->iph.tot_len = htons(ip_len);
 		b->iph.saddr = conn->a.a4.a.s_addr;
-		b->iph.daddr = c->ip4.addr_seen;
+		b->iph.daddr = c->ip4.addr_seen.s_addr;
 
 		if (check)
 			b->iph.check = *check;
@@ -2048,7 +2048,7 @@ static uint32_t tcp_seq_init(const struct ctx *c, int af, const void *addr,
 		} __attribute__((__packed__)) in = {
 			.src = *(struct in_addr *)addr,
 			.srcport = srcport,
-			.dst = { c->ip4.addr },
+			.dst = c->ip4.addr,
 			.dstport = dstport,
 		};
 
@@ -2176,10 +2176,10 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 		return;
 
 	if (!c->no_map_gw) {
-		if (af == AF_INET && addr4.sin_addr.s_addr == c->ip4.gw)
-			addr4.sin_addr.s_addr	= htonl(INADDR_LOOPBACK);
+		if (af == AF_INET && IN4_ARE_ADDR_EQUAL(addr, &c->ip4.gw))
+			addr4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 		if (af == AF_INET6 && IN6_ARE_ADDR_EQUAL(addr, &c->ip6.gw))
-			addr6.sin6_addr		= in6addr_loopback;
+			addr6.sin6_addr	= in6addr_loopback;
 	}
 
 	if (af == AF_INET6 && IN6_IS_ADDR_LINKLOCAL(&addr6.sin6_addr)) {
@@ -2899,30 +2899,28 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		tcp_hash_insert(c, conn, AF_INET6, &sa6.sin6_addr);
 	} else {
 		struct sockaddr_in sa4;
-		in_addr_t s_addr;
 
 		memcpy(&sa4, &sa, sizeof(sa4));
-		s_addr = ntohl(sa4.sin_addr.s_addr);
 
 		memset(&conn->a.a4.zero,   0, sizeof(conn->a.a4.zero));
 		memset(&conn->a.a4.one, 0xff, sizeof(conn->a.a4.one));
 
-		if (IPV4_IS_LOOPBACK(s_addr) || s_addr == INADDR_ANY ||
-		    htonl(s_addr) == c->ip4.addr_seen)
-			s_addr = ntohl(c->ip4.gw);
+		if (IN4_IS_ADDR_LOOPBACK(&sa4.sin_addr) ||
+		    IN4_IS_ADDR_UNSPECIFIED(&sa4.sin_addr) ||
+		    IN4_ARE_ADDR_EQUAL(&sa4.sin_addr, &c->ip4.addr_seen))
+			sa4.sin_addr = c->ip4.gw;
 
-		s_addr = htonl(s_addr);
-		memcpy(&conn->a.a4.a, &s_addr, sizeof(conn->a.a4.a));
+		conn->a.a4.a = sa4.sin_addr;
 
 		conn->sock_port = ntohs(sa4.sin_port);
 		conn->tap_port = ref.r.p.tcp.tcp.index;
 
-		conn->seq_to_tap = tcp_seq_init(c, AF_INET, &s_addr,
+		conn->seq_to_tap = tcp_seq_init(c, AF_INET, &sa4.sin_addr,
 						conn->sock_port,
 						conn->tap_port,
 						now);
 
-		tcp_hash_insert(c, conn, AF_INET, &s_addr);
+		tcp_hash_insert(c, conn, AF_INET, &sa4.sin_addr);
 	}
 
 	conn->seq_ack_from_tap = conn->seq_to_tap + 1;
@@ -3081,7 +3079,7 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  * @ifname:	Name of interface to bind to, NULL if not configured
  * @port:	Port, host order
  */
-static void tcp_sock_init4(const struct ctx *c, int ns, const in_addr_t *addr,
+static void tcp_sock_init4(const struct ctx *c, int ns, const struct in_addr *addr,
 			   const char *ifname, in_port_t port)
 {
 	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = ns };
@@ -3089,14 +3087,13 @@ static void tcp_sock_init4(const struct ctx *c, int ns, const in_addr_t *addr,
 	int s;
 
 	if (c->mode == MODE_PASTA) {
-		spliced = !addr ||
-			  ntohl(*addr) == INADDR_ANY ||
-			  IPV4_IS_LOOPBACK(ntohl(*addr));
+		spliced = !addr || IN4_IS_ADDR_UNSPECIFIED(addr) ||
+			IN4_IS_ADDR_LOOPBACK(addr);
 
 		if (!addr)
 			addr = &c->ip4.addr;
 
-		tap = !ns && !IPV4_IS_LOOPBACK(ntohl(*addr));
+		tap = !ns && !IN4_IS_ADDR_LOOPBACK(addr);
 	}
 
 	if (ns)
@@ -3117,9 +3114,10 @@ static void tcp_sock_init4(const struct ctx *c, int ns, const in_addr_t *addr,
 	}
 
 	if (spliced) {
+		struct in_addr loopback = { htonl(INADDR_LOOPBACK) };
 		tref.tcp.splice = 1;
 
-		addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
+		addr = &loopback;
 
 		s = sock_l4(c, AF_INET, IPPROTO_TCP, addr, ifname, port,
 			    tref.u32);

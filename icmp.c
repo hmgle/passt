@@ -130,8 +130,7 @@ void icmp_sock_handler(const struct ctx *c, union epoll_ref ref,
 		debug("ICMP: echo %s to tap, ID: %i, seq: %i",
 		      (ih->type == ICMP_ECHO) ? "request" : "reply", id, seq);
 
-		tap_icmp4_send(c, sr4->sin_addr.s_addr, tap_ip4_daddr(c),
-			       buf, n);
+		tap_icmp4_send(c, sr4->sin_addr, tap_ip4_daddr(c), buf, n);
 	}
 }
 

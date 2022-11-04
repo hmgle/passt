@@ -92,7 +92,7 @@ int tap_send(const struct ctx *c, const void *data, size_t len)
  *
  * Returns: IPv4 address, network order
  */
-in_addr_t tap_ip4_daddr(const struct ctx *c)
+struct in_addr tap_ip4_daddr(const struct ctx *c)
 {
 	return c->ip4.addr_seen;
 }
@@ -141,7 +141,7 @@ static void *tap_push_l2h(const struct ctx *c, void *buf, uint16_t proto)
  *
  * Return: pointer at which to write the packet's payload
  */
-static void *tap_push_ip4h(char *buf, in_addr_t src, in_addr_t dst,
+static void *tap_push_ip4h(char *buf, struct in_addr src, struct in_addr dst,
 			   size_t len, uint8_t proto)
 {
 	struct iphdr *ip4h = (struct iphdr *)buf;
@@ -154,8 +154,8 @@ static void *tap_push_ip4h(char *buf, in_addr_t src, in_addr_t dst,
 	ip4h->frag_off = 0;
 	ip4h->ttl = 255;
 	ip4h->protocol = proto;
-	ip4h->saddr = src;
-	ip4h->daddr = dst;
+	ip4h->saddr = src.s_addr;
+	ip4h->daddr = dst.s_addr;
 	csum_ip4_header(ip4h);
 	return ip4h + 1;
 }
@@ -170,8 +170,8 @@ static void *tap_push_ip4h(char *buf, in_addr_t src, in_addr_t dst,
  * @in:		UDP payload contents (not including UDP header)
  * @len:	UDP payload length (not including UDP header)
  */
-void tap_udp4_send(const struct ctx *c, in_addr_t src, in_port_t sport,
-		   in_addr_t dst, in_port_t dport,
+void tap_udp4_send(const struct ctx *c, struct in_addr src, in_port_t sport,
+		   struct in_addr dst, in_port_t dport,
 		   const void *in, size_t len)
 {
 	size_t udplen = len + sizeof(struct udphdr);
@@ -199,7 +199,7 @@ void tap_udp4_send(const struct ctx *c, in_addr_t src, in_port_t sport,
  * @in:		ICMP packet, including ICMP header
  * @len:	ICMP packet length, including ICMP header
  */
-void tap_icmp4_send(const struct ctx *c, in_addr_t src, in_addr_t dst,
+void tap_icmp4_send(const struct ctx *c, struct in_addr src, struct in_addr dst,
 		    void *in, size_t len)
 {
 	char buf[USHRT_MAX];
@@ -448,8 +448,8 @@ resume:
 
 		l4_len = l3_len - hlen;
 
-		if (iph->saddr && c->ip4.addr_seen != iph->saddr) {
-			c->ip4.addr_seen = iph->saddr;
+		if (iph->saddr && c->ip4.addr_seen.s_addr != iph->saddr) {
+			c->ip4.addr_seen.s_addr = iph->saddr;
 			proto_update_l2_buf(NULL, NULL, &c->ip4.addr_seen);
 		}
 

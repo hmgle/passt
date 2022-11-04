@@ -358,12 +358,12 @@ static void get_dns(struct ctx *c)
 	int dns4_set, dns6_set, dnss_set, dns_set, fd;
 	struct in6_addr *dns6 = &c->ip6.dns[0];
 	struct fqdn *s = c->dns_search;
-	uint32_t *dns4 = &c->ip4.dns[0];
+	struct in_addr *dns4 = &c->ip4.dns[0];
 	struct lineread resolvconf;
 	int line_len;
 	char *line, *p, *end;
 
-	dns4_set = !c->ifi4 || !!*dns4;
+	dns4_set = !c->ifi4 || !IN4_IS_ADDR_UNSPECIFIED(dns4);
 	dns6_set = !c->ifi6 || !IN6_IS_ADDR_UNSPECIFIED(dns6);
 	dnss_set = !!*s->n || c->no_dns_search;
 	dns_set = (dns4_set && dns6_set) || c->no_dns;
@@ -389,15 +389,15 @@ static void get_dns(struct ctx *c)
 			    dns4 - &c->ip4.dns[0] < ARRAY_SIZE(c->ip4.dns) - 1 &&
 			    inet_pton(AF_INET, p + 1, dns4)) {
 				/* We can only access local addresses via the gw redirect */
-				if (IPV4_IS_LOOPBACK(ntohl(*dns4))) {
+				if (IN4_IS_ADDR_LOOPBACK(dns4)) {
 					if (c->no_map_gw) {
-						*dns4 = 0;
+						dns4->s_addr = htonl(INADDR_ANY);
 						continue;
 					}
 					*dns4 = c->ip4.gw;
 				}
 				dns4++;
-				*dns4 = 0;
+				dns4->s_addr = htonl(INADDR_ANY);
 			}
 
 			if (!dns6_set &&
@@ -566,18 +566,19 @@ static unsigned int conf_ip4(unsigned int ifi,
 		return 0;
 	}
 
-	if (!ip4->gw)
+	if (IN4_IS_ADDR_UNSPECIFIED(&ip4->gw))
 		nl_route(0, ifi, AF_INET, &ip4->gw);
 
-	if (!ip4->addr)
+	if (IN4_IS_ADDR_UNSPECIFIED(&ip4->addr))
 		nl_addr(0, ifi, AF_INET, &ip4->addr, &ip4->prefix_len, NULL);
 
 	if (!ip4->prefix_len) {
-		if (IN_CLASSA(ntohl(ip4->addr)))
+		in_addr_t addr = ntohl(ip4->addr.s_addr);
+		if (IN_CLASSA(addr))
 			ip4->prefix_len = (32 - IN_CLASSA_NSHIFT);
-		else if (IN_CLASSB(ntohl(ip4->addr)))
+		else if (IN_CLASSB(addr))
 			ip4->prefix_len = (32 - IN_CLASSB_NSHIFT);
-		else if (IN_CLASSC(ntohl(ip4->addr)))
+		else if (IN_CLASSC(addr))
 			ip4->prefix_len = (32 - IN_CLASSC_NSHIFT);
 		else
 			ip4->prefix_len = 32;
@@ -588,7 +589,9 @@ static unsigned int conf_ip4(unsigned int ifi,
 	if (MAC_IS_ZERO(mac))
 		nl_link(0, ifi, mac, 0, 0);
 
-	if (!ip4->gw || !ip4->addr || MAC_IS_ZERO(mac))
+	if (IN4_IS_ADDR_UNSPECIFIED(&ip4->gw) ||
+	    IN4_IS_ADDR_UNSPECIFIED(&ip4->addr) ||
+	    MAC_IS_ZERO(mac))
 		return 0;
 
 	return ifi;
@@ -850,7 +853,7 @@ static void conf_print(const struct ctx *c)
 			     inet_ntop(AF_INET, &c->ip4.gw,   buf4, sizeof(buf4)));
 		}
 
-		for (i = 0; c->ip4.dns[i]; i++) {
+		for (i = 0; !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns[i]); i++) {
 			if (!i)
 				info("DNS:");
 			inet_ntop(AF_INET, &c->ip4.dns[i], buf4, sizeof(buf4));
@@ -1088,7 +1091,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	char *runas = NULL, *logfile = NULL;
 	struct in6_addr *dns6 = c->ip6.dns;
 	struct fqdn *dnss = c->dns_search;
-	uint32_t *dns4 = c->ip4.dns;
+	struct in_addr *dns4 = c->ip4.dns;
 	const char *optstring;
 	unsigned int ifi = 0;
 	int name, ret, b, i;
@@ -1186,11 +1189,11 @@ void conf(struct ctx *c, int argc, char **argv)
 			    !IN6_IS_ADDR_LOOPBACK(&c->ip6.dns_fwd))
 				break;
 
-			if (c->ip4.dns_fwd == htonl(INADDR_ANY)		&&
+			if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_fwd)	&&
 			    inet_pton(AF_INET, optarg, &c->ip4.dns_fwd)	&&
-			    c->ip4.dns_fwd != htonl(INADDR_ANY)		&&
-			    c->ip4.dns_fwd != htonl(INADDR_BROADCAST)	&&
-			    !IPV4_IS_LOOPBACK(ntohl(c->ip4.dns_fwd)))
+			    !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_fwd)	&&
+			    !IN4_IS_ADDR_BROADCAST(&c->ip4.dns_fwd)	&&
+			    !IN4_IS_ADDR_LOOPBACK(&c->ip4.dns_fwd))
 				break;
 
 			err("Invalid DNS forwarding address: %s", optarg);
@@ -1384,12 +1387,12 @@ void conf(struct ctx *c, int argc, char **argv)
 			    !IN6_IS_ADDR_MULTICAST(&c->ip6.addr))
 				break;
 
-			if (c->ip4.addr == htonl(INADDR_ANY)		&&
+			if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.addr)	&&
 			    inet_pton(AF_INET, optarg, &c->ip4.addr)	&&
-			    c->ip4.addr != htonl(INADDR_ANY)		&&
-			    c->ip4.addr != htonl(INADDR_BROADCAST)	&&
-			    !IPV4_IS_LOOPBACK(ntohl(c->ip4.addr))	&&
-			    !IN_MULTICAST(ntohl(c->ip4.addr)))
+			    !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.addr)	&&
+			    !IN4_IS_ADDR_BROADCAST(&c->ip4.addr)	&&
+			    !IN4_IS_ADDR_LOOPBACK(&c->ip4.addr)		&&
+			    !IN4_IS_ADDR_MULTICAST(&c->ip4.addr))
 				break;
 
 			err("Invalid address: %s", optarg);
@@ -1420,11 +1423,11 @@ void conf(struct ctx *c, int argc, char **argv)
 			    !IN6_IS_ADDR_LOOPBACK(&c->ip6.gw))
 				break;
 
-			if (c->ip4.gw == htonl(INADDR_ANY)		&&
+			if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.gw)		&&
 			    inet_pton(AF_INET, optarg, &c->ip4.gw)	&&
-			    c->ip4.gw != htonl(INADDR_ANY)		&&
-			    c->ip4.gw != htonl(INADDR_BROADCAST)	&&
-			    !IPV4_IS_LOOPBACK(ntohl(c->ip4.gw)))
+			    !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.gw)	&&
+			    !IN4_IS_ADDR_BROADCAST(&c->ip4.gw)		&&
+			    !IN4_IS_ADDR_LOOPBACK(&c->ip4.gw))
 				break;
 
 			err("Invalid gateway address: %s", optarg);
