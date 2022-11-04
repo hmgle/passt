@@ -320,8 +320,8 @@ static struct tap4_l4_t {
 	uint16_t source;
 	uint16_t dest;
 
-	uint32_t saddr;
-	uint32_t daddr;
+	struct in_addr saddr;
+	struct in_addr daddr;
 
 	struct pool_l4_t p;
 } tap4_l4[TAP_SEQS /* Arbitrary: TAP_MSGS in theory, so limit in users */];
@@ -367,14 +367,15 @@ static void tap_packet_debug(const struct iphdr *iph,
 	uint8_t proto = 0;
 
 	if (iph || seq4) {
-		inet_ntop(AF_INET,   iph ? &iph->saddr  : &seq4->saddr,
-			  buf4s, sizeof(buf4s));
-		inet_ntop(AF_INET,   iph ? &iph->daddr  : &seq4->daddr,
-			  buf4d, sizeof(buf4d));
-		if (iph)
+		if (iph) {
+			inet_ntop(AF_INET, &iph->saddr, buf4s, sizeof(buf4s));
+			inet_ntop(AF_INET, &iph->daddr, buf4d, sizeof(buf4d));
 			proto = iph->protocol;
-		else if (seq4)
+		} else {
+			inet_ntop(AF_INET, &seq4->saddr, buf4s, sizeof(buf4s));
+			inet_ntop(AF_INET, &seq4->daddr, buf4d, sizeof(buf4d));
 			proto = seq4->protocol;
+		}
 	} else {
 		inet_ntop(AF_INET6, ip6h ? &ip6h->saddr : &seq6->saddr,
 			  buf6s, sizeof(buf6s));
@@ -491,15 +492,15 @@ resume:
 #define L4_MATCH(iph, uh, seq)						\
 	(seq->protocol == iph->protocol &&				\
 	 seq->source   == uh->source    && seq->dest  == uh->dest &&	\
-	 seq->saddr    == iph->saddr    && seq->daddr == iph->daddr)
+	 seq->saddr.s_addr == iph->saddr && seq->daddr.s_addr == iph->daddr)
 
 #define L4_SET(iph, uh, seq)						\
 	do {								\
-		seq->protocol	= iph->protocol;			\
-		seq->source	= uh->source;				\
-		seq->dest	= uh->dest;				\
-		seq->saddr	= iph->saddr;				\
-		seq->daddr	= iph->daddr;				\
+		seq->protocol		= iph->protocol;		\
+		seq->source		= uh->source;			\
+		seq->dest		= uh->dest;			\
+		seq->saddr.s_addr	= iph->saddr;			\
+		seq->daddr.s_addr	= iph->daddr;			\
 	} while (0)
 
 		if (seq && L4_MATCH(iph, uh, seq) && seq->p.count < TAP_SEQS)
@@ -531,7 +532,7 @@ append:
 
 	for (j = 0, seq = tap4_l4; j < seq_count; j++, seq++) {
 		struct pool *p = (struct pool *)&seq->p;
-		uint32_t *da = &seq->daddr;
+		struct in_addr *da = &seq->daddr;
 		size_t n = p->count;
 
 		tap_packet_debug(NULL, NULL, seq, 0, NULL, n);
