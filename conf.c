@@ -1164,11 +1164,11 @@ void conf(struct ctx *c, int argc, char **argv)
 			    !IN6_IS_ADDR_LOOPBACK(&c->ip6.dns_fwd))
 				break;
 
-			if (c->ip4.dns_fwd == INADDR_ANY		&&
+			if (c->ip4.dns_fwd == htonl(INADDR_ANY)		&&
 			    inet_pton(AF_INET, optarg, &c->ip4.dns_fwd)	&&
-			    c->ip4.dns_fwd != INADDR_ANY		&&
-			    c->ip4.dns_fwd != INADDR_BROADCAST		&&
-			    c->ip4.dns_fwd != INADDR_LOOPBACK)
+			    c->ip4.dns_fwd != htonl(INADDR_ANY)		&&
+			    c->ip4.dns_fwd != htonl(INADDR_BROADCAST)	&&
+			    c->ip4.dns_fwd != htonl(INADDR_LOOPBACK))
 				break;
 
 			err("Invalid DNS forwarding address: %s", optarg);
@@ -1362,12 +1362,12 @@ void conf(struct ctx *c, int argc, char **argv)
 			    !IN6_IS_ADDR_MULTICAST(&c->ip6.addr))
 				break;
 
-			if (c->ip4.addr == INADDR_ANY			&&
+			if (c->ip4.addr == htonl(INADDR_ANY)		&&
 			    inet_pton(AF_INET, optarg, &c->ip4.addr)	&&
-			    c->ip4.addr != INADDR_ANY			&&
-			    c->ip4.addr != INADDR_BROADCAST		&&
-			    c->ip4.addr != INADDR_LOOPBACK		&&
-			    !IN_MULTICAST(c->ip4.addr))
+			    c->ip4.addr != htonl(INADDR_ANY)		&&
+			    c->ip4.addr != htonl(INADDR_BROADCAST)	&&
+			    c->ip4.addr != htonl(INADDR_LOOPBACK)	&&
+			    !IN_MULTICAST(ntohl(c->ip4.addr)))
 				break;
 
 			err("Invalid address: %s", optarg);
@@ -1405,11 +1405,11 @@ void conf(struct ctx *c, int argc, char **argv)
 			    !IN6_IS_ADDR_LOOPBACK(&c->ip6.gw))
 				break;
 
-			if (c->ip4.gw == INADDR_ANY			&&
+			if (c->ip4.gw == htonl(INADDR_ANY)		&&
 			    inet_pton(AF_INET, optarg, &c->ip4.gw)	&&
-			    c->ip4.gw != INADDR_ANY			&&
-			    c->ip4.gw != INADDR_BROADCAST		&&
-			    c->ip4.gw != INADDR_LOOPBACK)
+			    c->ip4.gw != htonl(INADDR_ANY)		&&
+			    c->ip4.gw != htonl(INADDR_BROADCAST)	&&
+			    c->ip4.gw != htonl(INADDR_LOOPBACK))
 				break;
 
 			err("Invalid gateway address: %s", optarg);

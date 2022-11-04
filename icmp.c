@@ -154,7 +154,7 @@ int icmp_tap_handler(const struct ctx *c, int af, const void *addr,
 		union icmp_epoll_ref iref = { .icmp.v6 = 0 };
 		struct sockaddr_in sa = {
 			.sin_family = AF_INET,
-			.sin_addr = { .s_addr = INADDR_ANY },
+			.sin_addr = { .s_addr = htonl(INADDR_ANY) },
 		};
 		struct icmphdr *ih;
 		int id, s;
