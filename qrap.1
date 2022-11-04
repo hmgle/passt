@@ -5,7 +5,7 @@
 
 .SH NAME
 .B qrap
-\- qemu wrapper connecting UNIX domain socket to file descriptor
+\- temporary qemu wrapper connecting UNIX domain socket to file descriptor
 
 .SH SYNOPSIS
 .B qrap
@@ -47,13 +47,10 @@ $ ./qrap test.qcow2 -m 1024 -display none -nodefaults -nographic
 
 .SH NOTES
 
-This wrapper is temporary and needed only as long as \fBqemu\fR(1) does not
-directly support a UNIX domain socket as \fInetdev\fR back-end.
-
-Out-of-tree patches for \fBqemu\fR(1) introducing support for a UNIX domain
-socket back-end are available at:
-
-	\fIhttps://passt.top/passt/tree/contrib/qemu\fR
+This wrapper is temporary: qemu commit 13c6be96618c ("net: stream: add unix
+socket") introduces native AF_UNIX socket support, and it should be included in
+qemu starting from the 7.2 release. It will be around for a little bit longer to
+give users enough time to switch.
 
 .SH AUTHOR
 

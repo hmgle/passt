@@ -944,13 +944,11 @@ static void tap_sock_unix_init(struct ctx *c)
 	ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
 	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, c->fd_tap_listen, &ev);
 
-	info("You can now start qrap:");
-	info("    ./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio");
-	info("or directly qemu, patched with:");
-	info("    qemu/0001-net-Allow-also-UNIX-domain-sockets-to-be-used-as-net.patch");
-	info("as follows:");
-	info("    kvm ... -net socket,connect=%s -net nic,model=virtio",
+	info("You can now start qemu (>= 7.2, with commit 13c6be96618c):");
+	info("    kvm ... -device virtio-net-pci,netdev=s -netdev stream,id=s,server=off,addr.type=unix,addr.path=%s",
 	     addr.sun_path);
+	info("or qrap, for earlier qemu versions:");
+	info("    ./qrap 5 kvm ... -net socket,fd=5 -net nic,model=virtio");
 }
 
 /**

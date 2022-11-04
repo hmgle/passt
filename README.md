@@ -368,13 +368,11 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 ## Interfaces and Environment
 
 _passt_ exchanges packets with _qemu_ via UNIX domain socket, using the `socket`
-back-end in qemu. Currently, qemu can only connect to a listening process via
-TCP. Two temporary solutions are available:
+back-end in qemu. This is supported since qemu 7.2.
 
-* a [patch](/passt/tree/qemu) for qemu
-* a wrapper, [qrap](/passt/tree/qrap.c), that connects to a
-  UNIX domain socket and starts qemu, which can now use the file descriptor
-  that's already opened
+For older versions, the [qrap](/passt/tree/qrap.c) wrapper can be used to
+connect to a UNIX domain socket and to start qemu, which can now use the file
+descriptor that's already opened.
 
 This approach, compared to using a _tap_ device, doesn't require any security
 capabilities, as we don't need to create any interface.

@@ -7,8 +7,9 @@
  * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
  *
- * TODO: Implement this functionality directly in qemu: we have TCP and UDP
- * socket back-ends already.
+ * TODO: Drop this implementation once qemu commit 13c6be96618c ("net: stream:
+ * add unix socket") is included in a release (7.2), and once we can reasonably
+ * assume existing users switched to it.
  */
 
 #include <stdio.h>
