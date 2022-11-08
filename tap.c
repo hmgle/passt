@@ -757,7 +757,7 @@ redo:
 			rem = recv(c->fd_tap, p + n,
 				   (ssize_t)sizeof(uint32_t) - n, 0);
 			if ((n += rem) != (ssize_t)sizeof(uint32_t))
-				return 0;
+				return -EIO;
 		}
 
 		len = ntohl(*(uint32_t *)p);
@@ -771,7 +771,7 @@ redo:
 		if (len > n) {
 			rem = recv(c->fd_tap, p + n, len - n, 0);
 			if ((n += rem) != len)
-				return 0;
+				return -EIO;
 		}
 
 		/* Complete the partial read above before discarding a malformed
