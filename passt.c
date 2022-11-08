@@ -243,8 +243,15 @@ int main(int argc, char **argv)
 	conf(&c, argc, argv);
 	trace_init(c.trace);
 
-	if (!c.debug && (c.stderr || isatty(fileno(stdout))))
+	if (c.stderr || isatty(fileno(stdout)))
 		__openlog(log_name, LOG_PERROR, LOG_DAEMON);
+
+	if (c.debug)
+		__setlogmask(LOG_UPTO(LOG_DEBUG));
+	else if (c.quiet)
+		__setlogmask(LOG_UPTO(LOG_ERR));
+	else
+		__setlogmask(LOG_UPTO(LOG_INFO));
 
 	quit_fd = pasta_netns_quit_init(&c);
 
@@ -266,13 +273,6 @@ int main(int argc, char **argv)
 
 	if (c.ifi6 && !c.no_dhcpv6)
 		dhcpv6_init(&c);
-
-	if (c.debug)
-		__setlogmask(LOG_UPTO(LOG_DEBUG));
-	else if (c.quiet)
-		__setlogmask(LOG_UPTO(LOG_ERR));
-	else
-		__setlogmask(LOG_UPTO(LOG_INFO));
 
 	pcap_init(&c);
 
