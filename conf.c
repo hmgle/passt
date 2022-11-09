@@ -884,7 +884,10 @@ static void conf_print(const struct ctx *c)
 
 	if (c->ifi4) {
 		if (!c->no_dhcp) {
-			uint32_t mask = htonl(0xffffffff << c->ip4.prefix_len);
+			uint32_t mask;
+
+			mask = htonl(0xffffffff << (32 - c->ip4.prefix_len));
+
 			info("DHCP:");
 			info("    assign: %s",
 			     inet_ntop(AF_INET, &c->ip4.addr, buf4, sizeof(buf4)));
