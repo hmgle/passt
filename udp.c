@@ -1129,7 +1129,7 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 					    c->udp.fwd_in.f.delta[port]);
 	}
 
-	if (af == AF_INET || af == AF_UNSPEC) {
+	if ((af == AF_INET || af == AF_UNSPEC) && c->ifi4) {
 		if (!addr && c->mode == MODE_PASTA)
 			bind_addr = &c->ip4.addr;
 		else
@@ -1162,7 +1162,7 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		}
 	}
 
-	if (af == AF_INET6 || af == AF_UNSPEC) {
+	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6) {
 		if (!addr && c->mode == MODE_PASTA)
 			bind_addr = &c->ip6.addr;
 		else

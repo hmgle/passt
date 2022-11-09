@@ -3213,9 +3213,9 @@ static void tcp_sock_init6(const struct ctx *c, int ns,
 void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		   const void *addr, const char *ifname, in_port_t port)
 {
-	if (af == AF_INET || af == AF_UNSPEC)
+	if ((af == AF_INET  || af == AF_UNSPEC) && c->ifi4)
 		tcp_sock_init4(c, ns, addr, ifname, port);
-	if (af == AF_INET6 || af == AF_UNSPEC)
+	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6)
 		tcp_sock_init6(c, ns, addr, ifname, port);
 }
 
