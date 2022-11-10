@@ -121,7 +121,7 @@ int ndp(struct ctx *c, const struct icmp6hdr *ih, const struct in6_addr *saddr)
 		if (c->no_dhcp_dns)
 			goto dns_done;
 
-		for (n = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_send[n]); n++);
+		for (n = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns[n]); n++);
 		if (n) {
 			*p++ = 25;				/* RDNSS */
 			*p++ = 1 + 2 * n;			/* length */
@@ -130,8 +130,8 @@ int ndp(struct ctx *c, const struct icmp6hdr *ih, const struct in6_addr *saddr)
 			p += 4;
 
 			for (i = 0; i < n; i++) {
-				memcpy(p, &c->ip6.dns_send[i], 16);
-				p += 16;			/* address */
+				memcpy(p, &c->ip6.dns[i], 16);	/* address */
+				p += 16;
 			}
 
 			for (n = 0; *c->dns_search[n].n; n++)

@@ -379,7 +379,7 @@ static size_t dhcpv6_dns_fill(const struct ctx *c, char *buf, int offset)
 	if (c->no_dhcp_dns)
 		goto search;
 
-	for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_send[i]); i++) {
+	for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns[i]); i++) {
 		if (!i) {
 			srv = (struct opt_dns_servers *)(buf + offset);
 			offset += sizeof(struct opt_hdr);
@@ -387,8 +387,7 @@ static size_t dhcpv6_dns_fill(const struct ctx *c, char *buf, int offset)
 			srv->hdr.l = 0;
 		}
 
-		memcpy(&srv->addr[i], &c->ip6.dns_send[i],
-		       sizeof(srv->addr[i]));
+		memcpy(&srv->addr[i], &c->ip6.dns[i], sizeof(srv->addr[i]));
 		srv->hdr.l += sizeof(srv->addr[i]);
 		offset += sizeof(srv->addr[i]);
 	}

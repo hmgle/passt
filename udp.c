@@ -678,10 +678,10 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 
 	src_port = ntohs(b->s_in.sin_port);
 
-	if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_fwd) &&
-	    IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.dns[0]) &&
+	if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_match) &&
+	    IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.dns_host) &&
 	    src_port == 53) {
-		b->iph.saddr = c->ip4.dns_fwd.s_addr;
+		b->iph.saddr = c->ip4.dns_match.s_addr;
 	} else if (IN4_IS_ADDR_LOOPBACK(&b->s_in.sin_addr) ||
 		   IN4_IS_ADDR_UNSPECIFIED(&b->s_in.sin_addr)||
 		   IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.addr_seen)) {
@@ -770,10 +770,11 @@ static void udp_sock_fill_data_v6(const struct ctx *c, int n,
 	if (IN6_IS_ADDR_LINKLOCAL(src)) {
 		b->ip6h.daddr = c->ip6.addr_ll_seen;
 		b->ip6h.saddr = b->s_in6.sin6_addr;
-	} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_fwd) &&
-		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.dns[0]) && src_port == 53) {
+	} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_match) &&
+		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.dns_host) &&
+		   src_port == 53) {
 		b->ip6h.daddr = c->ip6.addr_seen;
-		b->ip6h.saddr = c->ip6.dns_fwd;
+		b->ip6h.saddr = c->ip6.dns_match;
 	} else if (IN6_IS_ADDR_LOOPBACK(src)			||
 		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.addr_seen)	||
 		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.addr)) {
@@ -1016,13 +1017,15 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 
 		udp_tap_map[V4][src].ts = now->tv_sec;
 
-		if (IN4_ARE_ADDR_EQUAL(&s_in.sin_addr, &c->ip4.gw) && !c->no_map_gw) {
+		if (IN4_ARE_ADDR_EQUAL(&s_in.sin_addr, &c->ip4.gw) &&
+		    !c->no_map_gw) {
 			if (!(udp_tap_map[V4][dst].flags & PORT_LOCAL) ||
 			    (udp_tap_map[V4][dst].flags & PORT_LOOPBACK))
 				s_in.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 			else
 				s_in.sin_addr = c->ip4.addr_seen;
-		} else if (IN4_ARE_ADDR_EQUAL(&s_in.sin_addr, &c->ip4.dns_fwd) &&
+		} else if (IN4_ARE_ADDR_EQUAL(&s_in.sin_addr,
+					      &c->ip4.dns_match) &&
 			   ntohs(s_in.sin_port) == 53) {
 			s_in.sin_addr = c->ip4.dns[0];
 		}
@@ -1045,7 +1048,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 				s_in6.sin6_addr = c->ip6.addr;
 			else
 				s_in6.sin6_addr = c->ip6.addr_seen;
-		} else if (IN6_ARE_ADDR_EQUAL(addr, &c->ip6.dns_fwd) &&
+		} else if (IN6_ARE_ADDR_EQUAL(addr, &c->ip6.dns_match) &&
 			   ntohs(s_in6.sin6_port) == 53) {
 			s_in6.sin6_addr = c->ip6.dns[0];
 		} else if (IN6_IS_ADDR_LINKLOCAL(&s_in6.sin6_addr)) {

@@ -101,9 +101,9 @@ enum passt_modes {
  * @addr_seen:		Latest IPv4 address seen as source from tap
  * @prefixlen:		IPv4 prefix length (netmask)
  * @gw:			Default IPv4 gateway, network order
- * @dns:		Host IPv4 DNS addresses, zero-terminated, network order
- * @dns_send:		Offered IPv4 DNS, zero-terminated, network order
- * @dns_fwd:		Address forwarded (UDP) to first IPv4 DNS, network order
+ * @dns:		DNS addresses for DHCP, zero-terminated, network order
+ * @dns_match:		Forward DNS query if sent to this address, network order
+ * @dns_host:		Use this DNS on the host for forwarding, network order
  */
 struct ip4_ctx {
 	struct in_addr addr;
@@ -111,8 +111,8 @@ struct ip4_ctx {
 	int prefix_len;
 	struct in_addr gw;
 	struct in_addr dns[MAXNS + 1];
-	struct in_addr dns_send[MAXNS + 1];
-	struct in_addr dns_fwd;
+	struct in_addr dns_match;
+	struct in_addr dns_host;
 };
 
 /**
@@ -122,9 +122,9 @@ struct ip4_ctx {
  * @addr_seen:		Latest IPv6 global/site address seen as source from tap
  * @addr_ll_seen:	Latest IPv6 link-local address seen as source from tap
  * @gw:			Default IPv6 gateway
- * @dns:		Host IPv6 DNS addresses, zero-terminated
- * @dns_send:		Offered IPv6 DNS addresses, zero-terminated
- * @dns_fwd:		Address forwarded (UDP) to first IPv6 DNS, network order
+ * @dns:		DNS addresses for DHCPv6 and NDP, zero-terminated
+ * @dns_match:		Forward DNS query if sent to this address
+ * @dns_host:		Use this DNS on the host for forwarding
  */
 struct ip6_ctx {
 	struct in6_addr addr;
@@ -133,8 +133,8 @@ struct ip6_ctx {
 	struct in6_addr addr_ll_seen;
 	struct in6_addr gw;
 	struct in6_addr dns[MAXNS + 1];
-	struct in6_addr dns_send[MAXNS + 1];
-	struct in6_addr dns_fwd;
+	struct in6_addr dns_match;
+	struct in6_addr dns_host;
 };
 
 #include <netinet/if_ether.h>

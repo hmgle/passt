@@ -359,9 +359,8 @@ int dhcp(const struct ctx *c, const struct pool *p)
 	}
 
 	for (i = 0, opts[6].slen = 0;
-	     !c->no_dhcp_dns && !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_send[i]);
-	     i++) {
-		((struct in_addr *)opts[6].s)[i] = c->ip4.dns_send[i];
+	     !c->no_dhcp_dns && !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns[i]); i++) {
+		((struct in_addr *)opts[6].s)[i] = c->ip4.dns[i];
 		opts[6].slen += sizeof(uint32_t);
 	}
 

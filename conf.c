@@ -355,11 +355,9 @@ overlap:
  */
 static void get_dns(struct ctx *c)
 {
-	struct in6_addr *dns6_send = &c->ip6.dns_send[0];
-	struct in_addr *dns4_send = &c->ip4.dns_send[0];
+	struct in6_addr *dns6 = &c->ip6.dns[0], dns6_tmp;
+	struct in_addr *dns4 = &c->ip4.dns[0], dns4_tmp;
 	int dns4_set, dns6_set, dnss_set, dns_set, fd;
-	struct in6_addr *dns6 = &c->ip6.dns[0];
-	struct in_addr *dns4 = &c->ip4.dns[0];
 	struct fqdn *s = c->dns_search;
 	struct lineread resolvconf;
 	int line_len;
@@ -388,49 +386,44 @@ static void get_dns(struct ctx *c)
 				*end = 0;
 
 			if (!dns4_set &&
-			    dns4 - &c->ip4.dns[0] < ARRAY_SIZE(c->ip4.dns) - 1 &&
-			    inet_pton(AF_INET, p + 1, dns4)) {
+			    dns4 - &c->ip4.dns[0] < ARRAY_SIZE(c->ip4.dns) - 1
+			    && inet_pton(AF_INET, p + 1, &dns4_tmp)) {
 				/* Guest or container can only access local
 				 * addresses via local redirect
 				 */
-				if (IN4_IS_ADDR_LOOPBACK(dns4)) {
+				if (IN4_IS_ADDR_LOOPBACK(&dns4_tmp)) {
 					if (!c->no_map_gw) {
-						*dns4_send = c->ip4.gw;
-						dns4_send++;
+						*dns4 = c->ip4.gw;
+						dns4++;
 					}
 				} else {
-					*dns4_send = *dns4;
-					dns4_send++;
+					*dns4 = dns4_tmp;
+					dns4++;
 				}
 
-				dns4++;
-
-				dns4->s_addr = htonl(INADDR_ANY);
-				dns4_send->s_addr = htonl(INADDR_ANY);
+				if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_host))
+					c->ip4.dns_host = dns4_tmp;
 			}
 
 			if (!dns6_set &&
-			    dns6 - &c->ip6.dns[0] < ARRAY_SIZE(c->ip6.dns) - 1 &&
-			    inet_pton(AF_INET6, p + 1, dns6)) {
+			    dns6 - &c->ip6.dns[0] < ARRAY_SIZE(c->ip6.dns) - 1
+			    && inet_pton(AF_INET6, p + 1, &dns6_tmp)) {
 				/* Guest or container can only access local
 				 * addresses via local redirect
 				 */
-				if (IN6_IS_ADDR_LOOPBACK(dns6)) {
+				if (IN6_IS_ADDR_LOOPBACK(&dns6_tmp)) {
 					if (!c->no_map_gw) {
-						memcpy(dns6_send, &c->ip6.gw,
-						       sizeof(*dns6_send));
-						dns6_send++;
+						memcpy(dns6, &c->ip6.gw,
+						       sizeof(*dns6));
+						dns6++;
 					}
 				} else {
-					memcpy(dns6_send, dns6,
-					       sizeof(*dns6_send));
-					dns6_send++;
+					memcpy(dns6, &dns6_tmp, sizeof(*dns6));
+					dns6++;
 				}
 
-				dns6++;
-
-				memset(dns6, 0, sizeof(*dns6));
-				memset(dns6_send, 0, sizeof(*dns6_send));
+				if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_host))
+					c->ip6.dns_host = dns6_tmp;
 			}
 		} else if (!dnss_set && strstr(line, "search ") == line &&
 			   s == c->dns_search) {
@@ -897,12 +890,10 @@ static void conf_print(const struct ctx *c)
 			     inet_ntop(AF_INET, &c->ip4.gw,   buf4, sizeof(buf4)));
 		}
 
-		for (i = 0; !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_send[i]);
-		     i++) {
+		for (i = 0; !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns[i]); i++) {
 			if (!i)
 				info("DNS:");
-			inet_ntop(AF_INET, &c->ip4.dns_send[i], buf4,
-				  sizeof(buf4));
+			inet_ntop(AF_INET, &c->ip4.dns[i], buf4, sizeof(buf4));
 			info("    %s", buf4);
 		}
 
@@ -933,8 +924,7 @@ static void conf_print(const struct ctx *c)
 		     inet_ntop(AF_INET6, &c->ip6.addr_ll, buf6, sizeof(buf6)));
 
 dns6:
-		for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_send[i]);
-		     i++) {
+		for (i = 0; !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns[i]); i++) {
 			if (!i)
 				info("DNS:");
 			inet_ntop(AF_INET6, &c->ip6.dns[i], buf6, sizeof(buf6));
@@ -1230,17 +1220,17 @@ void conf(struct ctx *c, int argc, char **argv)
 			c->no_dhcp_dns_search = 1;
 			break;
 		case 9:
-			if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_fwd)	&&
-			    inet_pton(AF_INET6, optarg, &c->ip6.dns_fwd) &&
-			    !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_fwd)	&&
-			    !IN6_IS_ADDR_LOOPBACK(&c->ip6.dns_fwd))
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_match)     &&
+			    inet_pton(AF_INET6, optarg, &c->ip6.dns_match) &&
+			    !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_match)    &&
+			    !IN6_IS_ADDR_LOOPBACK(&c->ip6.dns_match))
 				break;
 
-			if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_fwd)	&&
-			    inet_pton(AF_INET, optarg, &c->ip4.dns_fwd)	&&
-			    !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_fwd)	&&
-			    !IN4_IS_ADDR_BROADCAST(&c->ip4.dns_fwd)	&&
-			    !IN4_IS_ADDR_LOOPBACK(&c->ip4.dns_fwd))
+			if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_match)    &&
+			    inet_pton(AF_INET, optarg, &c->ip4.dns_match) &&
+			    !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_match)   &&
+			    !IN4_IS_ADDR_BROADCAST(&c->ip4.dns_match)     &&
+			    !IN4_IS_ADDR_LOOPBACK(&c->ip4.dns_match))
 				break;
 
 			err("Invalid DNS forwarding address: %s", optarg);
