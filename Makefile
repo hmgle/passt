@@ -125,7 +125,7 @@ passt: $(PASST_SRCS) $(HEADERS)
 
 passt.avx2: FLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
 passt.avx2: $(PASST_SRCS) $(HEADERS)
-	$(CC) $(filter-out -O2,$(FLAGS) $(CFLAGS) $(CPPFLAGS)) \
+	$(CC) $(filter-out -O2,$(FLAGS)) $(CFLAGS) $(CPPFLAGS) \
 		$(PASST_SRCS) -o passt.avx2 $(LDFLAGS)
 
 passt.avx2: passt
