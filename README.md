@@ -343,19 +343,20 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ⌚ drop-in replacement for VPNKit (rootless Docker)
 
 ### Availability
+* ✅ official [packages](https://tracker.debian.org/pkg/passt) for Debian
 * ✅ official [packages](https://src.fedoraproject.org/rpms/passt) for Fedora
 * ✅ unofficial
   [packages](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) for CentOS
   Stream, EPEL, Mageia
-* ✅ unofficial packages from x86_64 static builds for other RPM-based
-  distributions and Debian
+* ✅ unofficial [packages](https://passt.top/builds/latest/x86_64/) from x86_64
+  static builds for other RPM-based distributions
+* ✅ unofficial [packages](https://passt.top/builds/latest/x86_64/) from x86_64
+  static builds for Debian-based distributions
 * ✅ testing on non-x86_64 architectures (aarch64, armv7l, i386, ppc64, ppc64le,
   s390x)
-* ✅ example Debian [package files](/passt/tree/contrib/debian)
 * 🛠 official
   [openSUSE packages](https://build.opensuse.org/package/show/home:dfaggioli:devel/passt)
-* ⌚ official packages for Debian
-  ([RFP](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1010498)), Arch Linux
+* ⌚ official packages for Arch Linux
 
 ### Services
 * ✅ built-in [ARP proxy](/passt/tree/arp.c)
@@ -538,12 +539,13 @@ See also the [test logs](/builds/latest/test/).
 
     * alternatively, install one of the available packages:
 
-        * [Debian and Debian-based](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
+        * [Debian](https://tracker.debian.org/pkg/passt) (official)
         * [Fedora](https://src.fedoraproject.org/rpms/passt) (official)
         * [CentOS Stream](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [EPEL](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [Mageia](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [openSUSE](https://build.opensuse.org/package/show/home:dfaggioli:devel/passt) (unofficial)
+        * [Debian-based](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
         * [Other RPM-based distributions](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
 
         Static binaries and packages are simply built with:
@@ -587,12 +589,13 @@ See also the [test logs](/builds/latest/test/).
 
     * alternatively, install one of the available packages:
 
-        * [Debian and Debian-based](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
+        * [Debian](https://tracker.debian.org/pkg/passt) (official)
         * [Fedora](https://src.fedoraproject.org/rpms/passt) (official)
         * [CentOS Stream](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [EPEL](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [Mageia](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
         * [openSUSE](https://build.opensuse.org/package/show/home:dfaggioli:devel/passt) (unofficial)
+        * [Debian-based](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
         * [Other RPM-based distributions](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
 
         Static binaries and packages are simply built with:
