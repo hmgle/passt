@@ -26,6 +26,7 @@ AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/I[456]86/I386/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPC64/PPC/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/PPCLE/PPC64LE/')
 AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/MIPS64EL/MIPSEL64/')
+AUDIT_ARCH := $(shell echo $(AUDIT_ARCH) | sed 's/HPPA/PARISC/')
 
 FLAGS := -Wall -Wextra -pedantic -std=c99 -D_XOPEN_SOURCE=700 -D_GNU_SOURCE
 FLAGS += -D_FORTIFY_SOURCE=2 -O2 -pie -fPIE
