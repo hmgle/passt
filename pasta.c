@@ -226,11 +226,11 @@ void pasta_start_ns(struct ctx *c, uid_t uid, gid_t gid,
 		arg.argv = sh_argv;
 	}
 
-	pasta_child_pid = clone(pasta_spawn_cmd,
-				ns_fn_stack + sizeof(ns_fn_stack) / 2,
-				CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWNET |
-				CLONE_NEWUTS,
-				(void *)&arg);
+	pasta_child_pid = do_clone(pasta_spawn_cmd, ns_fn_stack,
+				   sizeof(ns_fn_stack),
+				   CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWNET |
+				   CLONE_NEWUTS,
+				   (void *)&arg);
 
 	if (pasta_child_pid == -1) {
 		perror("clone");

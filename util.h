@@ -81,13 +81,15 @@
 	(((struct in_addr *)(a))->s_addr == ((struct in_addr *)b)->s_addr)
 
 #define NS_FN_STACK_SIZE	(RLIMIT_STACK_VAL * 1024 / 8)
+int do_clone(int (*fn)(void *), char *stack_area, size_t stack_size, int flags,
+	     void *arg);
 #define NS_CALL(fn, arg)						\
 	do {								\
 		char ns_fn_stack[NS_FN_STACK_SIZE];			\
 									\
-		clone((fn), ns_fn_stack + sizeof(ns_fn_stack) / 2,	\
-		      CLONE_VM | CLONE_VFORK | CLONE_FILES | SIGCHLD,	\
-		      (void *)(arg));					\
+		do_clone((fn), ns_fn_stack, sizeof(ns_fn_stack),	\
+			 CLONE_VM | CLONE_VFORK | CLONE_FILES | SIGCHLD,\
+			 (void *)(arg));				\
 	} while (0)
 
 #if __BYTE_ORDER == __BIG_ENDIAN

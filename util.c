@@ -482,3 +482,24 @@ int write_file(const char *path, const char *buf)
 	close(fd);
 	return len == 0 ? 0 : -1;
 }
+
+/**
+ * do_clone() - Wrapper of __clone2() for ia64, clone() for other architectures
+ * @fn:		Entry point for child
+ * @stack_area:	Stack area for child: we'll point callees to the middle of it
+ * @stack_size:	Total size of stack area, passed to callee divided by two
+ * @flags:	clone() system call flags
+ * @arg:	Argument to @fn
+ *
+ * Return: thread ID of child, -1 on failure
+ */
+int do_clone(int (*fn)(void *), char *stack_area, size_t stack_size, int flags,
+	     void *arg)
+{
+#ifdef __ia64__
+	return __clone2(fn, stack_area + stack_size / 2, stack_size / 2,
+			flags, arg);
+#else
+	return clone(fn, stack_area + stack_size / 2, flags, arg);
+#endif
+}
