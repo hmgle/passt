@@ -60,8 +60,8 @@ HEADERS = $(PASST_HEADERS) seccomp.h
 # csum_unaligned(). Mark csum_unaligned() as "noipa" as a quick work-around,
 # while we figure out if a corresponding gcc issue has already been reported.
 ifeq (,$(filter-out 11 12, $(shell $(CC) -dumpversion)))
-ifneq (,$(filter -flto%,$(FLAGS) $(CFLAGS)))
-ifneq (,$(filter -O2,$(FLAGS) $(CFLAGS)))
+ifneq (,$(filter -flto%,$(FLAGS) $(CFLAGS) $(CPPFLAGS)))
+ifneq (,$(filter -O2,$(FLAGS) $(CFLAGS) $(CPPFLAGS)))
 	FLAGS += -DTCP_HASH_NOINLINE
 	FLAGS += -DSIPHASH_20B_NOINLINE
 	FLAGS += -DCSUM_UNALIGNED_NO_IPA
@@ -121,11 +121,11 @@ seccomp.h: seccomp.sh $(PASST_SRCS) $(PASST_HEADERS)
 	@ EXTRA_SYSCALLS="$(EXTRA_SYSCALLS)" ./seccomp.sh $(PASST_SRCS) $(PASST_HEADERS)
 
 passt: $(PASST_SRCS) $(HEADERS)
-	$(CC) $(FLAGS) $(CFLAGS) $(PASST_SRCS) -o passt $(LDFLAGS)
+	$(CC) $(FLAGS) $(CFLAGS) $(CPPFLAGS) $(PASST_SRCS) -o passt $(LDFLAGS)
 
 passt.avx2: FLAGS += -Ofast -mavx2 -ftree-vectorize -funroll-loops
 passt.avx2: $(PASST_SRCS) $(HEADERS)
-	$(CC) $(filter-out -O2,$(FLAGS) $(CFLAGS)) \
+	$(CC) $(filter-out -O2,$(FLAGS) $(CFLAGS) $(CPPFLAGS)) \
 		$(PASST_SRCS) -o passt.avx2 $(LDFLAGS)
 
 passt.avx2: passt
@@ -134,7 +134,7 @@ pasta.avx2 pasta.1 pasta: pasta%: passt%
 	ln -s $< $@
 
 qrap: $(QRAP_SRCS) passt.h
-	$(CC) $(FLAGS) $(CFLAGS) $(QRAP_SRCS) -o qrap $(LDFLAGS)
+	$(CC) $(FLAGS) $(CFLAGS) $(CPPFLAGS) $(QRAP_SRCS) -o qrap $(LDFLAGS)
 
 valgrind: EXTRA_SYSCALLS += rt_sigprocmask rt_sigtimedwait rt_sigaction	\
 			    getpid gettid kill clock_gettime mmap	\
@@ -283,7 +283,7 @@ clang-tidy: $(SRCS) $(HEADERS)
 	-concurrency-mt-unsafe,\
 	-readability-identifier-length \
 	-config='{CheckOptions: [{key: bugprone-suspicious-string-compare.WarnOnImplicitComparison, value: "false"}]}' \
-	--warnings-as-errors=* $(SRCS) -- $(filter-out -pie,$(FLAGS) $(CFLAGS))
+	--warnings-as-errors=* $(SRCS) -- $(filter-out -pie,$(FLAGS) $(CFLAGS) $(CPPFLAGS))
 
 SYSTEM_INCLUDES := /usr/include $(wildcard /usr/include/$(TARGET))
 ifeq ($(shell $(CC) -v 2>&1 | grep -c "gcc version"),1)
@@ -299,5 +299,5 @@ cppcheck: $(SRCS) $(HEADERS)
 	$(SYSTEM_INCLUDES:%=--suppress=unmatchedSuppression:%/*)	\
 	--inline-suppr							\
 	--suppress=unusedStructMember					\
-	$(filter -D%,$(FLAGS) $(CFLAGS))				\
+	$(filter -D%,$(FLAGS) $(CFLAGS) $(CPPFLAGS))			\
 	.
