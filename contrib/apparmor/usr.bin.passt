@@ -3,7 +3,10 @@
 # PASST - Plug A Simple Socket Transport
 #  for qemu/UNIX domain socket mode
 #
-# contrib/apparmor/usr.bin.passt - AppArmor profile example/template for passt
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# contrib/apparmor/usr.bin.passt - AppArmor profile for passt(1) and pasta(1)
 #
 # Copyright (c) 2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
@@ -12,31 +15,29 @@ abi <abi/3.0>,
 
 include <tunables/global>
 
-/usr/bin/passt {
-  ### Alternatively: include <abstractions/base>
-  @{etc_ro}/ld.so.cache			r,
-  /{usr/,}lib{,32,64}/ld-*.so		r,
-  /{usr/,}lib{,32,64}/libc-*.so		mr,
-  /{usr/,}lib/@{multiarch}/ld-*.so	r,
-  /{usr/,}lib/@{multiarch}/libc-*.so	mr,
-  /dev/null 				rw,	# __daemon(), util.c
-  signal receive set=int peer=unconfined,
-  signal receive set=term peer=unconfined,
-  ###
+profile passt /usr/bin/passt{,.avx2} flags=(attach_disconnected) {
+  ### Common rules for passt and pasta
 
-  ### Alternatively: include <abstractions/nameservice>
+  include <abstractions/base>
+
+  # Alternatively: include <abstractions/nameservice>
   @{etc_ro}/resolv.conf			r,	# get_dns(), conf.c
-  ###
 
-  capability sys_admin,				# sandbox(), passt.c
-  capability setpcap,				# drop_caps(), util.c
+  capability net_bind_service,			# isolation.c, conf.c
+  capability setuid,
+  capability setgid,
+  capability sys_admin,
+  capability setpcap,
+  capability net_admin,
+  capability sys_ptrace,
 
-  mount		""	-> "/",			# sandbox(), passt.c
+  /					r,	# isolate_prefork(), isolation.c
+  mount		""	-> "/",
   mount		""	-> "/tmp/",
   pivot_root	"/tmp/" -> "/tmp/",
   umount	"/",
 
-  network netlink raw,				# netlink.c
+  network netlink raw,				# nl_sock_init_do(), netlink.c
 
   network inet stream,				# tcp.c
   network inet6 stream,
@@ -46,14 +47,42 @@ include <tunables/global>
 
   network unix stream,				# tap.c
 
-  network unix dgram,				# __openlog(), util.c
+  network unix dgram,				# __openlog(), log.c
 
-  ### Alternatively: include <abstractions/user-tmp>
+  # Alternatively: include <abstractions/user-tmp>
   owner /tmp/**				w,	# tap_sock_unix_init(), pcap(),
-						# write_pidfile()
-  ###
+						# write_pidfile(),
+						# logfile_init()
 
   owner @{HOME}/**			w,	# pcap(), write_pidfile()
 
   /usr/bin/passt.avx2			ix,	# arch_avx2_exec(), arch.c
+
+
+  ### Rules for pasta
+  ###
+  ### TODO: AppArmor doesn't give us the chance to attach a separate profile
+  ### depending on the executable symlink. That's possible with SELinux. Two
+  ### alternatives: implement that in AppArmor, or consider aa_change_hat(2).
+  ### With this, rules for passt(1) could be restricted significantly. Note that
+  ### the attach_disconnected flag is not needed for passt(1).
+
+  @{PROC}/net/tcp			r,	# procfs_scan_listen(), util.c
+  @{PROC}/net/tcp6			r,
+  @{PROC}/net/udp			r,
+  @{PROC}/net/udp6			r,
+
+  @{run}/user/@{uid}/netns/*		r,	# pasta_open_ns(), pasta.c
+
+  @{PROC}/[0-9]*/ns/net			r,	# pasta_wait_for_ns(),
+  @{PROC}/[0-9]*/ns/user		r,	# conf_pasta_ns()
+
+  /dev/net/tun				rw,	# tap_ns_tun(), tap.c
+
+  owner @{PROC}/@{pid}/gid_map		w,	# pasta_start_ns(), conf_ugid()
+  owner @{PROC}/@{pid}/setgroups	w,
+  owner @{PROC}/@{pid}/uid_map		rw,
+
+  owner @{PROC}/sys/net/ipv4/ping_group_range w, # pasta_spawn_cmd(), pasta.c
+  /{usr/,}bin/**			Ux,
 }
