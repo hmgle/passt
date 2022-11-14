@@ -125,7 +125,7 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 		fd = socket(af, SOCK_DGRAM | SOCK_NONBLOCK, proto);
 
 	if (fd < 0) {
-		perror("L4 socket");
+		warn("L4 socket: %s", strerror(errno));
 		return -1;
 	}
 
@@ -193,7 +193,7 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 	}
 
 	if (proto == IPPROTO_TCP && listen(fd, 128) < 0) {
-		perror("TCP socket listen");
+		warn("TCP socket listen: %s", strerror(errno));
 		close(fd);
 		return -1;
 	}
@@ -201,7 +201,7 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 	ev.events = EPOLLIN;
 	ev.data.u64 = ref.u64;
 	if (epoll_ctl(c->epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-		perror("L4 epoll_ctl");
+		warn("L4 epoll_ctl: %s", strerror(errno));
 		return -1;
 	}
 

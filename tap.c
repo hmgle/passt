@@ -899,7 +899,7 @@ static void tap_sock_unix_init(struct ctx *c)
 	int i;
 
 	if (fd < 0) {
-		perror("UNIX socket");
+		err("UNIX socket: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 
@@ -920,7 +920,7 @@ static void tap_sock_unix_init(struct ctx *c)
 
 		ex = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
 		if (ex < 0) {
-			perror("UNIX domain socket check");
+			err("UNIX domain socket check: %s", strerror(errno));
 			exit(EXIT_FAILURE);
 		}
 
@@ -944,7 +944,7 @@ static void tap_sock_unix_init(struct ctx *c)
 	}
 
 	if (i == UNIX_SOCK_MAX) {
-		perror("UNIX socket bind");
+		err("UNIX socket bind: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 

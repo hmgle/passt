@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include "util.h"
+#include "log.h"
 #include "arp.h"
 #include "dhcp.h"
 #include "passt.h"
@@ -43,6 +44,7 @@ int arp(const struct ctx *c, const struct pool *p)
 	struct arphdr *ah;
 	struct arpmsg *am;
 	size_t len;
+	int ret;
 
 	eh = packet_get(p, 0, 0,			 sizeof(*eh), NULL);
 	ah = packet_get(p, 0, sizeof(*eh),		 sizeof(*ah), NULL);
@@ -81,8 +83,8 @@ int arp(const struct ctx *c, const struct pool *p)
 	memcpy(eh->h_dest,	eh->h_source,	sizeof(eh->h_dest));
 	memcpy(eh->h_source,	c->mac,		sizeof(eh->h_source));
 
-	if (tap_send(c, eh, len) < 0)
-		perror("ARP: send");
+	if ((ret = tap_send(c, eh, len)) < 0)
+		warn("ARP: send: %s", strerror(ret));
 
 	return 1;
 }
