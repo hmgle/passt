@@ -330,15 +330,13 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ✅ qemu, libvirt support with [`qrap` wrapper](/passt/tree/qrap.c)
 * ✅ out-of-tree patches for [qemu](/passt/tree/contrib/qemu) and
   [libvirt](/passt/tree/contrib/libvirt) available
-* ✅ Podman [support](https://github.com/containers/podman/pull/16141)
+* ✅ Podman [integration](https://github.com/containers/podman/pull/16141)
 * ✅ bug-to-bug compatible
   [_slirp4netns_ replacement](/passt/tree/slirp4netns.sh)
 * ✅ out-of-tree patch for
   [Kata Containers](/passt/tree/contrib/kata-containers) available
 * 🛠 native [qemu](https://bugs.passt.top/show_bug.cgi?id=11),
   [libvirt](https://bugs.passt.top/show_bug.cgi?id=12) support
-* 🛠 native
-  [Podman integration](https://github.com/containers/podman/pull/16141)
 * ⌚ drop-in replacement for VPNKit (rootless Docker)
 
 ### Availability
@@ -610,9 +608,9 @@ See also the [test logs](/builds/latest/test/).
         ./pasta
 
     * alternatively, use it directly with Podman (since Podman 4.3.2, or with
-      commit [`aa47e05ae4a0`](https://github.com/containers/podman/commit/aa47e05ae4a0d14a338cbe106b7eb9cdf098a529):
+      commit [`aa47e05ae4a0`](https://github.com/containers/podman/commit/aa47e05ae4a0d14a338cbe106b7eb9cdf098a529)):
 
-          podman run --net=pasta ...
+            podman run --net=pasta ...
 
 * you're now inside a new user and network namespace. For IPv6, SLAAC happens
   right away as _pasta_ sets up the interface, but DHCPv6 support is available
