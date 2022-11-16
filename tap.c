@@ -747,31 +747,19 @@ redo:
 		return -ECONNRESET;
 	}
 
-	while (n > 0) {
-		ssize_t len;
-
-		/* Force receiving at least a complete length descriptor to
-		 * avoid an inconsistent stream.
-		 */
-		if (n < (ssize_t)sizeof(uint32_t)) {
-			rem = recv(c->fd_tap, p + n,
-				   (ssize_t)sizeof(uint32_t) - n, 0);
-			if ((n += rem) != (ssize_t)sizeof(uint32_t))
-				return -EIO;
-		}
-
-		len = ntohl(*(uint32_t *)p);
+	while (n > (ssize_t)sizeof(uint32_t)) {
+		ssize_t len = ntohl(*(uint32_t *)p);
 
 		p += sizeof(uint32_t);
 		n -= sizeof(uint32_t);
 
 		/* At most one packet might not fit in a single read, and this
-		 * also needs to be blocking.
+		 * needs to be blocking.
 		 */
 		if (len > n) {
 			rem = recv(c->fd_tap, p + n, len - n, 0);
 			if ((n += rem) != len)
-				return -EIO;
+				return 0;
 		}
 
 		/* Complete the partial read above before discarding a malformed
