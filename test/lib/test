@@ -31,6 +31,8 @@ test_iperf3() {
 	__procs="$((${1} - 1))"; shift
 	__time="${1}"; shift
 
+	pane_or_context_run "${__sctx}" 'rm -f s*.json'
+
 	pane_or_context_run_bg "${__sctx}" 				\
 		 'for i in $(seq 0 '${__procs}'); do'			\
 		 '	(iperf3 -s1J -p'${__port}' -i'${__time}		\
@@ -64,8 +66,6 @@ test_iperf3() {
 
 	__bw=$(pane_or_context_output "${__sctx}"			\
 		 'cat s*.json | jq -rMs "map('${__jval}') | add"')
-	pane_or_context_run "${__sctx}"					\
-		'for i in $(seq 0 '${__procs}'); do rm s${i}.json; done'
 
 	TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__var}__" "${__bw}" )"
 
