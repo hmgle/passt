@@ -513,20 +513,23 @@ bool tcp_splice_conn_from_sock(struct ctx *c, union epoll_ref ref,
 			       struct tcp_splice_conn *conn, int s,
 			       const struct sockaddr *sa)
 {
+	const struct in_addr *a4;
+	union inany_addr aany;
+	in_port_t port;
+
 	assert(c->mode == MODE_PASTA);
 
-	if (sa->sa_family == AF_INET6) {
-		const struct sockaddr_in6 *sa6;
+	inany_from_sockaddr(&aany, &port, sa);
+	a4 = inany_v4(&aany);
 
-		sa6 = (const struct sockaddr_in6 *)sa;
-		if (!IN6_IS_ADDR_LOOPBACK(&sa6->sin6_addr))
-			return false;
-		conn->flags = SPLICE_V6;
-	} else {
-		const struct sockaddr_in *sa4 = (const struct sockaddr_in *)sa;
-		if (!IN4_IS_ADDR_LOOPBACK(&sa4->sin_addr))
+	if (a4) {
+		if (!IN4_IS_ADDR_LOOPBACK(a4))
 			return false;
 		conn->flags = 0;
+	} else {
+		if (!IN6_IS_ADDR_LOOPBACK(&aany.a6))
+			return false;
+		conn->flags = SPLICE_V6;
 	}
 
 	if (setsockopt(s, SOL_TCP, TCP_QUICKACK, &((int){ 1 }), sizeof(int)))
