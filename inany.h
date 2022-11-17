@@ -30,11 +30,11 @@ union inany_addr {
  *
  * Return: IPv4 address if @addr is IPv4, NULL otherwise
  */
-static inline const struct in_addr *inany_v4(const union inany_addr *addr)
+static inline struct in_addr *inany_v4(const union inany_addr *addr)
 {
 	if (!IN6_IS_ADDR_V4MAPPED(&addr->a6))
 		return NULL;
-	return &addr->v4mapped.a4;
+	return (struct in_addr *)&addr->v4mapped.a4;
 }
 
 /** inany_equals - Compare two IPv[46] addresses
@@ -61,6 +61,32 @@ static inline void inany_from_af(union inany_addr *aa, int af, const void *addr)
 		memset(&aa->v4mapped.zero, 0, sizeof(aa->v4mapped.zero));
 		memset(&aa->v4mapped.one, 0xff, sizeof(aa->v4mapped.one));
 		aa->v4mapped.a4 = *((struct in_addr *)addr);
+	} else {
+		/* Not valid to call with other address families */
+		assert(0);
+	}
+}
+
+/** inany_from_sockaddr - Extract IPv[46] address and port number from sockaddr
+ * @aa:		Pointer to store IPv[46] address
+ * @port:	Pointer to store port number, host order
+ * @addr:	struct sockaddr_in (IPv4) or struct sockaddr_in6 (IPv6)
+ */
+static inline void inany_from_sockaddr(union inany_addr *aa, in_port_t *port,
+				       const void *addr)
+{
+	const struct sockaddr *sa = (const struct sockaddr *)addr;
+
+	if (sa->sa_family == AF_INET6) {
+		struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)sa;
+
+		inany_from_af(aa, AF_INET6, &sa6->sin6_addr);
+		*port = ntohs(sa6->sin6_port);
+	} else if (sa->sa_family == AF_INET) {
+		struct sockaddr_in *sa4 = (struct sockaddr_in *)sa;
+
+		inany_from_af(aa, AF_INET, &sa4->sin_addr);
+		*port = ntohs(sa4->sin_port);
 	} else {
 		/* Not valid to call with other address families */
 		assert(0);

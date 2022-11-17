@@ -2725,6 +2725,34 @@ static void tcp_connect_finish(struct ctx *c, struct tcp_tap_conn *conn)
 }
 
 /**
+ * tcp_snat_inbound() - Translate source address for inbound data if needed
+ * @c:		Execution context
+ * @addr:	Source address of inbound packet/connection
+ */
+static void tcp_snat_inbound(const struct ctx *c, union inany_addr *addr)
+{
+	struct in_addr *addr4 = inany_v4(addr);
+
+	if (addr4) {
+		if (IN4_IS_ADDR_LOOPBACK(addr4) ||
+		    IN4_IS_ADDR_UNSPECIFIED(addr4) ||
+		    IN4_ARE_ADDR_EQUAL(addr4, &c->ip4.addr_seen))
+			*addr4 = c->ip4.gw;
+	} else {
+		struct in6_addr *addr6 = &addr->a6;
+
+		if (IN6_IS_ADDR_LOOPBACK(addr6) ||
+		    IN6_ARE_ADDR_EQUAL(addr6, &c->ip6.addr_seen) ||
+		    IN6_ARE_ADDR_EQUAL(addr6, &c->ip6.addr)) {
+			if (IN6_IS_ADDR_LINKLOCAL(&c->ip6.gw))
+				*addr6 = c->ip6.gw;
+			else
+				*addr6 = c->ip6.addr_ll;
+		}
+	}
+}
+
+/**
  * tcp_tap_conn_from_sock() - Initialize state for non-spliced connection
  * @c:		Execution context
  * @ref:	epoll reference of listening socket
@@ -2744,43 +2772,10 @@ static void tcp_tap_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	conn->ws_to_tap = conn->ws_from_tap = 0;
 	conn_event(c, conn, SOCK_ACCEPTED);
 
-	if (sa->sa_family == AF_INET6) {
-		struct sockaddr_in6 sa6;
+	inany_from_sockaddr(&conn->addr, &conn->sock_port, sa);
+	conn->tap_port = ref.r.p.tcp.tcp.index;
 
-		memcpy(&sa6, sa, sizeof(sa6));
-
-		if (IN6_IS_ADDR_LOOPBACK(&sa6.sin6_addr) ||
-		    IN6_ARE_ADDR_EQUAL(&sa6.sin6_addr, &c->ip6.addr_seen) ||
-		    IN6_ARE_ADDR_EQUAL(&sa6.sin6_addr, &c->ip6.addr)) {
-			struct in6_addr *src;
-
-			if (IN6_IS_ADDR_LINKLOCAL(&c->ip6.gw))
-				src = &c->ip6.gw;
-			else
-				src = &c->ip6.addr_ll;
-
-			memcpy(&sa6.sin6_addr, src, sizeof(*src));
-		}
-
-		inany_from_af(&conn->addr, AF_INET6, &sa6.sin6_addr);
-
-		conn->sock_port = ntohs(sa6.sin6_port);
-		conn->tap_port = ref.r.p.tcp.tcp.index;
-	} else {
-		struct sockaddr_in sa4;
-
-		memcpy(&sa4, sa, sizeof(sa4));
-
-		if (IN4_IS_ADDR_LOOPBACK(&sa4.sin_addr) ||
-		    IN4_IS_ADDR_UNSPECIFIED(&sa4.sin_addr) ||
-		    IN4_ARE_ADDR_EQUAL(&sa4.sin_addr, &c->ip4.addr_seen))
-			sa4.sin_addr = c->ip4.gw;
-
-		inany_from_af(&conn->addr, AF_INET, &sa4.sin_addr);
-
-		conn->sock_port = ntohs(sa4.sin_port);
-		conn->tap_port = ref.r.p.tcp.tcp.index;
-	}
+	tcp_snat_inbound(c, &conn->addr);
 
 	tcp_seq_init(c, conn, now);
 	tcp_hash_insert(c, conn);
