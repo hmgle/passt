@@ -141,7 +141,7 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 
 	if (fd > SOCKET_MAX) {
 		close(fd);
-		return -EIO;
+		return -1;
 	}
 
 	ref.r.s = fd;
