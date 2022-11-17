@@ -1248,17 +1248,12 @@ static unsigned int tcp_conn_hash(const struct ctx *c,
  * tcp_hash_insert() - Insert connection into hash table, chain link
  * @c:		Execution context
  * @conn:	Connection pointer
- * @af:		Address family, AF_INET or AF_INET6
- * @addr:	Remote address, pointer to in_addr or in6_addr
  */
-static void tcp_hash_insert(const struct ctx *c, struct tcp_tap_conn *conn,
-			    int af, const void *addr)
+static void tcp_hash_insert(const struct ctx *c, struct tcp_tap_conn *conn)
 {
-	union inany_addr aany;
 	int b;
 
-	inany_from_af(&aany, af, addr);
-	b = tcp_hash(c, &aany, conn->tap_port, conn->sock_port);
+	b = tcp_hash(c, &conn->addr, conn->tap_port, conn->sock_port);
 	conn->next_index = tc_hash[b] ? CONN_IDX(tc_hash[b]) : -1;
 	tc_hash[b] = conn;
 
@@ -2153,7 +2148,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	conn->seq_to_tap = tcp_seq_init(c, af, addr, th->dest, th->source, now);
 	conn->seq_ack_from_tap = conn->seq_to_tap + 1;
 
-	tcp_hash_insert(c, conn, af, addr);
+	tcp_hash_insert(c, conn);
 
 	if (!bind(s, sa, sl)) {
 		tcp_rst(c, conn);	/* Nobody is listening then */
@@ -2802,8 +2797,6 @@ static void tcp_tap_conn_from_sock(struct ctx *c, union epoll_ref ref,
 						conn->sock_port,
 						conn->tap_port,
 						now);
-
-		tcp_hash_insert(c, conn, AF_INET6, &sa6.sin6_addr);
 	} else {
 		struct sockaddr_in sa4;
 
@@ -2823,9 +2816,9 @@ static void tcp_tap_conn_from_sock(struct ctx *c, union epoll_ref ref,
 						conn->sock_port,
 						conn->tap_port,
 						now);
-
-		tcp_hash_insert(c, conn, AF_INET, &sa4.sin_addr);
 	}
+
+	tcp_hash_insert(c, conn);
 
 	conn->seq_ack_from_tap = conn->seq_to_tap + 1;
 
