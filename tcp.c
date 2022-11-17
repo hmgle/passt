@@ -98,11 +98,11 @@
  * Connection tracking and storage
  * -------------------------------
  *
- * Connections are tracked by the @tc array of struct tcp_tap_conn, containing
- * addresses, ports, TCP states and parameters. This is statically allocated and
- * indexed by an arbitrary connection number. The array is compacted whenever a
- * connection is closed, by remapping the highest connection index in use to the
- * one freed up.
+ * Connections are tracked by struct tcp_tap_conn entries in the @tc
+ * array, containing addresses, ports, TCP states and parameters. This
+ * is statically allocated and indexed by an arbitrary connection
+ * number. The array is compacted whenever a connection is closed, by
+ * remapping the highest connection index in use to the one freed up.
  *
  * References used for the epoll interface report the connection index used for
  * the @tc array.
@@ -588,10 +588,10 @@ static unsigned int tcp6_l2_flags_buf_used;
 static size_t tcp6_l2_flags_buf_bytes;
 
 /* TCP connections */
-static struct tcp_tap_conn tc[TCP_MAX_CONNS];
+union tcp_conn tc[TCP_MAX_CONNS];
 
-#define CONN(index)		(tc + (index))
-#define CONN_IDX(conn)		((conn) - tc)
+#define CONN(index)		(&tc[(index)].tap)
+#define CONN_IDX(conn)		((union tcp_conn *)(conn) - tc)
 
 /** conn_at_idx() - Find a connection by index, if present
  * @index:	Index of connection to lookup
@@ -1351,26 +1351,28 @@ static struct tcp_tap_conn *tcp_hash_lookup(const struct ctx *c,
  * @c:		Execution context
  * @hole:	Pointer to recently closed connection
  */
-static void tcp_table_compact(struct ctx *c, struct tcp_tap_conn *hole)
+void tcp_table_compact(struct ctx *c, union tcp_conn *hole)
 {
-	struct tcp_tap_conn *from, *to;
+	union tcp_conn *from;
 
 	if (CONN_IDX(hole) == --c->tcp.conn_count) {
-		debug("TCP: hash table compaction: maximum index was %li (%p)",
+		debug("TCP: table compaction: maximum index was %li (%p)",
 		      CONN_IDX(hole), hole);
 		memset(hole, 0, sizeof(*hole));
 		return;
 	}
 
-	from = CONN(c->tcp.conn_count);
+	from = tc + c->tcp.conn_count;
 	memcpy(hole, from, sizeof(*hole));
 
-	to = hole;
-	tcp_tap_conn_update(c, from, to);
+	if (from->c.spliced)
+		tcp_splice_conn_update(c, &hole->splice);
+	else
+		tcp_tap_conn_update(c, &from->tap, &hole->tap);
 
-	debug("TCP: hash table compaction: old index %li, new index %li, "
-	      "sock %i, from: %p, to: %p",
-	      CONN_IDX(from), CONN_IDX(to), from->sock, from, to);
+	debug("TCP: table compaction (spliced=%d): old index %li, new index %li, "
+	      "from: %p, to: %p",
+	      from->c.spliced, CONN_IDX(from), CONN_IDX(hole), from, hole);
 
 	memset(from, 0, sizeof(*from));
 }
@@ -1387,7 +1389,7 @@ static void tcp_conn_destroy(struct ctx *c, struct tcp_tap_conn *conn)
 		close(conn->timer);
 
 	tcp_hash_remove(conn);
-	tcp_table_compact(c, conn);
+	tcp_table_compact(c, (union tcp_conn *)conn);
 }
 
 static void tcp_rst_do(struct ctx *c, struct tcp_tap_conn *conn);
@@ -1535,7 +1537,9 @@ void tcp_defer_handler(struct ctx *c)
 	if (c->tcp.conn_count < MIN(max_files, max_conns))
 		return;
 
-	for (conn = CONN(c->tcp.conn_count - 1); conn >= tc; conn--) {
+	for (conn = CONN(c->tcp.conn_count - 1); conn >= CONN(0); conn--) {
+		if (conn->c.spliced)
+			continue;
 		if (conn->events == CLOSED)
 			tcp_conn_destroy(c, conn);
 	}
@@ -3433,7 +3437,9 @@ void tcp_timer(struct ctx *c, const struct timespec *ts)
 		}
 	}
 
-	for (conn = CONN(c->tcp.conn_count - 1); conn >= tc; conn--) {
+	for (conn = CONN(c->tcp.conn_count - 1); conn >= CONN(0); conn--) {
+		if (conn->c.spliced)
+			continue;
 		if (conn->events == CLOSED)
 			tcp_conn_destroy(c, conn);
 	}

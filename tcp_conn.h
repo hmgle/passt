@@ -195,4 +195,10 @@ union tcp_conn {
 	struct tcp_splice_conn splice;
 };
 
+/* TCP connections */
+extern union tcp_conn tc[];
+
+void tcp_splice_conn_update(struct ctx *c, struct tcp_splice_conn *new);
+void tcp_table_compact(struct ctx *c, union tcp_conn *hole);
+
 #endif /* TCP_CONN_H */

@@ -16,7 +16,7 @@
  * For local traffic directed to TCP ports configured for direct
  * mapping between namespaces, packets are directly translated between
  * L4 sockets using a pair of splice() syscalls. These connections are
- * tracked in the @tc_splice array of struct tcp_splice_conn, using
+ * tracked by struct tcp_splice_conn entries in the @tc array, using
  * these events:
  *
  * - SPLICE_CONNECT:		connection accepted, connecting to target
@@ -57,7 +57,7 @@
 
 #define MAX_PIPE_SIZE			(8UL * 1024 * 1024)
 #define TCP_SPLICE_PIPE_POOL_SIZE	16
-#define TCP_SPLICE_CONN_PRESSURE	30	/* % of splice_conn_count */
+#define TCP_SPLICE_CONN_PRESSURE	30	/* % of conn_count */
 #define TCP_SPLICE_FILE_PRESSURE	30	/* % of c->nofile */
 
 /* From tcp.c */
@@ -72,11 +72,8 @@ static int splice_pipe_pool		[TCP_SPLICE_PIPE_POOL_SIZE][2][2];
 #define CONN_V6(x)			(x->flags & SPLICE_V6)
 #define CONN_V4(x)			(!CONN_V6(x))
 #define CONN_HAS(conn, set)		((conn->events & (set)) == (set))
-#define CONN(index)			(tc_splice + (index))
-#define CONN_IDX(conn)			((conn) - tc_splice)
-
-/* Spliced connections */
-static struct tcp_splice_conn tc_splice[TCP_SPLICE_MAX_CONNS];
+#define CONN(index)			(&tc[(index)].splice)
+#define CONN_IDX(conn)			((union tcp_conn *)(conn) - tc)
 
 /* Display strings for connection events */
 static const char *tcp_splice_event_str[] __attribute((__unused__)) = {
@@ -248,41 +245,11 @@ static void conn_event_do(const struct ctx *c, struct tcp_splice_conn *conn,
  * @c:		Execution context
  * @new:	New location of tcp_splice_conn
  */
-static void tcp_splice_conn_update(struct ctx *c, struct tcp_splice_conn *new)
+void tcp_splice_conn_update(struct ctx *c, struct tcp_splice_conn *new)
 {
 	tcp_splice_epoll_ctl(c, new);
 	if (tcp_splice_epoll_ctl(c, new))
 		conn_flag(c, new, CLOSING);
-}
-
-/**
- * tcp_table_splice_compact - Compact spliced connection table
- * @c:		Execution context
- * @hole:	Pointer to recently closed connection
- */
-static void tcp_table_splice_compact(struct ctx *c,
-				     struct tcp_splice_conn *hole)
-{
-	struct tcp_splice_conn *move;
-
-	if (CONN_IDX(hole) == --c->tcp.splice_conn_count) {
-		debug("TCP (spliced): index %li (max) removed", CONN_IDX(hole));
-		return;
-	}
-
-	move = CONN(c->tcp.splice_conn_count);
-
-	memcpy(hole, move, sizeof(*hole));
-
-	move->a = move->b = -1;
-	move->a_read = move->a_written = move->b_read = move->b_written = 0;
-	move->pipe_a_b[0] = move->pipe_a_b[1] = -1;
-	move->pipe_b_a[0] = move->pipe_b_a[1] = -1;
-	move->flags = move->events = 0;
-
-	debug("TCP (spliced): index %li moved to %li",
-	      CONN_IDX(move), CONN_IDX(hole));
-	tcp_splice_conn_update(c, hole);
 }
 
 /**
@@ -319,7 +286,8 @@ static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
 	conn->flags = 0;
 	debug("TCP (spliced): index %li, CLOSED", CONN_IDX(conn));
 
-	tcp_table_splice_compact(c, conn);
+	c->tcp.splice_conn_count--;
+	tcp_table_compact(c, (union tcp_conn *)conn);
 }
 
 /**
@@ -553,7 +521,7 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 	if (ref.r.p.tcp.tcp.listen) {
 		int s;
 
-		if (c->tcp.splice_conn_count >= TCP_SPLICE_MAX_CONNS)
+		if (c->tcp.conn_count >= TCP_MAX_CONNS)
 			return;
 
 		if ((s = accept4(ref.r.s, NULL, NULL, SOCK_NONBLOCK)) < 0)
@@ -565,8 +533,9 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 			      s);
 		}
 
-		conn = CONN(c->tcp.splice_conn_count++);
+		conn = CONN(c->tcp.conn_count++);
 		conn->c.spliced = true;
+		c->tcp.splice_conn_count++;
 		conn->a = s;
 		conn->flags = ref.r.p.tcp.tcp.v6 ? SPLICE_V6 : 0;
 
@@ -845,9 +814,10 @@ void tcp_splice_timer(struct ctx *c)
 {
 	struct tcp_splice_conn *conn;
 
-	for (conn = CONN(c->tcp.splice_conn_count - 1);
-	     conn >= tc_splice;
-	     conn--) {
+	for (conn = CONN(c->tcp.conn_count - 1); conn >= CONN(0); conn--) {
+		if (!conn->c.spliced)
+			continue;
+
 		if (conn->flags & CLOSING) {
 			tcp_splice_destroy(c, conn);
 			return;
@@ -890,12 +860,12 @@ void tcp_splice_defer_handler(struct ctx *c)
 	int max_files = c->nofile / 100 * TCP_SPLICE_FILE_PRESSURE;
 	struct tcp_splice_conn *conn;
 
-	if (c->tcp.splice_conn_count < MIN(max_files / 6, max_conns))
+	if (c->tcp.conn_count < MIN(max_files / 6, max_conns))
 		return;
 
-	for (conn = CONN(c->tcp.splice_conn_count - 1);
-	     conn >= tc_splice;
-	     conn--) {
+	for (conn = CONN(c->tcp.conn_count - 1); conn >= CONN(0); conn--) {
+		if (!conn->c.spliced)
+			continue;
 		if (conn->flags & CLOSING)
 			tcp_splice_destroy(c, conn);
 	}

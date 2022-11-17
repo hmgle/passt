@@ -54,7 +54,7 @@ union tcp_epoll_ref {
 /**
  * struct tcp_ctx - Execution context for TCP routines
  * @hash_secret:	128-bit secret for hash functions, ISN and hash table
- * @conn_count:		Count of connections (not spliced) in connection table
+ * @conn_count:		Count of total connections in connection table
  * @splice_conn_count:	Count of spliced connections in connection table
  * @port_to_tap:	Ports bound host-side, packets to tap or spliced
  * @fwd_in:		Port forwarding configuration for inbound packets
