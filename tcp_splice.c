@@ -242,6 +242,19 @@ static void conn_event_do(const struct ctx *c, struct tcp_splice_conn *conn,
 		conn_event_do(c, conn, event);				\
 	} while (0)
 
+
+/**
+ * tcp_splice_conn_update() - Update tcp_splice_conn when being moved in the table
+ * @c:		Execution context
+ * @new:	New location of tcp_splice_conn
+ */
+static void tcp_splice_conn_update(struct ctx *c, struct tcp_splice_conn *new)
+{
+	tcp_splice_epoll_ctl(c, new);
+	if (tcp_splice_epoll_ctl(c, new))
+		conn_flag(c, new, CLOSING);
+}
+
 /**
  * tcp_table_splice_compact - Compact spliced connection table
  * @c:		Execution context
@@ -269,9 +282,7 @@ static void tcp_table_splice_compact(struct ctx *c,
 
 	debug("TCP (spliced): index %li moved to %li",
 	      CONN_IDX(move), CONN_IDX(hole));
-	tcp_splice_epoll_ctl(c, hole);
-	if (tcp_splice_epoll_ctl(c, hole))
-		conn_flag(c, hole, CLOSING);
+	tcp_splice_conn_update(c, hole);
 }
 
 /**

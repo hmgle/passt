@@ -1291,11 +1291,13 @@ static void tcp_hash_remove(const struct tcp_tap_conn *conn)
 }
 
 /**
- * tcp_hash_update() - Update pointer for given connection
- * @old:	Old connection pointer
- * @new:	New connection pointer
+ * tcp_tap_conn_update() - Update tcp_tap_conn when being moved in the table
+ * @c:		Execution context
+ * @old:	Old location of tcp_tap_conn
+ * @new:	New location of tcp_tap_conn
  */
-static void tcp_hash_update(struct tcp_tap_conn *old, struct tcp_tap_conn *new)
+static void tcp_tap_conn_update(struct ctx *c, struct tcp_tap_conn *old,
+				struct tcp_tap_conn *new)
 {
 	struct tcp_tap_conn *entry, *prev = NULL;
 	int b = old->hash_bucket;
@@ -1314,6 +1316,8 @@ static void tcp_hash_update(struct tcp_tap_conn *old, struct tcp_tap_conn *new)
 	debug("TCP: hash table update: old index %li, new index %li, sock %i, "
 	      "bucket: %i, old: %p, new: %p",
 	      CONN_IDX(old), CONN_IDX(new), new->sock, b, old, new);
+
+	tcp_epoll_ctl(c, new);
 }
 
 /**
@@ -1362,9 +1366,7 @@ static void tcp_table_compact(struct ctx *c, struct tcp_tap_conn *hole)
 	memcpy(hole, from, sizeof(*hole));
 
 	to = hole;
-	tcp_hash_update(from, to);
-
-	tcp_epoll_ctl(c, to);
+	tcp_tap_conn_update(c, from, to);
 
 	debug("TCP: hash table compaction: old index %li, new index %li, "
 	      "sock %i, from: %p, to: %p",
