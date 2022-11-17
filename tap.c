@@ -90,7 +90,7 @@ int tap_send(const struct ctx *c, const void *data, size_t len)
  * tap_ip4_daddr() - Normal IPv4 destination address for inbound packets
  * @c:		Execution context
  *
- * Returns: IPv4 address, network order
+ * Return: IPv4 address, network order
  */
 struct in_addr tap_ip4_daddr(const struct ctx *c)
 {
@@ -98,11 +98,11 @@ struct in_addr tap_ip4_daddr(const struct ctx *c)
 }
 
 /**
- * tap_ip6_daddr() - Normal IPv4 destination address for inbound packets
+ * tap_ip6_daddr() - Normal IPv6 destination address for inbound packets
  * @c:		Execution context
  * @src:	Source address
  *
- * Returns: pointer to IPv6 address
+ * Return: pointer to IPv6 address
  */
 const struct in6_addr *tap_ip6_daddr(const struct ctx *c,
 				     const struct in6_addr *src)

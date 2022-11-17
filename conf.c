@@ -112,9 +112,9 @@ static int get_bound_ports_ns(void *arg)
  * @s:		String to search
  * @c:		Delimiter character
  *
- * Returns: If another @c is found in @s, returns a pointer to the
- *	    character *after* the delimiter, if no further @c is in
- *	    @s, return NULL
+ * Return: If another @c is found in @s, returns a pointer to the
+ *	   character *after* the delimiter, if no further @c is in @s,
+ *	   return NULL
  */
 static char *next_chunk(const char *s, char c)
 {
