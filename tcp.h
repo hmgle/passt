@@ -32,7 +32,6 @@ void tcp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 /**
  * union tcp_epoll_ref - epoll reference portion for TCP connections
  * @listen:		Set if this file descriptor is a listening socket
- * @splice:		Set if descriptor is associated to a spliced connection
  * @outbound:		Listening socket maps to outbound, spliced connection
  * @v6:			Set for IPv6 sockets or connections
  * @timer:		Reference is a timerfd descriptor for connection
@@ -42,7 +41,6 @@ void tcp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 union tcp_epoll_ref {
 	struct {
 		uint32_t	listen:1,
-				splice:1,
 				outbound:1,
 				v6:1,
 				timer:1,

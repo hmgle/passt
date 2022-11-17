@@ -166,11 +166,9 @@ static int tcp_splice_epoll_ctl(const struct ctx *c,
 {
 	int m = conn->c.in_epoll ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 	union epoll_ref ref_a = { .r.proto = IPPROTO_TCP, .r.s = conn->a,
-				  .r.p.tcp.tcp.splice = 1,
 				  .r.p.tcp.tcp.index = CONN_IDX(conn),
 				  .r.p.tcp.tcp.v6 = CONN_V6(conn) };
 	union epoll_ref ref_b = { .r.proto = IPPROTO_TCP, .r.s = conn->b,
-				  .r.p.tcp.tcp.splice = 1,
 				  .r.p.tcp.tcp.index = CONN_IDX(conn),
 				  .r.p.tcp.tcp.v6 = CONN_V6(conn) };
 	struct epoll_event ev_a = { .data.u64 = ref_a.u64 };
@@ -547,24 +545,20 @@ bool tcp_splice_conn_from_sock(struct ctx *c, union epoll_ref ref,
 }
 
 /**
- * tcp_sock_handler_splice() - Handler for socket mapped to spliced connection
+ * tcp_splice_sock_handler() - Handler for socket mapped to spliced connection
  * @c:		Execution context
- * @ref:	epoll reference
+ * @conn:	Connection state
+ * @s:		Socket fd on which an event has occurred
  * @events:	epoll events bitmap
  *
  * #syscalls:pasta splice
  */
-void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
-			     uint32_t events)
+void tcp_splice_sock_handler(struct ctx *c, struct tcp_splice_conn *conn,
+			     int s, uint32_t events)
 {
 	uint8_t lowat_set_flag, lowat_act_flag;
 	int from, to, *pipes, eof, never_read;
 	uint32_t *seq_read, *seq_write;
-	struct tcp_splice_conn *conn;
-
-	assert(!ref.r.p.tcp.tcp.listen);
-
-	conn = CONN(ref.r.p.tcp.tcp.index);
 
 	if (conn->events == SPLICE_CLOSED)
 		return;
@@ -580,25 +574,25 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 	}
 
 	if (events & EPOLLOUT) {
-		if (ref.r.s == conn->a)
+		if (s == conn->a)
 			conn_event(c, conn, ~A_OUT_WAIT);
 		else
 			conn_event(c, conn, ~B_OUT_WAIT);
 
-		tcp_splice_dir(conn, ref.r.s, 1, &from, &to, &pipes);
+		tcp_splice_dir(conn, s, 1, &from, &to, &pipes);
 	} else {
-		tcp_splice_dir(conn, ref.r.s, 0, &from, &to, &pipes);
+		tcp_splice_dir(conn, s, 0, &from, &to, &pipes);
 	}
 
 	if (events & EPOLLRDHUP) {
-		if (ref.r.s == conn->a)
+		if (s == conn->a)
 			conn_event(c, conn, A_FIN_RCVD);
 		else
 			conn_event(c, conn, B_FIN_RCVD);
 	}
 
 	if (events & EPOLLHUP) {
-		if (ref.r.s == conn->a)
+		if (s == conn->a)
 			conn_event(c, conn, A_FIN_SENT); /* Fake, but implied */
 		else
 			conn_event(c, conn, B_FIN_SENT);

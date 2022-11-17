@@ -2851,7 +2851,6 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	int s;
 
 	assert(ref.r.p.tcp.tcp.listen);
-	assert(!ref.r.p.tcp.tcp.splice);
 
 	if (c->tcp.conn_count >= TCP_MAX_CONNS)
 		return;
@@ -2940,35 +2939,14 @@ static void tcp_timer_handler(struct ctx *c, union epoll_ref ref)
 }
 
 /**
- * tcp_sock_handler() - Handle new data from socket, or timerfd event
+ * tcp_tap_sock_handler() - Handle new data from non-spliced socket
  * @c:		Execution context
- * @ref:	epoll reference
+ * @conn:	Connection state
  * @events:	epoll events bitmap
- * @now:	Current timestamp
  */
-void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
-		      const struct timespec *now)
+static void tcp_tap_sock_handler(struct ctx *c, struct tcp_tap_conn *conn,
+				 uint32_t events)
 {
-	struct tcp_tap_conn *conn;
-
-	if (ref.r.p.tcp.tcp.timer) {
-		tcp_timer_handler(c, ref);
-		return;
-	}
-
-	if (ref.r.p.tcp.tcp.listen) {
-		tcp_conn_from_sock(c, ref, now);
-		return;
-	}
-
-	if (ref.r.p.tcp.tcp.splice) {
-		tcp_sock_handler_splice(c, ref, events);
-		return;
-	}
-
-	if (!(conn = conn_at_idx(ref.r.p.tcp.tcp.index)))
-		return;
-
 	if (conn->events == CLOSED)
 		return;
 
@@ -3013,6 +2991,36 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 			tcp_connect_finish(c, conn);
 		/* Data? Check later */
 	}
+}
+
+/**
+ * tcp_sock_handler() - Handle new data from socket, or timerfd event
+ * @c:		Execution context
+ * @ref:	epoll reference
+ * @events:	epoll events bitmap
+ * @now:	Current timestamp
+ */
+void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
+		      const struct timespec *now)
+{
+	union tcp_conn *conn;
+
+	if (ref.r.p.tcp.tcp.timer) {
+		tcp_timer_handler(c, ref);
+		return;
+	}
+
+	if (ref.r.p.tcp.tcp.listen) {
+		tcp_conn_from_sock(c, ref, now);
+		return;
+	}
+
+	conn = tc + ref.r.p.tcp.tcp.index;
+
+	if (conn->c.spliced)
+		tcp_splice_sock_handler(c, &conn->splice, ref.r.s, events);
+	else
+		tcp_tap_sock_handler(c, &conn->tap, events);
 }
 
 /**
