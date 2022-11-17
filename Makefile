@@ -152,7 +152,7 @@ valgrind: all
 
 .PHONY: clean
 clean:
-	$(RM) $(BIN) *.o seccomp.h pasta.1 \
+	$(RM) $(BIN) *~ *.o seccomp.h pasta.1 \
 		passt.tar passt.tar.gz *.deb *.rpm \
 		passt.pid README.plain.md
 
