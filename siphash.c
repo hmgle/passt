@@ -104,6 +104,7 @@
  *
  * Return: the 64-bit hash output
  */
+/* cppcheck-suppress unusedFunction */
 uint64_t siphash_8b(const uint8_t *in, const uint64_t *k)
 {
 	PREAMBLE(8);

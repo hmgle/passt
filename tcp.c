@@ -1205,8 +1205,7 @@ static int tcp_hash_match(const struct tcp_tap_conn *conn,
 /**
  * tcp_hash() - Calculate hash value for connection given address and ports
  * @c:		Execution context
- * @af:		Address family, AF_INET or AF_INET6
- * @addr:	Remote address, pointer to in_addr or in6_addr
+ * @addr:	Remote address
  * @tap_port:	tap-facing port
  * @sock_port:	Socket-facing port
  *
@@ -1215,32 +1214,19 @@ static int tcp_hash_match(const struct tcp_tap_conn *conn,
 #if TCP_HASH_NOINLINE
 __attribute__((__noinline__))	/* See comment in Makefile */
 #endif
-static unsigned int tcp_hash(const struct ctx *c, int af, const void *addr,
+static unsigned int tcp_hash(const struct ctx *c, const union inany_addr *addr,
 			     in_port_t tap_port, in_port_t sock_port)
 {
+	struct {
+		union inany_addr addr;
+		in_port_t tap_port;
+		in_port_t sock_port;
+	} __attribute__((__packed__)) in = {
+		*addr, tap_port, sock_port
+	};
 	uint64_t b = 0;
 
-	if (af == AF_INET) {
-		struct {
-			struct in_addr addr;
-			in_port_t tap_port;
-			in_port_t sock_port;
-		} __attribute__((__packed__)) in = {
-			*(struct in_addr *)addr, tap_port, sock_port,
-		};
-
-		b = siphash_8b((uint8_t *)&in, c->tcp.hash_secret);
-	} else if (af == AF_INET6) {
-		struct {
-			struct in6_addr addr;
-			in_port_t tap_port;
-			in_port_t sock_port;
-		} __attribute__((__packed__)) in = {
-			*(struct in6_addr *)addr, tap_port, sock_port,
-		};
-
-		b = siphash_20b((uint8_t *)&in, c->tcp.hash_secret);
-	}
+	b = siphash_20b((uint8_t *)&in, c->tcp.hash_secret);
 
 	return (unsigned int)(b % TCP_HASH_TABLE_SIZE);
 }
@@ -1255,14 +1241,7 @@ static unsigned int tcp_hash(const struct ctx *c, int af, const void *addr,
 static unsigned int tcp_conn_hash(const struct ctx *c,
 				  const struct tcp_tap_conn *conn)
 {
-	const struct in_addr *a4 = inany_v4(&conn->addr);
-
-	if (a4)
-		return tcp_hash(c, AF_INET, a4,
-				conn->tap_port, conn->sock_port);
-	else
-		return tcp_hash(c, AF_INET6, &conn->addr.a6,
-				conn->tap_port, conn->sock_port);
+	return tcp_hash(c, &conn->addr, conn->tap_port, conn->sock_port);
 }
 
 /**
@@ -1275,9 +1254,11 @@ static unsigned int tcp_conn_hash(const struct ctx *c,
 static void tcp_hash_insert(const struct ctx *c, struct tcp_tap_conn *conn,
 			    int af, const void *addr)
 {
+	union inany_addr aany;
 	int b;
 
-	b = tcp_hash(c, af, addr, conn->tap_port, conn->sock_port);
+	inany_from_af(&aany, af, addr);
+	b = tcp_hash(c, &aany, conn->tap_port, conn->sock_port);
 	conn->next_index = tc_hash[b] ? CONN_IDX(tc_hash[b]) : -1;
 	tc_hash[b] = conn;
 
@@ -1357,9 +1338,12 @@ static struct tcp_tap_conn *tcp_hash_lookup(const struct ctx *c,
 					    in_port_t tap_port,
 					    in_port_t sock_port)
 {
-	int b = tcp_hash(c, af, addr, tap_port, sock_port);
+	union inany_addr aany;
 	struct tcp_tap_conn *conn;
+	int b;
 
+	inany_from_af(&aany, af, addr);
+	b = tcp_hash(c, &aany, tap_port, sock_port);
 	for (conn = tc_hash[b]; conn; conn = conn_at_idx(conn->next_index)) {
 		if (tcp_hash_match(conn, af, addr, tap_port, sock_port))
 			return conn;
