@@ -111,7 +111,6 @@ static void tcp_splice_conn_epoll_events(uint16_t events,
 	*b |= (events & B_OUT_WAIT) ? EPOLLOUT : 0;
 }
 
-static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn);
 static int tcp_splice_epoll_ctl(const struct ctx *c,
 				struct tcp_splice_conn *conn);
 
@@ -257,7 +256,7 @@ void tcp_splice_conn_update(struct ctx *c, struct tcp_splice_conn *new)
  * @c:		Execution context
  * @conn:	Connection pointer
  */
-static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
+void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
 {
 	if (conn->events & SPLICE_ESTABLISHED) {
 		/* Flushing might need to block: don't recycle them. */
@@ -848,25 +847,4 @@ void tcp_splice_timer(struct ctx *c)
 	}
 
 	tcp_splice_pipe_refill(c);
-}
-
-/**
- * tcp_splice_defer_handler() - Close connections without timer on file pressure
- * @c:		Execution context
- */
-void tcp_splice_defer_handler(struct ctx *c)
-{
-	int max_conns = c->tcp.conn_count / 100 * TCP_SPLICE_CONN_PRESSURE;
-	int max_files = c->nofile / 100 * TCP_SPLICE_FILE_PRESSURE;
-	struct tcp_splice_conn *conn;
-
-	if (c->tcp.conn_count < MIN(max_files / 6, max_conns))
-		return;
-
-	for (conn = CONN(c->tcp.conn_count - 1); conn >= CONN(0); conn--) {
-		if (!conn->c.spliced)
-			continue;
-		if (conn->flags & CLOSING)
-			tcp_splice_destroy(c, conn);
-	}
 }

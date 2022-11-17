@@ -1527,21 +1527,23 @@ void tcp_defer_handler(struct ctx *c)
 {
 	int max_conns = c->tcp.conn_count / 100 * TCP_CONN_PRESSURE;
 	int max_files = c->nofile / 100 * TCP_FILE_PRESSURE;
-	struct tcp_tap_conn *conn;
+	union tcp_conn *conn;
 
 	tcp_l2_flags_buf_flush(c);
 	tcp_l2_data_buf_flush(c);
 
-	tcp_splice_defer_handler(c);
-
-	if (c->tcp.conn_count < MIN(max_files, max_conns))
+	if ((c->tcp.conn_count < MIN(max_files, max_conns)) &&
+	    (c->tcp.splice_conn_count < MIN(max_files / 6, max_conns)))
 		return;
 
-	for (conn = CONN(c->tcp.conn_count - 1); conn >= CONN(0); conn--) {
-		if (conn->c.spliced)
-			continue;
-		if (conn->events == CLOSED)
-			tcp_conn_destroy(c, conn);
+	for (conn = tc + c->tcp.conn_count - 1; conn >= tc; conn--) {
+		if (conn->c.spliced) {
+			if (conn->splice.flags & CLOSING)
+				tcp_splice_destroy(c, &conn->splice);
+		} else {
+			if (conn->tap.events == CLOSED)
+				tcp_conn_destroy(c, &conn->tap);
+		}
 	}
 
 }
