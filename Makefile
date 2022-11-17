@@ -11,6 +11,10 @@
 
 VERSION ?= $(shell git describe --tags HEAD 2>/dev/null || echo "unknown\ version")
 
+# Does the target platform allow IPv4 connections to be handled via
+# the IPv6 socket API? (Linux does)
+DUAL_STACK_SOCKETS := 1
+
 RLIMIT_STACK_VAL := $(shell /bin/sh -c 'ulimit -s')
 ifeq ($(RLIMIT_STACK_VAL),unlimited)
 RLIMIT_STACK_VAL := 1024
@@ -36,6 +40,7 @@ FLAGS += -DPASST_AUDIT_ARCH=AUDIT_ARCH_$(AUDIT_ARCH)
 FLAGS += -DRLIMIT_STACK_VAL=$(RLIMIT_STACK_VAL)
 FLAGS += -DARCH=\"$(TARGET_ARCH)\"
 FLAGS += -DVERSION=\"$(VERSION)\"
+FLAGS += -DDUAL_STACK_SOCKETS=$(DUAL_STACK_SOCKETS)
 
 PASST_SRCS = arch.c arp.c checksum.c conf.c dhcp.c dhcpv6.c icmp.c igmp.c \
 	isolation.c lineread.c log.c mld.c ndp.c netlink.c packet.c passt.c \

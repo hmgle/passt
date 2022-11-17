@@ -22,6 +22,8 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+#include <stdbool.h>
+#include <assert.h>
 
 #include "util.h"
 #include "passt.h"
@@ -112,12 +114,20 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 		0, IN6ADDR_ANY_INIT, 0,
 	};
 	const struct sockaddr *sa;
+	bool dual_stack = false;
 	struct epoll_event ev;
 	int fd, sl, y = 1;
 
 	if (proto != IPPROTO_TCP && proto != IPPROTO_UDP &&
 	    proto != IPPROTO_ICMP && proto != IPPROTO_ICMPV6)
 		return -1;	/* Not implemented. */
+
+	if (af == AF_UNSPEC) {
+		if (!DUAL_STACK_SOCKETS || bind_addr)
+			return -1;
+		dual_stack = true;
+		af = AF_INET6;
+	}
 
 	if (proto == IPPROTO_TCP)
 		fd = socket(af, SOCK_STREAM | SOCK_NONBLOCK, proto);
@@ -158,8 +168,11 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 		sa = (const struct sockaddr *)&addr6;
 		sl = sizeof(addr6);
 
-		if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &y, sizeof(y)))
-			debug("Failed to set IPV6_V6ONLY on socket %i", fd);
+		if (!dual_stack)
+			if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY,
+				       &y, sizeof(y)))
+				debug("Failed to set IPV6_V6ONLY on socket %i",
+				      fd);
 	}
 
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(y)))
