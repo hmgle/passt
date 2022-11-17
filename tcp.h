@@ -10,7 +10,6 @@
 
 #define TCP_CONN_INDEX_BITS		17	/* 128k */
 #define TCP_MAX_CONNS			(1 << TCP_CONN_INDEX_BITS)
-#define TCP_MAX_SOCKS			(TCP_MAX_CONNS + USHRT_MAX * 2)
 
 #define TCP_SOCK_POOL_SIZE		32
 
