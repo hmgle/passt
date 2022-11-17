@@ -10,8 +10,9 @@ struct tcp_splice_conn;
 
 void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 			     uint32_t events);
-void tcp_splice_conn_from_sock(struct ctx *c, union epoll_ref ref,
-			       struct tcp_splice_conn *conn, int s);
+bool tcp_splice_conn_from_sock(struct ctx *c, union epoll_ref ref,
+			       struct tcp_splice_conn *conn, int s,
+			       const struct sockaddr *sa);
 void tcp_splice_init(struct ctx *c);
 
 #endif /* TCP_SPLICE_H */

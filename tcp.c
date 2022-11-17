@@ -434,7 +434,6 @@ static const char *tcp_flag_str[] __attribute((__unused__)) = {
 };
 
 /* Listening sockets, used for automatic port forwarding in pasta mode only */
-static int tcp_sock_init_lo	[NUM_PORTS][IP_VERSIONS];
 static int tcp_sock_init_ext	[NUM_PORTS][IP_VERSIONS];
 static int tcp_sock_ns		[NUM_PORTS][IP_VERSIONS];
 
@@ -2851,21 +2850,31 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	socklen_t sl;
 	int s;
 
+	assert(ref.r.p.tcp.tcp.listen);
+	assert(!ref.r.p.tcp.tcp.splice);
+
 	if (c->tcp.conn_count >= TCP_MAX_CONNS)
 		return;
 
 	sl = sizeof(sa);
+	/* FIXME: Workaround clang-tidy not realizing that accept4()
+	 * writes the socket address.  See
+	 * https://github.com/llvm/llvm-project/issues/58992
+	 */
+	memset(&sa, 0, sizeof(struct sockaddr_in6));
 	s = accept4(ref.r.s, (struct sockaddr *)&sa, &sl, SOCK_NONBLOCK);
 	if (s < 0)
 		return;
 
 	conn = tc + c->tcp.conn_count++;
 
-	if (ref.r.p.tcp.tcp.splice)
-		tcp_splice_conn_from_sock(c, ref, &conn->splice, s);
-	else
-		tcp_tap_conn_from_sock(c, ref, &conn->tap, s,
-				       (struct sockaddr *)&sa, now);
+	if (c->mode == MODE_PASTA &&
+	    tcp_splice_conn_from_sock(c, ref, &conn->splice,
+				      s, (struct sockaddr *)&sa))
+		return;
+
+	tcp_tap_conn_from_sock(c, ref, &conn->tap, s,
+			       (struct sockaddr *)&sa, now);
 }
 
 /**
@@ -3018,47 +3027,16 @@ static void tcp_sock_init4(const struct ctx *c, const struct in_addr *addr,
 {
 	in_port_t idx = port + c->tcp.fwd_in.delta[port];
 	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.index = idx };
-	bool spliced = false, tap = true;
 	int s;
 
-	if (c->mode == MODE_PASTA) {
-		spliced = !addr || IN4_IS_ADDR_UNSPECIFIED(addr) ||
-			IN4_IS_ADDR_LOOPBACK(addr);
+	s = sock_l4(c, AF_INET, IPPROTO_TCP, addr, ifname, port, tref.u32);
+	if (s >= 0)
+		tcp_sock_set_bufsize(c, s);
+	else
+		s = -1;
 
-		if (!addr)
-			addr = &c->ip4.addr;
-
-		tap = !IN4_IS_ADDR_LOOPBACK(addr);
-	}
-
-	if (tap) {
-		s = sock_l4(c, AF_INET, IPPROTO_TCP, addr, ifname, port,
-			    tref.u32);
-		if (s >= 0)
-			tcp_sock_set_bufsize(c, s);
-		else
-			s = -1;
-
-		if (c->tcp.fwd_in.mode == FWD_AUTO)
-			tcp_sock_init_ext[port][V4] = s;
-	}
-
-	if (spliced) {
-		struct in_addr loopback = { htonl(INADDR_LOOPBACK) };
-		tref.tcp.splice = 1;
-
-		addr = &loopback;
-
-		s = sock_l4(c, AF_INET, IPPROTO_TCP, addr, ifname, port,
-			    tref.u32);
-		if (s >= 0)
-			tcp_sock_set_bufsize(c, s);
-		else
-			s = -1;
-
-		if (c->tcp.fwd_out.mode == FWD_AUTO)
-			tcp_sock_init_lo[port][V4] = s;
-	}
+	if (c->tcp.fwd_in.mode == FWD_AUTO)
+		tcp_sock_init_ext[port][V4] = s;
 }
 
 /**
@@ -3075,47 +3053,16 @@ static void tcp_sock_init6(const struct ctx *c,
 	in_port_t idx = port + c->tcp.fwd_in.delta[port];
 	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.v6 = 1,
 				     .tcp.index = idx };
-	bool spliced = false, tap = true;
 	int s;
 
-	if (c->mode == MODE_PASTA) {
-		spliced = !addr ||
-			  IN6_IS_ADDR_UNSPECIFIED(addr) ||
-			  IN6_IS_ADDR_LOOPBACK(addr);
+	s = sock_l4(c, AF_INET6, IPPROTO_TCP, addr, ifname, port, tref.u32);
+	if (s >= 0)
+		tcp_sock_set_bufsize(c, s);
+	else
+		s = -1;
 
-		if (!addr)
-			addr = &c->ip6.addr;
-
-		tap = !IN6_IS_ADDR_LOOPBACK(addr);
-	}
-
-	if (tap) {
-		s = sock_l4(c, AF_INET6, IPPROTO_TCP, addr, ifname, port,
-			    tref.u32);
-		if (s >= 0)
-			tcp_sock_set_bufsize(c, s);
-		else
-			s = -1;
-
-		if (c->tcp.fwd_in.mode == FWD_AUTO)
-			tcp_sock_init_ext[port][V6] = s;
-	}
-
-	if (spliced) {
-		tref.tcp.splice = 1;
-
-		addr = &in6addr_loopback;
-
-		s = sock_l4(c, AF_INET6, IPPROTO_TCP, addr, ifname, port,
-			    tref.u32);
-		if (s >= 0)
-			tcp_sock_set_bufsize(c, s);
-		else
-			s = -1;
-
-		if (c->tcp.fwd_out.mode == FWD_AUTO)
-			tcp_sock_init_lo[port][V6] = s;
-	}
+	if (c->tcp.fwd_in.mode == FWD_AUTO)
+		tcp_sock_init_ext[port][V6] = s;
 }
 
 /**
@@ -3144,7 +3091,7 @@ static void tcp_ns_sock_init4(const struct ctx *c, in_port_t port)
 {
 	in_port_t idx = port + c->tcp.fwd_out.delta[port];
 	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = 1,
-				     .tcp.splice = 1, .tcp.index = idx };
+				     .tcp.index = idx };
 	struct in_addr loopback = { htonl(INADDR_LOOPBACK) };
 	int s;
 
@@ -3169,8 +3116,7 @@ static void tcp_ns_sock_init6(const struct ctx *c, in_port_t port)
 {
 	in_port_t idx = port + c->tcp.fwd_out.delta[port];
 	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = 1,
-				     .tcp.splice = 1, .tcp.v6 = 1,
-				     .tcp.index = idx };
+				     .tcp.v6 = 1, .tcp.index = idx };
 	int s;
 
 	assert(c->mode == MODE_PASTA);
@@ -3337,7 +3283,6 @@ int tcp_init(struct ctx *c)
 	memset(init_sock_pool6,		0xff,	sizeof(init_sock_pool6));
 	memset(ns_sock_pool4,		0xff,	sizeof(ns_sock_pool4));
 	memset(ns_sock_pool6,		0xff,	sizeof(ns_sock_pool6));
-	memset(tcp_sock_init_lo,	0xff,	sizeof(tcp_sock_init_lo));
 	memset(tcp_sock_init_ext,	0xff,	sizeof(tcp_sock_init_ext));
 	memset(tcp_sock_ns,		0xff,	sizeof(tcp_sock_ns));
 
@@ -3444,16 +3389,6 @@ static int tcp_port_rebind(void *arg)
 				if (tcp_sock_init_ext[port][V6] >= 0) {
 					close(tcp_sock_init_ext[port][V6]);
 					tcp_sock_init_ext[port][V6] = -1;
-				}
-
-				if (tcp_sock_init_lo[port][V4] >= 0) {
-					close(tcp_sock_init_lo[port][V4]);
-					tcp_sock_init_lo[port][V4] = -1;
-				}
-
-				if (tcp_sock_init_lo[port][V6] >= 0) {
-					close(tcp_sock_init_lo[port][V6]);
-					tcp_sock_init_lo[port][V6] = -1;
 				}
 				continue;
 			}

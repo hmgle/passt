@@ -502,18 +502,35 @@ static void tcp_splice_dir(struct tcp_splice_conn *conn, int ref_sock,
 }
 
 /**
- * tcp_splice_conn_from_sock() - Initialize state for spliced connection
+ * tcp_splice_conn_from_sock() - Attempt to init state for a spliced connection
  * @c:		Execution context
  * @ref:	epoll reference of listening socket
  * @conn:	connection structure to initialize
  * @s:		Accepted socket
+ * @sa:		Peer address of connection
  *
+ * Return: true if able to create a spliced connection, false otherwise
  * #syscalls:pasta setsockopt
  */
-void tcp_splice_conn_from_sock(struct ctx *c, union epoll_ref ref,
-			       struct tcp_splice_conn *conn, int s)
+bool tcp_splice_conn_from_sock(struct ctx *c, union epoll_ref ref,
+			       struct tcp_splice_conn *conn, int s,
+			       const struct sockaddr *sa)
 {
 	assert(c->mode == MODE_PASTA);
+
+	if (ref.r.p.tcp.tcp.v6) {
+		const struct sockaddr_in6 *sa6;
+
+		sa6 = (const struct sockaddr_in6 *)sa;
+		if (!IN6_IS_ADDR_LOOPBACK(&sa6->sin6_addr))
+			return false;
+		conn->flags = SPLICE_V6;
+	} else {
+		const struct sockaddr_in *sa4 = (const struct sockaddr_in *)sa;
+		if (!IN4_IS_ADDR_LOOPBACK(&sa4->sin_addr))
+			return false;
+		conn->flags = 0;
+	}
 
 	if (setsockopt(s, SOL_TCP, TCP_QUICKACK, &((int){ 1 }), sizeof(int)))
 		trace("TCP (spliced): failed to set TCP_QUICKACK on %i", s);
@@ -521,11 +538,12 @@ void tcp_splice_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	conn->c.spliced = true;
 	c->tcp.splice_conn_count++;
 	conn->a = s;
-	conn->flags = ref.r.p.tcp.tcp.v6 ? SPLICE_V6 : 0;
 
 	if (tcp_splice_new(c, conn, ref.r.p.tcp.tcp.index,
 			   ref.r.p.tcp.tcp.outbound))
 		conn_flag(c, conn, CLOSING);
+
+	return true;
 }
 
 /**
