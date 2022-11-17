@@ -288,6 +288,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include <time.h>
+#include <assert.h>
 
 #include <linux/tcp.h> /* For struct tcp_info */
 
@@ -601,6 +602,7 @@ static inline struct tcp_tap_conn *conn_at_idx(int index)
 {
 	if ((index < 0) || (index >= TCP_MAX_CONNS))
 		return NULL;
+	assert(!(CONN(index)->c.spliced));
 	return CONN(index);
 }
 
@@ -2096,6 +2098,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	}
 
 	conn = CONN(c->tcp.conn_count++);
+	conn->c.spliced = false;
 	conn->sock = s;
 	conn->timer = -1;
 	conn_event(c, conn, TAP_SYN_RCVD);
@@ -2764,6 +2767,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 		return;
 
 	conn = CONN(c->tcp.conn_count++);
+	conn->c.spliced = false;
 	conn->sock = s;
 	conn->timer = -1;
 	conn->ws_to_tap = conn->ws_from_tap = 0;

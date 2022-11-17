@@ -46,6 +46,7 @@
 #include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <assert.h>
 
 #include "util.h"
 #include "passt.h"
@@ -554,6 +555,7 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 		}
 
 		conn = CONN(c->tcp.splice_conn_count++);
+		conn->c.spliced = true;
 		conn->a = s;
 		conn->flags = ref.r.p.tcp.tcp.v6 ? SPLICE_V6 : 0;
 

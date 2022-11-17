@@ -12,7 +12,18 @@
 #define TCP_HASH_BUCKET_BITS		(TCP_CONN_INDEX_BITS + 1)
 
 /**
+ * struct tcp_conn_common - Common fields for spliced and non-spliced
+ * @spliced:		Is this a spliced connection?
+ */
+struct tcp_conn_common {
+	bool spliced	:1;
+};
+
+extern const char *tcp_common_flag_str[];
+
+/**
  * struct tcp_tap_conn - Descriptor for a TCP connection (not spliced)
+ * @c:			Fields common with tcp_splice_conn
  * @next_index:		Connection index of next item in hash chain, -1 for none
  * @tap_mss:		MSS advertised by tap/guest, rounded to 2 ^ TCP_MSS_BITS
  * @sock:		Socket descriptor number
@@ -40,6 +51,9 @@
  * @seq_init_from_tap:	Initial sequence number from tap
  */
 struct tcp_tap_conn {
+	/* Must be first element to match tcp_splice_conn */
+	struct tcp_conn_common c;
+
 	int	 	next_index	:TCP_CONN_INDEX_BITS + 2;
 
 #define TCP_RETRANS_BITS		3
@@ -122,6 +136,7 @@ struct tcp_tap_conn {
 
 /**
  * struct tcp_splice_conn - Descriptor for a spliced TCP connection
+ * @c:			Fields common with tcp_tap_conn
  * @a:			File descriptor number of socket for accepted connection
  * @pipe_a_b:		Pipe ends for splice() from @a to @b
  * @b:			File descriptor number of peer connected socket
@@ -134,6 +149,9 @@ struct tcp_tap_conn {
  * @b_written:		Bytes written to @b (not fully written from one @a read)
 */
 struct tcp_splice_conn {
+	/* Must be first element to match tcp_tap_conn */
+	struct tcp_conn_common c;
+
 	int a;
 	int pipe_a_b[2];
 	int b;
@@ -163,6 +181,18 @@ struct tcp_splice_conn {
 	uint32_t a_written;
 	uint32_t b_read;
 	uint32_t b_written;
+};
+
+/**
+ * union tcp_conn - Descriptor for a TCP connection (spliced or non-spliced)
+ * @c:			Fields common between all variants
+ * @tap:		Fields specific to non-spliced connections
+ * @splice:		Fields specific to spliced connections
+*/
+union tcp_conn {
+	struct tcp_conn_common c;
+	struct tcp_tap_conn tap;
+	struct tcp_splice_conn splice;
 };
 
 #endif /* TCP_CONN_H */
