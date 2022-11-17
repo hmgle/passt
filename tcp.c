@@ -662,8 +662,7 @@ static int tcp_epoll_ctl(const struct ctx *c, struct tcp_tap_conn *conn)
 {
 	int m = conn->c.in_epoll ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 	union epoll_ref ref = { .r.proto = IPPROTO_TCP, .r.s = conn->sock,
-				.r.p.tcp.tcp.index = CONN_IDX(conn),
-				.r.p.tcp.tcp.v6 = CONN_V6(conn) };
+				.r.p.tcp.tcp.index = CONN_IDX(conn) };
 	struct epoll_event ev = { .data.u64 = ref.u64 };
 
 	if (conn->events == CLOSED) {
@@ -2745,7 +2744,7 @@ static void tcp_tap_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	conn->ws_to_tap = conn->ws_from_tap = 0;
 	conn_event(c, conn, SOCK_ACCEPTED);
 
-	if (ref.r.p.tcp.tcp.v6) {
+	if (sa->sa_family == AF_INET6) {
 		struct sockaddr_in6 sa6;
 
 		memcpy(&sa6, sa, sizeof(sa6));
@@ -3019,8 +3018,7 @@ static void tcp_sock_init6(const struct ctx *c,
 			   in_port_t port)
 {
 	in_port_t idx = port + c->tcp.fwd_in.delta[port];
-	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.v6 = 1,
-				     .tcp.index = idx };
+	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.index = idx };
 	int s;
 
 	s = sock_l4(c, AF_INET6, IPPROTO_TCP, addr, ifname, port, tref.u32);
@@ -3084,7 +3082,7 @@ static void tcp_ns_sock_init6(const struct ctx *c, in_port_t port)
 {
 	in_port_t idx = port + c->tcp.fwd_out.delta[port];
 	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = 1,
-				     .tcp.v6 = 1, .tcp.index = idx };
+				     .tcp.index = idx };
 	int s;
 
 	assert(c->mode == MODE_PASTA);

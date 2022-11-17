@@ -167,11 +167,9 @@ static int tcp_splice_epoll_ctl(const struct ctx *c,
 {
 	int m = conn->c.in_epoll ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 	union epoll_ref ref_a = { .r.proto = IPPROTO_TCP, .r.s = conn->a,
-				  .r.p.tcp.tcp.index = CONN_IDX(conn),
-				  .r.p.tcp.tcp.v6 = CONN_V6(conn) };
+				  .r.p.tcp.tcp.index = CONN_IDX(conn) };
 	union epoll_ref ref_b = { .r.proto = IPPROTO_TCP, .r.s = conn->b,
-				  .r.p.tcp.tcp.index = CONN_IDX(conn),
-				  .r.p.tcp.tcp.v6 = CONN_V6(conn) };
+				  .r.p.tcp.tcp.index = CONN_IDX(conn) };
 	struct epoll_event ev_a = { .data.u64 = ref_a.u64 };
 	struct epoll_event ev_b = { .data.u64 = ref_b.u64 };
 	uint32_t events_a, events_b;
@@ -517,7 +515,7 @@ bool tcp_splice_conn_from_sock(struct ctx *c, union epoll_ref ref,
 {
 	assert(c->mode == MODE_PASTA);
 
-	if (ref.r.p.tcp.tcp.v6) {
+	if (sa->sa_family == AF_INET6) {
 		const struct sockaddr_in6 *sa6;
 
 		sa6 = (const struct sockaddr_in6 *)sa;
