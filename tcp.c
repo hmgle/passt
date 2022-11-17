@@ -2987,15 +2987,15 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 /**
  * tcp_sock_init4() - Initialise listening sockets for a given IPv4 port
  * @c:		Execution context
- * @ns:		In pasta mode, if set, bind with loopback address in namespace
  * @addr:	Pointer to address for binding, NULL if not configured
  * @ifname:	Name of interface to bind to, NULL if not configured
  * @port:	Port, host order
  */
-static void tcp_sock_init4(const struct ctx *c, int ns, const struct in_addr *addr,
+static void tcp_sock_init4(const struct ctx *c, const struct in_addr *addr,
 			   const char *ifname, in_port_t port)
 {
-	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = ns };
+	in_port_t idx = port + c->tcp.fwd_in.delta[port];
+	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.index = idx };
 	bool spliced = false, tap = true;
 	int s;
 
@@ -3006,13 +3006,8 @@ static void tcp_sock_init4(const struct ctx *c, int ns, const struct in_addr *ad
 		if (!addr)
 			addr = &c->ip4.addr;
 
-		tap = !ns && !IN4_IS_ADDR_LOOPBACK(addr);
+		tap = !IN4_IS_ADDR_LOOPBACK(addr);
 	}
-
-	if (ns)
-		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_out.delta[port]);
-	else
-		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_in.delta[port]);
 
 	if (tap) {
 		s = sock_l4(c, AF_INET, IPPROTO_TCP, addr, ifname, port,
@@ -3039,29 +3034,25 @@ static void tcp_sock_init4(const struct ctx *c, int ns, const struct in_addr *ad
 		else
 			s = -1;
 
-		if (c->tcp.fwd_out.mode == FWD_AUTO) {
-			if (ns)
-				tcp_sock_ns[port][V4] = s;
-			else
-				tcp_sock_init_lo[port][V4] = s;
-		}
+		if (c->tcp.fwd_out.mode == FWD_AUTO)
+			tcp_sock_init_lo[port][V4] = s;
 	}
 }
 
 /**
  * tcp_sock_init6() - Initialise listening sockets for a given IPv6 port
  * @c:		Execution context
- * @ns:		In pasta mode, if set, bind with loopback address in namespace
  * @addr:	Pointer to address for binding, NULL if not configured
  * @ifname:	Name of interface to bind to, NULL if not configured
  * @port:	Port, host order
  */
-static void tcp_sock_init6(const struct ctx *c, int ns,
+static void tcp_sock_init6(const struct ctx *c,
 			   const struct in6_addr *addr, const char *ifname,
 			   in_port_t port)
 {
-	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = ns,
-				     .tcp.v6 = 1 };
+	in_port_t idx = port + c->tcp.fwd_in.delta[port];
+	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.v6 = 1,
+				     .tcp.index = idx };
 	bool spliced = false, tap = true;
 	int s;
 
@@ -3073,13 +3064,8 @@ static void tcp_sock_init6(const struct ctx *c, int ns,
 		if (!addr)
 			addr = &c->ip6.addr;
 
-		tap = !ns && !IN6_IS_ADDR_LOOPBACK(addr);
+		tap = !IN6_IS_ADDR_LOOPBACK(addr);
 	}
-
-	if (ns)
-		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_out.delta[port]);
-	else
-		tref.tcp.index = (in_port_t)(port + c->tcp.fwd_in.delta[port]);
 
 	if (tap) {
 		s = sock_l4(c, AF_INET6, IPPROTO_TCP, addr, ifname, port,
@@ -3105,40 +3091,99 @@ static void tcp_sock_init6(const struct ctx *c, int ns,
 		else
 			s = -1;
 
-		if (c->tcp.fwd_out.mode == FWD_AUTO) {
-			if (ns)
-				tcp_sock_ns[port][V6] = s;
-			else
-				tcp_sock_init_lo[port][V6] = s;
-		}
+		if (c->tcp.fwd_out.mode == FWD_AUTO)
+			tcp_sock_init_lo[port][V6] = s;
 	}
 }
 
 /**
- * tcp_sock_init() - Initialise listening sockets for a given port
+ * tcp_sock_init() - Create listening sockets for a given host ("inbound") port
  * @c:		Execution context
- * @ns:		In pasta mode, if set, bind with loopback address in namespace
  * @af:		Address family to select a specific IP version, or AF_UNSPEC
  * @addr:	Pointer to address for binding, NULL if not configured
  * @ifname:	Name of interface to bind to, NULL if not configured
  * @port:	Port, host order
  */
-void tcp_sock_init(const struct ctx *c, int ns, sa_family_t af,
-		   const void *addr, const char *ifname, in_port_t port)
+void tcp_sock_init(const struct ctx *c, sa_family_t af, const void *addr,
+		   const char *ifname, in_port_t port)
 {
 	if ((af == AF_INET  || af == AF_UNSPEC) && c->ifi4)
-		tcp_sock_init4(c, ns, addr, ifname, port);
+		tcp_sock_init4(c, addr, ifname, port);
 	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6)
-		tcp_sock_init6(c, ns, addr, ifname, port);
+		tcp_sock_init6(c, addr, ifname, port);
 }
 
 /**
- * tcp_sock_init_ns() - Bind sockets in namespace for outbound connections
+ * tcp_ns_sock_init4() - Init socket to listen for outbound IPv4 connections
+ * @c:		Execution context
+ * @port:	Port, host order
+ */
+static void tcp_ns_sock_init4(const struct ctx *c, in_port_t port)
+{
+	in_port_t idx = port + c->tcp.fwd_out.delta[port];
+	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = 1,
+				     .tcp.splice = 1, .tcp.index = idx };
+	struct in_addr loopback = { htonl(INADDR_LOOPBACK) };
+	int s;
+
+	assert(c->mode == MODE_PASTA);
+
+	s = sock_l4(c, AF_INET, IPPROTO_TCP, &loopback, NULL, port, tref.u32);
+	if (s >= 0)
+		tcp_sock_set_bufsize(c, s);
+	else
+		s = -1;
+
+	if (c->tcp.fwd_out.mode == FWD_AUTO)
+		tcp_sock_ns[port][V4] = s;
+}
+
+/**
+ * tcp_ns_sock_init6() - Init socket to listen for outbound IPv6 connections
+ * @c:		Execution context
+ * @port:	Port, host order
+ */
+static void tcp_ns_sock_init6(const struct ctx *c, in_port_t port)
+{
+	in_port_t idx = port + c->tcp.fwd_out.delta[port];
+	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.outbound = 1,
+				     .tcp.splice = 1, .tcp.v6 = 1,
+				     .tcp.index = idx };
+	int s;
+
+	assert(c->mode == MODE_PASTA);
+
+	s = sock_l4(c, AF_INET6, IPPROTO_TCP, &in6addr_loopback, NULL, port,
+		    tref.u32);
+	if (s >= 0)
+		tcp_sock_set_bufsize(c, s);
+	else
+		s = -1;
+
+	if (c->tcp.fwd_out.mode == FWD_AUTO)
+		tcp_sock_ns[port][V6] = s;
+}
+
+/**
+ * tcp_ns_sock_init() - Init socket to listen for spliced outbound connections
+ * @c:		Execution context
+ * @port:	Port, host order
+ */
+void tcp_ns_sock_init(const struct ctx *c, in_port_t port)
+{
+	if (c->ifi4)
+		tcp_ns_sock_init4(c, port);
+	if (c->ifi6)
+		tcp_ns_sock_init6(c, port);
+}
+
+/**
+ * tcp_ns_socks_init() - Bind sockets in namespace for outbound connections
  * @arg:	Execution context
  *
  * Return: 0
  */
-static int tcp_sock_init_ns(void *arg)
+static int tcp_ns_socks_init(void *arg)
 {
 	struct ctx *c = (struct ctx *)arg;
 	unsigned port;
@@ -3149,7 +3194,7 @@ static int tcp_sock_init_ns(void *arg)
 		if (!bitmap_isset(c->tcp.fwd_out.map, port))
 			continue;
 
-		tcp_sock_init(c, 1, AF_UNSPEC, NULL, NULL, port);
+		tcp_ns_sock_init(c, port);
 	}
 
 	return 0;
@@ -3279,7 +3324,7 @@ int tcp_init(struct ctx *c)
 	if (c->mode == MODE_PASTA) {
 		tcp_splice_init(c);
 
-		NS_CALL(tcp_sock_init_ns, c);
+		NS_CALL(tcp_ns_socks_init, c);
 
 		refill_arg.ns = 1;
 		NS_CALL(tcp_sock_refill, &refill_arg);
@@ -3364,8 +3409,7 @@ static int tcp_port_rebind(void *arg)
 
 			if ((a->c->ifi4 && tcp_sock_ns[port][V4] == -1) ||
 			    (a->c->ifi6 && tcp_sock_ns[port][V6] == -1))
-				tcp_sock_init(a->c, 1, AF_UNSPEC, NULL, NULL,
-					      port);
+				tcp_ns_sock_init(a->c, port);
 		}
 	} else {
 		for (port = 0; port < NUM_PORTS; port++) {
@@ -3398,7 +3442,7 @@ static int tcp_port_rebind(void *arg)
 
 			if ((a->c->ifi4 && tcp_sock_init_ext[port][V4] == -1) ||
 			    (a->c->ifi6 && tcp_sock_init_ext[port][V6] == -1))
-				tcp_sock_init(a->c, 0, AF_UNSPEC, NULL, NULL,
+				tcp_sock_init(a->c, AF_UNSPEC, NULL, NULL,
 					      port);
 		}
 	}

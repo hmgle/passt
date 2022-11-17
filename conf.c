@@ -209,7 +209,7 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 
 		for (i = 0; i < PORT_EPHEMERAL_MIN; i++) {
 			if (optname == 't')
-				tcp_sock_init(c, 0, AF_UNSPEC, NULL, NULL, i);
+				tcp_sock_init(c, AF_UNSPEC, NULL, NULL, i);
 			else if (optname == 'u')
 				udp_sock_init(c, 0, AF_UNSPEC, NULL, NULL, i);
 		}
@@ -287,7 +287,7 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 			bitmap_set(fwd->map, i);
 
 			if (optname == 't')
-				tcp_sock_init(c, 0, af, addr, ifname, i);
+				tcp_sock_init(c, af, addr, ifname, i);
 			else if (optname == 'u')
 				udp_sock_init(c, 0, af, addr, ifname, i);
 		}
@@ -333,7 +333,7 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 			fwd->delta[i] = mapped_range.first - orig_range.first;
 
 			if (optname == 't')
-				tcp_sock_init(c, 0, af, addr, ifname, i);
+				tcp_sock_init(c, af, addr, ifname, i);
 			else if (optname == 'u')
 				udp_sock_init(c, 0, af, addr, ifname, i);
 		}
