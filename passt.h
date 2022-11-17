@@ -159,7 +159,7 @@ struct ip6_ctx {
  * @proc_net_udp:	Stored handles for /proc/net/udp{,6} in init and ns
  * @epollfd:		File descriptor for epoll instance
  * @fd_tap_listen:	File descriptor for listening AF_UNIX socket, if any
- * @fd_tap:		File descriptor for AF_UNIX socket or tuntap device
+ * @fd_tap:		AF_UNIX socket, tuntap device, or pre-opened socket
  * @mac:		Host MAC address
  * @mac_guest:		MAC address of guest or namespace, seen or configured
  * @ifi4:		Index of routable interface for IPv4, 0 if IPv4 disabled

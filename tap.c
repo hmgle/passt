@@ -1069,6 +1069,15 @@ void tap_sock_init(struct ctx *c)
 	}
 
 	if (c->fd_tap != -1) {
+		if (c->one_off) {	/* Passed as --fd */
+			struct epoll_event ev = { 0 };
+
+			ev.data.fd = c->fd_tap;
+			ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+			epoll_ctl(c->epollfd, EPOLL_CTL_ADD, c->fd_tap, &ev);
+			return;
+		}
+
 		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, c->fd_tap, NULL);
 		close(c->fd_tap);
 		c->fd_tap = -1;

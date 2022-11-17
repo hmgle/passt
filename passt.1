@@ -298,6 +298,16 @@ Default is to probe a free socket, not accepting connections, starting from
 \fI/tmp/passt_1.socket\fR to \fI/tmp/passt_64.socket\fR.
 
 .TP
+.BR \-F ", " \-\-fd " " \fIFD
+Pass a pre-opened, connected socket to \fBpasst\fR. Usually the socket is opened
+in the parent process and \fBpasst\fR inherits it when run as a child. This
+allows the parent process to open sockets using another address family or
+requiring special privileges.
+
+This option implies the behaviour described for \-\-one-off, once this socket
+is closed.
+
+.TP
 .BR \-1 ", " \-\-one-off
 Quit after handling a single client connection, that is, once the client closes
 the socket, or once we get a socket error.

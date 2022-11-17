@@ -719,6 +719,7 @@ static void usage(const char *name)
 		     UNIX_SOCK_PATH, 1);
 	}
 
+	info(   "  -F, --fd FD		Use FD as pre-opened connected socket");
 	info(   "  -p, --pcap FILE	Log tap-facing traffic to pcap file");
 	info(   "  -P, --pid FILE	Write own PID to the given file");
 	info(   "  -m, --mtu MTU	Assign MTU via DHCP/NDP");
@@ -1079,6 +1080,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"log-file",	required_argument,	NULL,		'l' },
 		{"help",	no_argument,		NULL,		'h' },
 		{"socket",	required_argument,	NULL,		's' },
+		{"fd",		required_argument,	NULL,		'F' },
 		{"ns-ifname",	required_argument,	NULL,		'I' },
 		{"pcap",	required_argument,	NULL,		'p' },
 		{"pid",		required_argument,	NULL,		'P' },
@@ -1138,9 +1140,9 @@ void conf(struct ctx *c, int argc, char **argv)
 
 	if (c->mode == MODE_PASTA) {
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
-		optstring = "dqfel:hI:p:P:m:a:n:M:g:i:D:S:46t:u:T:U:";
+		optstring = "dqfel:hF:I:p:P:m:a:n:M:g:i:D:S:46t:u:T:U:";
 	} else {
-		optstring = "dqfel:hs:p:P:m:a:n:M:g:i:D:S:461t:u:";
+		optstring = "dqfel:hs:F:p:P:m:a:n:M:g:i:D:S:461t:u:";
 	}
 
 	c->tcp.fwd_in.mode = c->tcp.fwd_out.mode = 0;
@@ -1355,6 +1357,23 @@ void conf(struct ctx *c, int argc, char **argv)
 				err("Invalid socket path: %s", optarg);
 				usage(argv[0]);
 			}
+			break;
+		case 'F':
+			if (c->fd_tap >= 0) {
+				err("Multiple --fd options given");
+				usage(argv[0]);
+			}
+
+			errno = 0;
+			c->fd_tap = strtol(optarg, NULL, 0);
+
+			if (c->fd_tap < 0 || errno) {
+				err("Invalid --fd: %s", optarg);
+				usage(argv[0]);
+			}
+
+			c->one_off = true;
+
 			break;
 		case 'I':
 			if (*c->pasta_ifn) {
@@ -1587,6 +1606,11 @@ void conf(struct ctx *c, int argc, char **argv)
 
 	if (v4_only && v6_only) {
 		err("Options ipv4-only and ipv6-only are mutually exclusive");
+		usage(argv[0]);
+	}
+
+	if (*c->sock_path && c->fd_tap >= 0) {
+		err("Options --socket and --fd are mutually exclusive");
 		usage(argv[0]);
 	}
 

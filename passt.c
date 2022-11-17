@@ -255,7 +255,6 @@ int main(int argc, char **argv)
 
 	quit_fd = pasta_netns_quit_init(&c);
 
-	c.fd_tap = c.fd_tap_listen = -1;
 	tap_sock_init(&c);
 
 	clock_gettime(CLOCK_MONOTONIC, &now);
