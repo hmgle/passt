@@ -21,12 +21,12 @@
  *
  * - SPLICE_CONNECT:		connection accepted, connecting to target
  * - SPLICE_ESTABLISHED:	connection to target established
- * - SPLICE_A_OUT_WAIT:		pipe to accepted socket full, wait for EPOLLOUT
- * - SPLICE_B_OUT_WAIT:		pipe to target socket full, wait for EPOLLOUT
- * - SPLICE_A_FIN_RCVD:		FIN (EPOLLRDHUP) seen from accepted socket
- * - SPLICE_B_FIN_RCVD:		FIN (EPOLLRDHUP) seen from target socket
- * - SPLICE_A_FIN_RCVD:		FIN (write shutdown) sent to accepted socket
- * - SPLICE_B_FIN_RCVD:		FIN (write shutdown) sent to target socket
+ * - A_OUT_WAIT:		pipe to accepted socket full, wait for EPOLLOUT
+ * - B_OUT_WAIT:		pipe to target socket full, wait for EPOLLOUT
+ * - A_FIN_RCVD:		FIN (EPOLLRDHUP) seen from accepted socket
+ * - B_FIN_RCVD:		FIN (EPOLLRDHUP) seen from target socket
+ * - A_FIN_RCVD:		FIN (write shutdown) sent to accepted socket
+ * - B_FIN_RCVD:		FIN (write shutdown) sent to target socket
  *
  * #syscalls:pasta pipe2|pipe fcntl armv6l:fcntl64 armv7l:fcntl64 ppc64:fcntl64
  */
@@ -52,6 +52,8 @@
 #include "log.h"
 #include "tcp_splice.h"
 
+#include "tcp_conn.h"
+
 #define MAX_PIPE_SIZE			(8UL * 1024 * 1024)
 #define TCP_SPLICE_PIPE_POOL_SIZE	16
 #define TCP_SPLICE_CONN_PRESSURE	30	/* % of splice_conn_count */
@@ -66,52 +68,7 @@ extern int ns_sock_pool6		[TCP_SOCK_POOL_SIZE];
 /* Pool of pre-opened pipes */
 static int splice_pipe_pool		[TCP_SPLICE_PIPE_POOL_SIZE][2][2];
 
-/**
- * struct tcp_splice_conn - Descriptor for a spliced TCP connection
- * @a:			File descriptor number of socket for accepted connection
- * @pipe_a_b:		Pipe ends for splice() from @a to @b
- * @b:			File descriptor number of peer connected socket
- * @pipe_b_a:		Pipe ends for splice() from @b to @a
- * @events:		Events observed/actions performed on connection
- * @flags:		Connection flags (attributes, not events)
- * @a_read:		Bytes read from @a (not fully written to @b in one shot)
- * @a_written:		Bytes written to @a (not fully written from one @b read)
- * @b_read:		Bytes read from @b (not fully written to @a in one shot)
- * @b_written:		Bytes written to @b (not fully written from one @a read)
-*/
-struct tcp_splice_conn {
-	int a;
-	int pipe_a_b[2];
-	int b;
-	int pipe_b_a[2];
-
-	uint8_t events;
-#define CLOSED				0
-#define CONNECT				BIT(0)
-#define ESTABLISHED			BIT(1)
-#define A_OUT_WAIT			BIT(2)
-#define B_OUT_WAIT			BIT(3)
-#define A_FIN_RCVD			BIT(4)
-#define B_FIN_RCVD			BIT(5)
-#define A_FIN_SENT			BIT(6)
-#define B_FIN_SENT			BIT(7)
-
-	uint8_t flags;
-#define SOCK_V6				BIT(0)
-#define IN_EPOLL			BIT(1)
-#define RCVLOWAT_SET_A			BIT(2)
-#define RCVLOWAT_SET_B			BIT(3)
-#define RCVLOWAT_ACT_A			BIT(4)
-#define RCVLOWAT_ACT_B			BIT(5)
-#define CLOSING				BIT(6)
-
-	uint32_t a_read;
-	uint32_t a_written;
-	uint32_t b_read;
-	uint32_t b_written;
-};
-
-#define CONN_V6(x)			(x->flags & SOCK_V6)
+#define CONN_V6(x)			(x->flags & SPLICE_V6)
 #define CONN_V4(x)			(!CONN_V6(x))
 #define CONN_HAS(conn, set)		((conn->events & (set)) == (set))
 #define CONN(index)			(tc_splice + (index))
@@ -122,13 +79,13 @@ static struct tcp_splice_conn tc_splice[TCP_SPLICE_MAX_CONNS];
 
 /* Display strings for connection events */
 static const char *tcp_splice_event_str[] __attribute((__unused__)) = {
-	"CONNECT", "ESTABLISHED", "A_OUT_WAIT", "B_OUT_WAIT",
+	"SPLICE_CONNECT", "SPLICE_ESTABLISHED", "A_OUT_WAIT", "B_OUT_WAIT",
 	"A_FIN_RCVD", "B_FIN_RCVD", "A_FIN_SENT", "B_FIN_SENT",
 };
 
 /* Display strings for connection flags */
 static const char *tcp_splice_flag_str[] __attribute((__unused__)) = {
-	"SOCK_V6", "IN_EPOLL", "RCVLOWAT_SET_A", "RCVLOWAT_SET_B",
+	"SPLICE_V6", "SPLICE_IN_EPOLL", "RCVLOWAT_SET_A", "RCVLOWAT_SET_B",
 	"RCVLOWAT_ACT_A", "RCVLOWAT_ACT_B", "CLOSING",
 };
 
@@ -143,12 +100,12 @@ static void tcp_splice_conn_epoll_events(uint16_t events,
 {
 	*a = *b = 0;
 
-	if (events & ESTABLISHED) {
+	if (events & SPLICE_ESTABLISHED) {
 		if (!(events & B_FIN_SENT))
 			*a = EPOLLIN | EPOLLRDHUP;
 		if (!(events & A_FIN_SENT))
 			*b = EPOLLIN | EPOLLRDHUP;
-	} else if (events & CONNECT) {
+	} else if (events & SPLICE_CONNECT) {
 		*b = EPOLLOUT;
 	}
 
@@ -210,7 +167,7 @@ static void conn_flag_do(const struct ctx *c, struct tcp_splice_conn *conn,
 static int tcp_splice_epoll_ctl(const struct ctx *c,
 				struct tcp_splice_conn *conn)
 {
-	int m = (conn->flags & IN_EPOLL) ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
+	int m = (conn->flags & SPLICE_IN_EPOLL) ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 	union epoll_ref ref_a = { .r.proto = IPPROTO_TCP, .r.s = conn->a,
 				  .r.p.tcp.tcp.splice = 1,
 				  .r.p.tcp.tcp.index = CONN_IDX(conn),
@@ -234,7 +191,7 @@ static int tcp_splice_epoll_ctl(const struct ctx *c,
 	    epoll_ctl(c->epollfd, m, conn->b, &ev_b))
 		goto delete;
 
-	conn->flags |= IN_EPOLL;		/* No need to log this */
+	conn->flags |= SPLICE_IN_EPOLL;		/* No need to log this */
 
 	return 0;
 
@@ -323,7 +280,7 @@ static void tcp_table_splice_compact(struct ctx *c,
  */
 static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
 {
-	if (conn->events & ESTABLISHED) {
+	if (conn->events & SPLICE_ESTABLISHED) {
 		/* Flushing might need to block: don't recycle them. */
 		if (conn->pipe_a_b[0] != -1) {
 			close(conn->pipe_a_b[0]);
@@ -337,7 +294,7 @@ static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
 		}
 	}
 
-	if (conn->events & CONNECT) {
+	if (conn->events & SPLICE_CONNECT) {
 		close(conn->b);
 		conn->b = -1;
 	}
@@ -346,7 +303,7 @@ static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
 	conn->a = -1;
 	conn->a_read = conn->a_written = conn->b_read = conn->b_written = 0;
 
-	conn->events = CLOSED;
+	conn->events = SPLICE_CLOSED;
 	conn->flags = 0;
 	debug("TCP (spliced): index %li, CLOSED", CONN_IDX(conn));
 
@@ -397,8 +354,8 @@ static int tcp_splice_connect_finish(const struct ctx *c,
 		}
 	}
 
-	if (!(conn->events & ESTABLISHED))
-		conn_event(c, conn, ESTABLISHED);
+	if (!(conn->events & SPLICE_ESTABLISHED))
+		conn_event(c, conn, SPLICE_ESTABLISHED);
 
 	return 0;
 }
@@ -466,9 +423,9 @@ static int tcp_splice_connect(const struct ctx *c, struct tcp_splice_conn *conn,
 			close(sock_conn);
 			return ret;
 		}
-		conn_event(c, conn, CONNECT);
+		conn_event(c, conn, SPLICE_CONNECT);
 	} else {
-		conn_event(c, conn, ESTABLISHED);
+		conn_event(c, conn, SPLICE_ESTABLISHED);
 		return tcp_splice_connect_finish(c, conn);
 	}
 
@@ -598,7 +555,7 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 
 		conn = CONN(c->tcp.splice_conn_count++);
 		conn->a = s;
-		conn->flags = ref.r.p.tcp.tcp.v6 ? SOCK_V6 : 0;
+		conn->flags = ref.r.p.tcp.tcp.v6 ? SPLICE_V6 : 0;
 
 		if (tcp_splice_new(c, conn, ref.r.p.tcp.tcp.index,
 				   ref.r.p.tcp.tcp.outbound))
@@ -609,13 +566,13 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 
 	conn = CONN(ref.r.p.tcp.tcp.index);
 
-	if (conn->events == CLOSED)
+	if (conn->events == SPLICE_CLOSED)
 		return;
 
 	if (events & EPOLLERR)
 		goto close;
 
-	if (conn->events == CONNECT) {
+	if (conn->events == SPLICE_CONNECT) {
 		if (!(events & EPOLLOUT))
 			goto close;
 		if (tcp_splice_connect_finish(c, conn))

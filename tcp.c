@@ -98,7 +98,7 @@
  * Connection tracking and storage
  * -------------------------------
  *
- * Connections are tracked by the @tc array of struct tcp_conn, containing
+ * Connections are tracked by the @tc array of struct tcp_tap_conn, containing
  * addresses, ports, TCP states and parameters. This is statically allocated and
  * indexed by an arbitrary connection number. The array is compacted whenever a
  * connection is closed, by remapping the highest connection index in use to the
@@ -301,6 +301,8 @@
 #include "tcp_splice.h"
 #include "log.h"
 
+#include "tcp_conn.h"
+
 #define TCP_FRAMES_MEM			128
 #define TCP_FRAMES							\
 	(c->mode == MODE_PASST ? TCP_FRAMES_MEM : 1)
@@ -308,7 +310,6 @@
 #define TCP_FILE_PRESSURE		30	/* % of c->nofile */
 #define TCP_CONN_PRESSURE		30	/* % of c->tcp.conn_count */
 
-#define TCP_HASH_BUCKET_BITS		(TCP_CONN_INDEX_BITS + 1)
 #define TCP_HASH_TABLE_LOAD		70		/* % */
 #define TCP_HASH_TABLE_SIZE		(TCP_MAX_CONNS * 100 /		\
 					 TCP_HASH_TABLE_LOAD)
@@ -402,117 +403,8 @@ struct tcp6_l2_head {	/* For MSS6 macro: keep in sync with tcp6_l2_buf_t */
 #define OPT_SACK	5
 #define OPT_TS		8
 
-/**
- * struct tcp_conn - Descriptor for a TCP connection (not spliced)
- * @next_index:		Connection index of next item in hash chain, -1 for none
- * @tap_mss:		MSS advertised by tap/guest, rounded to 2 ^ TCP_MSS_BITS
- * @sock:		Socket descriptor number
- * @events:		Connection events, implying connection states
- * @timer:		timerfd descriptor for timeout events
- * @flags:		Connection flags representing internal attributes
- * @hash_bucket:	Bucket index in connection lookup hash table
- * @retrans:		Number of retransmissions occurred due to ACK_TIMEOUT
- * @ws_from_tap:	Window scaling factor advertised from tap/guest
- * @ws_to_tap:		Window scaling factor advertised to tap/guest
- * @sndbuf:		Sending buffer in kernel, rounded to 2 ^ SNDBUF_BITS
- * @seq_dup_ack_approx:	Last duplicate ACK number sent to tap
- * @a.a6:		IPv6 remote address, can be IPv4-mapped
- * @a.a4.zero:		Zero prefix for IPv4-mapped, see RFC 6890, Table 20
- * @a.a4.one:		Ones prefix for IPv4-mapped
- * @a.a4.a:		IPv4 address
- * @tap_port:		Guest-facing tap port
- * @sock_port:		Remote, socket-facing port
- * @wnd_from_tap:	Last window size from tap, unscaled (as received)
- * @wnd_to_tap:		Sending window advertised to tap, unscaled (as sent)
- * @seq_to_tap:		Next sequence for packets to tap
- * @seq_ack_from_tap:	Last ACK number received from tap
- * @seq_from_tap:	Next sequence for packets from tap (not actually sent)
- * @seq_ack_to_tap:	Last ACK number sent to tap
- * @seq_init_from_tap:	Initial sequence number from tap
- */
-struct tcp_conn {
-	int	 	next_index	:TCP_CONN_INDEX_BITS + 2;
-
-#define TCP_RETRANS_BITS		3
-	unsigned int	retrans		:TCP_RETRANS_BITS;
-#define TCP_MAX_RETRANS			((1U << TCP_RETRANS_BITS) - 1)
-
-#define TCP_WS_BITS			4	/* RFC 7323 */
-#define TCP_WS_MAX			14
-	unsigned int	ws_from_tap	:TCP_WS_BITS;
-	unsigned int	ws_to_tap	:TCP_WS_BITS;
-
-
-	int		sock		:SOCKET_REF_BITS;
-
-	uint8_t		events;
-#define CLOSED			0
-#define SOCK_ACCEPTED		BIT(0)	/* implies SYN sent to tap */
-#define TAP_SYN_RCVD		BIT(1)	/* implies socket connecting */
-#define  TAP_SYN_ACK_SENT	BIT( 3)	/* implies socket connected */
-#define ESTABLISHED		BIT(2)
-#define  SOCK_FIN_RCVD		BIT( 3)
-#define  SOCK_FIN_SENT		BIT( 4)
-#define  TAP_FIN_RCVD		BIT( 5)
-#define  TAP_FIN_SENT		BIT( 6)
-#define  TAP_FIN_ACKED		BIT( 7)
-
-#define	CONN_STATE_BITS		/* Setting these clears other flags */	\
-	(SOCK_ACCEPTED | TAP_SYN_RCVD | ESTABLISHED)
-
-
-	int		timer		:SOCKET_REF_BITS;
-
-	uint8_t		flags;
-#define STALLED			BIT(0)
-#define LOCAL			BIT(1)
-#define WND_CLAMPED		BIT(2)
-#define IN_EPOLL		BIT(3)
-#define ACTIVE_CLOSE		BIT(4)
-#define ACK_TO_TAP_DUE		BIT(5)
-#define ACK_FROM_TAP_DUE	BIT(6)
-
-
-	unsigned int	hash_bucket	:TCP_HASH_BUCKET_BITS;
-
-#define TCP_MSS_BITS			14
-	unsigned int	tap_mss		:TCP_MSS_BITS;
-#define MSS_SET(conn, mss)	(conn->tap_mss = (mss >> (16 - TCP_MSS_BITS)))
-#define MSS_GET(conn)		(conn->tap_mss << (16 - TCP_MSS_BITS))
-
-
-#define SNDBUF_BITS		24
-	unsigned int	sndbuf		:SNDBUF_BITS;
-#define SNDBUF_SET(conn, bytes)	(conn->sndbuf = ((bytes) >> (32 - SNDBUF_BITS)))
-#define SNDBUF_GET(conn)	(conn->sndbuf << (32 - SNDBUF_BITS))
-
-	uint8_t		seq_dup_ack_approx;
-
-
-	union {
-		struct in6_addr a6;
-		struct {
-			uint8_t zero[10];
-			uint8_t one[2];
-			struct in_addr a;
-		} a4;
-	} a;
 #define CONN_V4(conn)		IN6_IS_ADDR_V4MAPPED(&conn->a.a6)
 #define CONN_V6(conn)		(!CONN_V4(conn))
-
-	in_port_t	tap_port;
-	in_port_t	sock_port;
-
-	uint16_t	wnd_from_tap;
-	uint16_t	wnd_to_tap;
-
-	uint32_t	seq_to_tap;
-	uint32_t	seq_ack_from_tap;
-	uint32_t	seq_from_tap;
-	uint32_t	seq_ack_to_tap;
-	uint32_t	seq_init_from_tap;
-};
-
 #define CONN_IS_CLOSING(conn)						\
 	((conn->events & ESTABLISHED) &&				\
 	 (conn->events & (SOCK_FIN_RCVD | TAP_FIN_RCVD)))
@@ -695,7 +587,7 @@ static unsigned int tcp6_l2_flags_buf_used;
 static size_t tcp6_l2_flags_buf_bytes;
 
 /* TCP connections */
-static struct tcp_conn tc[TCP_MAX_CONNS];
+static struct tcp_tap_conn tc[TCP_MAX_CONNS];
 
 #define CONN(index)		(tc + (index))
 #define CONN_IDX(conn)		((conn) - tc)
@@ -705,7 +597,7 @@ static struct tcp_conn tc[TCP_MAX_CONNS];
  *
  * Return: pointer to connection, or NULL if @index is out of bounds
  */
-static inline struct tcp_conn *conn_at_idx(int index)
+static inline struct tcp_tap_conn *conn_at_idx(int index)
 {
 	if ((index < 0) || (index >= TCP_MAX_CONNS))
 		return NULL;
@@ -713,7 +605,7 @@ static inline struct tcp_conn *conn_at_idx(int index)
 }
 
 /* Table for lookup from remote address, local port, remote port */
-static struct tcp_conn *tc_hash[TCP_HASH_TABLE_SIZE];
+static struct tcp_tap_conn *tc_hash[TCP_HASH_TABLE_SIZE];
 
 /* Pools for pre-opened sockets */
 int init_sock_pool4		[TCP_SOCK_POOL_SIZE];
@@ -749,7 +641,7 @@ static uint32_t tcp_conn_epoll_events(uint8_t events, uint8_t conn_flags)
 	return EPOLLRDHUP;
 }
 
-static void conn_flag_do(const struct ctx *c, struct tcp_conn *conn,
+static void conn_flag_do(const struct ctx *c, struct tcp_tap_conn *conn,
 			 unsigned long flag);
 #define conn_flag(c, conn, flag)					\
 	do {								\
@@ -764,7 +656,7 @@ static void conn_flag_do(const struct ctx *c, struct tcp_conn *conn,
  *
  * Return: 0 on success, negative error code on failure (not on deletion)
  */
-static int tcp_epoll_ctl(const struct ctx *c, struct tcp_conn *conn)
+static int tcp_epoll_ctl(const struct ctx *c, struct tcp_tap_conn *conn)
 {
 	int m = (conn->flags & IN_EPOLL) ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 	union epoll_ref ref = { .r.proto = IPPROTO_TCP, .r.s = conn->sock,
@@ -809,7 +701,7 @@ static int tcp_epoll_ctl(const struct ctx *c, struct tcp_conn *conn)
  *
  * #syscalls timerfd_create timerfd_settime
  */
-static void tcp_timer_ctl(const struct ctx *c, struct tcp_conn *conn)
+static void tcp_timer_ctl(const struct ctx *c, struct tcp_tap_conn *conn)
 {
 	struct itimerspec it = { { 0 }, { 0 } };
 
@@ -865,7 +757,7 @@ static void tcp_timer_ctl(const struct ctx *c, struct tcp_conn *conn)
  * @conn:	Connection pointer
  * @flag:	Flag to set, or ~flag to unset
  */
-static void conn_flag_do(const struct ctx *c, struct tcp_conn *conn,
+static void conn_flag_do(const struct ctx *c, struct tcp_tap_conn *conn,
 			 unsigned long flag)
 {
 	if (flag & (flag - 1)) {
@@ -903,7 +795,7 @@ static void conn_flag_do(const struct ctx *c, struct tcp_conn *conn,
  * @conn:	Connection pointer
  * @event:	Connection event
  */
-static void conn_event_do(const struct ctx *c, struct tcp_conn *conn,
+static void conn_event_do(const struct ctx *c, struct tcp_tap_conn *conn,
 			  unsigned long event)
 {
 	int prev, new, num = fls(event);
@@ -963,7 +855,7 @@ static void conn_event_do(const struct ctx *c, struct tcp_conn *conn,
  *
  * Return: 1 if destination is in low RTT table, 0 otherwise
  */
-static int tcp_rtt_dst_low(const struct tcp_conn *conn)
+static int tcp_rtt_dst_low(const struct tcp_tap_conn *conn)
 {
 	int i;
 
@@ -979,7 +871,7 @@ static int tcp_rtt_dst_low(const struct tcp_conn *conn)
  * @conn:	Connection pointer
  * @tinfo:	Pointer to struct tcp_info for socket
  */
-static void tcp_rtt_dst_check(const struct tcp_conn *conn,
+static void tcp_rtt_dst_check(const struct tcp_tap_conn *conn,
 			      const struct tcp_info *tinfo)
 {
 #ifdef HAS_MIN_RTT
@@ -1016,7 +908,7 @@ static void tcp_rtt_dst_check(const struct tcp_conn *conn,
  * tcp_get_sndbuf() - Get, scale SO_SNDBUF between thresholds (1 to 0.5 usage)
  * @conn:	Connection pointer
  */
-static void tcp_get_sndbuf(struct tcp_conn *conn)
+static void tcp_get_sndbuf(struct tcp_tap_conn *conn)
 {
 	int s = conn->sock, sndbuf;
 	socklen_t sl;
@@ -1290,7 +1182,8 @@ static int tcp_opt_get(const char *opts, size_t len, uint8_t type_find,
  *
  * Return: 1 on match, 0 otherwise
  */
-static int tcp_hash_match(const struct tcp_conn *conn, int af, const void *addr,
+static int tcp_hash_match(const struct tcp_tap_conn *conn,
+			  int af, const void *addr,
 			  in_port_t tap_port, in_port_t sock_port)
 {
 	if (af == AF_INET && CONN_V4(conn)			&&
@@ -1356,7 +1249,7 @@ static unsigned int tcp_hash(const struct ctx *c, int af, const void *addr,
  * @af:		Address family, AF_INET or AF_INET6
  * @addr:	Remote address, pointer to in_addr or in6_addr
  */
-static void tcp_hash_insert(const struct ctx *c, struct tcp_conn *conn,
+static void tcp_hash_insert(const struct ctx *c, struct tcp_tap_conn *conn,
 			    int af, const void *addr)
 {
 	int b;
@@ -1374,9 +1267,9 @@ static void tcp_hash_insert(const struct ctx *c, struct tcp_conn *conn,
  * tcp_hash_remove() - Drop connection from hash table, chain unlink
  * @conn:	Connection pointer
  */
-static void tcp_hash_remove(const struct tcp_conn *conn)
+static void tcp_hash_remove(const struct tcp_tap_conn *conn)
 {
-	struct tcp_conn *entry, *prev = NULL;
+	struct tcp_tap_conn *entry, *prev = NULL;
 	int b = conn->hash_bucket;
 
 	for (entry = tc_hash[b]; entry;
@@ -1400,9 +1293,9 @@ static void tcp_hash_remove(const struct tcp_conn *conn)
  * @old:	Old connection pointer
  * @new:	New connection pointer
  */
-static void tcp_hash_update(struct tcp_conn *old, struct tcp_conn *new)
+static void tcp_hash_update(struct tcp_tap_conn *old, struct tcp_tap_conn *new)
 {
-	struct tcp_conn *entry, *prev = NULL;
+	struct tcp_tap_conn *entry, *prev = NULL;
 	int b = old->hash_bucket;
 
 	for (entry = tc_hash[b]; entry;
@@ -1431,12 +1324,13 @@ static void tcp_hash_update(struct tcp_conn *old, struct tcp_conn *new)
  *
  * Return: connection pointer, if found, -ENOENT otherwise
  */
-static struct tcp_conn *tcp_hash_lookup(const struct ctx *c, int af,
-					const void *addr,
-					in_port_t tap_port, in_port_t sock_port)
+static struct tcp_tap_conn *tcp_hash_lookup(const struct ctx *c,
+					    int af, const void *addr,
+					    in_port_t tap_port,
+					    in_port_t sock_port)
 {
 	int b = tcp_hash(c, af, addr, tap_port, sock_port);
-	struct tcp_conn *conn;
+	struct tcp_tap_conn *conn;
 
 	for (conn = tc_hash[b]; conn; conn = conn_at_idx(conn->next_index)) {
 		if (tcp_hash_match(conn, af, addr, tap_port, sock_port))
@@ -1451,9 +1345,9 @@ static struct tcp_conn *tcp_hash_lookup(const struct ctx *c, int af,
  * @c:		Execution context
  * @hole:	Pointer to recently closed connection
  */
-static void tcp_table_compact(struct ctx *c, struct tcp_conn *hole)
+static void tcp_table_compact(struct ctx *c, struct tcp_tap_conn *hole)
 {
-	struct tcp_conn *from, *to;
+	struct tcp_tap_conn *from, *to;
 
 	if (CONN_IDX(hole) == --c->tcp.conn_count) {
 		debug("TCP: hash table compaction: maximum index was %li (%p)",
@@ -1482,7 +1376,7 @@ static void tcp_table_compact(struct ctx *c, struct tcp_conn *hole)
  * @c:		Execution context
  * @conn:	Connection pointer
  */
-static void tcp_conn_destroy(struct ctx *c, struct tcp_conn *conn)
+static void tcp_conn_destroy(struct ctx *c, struct tcp_tap_conn *conn)
 {
 	close(conn->sock);
 	if (conn->timer != -1)
@@ -1492,7 +1386,7 @@ static void tcp_conn_destroy(struct ctx *c, struct tcp_conn *conn)
 	tcp_table_compact(c, conn);
 }
 
-static void tcp_rst_do(struct ctx *c, struct tcp_conn *conn);
+static void tcp_rst_do(struct ctx *c, struct tcp_tap_conn *conn);
 #define tcp_rst(c, conn)						\
 	do {								\
 		debug("TCP: index %li, reset at %s:%i", CONN_IDX(conn), \
@@ -1627,7 +1521,7 @@ void tcp_defer_handler(struct ctx *c)
 {
 	int max_conns = c->tcp.conn_count / 100 * TCP_CONN_PRESSURE;
 	int max_files = c->nofile / 100 * TCP_FILE_PRESSURE;
-	struct tcp_conn *conn;
+	struct tcp_tap_conn *conn;
 
 	tcp_l2_flags_buf_flush(c);
 	tcp_l2_data_buf_flush(c);
@@ -1656,7 +1550,7 @@ void tcp_defer_handler(struct ctx *c)
  * Return: 802.3 length, host order
  */
 static size_t tcp_l2_buf_fill_headers(const struct ctx *c,
-				      const struct tcp_conn *conn,
+				      const struct tcp_tap_conn *conn,
 				      void *p, size_t plen,
 				      const uint16_t *check, uint32_t seq)
 {
@@ -1738,7 +1632,7 @@ do {									\
  *
  * Return: 1 if sequence or window were updated, 0 otherwise
  */
-static int tcp_update_seqack_wnd(const struct ctx *c, struct tcp_conn *conn,
+static int tcp_update_seqack_wnd(const struct ctx *c, struct tcp_tap_conn *conn,
 				 int force_seq, struct tcp_info *tinfo)
 {
 	uint32_t prev_wnd_to_tap = conn->wnd_to_tap << conn->ws_to_tap;
@@ -1824,7 +1718,7 @@ out:
  *
  * Return: negative error code on connection reset, 0 otherwise
  */
-static int tcp_send_flag(struct ctx *c, struct tcp_conn *conn, int flags)
+static int tcp_send_flag(struct ctx *c, struct tcp_tap_conn *conn, int flags)
 {
 	uint32_t prev_ack_to_tap = conn->seq_ack_to_tap;
 	uint32_t prev_wnd_to_tap = conn->wnd_to_tap;
@@ -1971,7 +1865,7 @@ static int tcp_send_flag(struct ctx *c, struct tcp_conn *conn, int flags)
  * @c:		Execution context
  * @conn:	Connection pointer
  */
-static void tcp_rst_do(struct ctx *c, struct tcp_conn *conn)
+static void tcp_rst_do(struct ctx *c, struct tcp_tap_conn *conn)
 {
 	if (conn->events == CLOSED)
 		return;
@@ -1986,7 +1880,7 @@ static void tcp_rst_do(struct ctx *c, struct tcp_conn *conn)
  * @opts:	Pointer to start of TCP options
  * @optlen:	Bytes in options: caller MUST ensure available length
  */
-static void tcp_get_tap_ws(struct tcp_conn *conn,
+static void tcp_get_tap_ws(struct tcp_tap_conn *conn,
 			   const char *opts, size_t optlen)
 {
 	int ws = tcp_opt_get(opts, optlen, OPT_WS, NULL, NULL);
@@ -2003,7 +1897,7 @@ static void tcp_get_tap_ws(struct tcp_conn *conn,
  * @conn:	Connection pointer
  * @window:	Window value, host order, unscaled
  */
-static void tcp_clamp_window(const struct ctx *c, struct tcp_conn *conn,
+static void tcp_clamp_window(const struct ctx *c, struct tcp_tap_conn *conn,
 			     unsigned wnd)
 {
 	uint32_t prev_scaled = conn->wnd_from_tap << conn->ws_from_tap;
@@ -2125,7 +2019,7 @@ static int tcp_conn_new_sock(const struct ctx *c, sa_family_t af)
  * Return: clamped MSS value
  */
 static uint16_t tcp_conn_tap_mss(const struct ctx *c,
-				 const struct tcp_conn *conn,
+				 const struct tcp_tap_conn *conn,
 				 const char *opts, size_t optlen)
 {
 	unsigned int mss;
@@ -2172,7 +2066,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 		.sin6_addr = *(struct in6_addr *)addr,
 	};
 	const struct sockaddr *sa;
-	struct tcp_conn *conn;
+	struct tcp_tap_conn *conn;
 	socklen_t sl;
 	int s, mss;
 
@@ -2280,7 +2174,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
  *
  * Return: 0 on success, negative error code from recv() on failure
  */
-static int tcp_sock_consume(struct tcp_conn *conn, uint32_t ack_seq)
+static int tcp_sock_consume(struct tcp_tap_conn *conn, uint32_t ack_seq)
 {
 	/* Simply ignore out-of-order ACKs: we already consumed the data we
 	 * needed from the buffer, and we won't rewind back to a lower ACK
@@ -2307,7 +2201,7 @@ static int tcp_sock_consume(struct tcp_conn *conn, uint32_t ack_seq)
  * @seq:	Sequence number to be sent
  * @now:	Current timestamp
  */
-static void tcp_data_to_tap(struct ctx *c, struct tcp_conn *conn,
+static void tcp_data_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 			    ssize_t plen, int no_csum, uint32_t seq)
 {
 	struct iovec *iov;
@@ -2344,7 +2238,7 @@ static void tcp_data_to_tap(struct ctx *c, struct tcp_conn *conn,
  *
  * #syscalls recvmsg
  */
-static int tcp_data_from_sock(struct ctx *c, struct tcp_conn *conn)
+static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn)
 {
 	uint32_t wnd_scaled = conn->wnd_from_tap << conn->ws_from_tap;
 	int fill_bufs, send_bufs = 0, last_len, iov_rem = 0;
@@ -2475,7 +2369,7 @@ zero_len:
  *
  * #syscalls sendmsg
  */
-static void tcp_data_from_tap(struct ctx *c, struct tcp_conn *conn,
+static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 			      const struct pool *p)
 {
 	int i, iov_i, ack = 0, fin = 0, retr = 0, keep = -1, partial_send = 0;
@@ -2675,7 +2569,7 @@ out:
  * @opts:	Pointer to start of options
  * @optlen:	Bytes in options: caller MUST ensure available length
  */
-static void tcp_conn_from_sock_finish(struct ctx *c, struct tcp_conn *conn,
+static void tcp_conn_from_sock_finish(struct ctx *c, struct tcp_tap_conn *conn,
 				      const struct tcphdr *th,
 				      const char *opts, size_t optlen)
 {
@@ -2714,7 +2608,7 @@ static void tcp_conn_from_sock_finish(struct ctx *c, struct tcp_conn *conn,
 int tcp_tap_handler(struct ctx *c, int af, const void *addr,
 		    const struct pool *p, const struct timespec *now)
 {
-	struct tcp_conn *conn;
+	struct tcp_tap_conn *conn;
 	size_t optlen, len;
 	struct tcphdr *th;
 	int ack_due = 0;
@@ -2829,7 +2723,7 @@ int tcp_tap_handler(struct ctx *c, int af, const void *addr,
  * @c:		Execution context
  * @conn:	Connection pointer
  */
-static void tcp_connect_finish(struct ctx *c, struct tcp_conn *conn)
+static void tcp_connect_finish(struct ctx *c, struct tcp_tap_conn *conn)
 {
 	socklen_t sl;
 	int so;
@@ -2857,7 +2751,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 			       const struct timespec *now)
 {
 	struct sockaddr_storage sa;
-	struct tcp_conn *conn;
+	struct tcp_tap_conn *conn;
 	socklen_t sl;
 	int s;
 
@@ -2949,7 +2843,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
  */
 static void tcp_timer_handler(struct ctx *c, union epoll_ref ref)
 {
-	struct tcp_conn *conn = conn_at_idx(ref.r.p.tcp.tcp.index);
+	struct tcp_tap_conn *conn = conn_at_idx(ref.r.p.tcp.tcp.index);
 	struct itimerspec check_armed = { { 0 }, { 0 } };
 
 	if (!conn)
@@ -3012,7 +2906,7 @@ static void tcp_timer_handler(struct ctx *c, union epoll_ref ref)
 void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		      const struct timespec *now)
 {
-	struct tcp_conn *conn;
+	struct tcp_tap_conn *conn;
 
 	if (ref.r.p.tcp.tcp.timer) {
 		tcp_timer_handler(c, ref);
@@ -3510,7 +3404,7 @@ static int tcp_port_rebind(void *arg)
 void tcp_timer(struct ctx *c, const struct timespec *ts)
 {
 	struct tcp_sock_refill_arg refill_arg = { c, 0 };
-	struct tcp_conn *conn;
+	struct tcp_tap_conn *conn;
 
 	(void)ts;
 
