@@ -1930,17 +1930,11 @@ static void tcp_clamp_window(const struct ctx *c, struct tcp_tap_conn *conn,
 /**
  * tcp_seq_init() - Calculate initial sequence number according to RFC 6528
  * @c:		Execution context
- * @af:		Address family, AF_INET or AF_INET6
- * @addr:	Remote address, pointer to in_addr or in6_addr
- * @dstport:	Destination port, connection-wise, network order
- * @srcport:	Source port, connection-wise, network order
+ * @conn:	TCP connection, with addr, sock_port and tap_port populated
  * @now:	Current timestamp
- *
- * Return: initial TCP sequence
  */
-static uint32_t tcp_seq_init(const struct ctx *c, int af, const void *addr,
-			     in_port_t dstport, in_port_t srcport,
-			     const struct timespec *now)
+static void tcp_seq_init(const struct ctx *c, struct tcp_tap_conn *conn,
+			 const struct timespec *now)
 {
 	union inany_addr aany;
 	struct {
@@ -1949,14 +1943,13 @@ static uint32_t tcp_seq_init(const struct ctx *c, int af, const void *addr,
 		union inany_addr dst;
 		in_port_t dstport;
 	} __attribute__((__packed__)) in = {
-		.srcport = srcport,
-		.dstport = dstport,
+		.src = conn->addr,
+		.srcport = conn->tap_port,
+		.dstport = conn->sock_port,
 	};
 	uint32_t ns, seq = 0;
 
-	inany_from_af(&aany, af, addr);
-	in.src = aany;
-	if (af == AF_INET)
+	if (CONN_V4(conn))
 		inany_from_af(&aany, AF_INET, &c->ip4.addr);
 	else
 		inany_from_af(&aany, AF_INET6, &c->ip6.addr);
@@ -1967,7 +1960,7 @@ static uint32_t tcp_seq_init(const struct ctx *c, int af, const void *addr,
 	ns = now->tv_sec * 1E9;
 	ns += now->tv_nsec >> 5; /* 32ns ticks, overflows 32 bits every 137s */
 
-	return seq + ns;
+	conn->seq_to_tap = seq + ns;
 }
 
 /**
@@ -2127,7 +2120,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	conn->seq_from_tap = conn->seq_init_from_tap + 1;
 	conn->seq_ack_to_tap = conn->seq_from_tap;
 
-	conn->seq_to_tap = tcp_seq_init(c, af, addr, th->dest, th->source, now);
+	tcp_seq_init(c, conn, now);
 	conn->seq_ack_from_tap = conn->seq_to_tap + 1;
 
 	tcp_hash_insert(c, conn);
@@ -2774,11 +2767,6 @@ static void tcp_tap_conn_from_sock(struct ctx *c, union epoll_ref ref,
 
 		conn->sock_port = ntohs(sa6.sin6_port);
 		conn->tap_port = ref.r.p.tcp.tcp.index;
-
-		conn->seq_to_tap = tcp_seq_init(c, AF_INET6, &sa6.sin6_addr,
-						conn->sock_port,
-						conn->tap_port,
-						now);
 	} else {
 		struct sockaddr_in sa4;
 
@@ -2793,13 +2781,9 @@ static void tcp_tap_conn_from_sock(struct ctx *c, union epoll_ref ref,
 
 		conn->sock_port = ntohs(sa4.sin_port);
 		conn->tap_port = ref.r.p.tcp.tcp.index;
-
-		conn->seq_to_tap = tcp_seq_init(c, AF_INET, &sa4.sin_addr,
-						conn->sock_port,
-						conn->tap_port,
-						now);
 	}
 
+	tcp_seq_init(c, conn, now);
 	tcp_hash_insert(c, conn);
 
 	conn->seq_ack_from_tap = conn->seq_to_tap + 1;
