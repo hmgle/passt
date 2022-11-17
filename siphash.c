@@ -123,6 +123,7 @@ uint64_t siphash_8b(const uint8_t *in, const uint64_t *k)
  *
  * Return: 32 bits obtained by XORing the two halves of the 64-bit hash output
  */
+/* cppcheck-suppress unusedFunction */
 uint32_t siphash_12b(const uint8_t *in, const uint64_t *k)
 {
 	uint32_t *in32 = (uint32_t *)in;

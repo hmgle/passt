@@ -1942,37 +1942,27 @@ static uint32_t tcp_seq_init(const struct ctx *c, int af, const void *addr,
 			     in_port_t dstport, in_port_t srcport,
 			     const struct timespec *now)
 {
+	union inany_addr aany;
+	struct {
+		union inany_addr src;
+		in_port_t srcport;
+		union inany_addr dst;
+		in_port_t dstport;
+	} __attribute__((__packed__)) in = {
+		.srcport = srcport,
+		.dstport = dstport,
+	};
 	uint32_t ns, seq = 0;
 
-	if (af == AF_INET) {
-		struct {
-			struct in_addr src;
-			in_port_t srcport;
-			struct in_addr dst;
-			in_port_t dstport;
-		} __attribute__((__packed__)) in = {
-			.src = *(struct in_addr *)addr,
-			.srcport = srcport,
-			.dst = c->ip4.addr,
-			.dstport = dstport,
-		};
+	inany_from_af(&aany, af, addr);
+	in.src = aany;
+	if (af == AF_INET)
+		inany_from_af(&aany, AF_INET, &c->ip4.addr);
+	else
+		inany_from_af(&aany, AF_INET6, &c->ip6.addr);
+	in.dst = aany;
 
-		seq = siphash_12b((uint8_t *)&in, c->tcp.hash_secret);
-	} else if (af == AF_INET6) {
-		struct {
-			struct in6_addr src;
-			in_port_t srcport;
-			struct in6_addr dst;
-			in_port_t dstport;
-		} __attribute__((__packed__)) in = {
-			.src = *(struct in6_addr *)addr,
-			.srcport = srcport,
-			.dst = c->ip6.addr,
-			.dstport = dstport,
-		};
-
-		seq = siphash_36b((uint8_t *)&in, c->tcp.hash_secret);
-	}
+	seq = siphash_36b((uint8_t *)&in, c->tcp.hash_secret);
 
 	ns = now->tv_sec * 1E9;
 	ns += now->tv_nsec >> 5; /* 32ns ticks, overflows 32 bits every 137s */
