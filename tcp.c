@@ -2978,52 +2978,32 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 }
 
 /**
- * tcp_sock_init4() - Initialise listening sockets for a given IPv4 port
+ * tcp_sock_init_af() - Initialise listening socket for a given af and port
  * @c:		Execution context
+ * @af:		Address family to listen on
+ * @port:	Port, host order
  * @addr:	Pointer to address for binding, NULL if not configured
  * @ifname:	Name of interface to bind to, NULL if not configured
- * @port:	Port, host order
+ *
+ * Return: fd for the new listening socket, or -1 on failure
  */
-static void tcp_sock_init4(const struct ctx *c, const struct in_addr *addr,
-			   const char *ifname, in_port_t port)
+static int tcp_sock_init_af(const struct ctx *c, int af, in_port_t port,
+			    const struct in_addr *addr, const char *ifname)
 {
 	in_port_t idx = port + c->tcp.fwd_in.delta[port];
 	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.index = idx };
 	int s;
 
-	s = sock_l4(c, AF_INET, IPPROTO_TCP, addr, ifname, port, tref.u32);
-	if (s >= 0)
-		tcp_sock_set_bufsize(c, s);
-	else
-		s = -1;
+	s = sock_l4(c, af, IPPROTO_TCP, addr, ifname, port, tref.u32);
 
 	if (c->tcp.fwd_in.mode == FWD_AUTO)
-		tcp_sock_init_ext[port][V4] = s;
-}
+		tcp_sock_init_ext[port][(af == AF_INET) ? V4 : V6] = s;
 
-/**
- * tcp_sock_init6() - Initialise listening sockets for a given IPv6 port
- * @c:		Execution context
- * @addr:	Pointer to address for binding, NULL if not configured
- * @ifname:	Name of interface to bind to, NULL if not configured
- * @port:	Port, host order
- */
-static void tcp_sock_init6(const struct ctx *c,
-			   const struct in6_addr *addr, const char *ifname,
-			   in_port_t port)
-{
-	in_port_t idx = port + c->tcp.fwd_in.delta[port];
-	union tcp_epoll_ref tref = { .tcp.listen = 1, .tcp.index = idx };
-	int s;
+	if (s < 0)
+		return -1;
 
-	s = sock_l4(c, AF_INET6, IPPROTO_TCP, addr, ifname, port, tref.u32);
-	if (s >= 0)
-		tcp_sock_set_bufsize(c, s);
-	else
-		s = -1;
-
-	if (c->tcp.fwd_in.mode == FWD_AUTO)
-		tcp_sock_init_ext[port][V6] = s;
+	tcp_sock_set_bufsize(c, s);
+	return s;
 }
 
 /**
@@ -3038,9 +3018,9 @@ void tcp_sock_init(const struct ctx *c, sa_family_t af, const void *addr,
 		   const char *ifname, in_port_t port)
 {
 	if ((af == AF_INET  || af == AF_UNSPEC) && c->ifi4)
-		tcp_sock_init4(c, addr, ifname, port);
+		tcp_sock_init_af(c, AF_INET, port, addr, ifname);
 	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6)
-		tcp_sock_init6(c, addr, ifname, port);
+		tcp_sock_init_af(c, AF_INET6, port, addr, ifname);
 }
 
 /**
