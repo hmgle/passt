@@ -259,11 +259,16 @@ docs: README.md
 # - readability-identifier-length
 #	Complains about any identifier <3 characters, reasonable for
 #	globals, pointlessly verbose for locals and parameters.
+#
+# - bugprone-assignment-in-if-condition
+#	Dubious value over the compiler's built-in warning.  Would
+#	increase verbosity.
 
 clang-tidy: $(SRCS) $(HEADERS)
 	clang-tidy -checks=*,-modernize-*,\
 	-clang-analyzer-valist.Uninitialized,\
 	-cppcoreguidelines-init-variables,\
+	-bugprone-assignment-in-if-condition,\
 	-bugprone-macro-parentheses,\
 	-google-readability-braces-around-statements,\
 	-hicpp-braces-around-statements,\
