@@ -1957,8 +1957,8 @@ static void tcp_seq_init(const struct ctx *c, struct tcp_tap_conn *conn,
 
 	seq = siphash_36b((uint8_t *)&in, c->tcp.hash_secret);
 
-	ns = now->tv_sec * 1E9;
-	ns += now->tv_nsec >> 5; /* 32ns ticks, overflows 32 bits every 137s */
+	/* 32ns ticks, overflows 32 bits every 137s */
+	ns = (now->tv_sec * 1000000000 + now->tv_nsec) >> 5;
 
 	conn->seq_to_tap = seq + ns;
 }
