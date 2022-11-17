@@ -502,6 +502,33 @@ static void tcp_splice_dir(struct tcp_splice_conn *conn, int ref_sock,
 }
 
 /**
+ * tcp_splice_conn_from_sock() - Initialize state for spliced connection
+ * @c:		Execution context
+ * @ref:	epoll reference of listening socket
+ * @conn:	connection structure to initialize
+ * @s:		Accepted socket
+ *
+ * #syscalls:pasta setsockopt
+ */
+void tcp_splice_conn_from_sock(struct ctx *c, union epoll_ref ref,
+			       struct tcp_splice_conn *conn, int s)
+{
+	assert(c->mode == MODE_PASTA);
+
+	if (setsockopt(s, SOL_TCP, TCP_QUICKACK, &((int){ 1 }), sizeof(int)))
+		trace("TCP (spliced): failed to set TCP_QUICKACK on %i", s);
+
+	conn->c.spliced = true;
+	c->tcp.splice_conn_count++;
+	conn->a = s;
+	conn->flags = ref.r.p.tcp.tcp.v6 ? SPLICE_V6 : 0;
+
+	if (tcp_splice_new(c, conn, ref.r.p.tcp.tcp.index,
+			   ref.r.p.tcp.tcp.outbound))
+		conn_flag(c, conn, CLOSING);
+}
+
+/**
  * tcp_sock_handler_splice() - Handler for socket mapped to spliced connection
  * @c:		Execution context
  * @ref:	epoll reference
@@ -517,33 +544,7 @@ void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 	uint32_t *seq_read, *seq_write;
 	struct tcp_splice_conn *conn;
 
-	if (ref.r.p.tcp.tcp.listen) {
-		int s;
-
-		if (c->tcp.conn_count >= TCP_MAX_CONNS)
-			return;
-
-		if ((s = accept4(ref.r.s, NULL, NULL, SOCK_NONBLOCK)) < 0)
-			return;
-
-		if (setsockopt(s, SOL_TCP, TCP_QUICKACK, &((int){ 1 }),
-			       sizeof(int))) {
-			trace("TCP (spliced): failed to set TCP_QUICKACK on %i",
-			      s);
-		}
-
-		conn = CONN(c->tcp.conn_count++);
-		conn->c.spliced = true;
-		c->tcp.splice_conn_count++;
-		conn->a = s;
-		conn->flags = ref.r.p.tcp.tcp.v6 ? SPLICE_V6 : 0;
-
-		if (tcp_splice_new(c, conn, ref.r.p.tcp.tcp.index,
-				   ref.r.p.tcp.tcp.outbound))
-			conn_flag(c, conn, CLOSING);
-
-		return;
-	}
+	assert(!ref.r.p.tcp.tcp.listen);
 
 	conn = CONN(ref.r.p.tcp.tcp.index);
 

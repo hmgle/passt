@@ -2753,28 +2753,19 @@ static void tcp_connect_finish(struct ctx *c, struct tcp_tap_conn *conn)
 }
 
 /**
- * tcp_conn_from_sock() - Handle new connection request from listening socket
+ * tcp_tap_conn_from_sock() - Initialize state for non-spliced connection
  * @c:		Execution context
  * @ref:	epoll reference of listening socket
+ * @conn:	connection structure to initialize
+ * @s:		Accepted socket
+ * @sa:		Peer socket address (from accept())
  * @now:	Current timestamp
  */
-static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
-			       const struct timespec *now)
+static void tcp_tap_conn_from_sock(struct ctx *c, union epoll_ref ref,
+				   struct tcp_tap_conn *conn, int s,
+				   struct sockaddr *sa,
+				   const struct timespec *now)
 {
-	struct sockaddr_storage sa;
-	struct tcp_tap_conn *conn;
-	socklen_t sl;
-	int s;
-
-	if (c->tcp.conn_count >= TCP_MAX_CONNS)
-		return;
-
-	sl = sizeof(sa);
-	s = accept4(ref.r.s, (struct sockaddr *)&sa, &sl, SOCK_NONBLOCK);
-	if (s < 0)
-		return;
-
-	conn = CONN(c->tcp.conn_count++);
 	conn->c.spliced = false;
 	conn->sock = s;
 	conn->timer = -1;
@@ -2784,7 +2775,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	if (ref.r.p.tcp.tcp.v6) {
 		struct sockaddr_in6 sa6;
 
-		memcpy(&sa6, &sa, sizeof(sa6));
+		memcpy(&sa6, sa, sizeof(sa6));
 
 		if (IN6_IS_ADDR_LOOPBACK(&sa6.sin6_addr) ||
 		    IN6_ARE_ADDR_EQUAL(&sa6.sin6_addr, &c->ip6.addr_seen) ||
@@ -2813,7 +2804,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	} else {
 		struct sockaddr_in sa4;
 
-		memcpy(&sa4, &sa, sizeof(sa4));
+		memcpy(&sa4, sa, sizeof(sa4));
 
 		memset(&conn->a.a4.zero,   0, sizeof(conn->a.a4.zero));
 		memset(&conn->a.a4.one, 0xff, sizeof(conn->a.a4.one));
@@ -2844,6 +2835,37 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	conn_flag(c, conn, ACK_FROM_TAP_DUE);
 
 	tcp_get_sndbuf(conn);
+}
+
+/**
+ * tcp_conn_from_sock() - Handle new connection request from listening socket
+ * @c:		Execution context
+ * @ref:	epoll reference of listening socket
+ * @now:	Current timestamp
+ */
+static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
+			       const struct timespec *now)
+{
+	struct sockaddr_storage sa;
+	union tcp_conn *conn;
+	socklen_t sl;
+	int s;
+
+	if (c->tcp.conn_count >= TCP_MAX_CONNS)
+		return;
+
+	sl = sizeof(sa);
+	s = accept4(ref.r.s, (struct sockaddr *)&sa, &sl, SOCK_NONBLOCK);
+	if (s < 0)
+		return;
+
+	conn = tc + c->tcp.conn_count++;
+
+	if (ref.r.p.tcp.tcp.splice)
+		tcp_splice_conn_from_sock(c, ref, &conn->splice, s);
+	else
+		tcp_tap_conn_from_sock(c, ref, &conn->tap, s,
+				       (struct sockaddr *)&sa, now);
 }
 
 /**
@@ -2925,13 +2947,13 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		return;
 	}
 
-	if (ref.r.p.tcp.tcp.splice) {
-		tcp_sock_handler_splice(c, ref, events);
+	if (ref.r.p.tcp.tcp.listen) {
+		tcp_conn_from_sock(c, ref, now);
 		return;
 	}
 
-	if (ref.r.p.tcp.tcp.listen) {
-		tcp_conn_from_sock(c, ref, now);
+	if (ref.r.p.tcp.tcp.splice) {
+		tcp_sock_handler_splice(c, ref, events);
 		return;
 	}
 
