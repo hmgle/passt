@@ -766,7 +766,7 @@ smaller:
  * tcp_splice_pipe_refill() - Refill pool of pre-opened pipes
  * @c:		Execution context
  */
-static void tcp_splice_pipe_refill(const struct ctx *c)
+void tcp_splice_pipe_refill(const struct ctx *c)
 {
 	int i;
 
@@ -803,48 +803,41 @@ void tcp_splice_init(struct ctx *c)
 {
 	memset(splice_pipe_pool, 0xff, sizeof(splice_pipe_pool));
 	tcp_set_pipe_size(c);
+	tcp_splice_pipe_refill(c);
 }
 
 /**
  * tcp_splice_timer() - Timer for spliced connections
  * @c:		Execution context
+ * @conn:	Spliced connection
  */
-void tcp_splice_timer(struct ctx *c)
+void tcp_splice_timer(struct ctx *c, struct tcp_splice_conn *conn)
 {
-	struct tcp_splice_conn *conn;
-
-	for (conn = CONN(c->tcp.conn_count - 1); conn >= CONN(0); conn--) {
-		if (!conn->c.spliced)
-			continue;
-
-		if (conn->flags & CLOSING) {
-			tcp_splice_destroy(c, conn);
-			return;
-		}
-
-		if ( (conn->flags & RCVLOWAT_SET_A) &&
-		    !(conn->flags & RCVLOWAT_ACT_A)) {
-			if (setsockopt(conn->a, SOL_SOCKET, SO_RCVLOWAT,
-				       &((int){ 1 }), sizeof(int))) {
-				trace("TCP (spliced): can't set SO_RCVLOWAT on "
-				      "%i", conn->a);
-			}
-			conn_flag(c, conn, ~RCVLOWAT_SET_A);
-		}
-
-		if ( (conn->flags & RCVLOWAT_SET_B) &&
-		    !(conn->flags & RCVLOWAT_ACT_B)) {
-			if (setsockopt(conn->b, SOL_SOCKET, SO_RCVLOWAT,
-				       &((int){ 1 }), sizeof(int))) {
-				trace("TCP (spliced): can't set SO_RCVLOWAT on "
-				      "%i", conn->b);
-			}
-			conn_flag(c, conn, ~RCVLOWAT_SET_B);
-		}
-
-		conn_flag(c, conn, ~RCVLOWAT_ACT_A);
-		conn_flag(c, conn, ~RCVLOWAT_ACT_B);
+	if (conn->flags & CLOSING) {
+		tcp_splice_destroy(c, conn);
+		return;
 	}
 
-	tcp_splice_pipe_refill(c);
+	if ( (conn->flags & RCVLOWAT_SET_A) &&
+	     !(conn->flags & RCVLOWAT_ACT_A)) {
+		if (setsockopt(conn->a, SOL_SOCKET, SO_RCVLOWAT,
+			       &((int){ 1 }), sizeof(int))) {
+			trace("TCP (spliced): can't set SO_RCVLOWAT on "
+			      "%i", conn->a);
+		}
+		conn_flag(c, conn, ~RCVLOWAT_SET_A);
+	}
+
+	if ( (conn->flags & RCVLOWAT_SET_B) &&
+	     !(conn->flags & RCVLOWAT_ACT_B)) {
+		if (setsockopt(conn->b, SOL_SOCKET, SO_RCVLOWAT,
+			       &((int){ 1 }), sizeof(int))) {
+			trace("TCP (spliced): can't set SO_RCVLOWAT on "
+			      "%i", conn->b);
+		}
+		conn_flag(c, conn, ~RCVLOWAT_SET_B);
+	}
+
+	conn_flag(c, conn, ~RCVLOWAT_ACT_A);
+	conn_flag(c, conn, ~RCVLOWAT_ACT_B);
 }

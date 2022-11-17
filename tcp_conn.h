@@ -201,5 +201,8 @@ extern union tcp_conn tc[];
 void tcp_splice_conn_update(struct ctx *c, struct tcp_splice_conn *new);
 void tcp_table_compact(struct ctx *c, union tcp_conn *hole);
 void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn);
+void tcp_splice_timer(struct ctx *c, struct tcp_splice_conn *conn);
+void tcp_splice_pipe_refill(const struct ctx *c);
+
 
 #endif /* TCP_CONN_H */

@@ -9,6 +9,5 @@
 void tcp_sock_handler_splice(struct ctx *c, union epoll_ref ref,
 			     uint32_t events);
 void tcp_splice_init(struct ctx *c);
-void tcp_splice_timer(struct ctx *c);
 
 #endif /* TCP_SPLICE_H */

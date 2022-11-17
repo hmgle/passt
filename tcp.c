@@ -3283,8 +3283,6 @@ int tcp_init(struct ctx *c)
 
 		refill_arg.ns = 1;
 		NS_CALL(tcp_sock_refill, &refill_arg);
-
-		tcp_splice_timer(c);
 	}
 
 	return 0;
@@ -3416,7 +3414,7 @@ static int tcp_port_rebind(void *arg)
 void tcp_timer(struct ctx *c, const struct timespec *ts)
 {
 	struct tcp_sock_refill_arg refill_arg = { c, 0 };
-	struct tcp_tap_conn *conn;
+	union tcp_conn *conn;
 
 	(void)ts;
 
@@ -3439,11 +3437,13 @@ void tcp_timer(struct ctx *c, const struct timespec *ts)
 		}
 	}
 
-	for (conn = CONN(c->tcp.conn_count - 1); conn >= CONN(0); conn--) {
-		if (conn->c.spliced)
-			continue;
-		if (conn->events == CLOSED)
-			tcp_conn_destroy(c, conn);
+	for (conn = tc + c->tcp.conn_count - 1; conn >= tc; conn--) {
+		if (conn->c.spliced) {
+			tcp_splice_timer(c, &conn->splice);
+		} else {
+			if (conn->tap.events == CLOSED)
+				tcp_conn_destroy(c, &conn->tap);
+		}
 	}
 
 	tcp_sock_refill(&refill_arg);
@@ -3453,6 +3453,6 @@ void tcp_timer(struct ctx *c, const struct timespec *ts)
 		    (c->ifi6 && ns_sock_pool6[TCP_SOCK_POOL_TSH] < 0))
 			NS_CALL(tcp_sock_refill, &refill_arg);
 
-		tcp_splice_timer(c);
+		tcp_splice_pipe_refill(c);
 	}
 }
