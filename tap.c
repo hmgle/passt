@@ -1106,11 +1106,11 @@ void tap_handler(struct ctx *c, int fd, uint32_t events,
 		return;
 	}
 
-	if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
-		goto reinit;
-
 	if ((c->mode == MODE_PASST && tap_handler_passt(c, now)) ||
 	    (c->mode == MODE_PASTA && tap_handler_pasta(c, now)))
+		goto reinit;
+
+	if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
 		goto reinit;
 
 	return;
