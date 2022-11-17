@@ -1177,25 +1177,17 @@ static int tcp_opt_get(const char *opts, size_t len, uint8_t type_find,
 /**
  * tcp_hash_match() - Check if a connection entry matches address and ports
  * @conn:	Connection entry to match against
- * @af:		Address family, AF_INET or AF_INET6
- * @addr:	Remote address, pointer to in_addr or in6_addr
+ * @addr:	Remote address
  * @tap_port:	tap-facing port
  * @sock_port:	Socket-facing port
  *
  * Return: 1 on match, 0 otherwise
  */
 static int tcp_hash_match(const struct tcp_tap_conn *conn,
-			  int af, const void *addr,
+			  const union inany_addr *addr,
 			  in_port_t tap_port, in_port_t sock_port)
 {
-	const struct in_addr *a4 = inany_v4(&conn->addr);
-
-	if (af == AF_INET && a4	&& !memcmp(a4, addr, sizeof(*a4)) &&
-	    conn->tap_port == tap_port && conn->sock_port == sock_port)
-		return 1;
-
-	if (af == AF_INET6					&&
-	    IN6_ARE_ADDR_EQUAL(&conn->addr.a6, addr)		&&
+	if (inany_equals(&conn->addr, addr) &&
 	    conn->tap_port == tap_port && conn->sock_port == sock_port)
 		return 1;
 
@@ -1340,7 +1332,7 @@ static struct tcp_tap_conn *tcp_hash_lookup(const struct ctx *c,
 	inany_from_af(&aany, af, addr);
 	b = tcp_hash(c, &aany, tap_port, sock_port);
 	for (conn = tc_hash[b]; conn; conn = conn_at_idx(conn->next_index)) {
-		if (tcp_hash_match(conn, af, addr, tap_port, sock_port))
+		if (tcp_hash_match(conn, &aany, tap_port, sock_port))
 			return conn;
 	}
 
