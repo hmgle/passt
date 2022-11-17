@@ -13,10 +13,11 @@
  * DOC: Theory of Operation
  *
  *
- * For local traffic directed to TCP ports configured for direct mapping between
- * namespaces, packets are directly translated between L4 sockets using a pair
- * of splice() syscalls. These connections are tracked in the @tc array of
- * struct tcp_splice_conn, using these events:
+ * For local traffic directed to TCP ports configured for direct
+ * mapping between namespaces, packets are directly translated between
+ * L4 sockets using a pair of splice() syscalls. These connections are
+ * tracked in the @tc_splice array of struct tcp_splice_conn, using
+ * these events:
  *
  * - SPLICE_CONNECT:		connection accepted, connecting to target
  * - SPLICE_ESTABLISHED:	connection to target established
@@ -113,10 +114,11 @@ struct tcp_splice_conn {
 #define CONN_V6(x)			(x->flags & SOCK_V6)
 #define CONN_V4(x)			(!CONN_V6(x))
 #define CONN_HAS(conn, set)		((conn->events & (set)) == (set))
-#define CONN(index)			(tc + (index))
+#define CONN(index)			(tc_splice + (index))
+#define CONN_IDX(conn)			((conn) - tc_splice)
 
 /* Spliced connections */
-static struct tcp_splice_conn tc[TCP_SPLICE_MAX_CONNS];
+static struct tcp_splice_conn tc_splice[TCP_SPLICE_MAX_CONNS];
 
 /* Display strings for connection events */
 static const char *tcp_splice_event_str[] __attribute((__unused__)) = {
@@ -173,7 +175,7 @@ static void conn_flag_do(const struct ctx *c, struct tcp_splice_conn *conn,
 
 		conn->flags &= flag;
 		if (fls(~flag) >= 0) {
-			debug("TCP (spliced): index %li: %s dropped", conn - tc,
+			debug("TCP (spliced): index %li: %s dropped", CONN_IDX(conn),
 			      tcp_splice_flag_str[fls(~flag)]);
 		}
 	} else {
@@ -182,7 +184,7 @@ static void conn_flag_do(const struct ctx *c, struct tcp_splice_conn *conn,
 
 		conn->flags |= flag;
 		if (fls(flag) >= 0) {
-			debug("TCP (spliced): index %li: %s", conn - tc,
+			debug("TCP (spliced): index %li: %s", CONN_IDX(conn),
 			      tcp_splice_flag_str[fls(flag)]);
 		}
 	}
@@ -211,11 +213,11 @@ static int tcp_splice_epoll_ctl(const struct ctx *c,
 	int m = (conn->flags & IN_EPOLL) ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 	union epoll_ref ref_a = { .r.proto = IPPROTO_TCP, .r.s = conn->a,
 				  .r.p.tcp.tcp.splice = 1,
-				  .r.p.tcp.tcp.index = conn - tc,
+				  .r.p.tcp.tcp.index = CONN_IDX(conn),
 				  .r.p.tcp.tcp.v6 = CONN_V6(conn) };
 	union epoll_ref ref_b = { .r.proto = IPPROTO_TCP, .r.s = conn->b,
 				  .r.p.tcp.tcp.splice = 1,
-				  .r.p.tcp.tcp.index = conn - tc,
+				  .r.p.tcp.tcp.index = CONN_IDX(conn),
 				  .r.p.tcp.tcp.v6 = CONN_V6(conn) };
 	struct epoll_event ev_a = { .data.u64 = ref_a.u64 };
 	struct epoll_event ev_b = { .data.u64 = ref_b.u64 };
@@ -257,7 +259,7 @@ static void conn_event_do(const struct ctx *c, struct tcp_splice_conn *conn,
 
 		conn->events &= event;
 		if (fls(~event) >= 0) {
-			debug("TCP (spliced): index %li, ~%s", conn - tc,
+			debug("TCP (spliced): index %li, ~%s", CONN_IDX(conn),
 			      tcp_splice_event_str[fls(~event)]);
 		}
 	} else {
@@ -266,7 +268,7 @@ static void conn_event_do(const struct ctx *c, struct tcp_splice_conn *conn,
 
 		conn->events |= event;
 		if (fls(event) >= 0) {
-			debug("TCP (spliced): index %li, %s", conn - tc,
+			debug("TCP (spliced): index %li, %s", CONN_IDX(conn),
 			      tcp_splice_event_str[fls(event)]);
 		}
 	}
@@ -292,8 +294,8 @@ static void tcp_table_splice_compact(struct ctx *c,
 {
 	struct tcp_splice_conn *move;
 
-	if ((hole - tc) == --c->tcp.splice_conn_count) {
-		debug("TCP (spliced): index %li (max) removed", hole - tc);
+	if (CONN_IDX(hole) == --c->tcp.splice_conn_count) {
+		debug("TCP (spliced): index %li (max) removed", CONN_IDX(hole));
 		return;
 	}
 
@@ -307,7 +309,8 @@ static void tcp_table_splice_compact(struct ctx *c,
 	move->pipe_b_a[0] = move->pipe_b_a[1] = -1;
 	move->flags = move->events = 0;
 
-	debug("TCP (spliced): index %li moved to %li", move - tc, hole - tc);
+	debug("TCP (spliced): index %li moved to %li",
+	      CONN_IDX(move), CONN_IDX(hole));
 	tcp_splice_epoll_ctl(c, hole);
 	if (tcp_splice_epoll_ctl(c, hole))
 		conn_flag(c, hole, CLOSING);
@@ -345,7 +348,7 @@ static void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
 
 	conn->events = CLOSED;
 	conn->flags = 0;
-	debug("TCP (spliced): index %li, CLOSED", conn - tc);
+	debug("TCP (spliced): index %li, CLOSED", CONN_IDX(conn));
 
 	tcp_table_splice_compact(c, conn);
 }
@@ -872,7 +875,9 @@ void tcp_splice_timer(struct ctx *c)
 {
 	struct tcp_splice_conn *conn;
 
-	for (conn = CONN(c->tcp.splice_conn_count - 1); conn >= tc; conn--) {
+	for (conn = CONN(c->tcp.splice_conn_count - 1);
+	     conn >= tc_splice;
+	     conn--) {
 		if (conn->flags & CLOSING) {
 			tcp_splice_destroy(c, conn);
 			return;
@@ -918,7 +923,9 @@ void tcp_splice_defer_handler(struct ctx *c)
 	if (c->tcp.splice_conn_count < MIN(max_files / 6, max_conns))
 		return;
 
-	for (conn = CONN(c->tcp.splice_conn_count - 1); conn >= tc; conn--) {
+	for (conn = CONN(c->tcp.splice_conn_count - 1);
+	     conn >= tc_splice;
+	     conn--) {
 		if (conn->flags & CLOSING)
 			tcp_splice_destroy(c, conn);
 	}
