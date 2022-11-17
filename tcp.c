@@ -1244,6 +1244,24 @@ static unsigned int tcp_hash(const struct ctx *c, int af, const void *addr,
 }
 
 /**
+ * tcp_conn_hash() - Calculate hash bucket of an existing connection
+ * @c:		Execution context
+ * @conn:	Connection
+ *
+ * Return: hash value, already modulo size of the hash table
+ */
+static unsigned int tcp_conn_hash(const struct ctx *c,
+				  const struct tcp_tap_conn *conn)
+{
+	if (CONN_V6(conn))
+		return tcp_hash(c, AF_INET6, &conn->a.a6,
+				conn->tap_port, conn->sock_port);
+	else
+		return tcp_hash(c, AF_INET, &conn->a.a4.a,
+				conn->tap_port, conn->sock_port);
+}
+
+/**
  * tcp_hash_insert() - Insert connection into hash table, chain link
  * @c:		Execution context
  * @conn:	Connection pointer
@@ -1258,7 +1276,6 @@ static void tcp_hash_insert(const struct ctx *c, struct tcp_tap_conn *conn,
 	b = tcp_hash(c, af, addr, conn->tap_port, conn->sock_port);
 	conn->next_index = tc_hash[b] ? CONN_IDX(tc_hash[b]) : -1;
 	tc_hash[b] = conn;
-	conn->hash_bucket = b;
 
 	debug("TCP: hash table insert: index %li, sock %i, bucket: %i, next: "
 	      "%p", CONN_IDX(conn), conn->sock, b, conn_at_idx(conn->next_index));
@@ -1266,12 +1283,14 @@ static void tcp_hash_insert(const struct ctx *c, struct tcp_tap_conn *conn,
 
 /**
  * tcp_hash_remove() - Drop connection from hash table, chain unlink
+ * @c:		Execution context
  * @conn:	Connection pointer
  */
-static void tcp_hash_remove(const struct tcp_tap_conn *conn)
+static void tcp_hash_remove(const struct ctx *c,
+			    const struct tcp_tap_conn *conn)
 {
 	struct tcp_tap_conn *entry, *prev = NULL;
-	int b = conn->hash_bucket;
+	int b = tcp_conn_hash(c, conn);
 
 	for (entry = tc_hash[b]; entry;
 	     prev = entry, entry = conn_at_idx(entry->next_index)) {
@@ -1299,7 +1318,7 @@ static void tcp_tap_conn_update(struct ctx *c, struct tcp_tap_conn *old,
 				struct tcp_tap_conn *new)
 {
 	struct tcp_tap_conn *entry, *prev = NULL;
-	int b = old->hash_bucket;
+	int b = tcp_conn_hash(c, old);
 
 	for (entry = tc_hash[b]; entry;
 	     prev = entry, entry = conn_at_idx(entry->next_index)) {
@@ -1387,7 +1406,7 @@ static void tcp_conn_destroy(struct ctx *c, struct tcp_tap_conn *conn)
 	if (conn->timer != -1)
 		close(conn->timer);
 
-	tcp_hash_remove(conn);
+	tcp_hash_remove(c, conn);
 	tcp_table_compact(c, (union tcp_conn *)conn);
 }
 

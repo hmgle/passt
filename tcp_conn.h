@@ -9,8 +9,6 @@
 #ifndef TCP_CONN_H
 #define TCP_CONN_H
 
-#define TCP_HASH_BUCKET_BITS		(TCP_CONN_INDEX_BITS + 1)
-
 /**
  * struct tcp_conn_common - Common fields for spliced and non-spliced
  * @spliced:		Is this a spliced connection?
@@ -32,7 +30,6 @@ extern const char *tcp_common_flag_str[];
  * @events:		Connection events, implying connection states
  * @timer:		timerfd descriptor for timeout events
  * @flags:		Connection flags representing internal attributes
- * @hash_bucket:	Bucket index in connection lookup hash table
  * @retrans:		Number of retransmissions occurred due to ACK_TIMEOUT
  * @ws_from_tap:	Window scaling factor advertised from tap/guest
  * @ws_to_tap:		Window scaling factor advertised to tap/guest
@@ -96,8 +93,6 @@ struct tcp_tap_conn {
 #define ACK_TO_TAP_DUE		BIT(4)
 #define ACK_FROM_TAP_DUE	BIT(5)
 
-
-	unsigned int	hash_bucket	:TCP_HASH_BUCKET_BITS;
 
 #define TCP_MSS_BITS			14
 	unsigned int	tap_mss		:TCP_MSS_BITS;
