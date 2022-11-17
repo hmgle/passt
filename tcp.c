@@ -2996,8 +2996,12 @@ static int tcp_sock_init_af(const struct ctx *c, int af, in_port_t port,
 
 	s = sock_l4(c, af, IPPROTO_TCP, addr, ifname, port, tref.u32);
 
-	if (c->tcp.fwd_in.mode == FWD_AUTO)
-		tcp_sock_init_ext[port][(af == AF_INET) ? V4 : V6] = s;
+	if (c->tcp.fwd_in.mode == FWD_AUTO) {
+		if (af == AF_INET  || af == AF_UNSPEC)
+			tcp_sock_init_ext[port][V4] = s;
+		if (af == AF_INET6 || af == AF_UNSPEC)
+			tcp_sock_init_ext[port][V6] = s;
+	}
 
 	if (s < 0)
 		return -1;
@@ -3017,6 +3021,12 @@ static int tcp_sock_init_af(const struct ctx *c, int af, in_port_t port,
 void tcp_sock_init(const struct ctx *c, sa_family_t af, const void *addr,
 		   const char *ifname, in_port_t port)
 {
+	if (af == AF_UNSPEC && c->ifi4 && c->ifi6)
+		/* Attempt to get a dual stack socket */
+		if (tcp_sock_init_af(c, AF_UNSPEC, port, addr, ifname) >= 0)
+			return;
+
+	/* Otherwise create a socket per IP version */
 	if ((af == AF_INET  || af == AF_UNSPEC) && c->ifi4)
 		tcp_sock_init_af(c, AF_INET, port, addr, ifname);
 	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6)
