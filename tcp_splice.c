@@ -52,6 +52,7 @@
 #include "passt.h"
 #include "log.h"
 #include "tcp_splice.h"
+#include "inany.h"
 
 #include "tcp_conn.h"
 

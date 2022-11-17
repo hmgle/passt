@@ -301,6 +301,7 @@
 #include "conf.h"
 #include "tcp_splice.h"
 #include "log.h"
+#include "inany.h"
 
 #include "tcp_conn.h"
 
@@ -404,7 +405,7 @@ struct tcp6_l2_head {	/* For MSS6 macro: keep in sync with tcp6_l2_buf_t */
 #define OPT_SACK	5
 #define OPT_TS		8
 
-#define CONN_V4(conn)		IN6_IS_ADDR_V4MAPPED(&conn->a.a6)
+#define CONN_V4(conn)		(!!inany_v4(&(conn)->addr))
 #define CONN_V6(conn)		(!CONN_V4(conn))
 #define CONN_IS_CLOSING(conn)						\
 	((conn->events & ESTABLISHED) &&				\
@@ -438,7 +439,7 @@ static int tcp_sock_init_ext	[NUM_PORTS][IP_VERSIONS];
 static int tcp_sock_ns		[NUM_PORTS][IP_VERSIONS];
 
 /* Table of destinations with very low RTT (assumed to be local), LRU */
-static struct in6_addr low_rtt_dst[LOW_RTT_TABLE_SIZE];
+static union inany_addr low_rtt_dst[LOW_RTT_TABLE_SIZE];
 
 /* Static buffers */
 
@@ -861,7 +862,7 @@ static int tcp_rtt_dst_low(const struct tcp_tap_conn *conn)
 	int i;
 
 	for (i = 0; i < LOW_RTT_TABLE_SIZE; i++)
-		if (IN6_ARE_ADDR_EQUAL(&conn->a.a6, low_rtt_dst + i))
+		if (inany_equals(&conn->addr, low_rtt_dst + i))
 			return 1;
 
 	return 0;
@@ -883,7 +884,7 @@ static void tcp_rtt_dst_check(const struct tcp_tap_conn *conn,
 		return;
 
 	for (i = 0; i < LOW_RTT_TABLE_SIZE; i++) {
-		if (IN6_ARE_ADDR_EQUAL(&conn->a.a6, low_rtt_dst + i))
+		if (inany_equals(&conn->addr, low_rtt_dst + i))
 			return;
 		if (hole == -1 && IN6_IS_ADDR_UNSPECIFIED(low_rtt_dst + i))
 			hole = i;
@@ -895,10 +896,10 @@ static void tcp_rtt_dst_check(const struct tcp_tap_conn *conn,
 	if (hole == -1)
 		return;
 
-	memcpy(low_rtt_dst + hole++, &conn->a.a6, sizeof(conn->a.a6));
+	low_rtt_dst[hole++] = conn->addr;
 	if (hole == LOW_RTT_TABLE_SIZE)
 		hole = 0;
-	memcpy(low_rtt_dst + hole, &in6addr_any, sizeof(conn->a.a6));
+	inany_from_af(low_rtt_dst + hole, AF_INET6, &in6addr_any);
 #else
 	(void)conn;
 	(void)tinfo;
@@ -1187,13 +1188,14 @@ static int tcp_hash_match(const struct tcp_tap_conn *conn,
 			  int af, const void *addr,
 			  in_port_t tap_port, in_port_t sock_port)
 {
-	if (af == AF_INET && CONN_V4(conn)			&&
-	    !memcmp(&conn->a.a4.a, addr, sizeof(conn->a.a4.a))	&&
+	const struct in_addr *a4 = inany_v4(&conn->addr);
+
+	if (af == AF_INET && a4	&& !memcmp(a4, addr, sizeof(*a4)) &&
 	    conn->tap_port == tap_port && conn->sock_port == sock_port)
 		return 1;
 
 	if (af == AF_INET6					&&
-	    IN6_ARE_ADDR_EQUAL(&conn->a.a6, addr)		&&
+	    IN6_ARE_ADDR_EQUAL(&conn->addr.a6, addr)		&&
 	    conn->tap_port == tap_port && conn->sock_port == sock_port)
 		return 1;
 
@@ -1253,11 +1255,13 @@ static unsigned int tcp_hash(const struct ctx *c, int af, const void *addr,
 static unsigned int tcp_conn_hash(const struct ctx *c,
 				  const struct tcp_tap_conn *conn)
 {
-	if (CONN_V6(conn))
-		return tcp_hash(c, AF_INET6, &conn->a.a6,
+	const struct in_addr *a4 = inany_v4(&conn->addr);
+
+	if (a4)
+		return tcp_hash(c, AF_INET, a4,
 				conn->tap_port, conn->sock_port);
 	else
-		return tcp_hash(c, AF_INET, &conn->a.a4.a,
+		return tcp_hash(c, AF_INET6, &conn->addr.a6,
 				conn->tap_port, conn->sock_port);
 }
 
@@ -1582,6 +1586,7 @@ static size_t tcp_l2_buf_fill_headers(const struct ctx *c,
 				      void *p, size_t plen,
 				      const uint16_t *check, uint32_t seq)
 {
+	const struct in_addr *a4 = inany_v4(&conn->addr);
 	size_t ip_len, eth_len;
 
 #define SET_TCP_HEADER_COMMON_V4_V6(b, conn, seq)			\
@@ -1599,13 +1604,33 @@ do {									\
 	}								\
 } while (0)
 
-	if (CONN_V6(conn)) {
+	if (a4) {
+		struct tcp4_l2_buf_t *b = (struct tcp4_l2_buf_t *)p;
+
+		ip_len = plen + sizeof(struct iphdr) + sizeof(struct tcphdr);
+		b->iph.tot_len = htons(ip_len);
+		b->iph.saddr = a4->s_addr;
+		b->iph.daddr = c->ip4.addr_seen.s_addr;
+
+		if (check)
+			b->iph.check = *check;
+		else
+			tcp_update_check_ip4(b);
+
+		SET_TCP_HEADER_COMMON_V4_V6(b, conn, seq);
+
+		tcp_update_check_tcp4(b);
+
+		eth_len = ip_len + sizeof(struct ethhdr);
+		if (c->mode == MODE_PASST)
+			b->vnet_len = htonl(eth_len);
+	} else {
 		struct tcp6_l2_buf_t *b = (struct tcp6_l2_buf_t *)p;
 
 		ip_len = plen + sizeof(struct ipv6hdr) + sizeof(struct tcphdr);
 
 		b->ip6h.payload_len = htons(plen + sizeof(struct tcphdr));
-		b->ip6h.saddr = conn->a.a6;
+		b->ip6h.saddr = conn->addr.a6;
 		if (IN6_IS_ADDR_LINKLOCAL(&b->ip6h.saddr))
 			b->ip6h.daddr = c->ip6.addr_ll_seen;
 		else
@@ -1620,26 +1645,6 @@ do {									\
 		b->ip6h.flow_lbl[0] = (conn->sock >> 16) & 0xf;
 		b->ip6h.flow_lbl[1] = (conn->sock >> 8) & 0xff;
 		b->ip6h.flow_lbl[2] = (conn->sock >> 0) & 0xff;
-
-		eth_len = ip_len + sizeof(struct ethhdr);
-		if (c->mode == MODE_PASST)
-			b->vnet_len = htonl(eth_len);
-	} else {
-		struct tcp4_l2_buf_t *b = (struct tcp4_l2_buf_t *)p;
-
-		ip_len = plen + sizeof(struct iphdr) + sizeof(struct tcphdr);
-		b->iph.tot_len = htons(ip_len);
-		b->iph.saddr = conn->a.a4.a.s_addr;
-		b->iph.daddr = c->ip4.addr_seen.s_addr;
-
-		if (check)
-			b->iph.check = *check;
-		else
-			tcp_update_check_ip4(b);
-
-		SET_TCP_HEADER_COMMON_V4_V6(b, conn, seq);
-
-		tcp_update_check_tcp4(b);
 
 		eth_len = ip_len + sizeof(struct ethhdr);
 		if (c->mode == MODE_PASST)
@@ -2144,18 +2149,14 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	if (!(conn->wnd_from_tap = (htons(th->window) >> conn->ws_from_tap)))
 		conn->wnd_from_tap = 1;
 
+	inany_from_af(&conn->addr, af, addr);
+
 	if (af == AF_INET) {
 		sa = (struct sockaddr *)&addr4;
 		sl = sizeof(addr4);
-
-		memset(&conn->a.a4.zero, 0,    sizeof(conn->a.a4.zero));
-		memset(&conn->a.a4.one,  0xff, sizeof(conn->a.a4.one));
-		memcpy(&conn->a.a4.a,    addr, sizeof(conn->a.a4.a));
 	} else {
 		sa = (struct sockaddr *)&addr6;
 		sl = sizeof(addr6);
-
-		memcpy(&conn->a.a6,      addr, sizeof(conn->a.a6));
 	}
 
 	conn->sock_port = ntohs(th->dest);
@@ -2808,7 +2809,7 @@ static void tcp_tap_conn_from_sock(struct ctx *c, union epoll_ref ref,
 			memcpy(&sa6.sin6_addr, src, sizeof(*src));
 		}
 
-		memcpy(&conn->a.a6, &sa6.sin6_addr, sizeof(conn->a.a6));
+		inany_from_af(&conn->addr, AF_INET6, &sa6.sin6_addr);
 
 		conn->sock_port = ntohs(sa6.sin6_port);
 		conn->tap_port = ref.r.p.tcp.tcp.index;
@@ -2824,15 +2825,12 @@ static void tcp_tap_conn_from_sock(struct ctx *c, union epoll_ref ref,
 
 		memcpy(&sa4, sa, sizeof(sa4));
 
-		memset(&conn->a.a4.zero,   0, sizeof(conn->a.a4.zero));
-		memset(&conn->a.a4.one, 0xff, sizeof(conn->a.a4.one));
-
 		if (IN4_IS_ADDR_LOOPBACK(&sa4.sin_addr) ||
 		    IN4_IS_ADDR_UNSPECIFIED(&sa4.sin_addr) ||
 		    IN4_ARE_ADDR_EQUAL(&sa4.sin_addr, &c->ip4.addr_seen))
 			sa4.sin_addr = c->ip4.gw;
 
-		conn->a.a4.a = sa4.sin_addr;
+		inany_from_af(&conn->addr, AF_INET, &sa4.sin_addr);
 
 		conn->sock_port = ntohs(sa4.sin_port);
 		conn->tap_port = ref.r.p.tcp.tcp.index;
