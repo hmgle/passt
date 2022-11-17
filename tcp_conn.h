@@ -14,9 +14,11 @@
 /**
  * struct tcp_conn_common - Common fields for spliced and non-spliced
  * @spliced:		Is this a spliced connection?
+ * @in_epoll:		Is the connection in the epoll set?
  */
 struct tcp_conn_common {
 	bool spliced	:1;
+	bool in_epoll	:1;
 };
 
 extern const char *tcp_common_flag_str[];
@@ -90,10 +92,9 @@ struct tcp_tap_conn {
 #define STALLED			BIT(0)
 #define LOCAL			BIT(1)
 #define WND_CLAMPED		BIT(2)
-#define IN_EPOLL		BIT(3)
-#define ACTIVE_CLOSE		BIT(4)
-#define ACK_TO_TAP_DUE		BIT(5)
-#define ACK_FROM_TAP_DUE	BIT(6)
+#define ACTIVE_CLOSE		BIT(3)
+#define ACK_TO_TAP_DUE		BIT(4)
+#define ACK_FROM_TAP_DUE	BIT(5)
 
 
 	unsigned int	hash_bucket	:TCP_HASH_BUCKET_BITS;
@@ -170,12 +171,11 @@ struct tcp_splice_conn {
 
 	uint8_t flags;
 #define SPLICE_V6			BIT(0)
-#define SPLICE_IN_EPOLL			BIT(1)
-#define RCVLOWAT_SET_A			BIT(2)
-#define RCVLOWAT_SET_B			BIT(3)
-#define RCVLOWAT_ACT_A			BIT(4)
-#define RCVLOWAT_ACT_B			BIT(5)
-#define CLOSING				BIT(6)
+#define RCVLOWAT_SET_A			BIT(1)
+#define RCVLOWAT_SET_B			BIT(2)
+#define RCVLOWAT_ACT_A			BIT(3)
+#define RCVLOWAT_ACT_B			BIT(4)
+#define CLOSING				BIT(5)
 
 	uint32_t a_read;
 	uint32_t a_written;

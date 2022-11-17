@@ -83,8 +83,8 @@ static const char *tcp_splice_event_str[] __attribute((__unused__)) = {
 
 /* Display strings for connection flags */
 static const char *tcp_splice_flag_str[] __attribute((__unused__)) = {
-	"SPLICE_V6", "SPLICE_IN_EPOLL", "RCVLOWAT_SET_A", "RCVLOWAT_SET_B",
-	"RCVLOWAT_ACT_A", "RCVLOWAT_ACT_B", "CLOSING",
+	"SPLICE_V6", "RCVLOWAT_SET_A", "RCVLOWAT_SET_B", "RCVLOWAT_ACT_A",
+	"RCVLOWAT_ACT_B", "CLOSING",
 };
 
 /**
@@ -164,7 +164,7 @@ static void conn_flag_do(const struct ctx *c, struct tcp_splice_conn *conn,
 static int tcp_splice_epoll_ctl(const struct ctx *c,
 				struct tcp_splice_conn *conn)
 {
-	int m = (conn->flags & SPLICE_IN_EPOLL) ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
+	int m = conn->c.in_epoll ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 	union epoll_ref ref_a = { .r.proto = IPPROTO_TCP, .r.s = conn->a,
 				  .r.p.tcp.tcp.splice = 1,
 				  .r.p.tcp.tcp.index = CONN_IDX(conn),
@@ -188,7 +188,7 @@ static int tcp_splice_epoll_ctl(const struct ctx *c,
 	    epoll_ctl(c->epollfd, m, conn->b, &ev_b))
 		goto delete;
 
-	conn->flags |= SPLICE_IN_EPOLL;		/* No need to log this */
+	conn->c.in_epoll = true;
 
 	return 0;
 

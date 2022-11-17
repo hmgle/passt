@@ -429,8 +429,8 @@ static const char *tcp_state_str[] __attribute((__unused__)) = {
 };
 
 static const char *tcp_flag_str[] __attribute((__unused__)) = {
-	"STALLED", "LOCAL", "WND_CLAMPED", "IN_EPOLL", "ACTIVE_CLOSE",
-	"ACK_TO_TAP_DUE", "ACK_FROM_TAP_DUE",
+	"STALLED", "LOCAL", "WND_CLAMPED", "ACTIVE_CLOSE", "ACK_TO_TAP_DUE",
+	"ACK_FROM_TAP_DUE",
 };
 
 /* Listening sockets, used for automatic port forwarding in pasta mode only */
@@ -660,14 +660,14 @@ static void conn_flag_do(const struct ctx *c, struct tcp_tap_conn *conn,
  */
 static int tcp_epoll_ctl(const struct ctx *c, struct tcp_tap_conn *conn)
 {
-	int m = (conn->flags & IN_EPOLL) ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
+	int m = conn->c.in_epoll ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 	union epoll_ref ref = { .r.proto = IPPROTO_TCP, .r.s = conn->sock,
 				.r.p.tcp.tcp.index = CONN_IDX(conn),
 				.r.p.tcp.tcp.v6 = CONN_V6(conn) };
 	struct epoll_event ev = { .data.u64 = ref.u64 };
 
 	if (conn->events == CLOSED) {
-		if (conn->flags & IN_EPOLL)
+		if (conn->c.in_epoll)
 			epoll_ctl(c->epollfd, EPOLL_CTL_DEL, conn->sock, &ev);
 		if (conn->timer != -1)
 			epoll_ctl(c->epollfd, EPOLL_CTL_DEL, conn->timer, &ev);
@@ -679,7 +679,7 @@ static int tcp_epoll_ctl(const struct ctx *c, struct tcp_tap_conn *conn)
 	if (epoll_ctl(c->epollfd, m, conn->sock, &ev))
 		return -errno;
 
-	conn->flags |= IN_EPOLL;	/* No need to log this */
+	conn->c.in_epoll = true;
 
 	if (conn->timer != -1) {
 		union epoll_ref ref_t = { .r.proto = IPPROTO_TCP,
