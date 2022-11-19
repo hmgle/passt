@@ -1372,16 +1372,18 @@ void tcp_table_compact(struct ctx *c, union tcp_conn *hole)
 /**
  * tcp_conn_destroy() - Close sockets, trigger hash table removal and compaction
  * @c:		Execution context
- * @conn:	Connection pointer
+ * @conn_union:	Connection pointer (container union)
  */
-static void tcp_conn_destroy(struct ctx *c, struct tcp_tap_conn *conn)
+static void tcp_conn_destroy(struct ctx *c, union tcp_conn *conn_union)
 {
+	struct tcp_tap_conn *conn = &conn_union->tap;
+
 	close(conn->sock);
 	if (conn->timer != -1)
 		close(conn->timer);
 
 	tcp_hash_remove(c, conn);
-	tcp_table_compact(c, (union tcp_conn *)conn);
+	tcp_table_compact(c, conn_union);
 }
 
 static void tcp_rst_do(struct ctx *c, struct tcp_tap_conn *conn);
@@ -1531,13 +1533,12 @@ void tcp_defer_handler(struct ctx *c)
 	for (conn = tc + c->tcp.conn_count - 1; conn >= tc; conn--) {
 		if (conn->c.spliced) {
 			if (conn->splice.flags & CLOSING)
-				tcp_splice_destroy(c, &conn->splice);
+				tcp_splice_destroy(c, conn);
 		} else {
 			if (conn->tap.events == CLOSED)
-				tcp_conn_destroy(c, &conn->tap);
+				tcp_conn_destroy(c, conn);
 		}
 	}
-
 }
 
 /**
@@ -3391,10 +3392,10 @@ void tcp_timer(struct ctx *c, const struct timespec *ts)
 
 	for (conn = tc + c->tcp.conn_count - 1; conn >= tc; conn--) {
 		if (conn->c.spliced) {
-			tcp_splice_timer(c, &conn->splice);
+			tcp_splice_timer(c, conn);
 		} else {
 			if (conn->tap.events == CLOSED)
-				tcp_conn_destroy(c, &conn->tap);
+				tcp_conn_destroy(c, conn);
 		}
 	}
 

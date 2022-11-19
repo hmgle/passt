@@ -251,10 +251,12 @@ void tcp_splice_conn_update(struct ctx *c, struct tcp_splice_conn *new)
 /**
  * tcp_splice_destroy() - Close spliced connection and pipes, clear
  * @c:		Execution context
- * @conn:	Connection pointer
+ * @conn_union:	Spliced connection (container union)
  */
-void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
+void tcp_splice_destroy(struct ctx *c, union tcp_conn *conn_union)
 {
+	struct tcp_splice_conn *conn = &conn_union->splice;
+
 	if (conn->events & SPLICE_ESTABLISHED) {
 		/* Flushing might need to block: don't recycle them. */
 		if (conn->pipe_a_b[0] != -1) {
@@ -283,7 +285,7 @@ void tcp_splice_destroy(struct ctx *c, struct tcp_splice_conn *conn)
 	debug("TCP (spliced): index %li, CLOSED", CONN_IDX(conn));
 
 	c->tcp.splice_conn_count--;
-	tcp_table_compact(c, (union tcp_conn *)conn);
+	tcp_table_compact(c, conn_union);
 }
 
 /**
@@ -824,12 +826,14 @@ void tcp_splice_init(struct ctx *c)
 /**
  * tcp_splice_timer() - Timer for spliced connections
  * @c:		Execution context
- * @conn:	Spliced connection
+ * @conn_union:	Spliced connection (container union)
  */
-void tcp_splice_timer(struct ctx *c, struct tcp_splice_conn *conn)
+void tcp_splice_timer(struct ctx *c, union tcp_conn *conn_union)
 {
+	struct tcp_splice_conn *conn = &conn_union->splice;
+
 	if (conn->flags & CLOSING) {
-		tcp_splice_destroy(c, conn);
+		tcp_splice_destroy(c, conn_union);
 		return;
 	}
 
