@@ -657,6 +657,10 @@ See also the [test logs](/builds/latest/test/).
 ### [Chat](/passt/chat)
 * Somebody might be available on [IRC](https://irc.passt.top)
 
+### Weekly development [meeting](https://pad.passt.top/p/weekly)
+* Open to everybody! Feel free to join and propose a different time directly on
+  the agenda.
+
 ## Security and Vulnerability Reports
 
 * Please send an email to [passt-sec](mailto:passt-sec@passt.top), private list,
