@@ -314,8 +314,9 @@ void udp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 
 /**
  * udp_sock4_iov_init() - Initialise scatter-gather L2 buffers for IPv4 sockets
+ * @c:		Execution context
  */
-static void udp_sock4_iov_init(void)
+static void udp_sock4_iov_init(const struct ctx *c)
 {
 	struct mmsghdr *h;
 	int i;
@@ -343,7 +344,11 @@ static void udp_sock4_iov_init(void)
 	for (i = 0, h = udp4_l2_mh_tap; i < UDP_MAX_FRAMES; i++, h++) {
 		struct msghdr *mh = &h->msg_hdr;
 
-		udp4_l2_iov_tap[i].iov_base	= &udp4_l2_buf[i].vnet_len;
+		if (c->mode == MODE_PASTA)
+			udp4_l2_iov_tap[i].iov_base	= &udp4_l2_buf[i].eh;
+		else
+			udp4_l2_iov_tap[i].iov_base	= &udp4_l2_buf[i].vnet_len;
+
 		mh->msg_iov			= &udp4_l2_iov_tap[i];
 		mh->msg_iovlen			= 1;
 	}
@@ -351,8 +356,9 @@ static void udp_sock4_iov_init(void)
 
 /**
  * udp_sock6_iov_init() - Initialise scatter-gather L2 buffers for IPv6 sockets
+ * @c:		Execution context
  */
-static void udp_sock6_iov_init(void)
+static void udp_sock6_iov_init(const struct ctx *c)
 {
 	struct mmsghdr *h;
 	int i;
@@ -383,7 +389,11 @@ static void udp_sock6_iov_init(void)
 	for (i = 0, h = udp6_l2_mh_tap; i < UDP_MAX_FRAMES; i++, h++) {
 		struct msghdr *mh = &h->msg_hdr;
 
-		udp6_l2_iov_tap[i].iov_base	= &udp6_l2_buf[i].vnet_len;
+		if (c->mode == MODE_PASTA)
+			udp6_l2_iov_tap[i].iov_base	= &udp6_l2_buf[i].eh;
+		else
+			udp6_l2_iov_tap[i].iov_base	= &udp6_l2_buf[i].vnet_len;
+
 		mh->msg_iov			= &udp6_l2_iov_tap[i];
 		mh->msg_iovlen			= 1;
 	}
@@ -685,16 +695,7 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 	b->uh.len = htons(udp4_l2_mh_sock[n].msg_len + sizeof(b->uh));
 
 	if (c->mode == MODE_PASTA) {
-		/* If we pass &b->eh directly to write(), starting from
-		 * gcc 12.1, at least on aarch64 and x86_64, we get a bogus
-		 * stringop-overread warning, due to:
-		 *   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103483
-		 *
-		 * but we can't disable it with a pragma, because it will be
-		 * ignored if LTO is enabled:
-		 *   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80922
-		 */
-		void *frame = (char *)b + offsetof(struct udp4_l2_buf_t, eh);
+		void *frame = udp4_l2_iov_tap[n].iov_base;
 
 		if (write(c->fd_tap, frame, sizeof(b->eh) + ip_len) < 0)
 			debug("tap write: %s", strerror(errno));
@@ -796,8 +797,7 @@ static void udp_sock_fill_data_v6(const struct ctx *c, int n,
 	b->ip6h.hop_limit = 255;
 
 	if (c->mode == MODE_PASTA) {
-		/* See udp_sock_fill_data_v4() for the reason behind 'frame' */
-		void *frame = (char *)b + offsetof(struct udp6_l2_buf_t, eh);
+		void *frame = udp6_l2_iov_tap[n].iov_base;
 
 		if (write(c->fd_tap, frame, sizeof(b->eh) + ip_len) < 0)
 			debug("tap write: %s", strerror(errno));
@@ -1231,10 +1231,10 @@ static void udp_splice_iov_init(void)
 int udp_init(struct ctx *c)
 {
 	if (c->ifi4)
-		udp_sock4_iov_init();
+		udp_sock4_iov_init(c);
 
 	if (c->ifi6)
-		udp_sock6_iov_init();
+		udp_sock6_iov_init(c);
 
 	udp_invert_portmap(&c->udp.fwd_in);
 	udp_invert_portmap(&c->udp.fwd_out);
