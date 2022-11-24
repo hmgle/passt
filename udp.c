@@ -647,7 +647,7 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 				  int *msg_idx, int *msg_bufs, ssize_t *msg_len,
 				  const struct timespec *now)
 {
-	struct msghdr *mh = &udp6_l2_mh_tap[*msg_idx].msg_hdr;
+	struct msghdr *mh = &udp4_l2_mh_tap[*msg_idx].msg_hdr;
 	struct udp4_l2_buf_t *b = &udp4_l2_buf[n];
 	size_t ip_len, buf_len;
 	in_port_t src_port;
@@ -721,9 +721,9 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 }
 
 /**
- * udp_sock_fill_data_v4() - Fill and queue one buffer. In pasta mode, write it
+ * udp_sock_fill_data_v6() - Fill and queue one buffer. In pasta mode, write it
  * @c:		Execution context
- * @n:		Index of buffer in udp4_l2_buf pool
+ * @n:		Index of buffer in udp6_l2_buf pool
  * @ref:	epoll reference from socket
  * @msg_idx:	Index within message being prepared (spans multiple buffers)
  * @msg_len:	Length of current message being prepared for sending
@@ -869,7 +869,7 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 		if (n <= 0)
 			return;
 
-		udp6_l2_mh_tap[0].msg_hdr.msg_iov = &udp6_l2_iov_tap[0];
+		udp4_l2_mh_tap[0].msg_hdr.msg_iov = &udp4_l2_iov_tap[0];
 
 		for (i = 0; i < (unsigned)n; i++) {
 			udp_sock_fill_data_v4(c, i, ref,
