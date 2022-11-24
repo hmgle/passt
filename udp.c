@@ -644,20 +644,17 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 }
 
 /**
- * udp_sock_fill_data_v4() - Fill and queue one buffer. In pasta mode, write it
+ * udp_update_hdr4() - Update headers for one IPv4 datagram
  * @c:		Execution context
  * @n:		Index of buffer in udp4_l2_buf pool
- * @ref:	epoll reference from socket
- * @msg_idx:	Index within message being prepared (spans multiple buffers)
- * @msg_len:	Length of current message being prepared for sending
+ * @dstport:	Destination port number
  * @now:	Current timestamp
+ *
+ * Return: size of tap frame with headers
  */
-static void udp_sock_fill_data_v4(const struct ctx *c, int n,
-				  union epoll_ref ref,
-				  int *msg_idx, int *msg_bufs, ssize_t *msg_len,
-				  const struct timespec *now)
+static size_t udp_update_hdr4(const struct ctx *c, int n, in_port_t dstport,
+			      const struct timespec *now)
 {
-	struct msghdr *mh = &udp4_l2_mh_tap[*msg_idx].msg_hdr;
 	struct udp4_l2_buf_t *b = &udp4_l2_buf[n];
 	size_t ip_len, buf_len;
 	in_port_t src_port;
@@ -691,51 +688,31 @@ static void udp_sock_fill_data_v4(const struct ctx *c, int n,
 
 	udp_update_check4(b);
 	b->uh.source = b->s_in.sin_port;
-	b->uh.dest = htons(ref.r.p.udp.udp.port);
+	b->uh.dest = htons(dstport);
 	b->uh.len = htons(udp4_l2_mh_sock[n].msg_len + sizeof(b->uh));
 
-	if (c->mode == MODE_PASTA) {
-		void *frame = udp4_l2_iov_tap[n].iov_base;
+	buf_len = ip_len + sizeof(b->eh);
 
-		if (write(c->fd_tap, frame, sizeof(b->eh) + ip_len) < 0)
-			debug("tap write: %s", strerror(errno));
-		pcap(frame, sizeof(b->eh) + ip_len);
-
-		return;
+	if (c->mode == MODE_PASST) {
+		b->vnet_len = htonl(buf_len);
+		buf_len += sizeof(b->vnet_len);
 	}
 
-	b->vnet_len = htonl(ip_len + sizeof(struct ethhdr));
-	buf_len = sizeof(uint32_t) + sizeof(struct ethhdr) + ip_len;
-	udp4_l2_iov_tap[n].iov_len = buf_len;
-
-	/* With bigger messages, qemu closes the connection. */
-	if (*msg_bufs && *msg_len + buf_len > SHRT_MAX) {
-		mh->msg_iovlen = *msg_bufs;
-
-		(*msg_idx)++;
-		udp4_l2_mh_tap[*msg_idx].msg_hdr.msg_iov = &udp4_l2_iov_tap[n];
-		*msg_len = *msg_bufs = 0;
-	}
-
-	*msg_len += buf_len;
-	(*msg_bufs)++;
+	return buf_len;
 }
 
 /**
- * udp_sock_fill_data_v6() - Fill and queue one buffer. In pasta mode, write it
+ * udp_update_hdr6() - Update headers for one IPv6 datagram
  * @c:		Execution context
  * @n:		Index of buffer in udp6_l2_buf pool
- * @ref:	epoll reference from socket
- * @msg_idx:	Index within message being prepared (spans multiple buffers)
- * @msg_len:	Length of current message being prepared for sending
+ * @dstport:	Destination port number
  * @now:	Current timestamp
+ *
+ * Return: size of tap frame with headers
  */
-static void udp_sock_fill_data_v6(const struct ctx *c, int n,
-				  union epoll_ref ref,
-				  int *msg_idx, int *msg_bufs, ssize_t *msg_len,
-				  const struct timespec *now)
+static size_t udp_update_hdr6(const struct ctx *c, int n, in_port_t dstport,
+			      const struct timespec *now)
 {
-	struct msghdr *mh = &udp6_l2_mh_tap[*msg_idx].msg_hdr;
 	struct udp6_l2_buf_t *b = &udp6_l2_buf[n];
 	size_t ip_len, buf_len;
 	struct in6_addr *src;
@@ -786,7 +763,7 @@ static void udp_sock_fill_data_v6(const struct ctx *c, int n,
 	}
 
 	b->uh.source = b->s_in6.sin6_port;
-	b->uh.dest = htons(ref.r.p.udp.udp.port);
+	b->uh.dest = htons(dstport);
 	b->uh.len = b->ip6h.payload_len;
 
 	b->ip6h.hop_limit = IPPROTO_UDP;
@@ -796,31 +773,14 @@ static void udp_sock_fill_data_v6(const struct ctx *c, int n,
 	b->ip6h.nexthdr = IPPROTO_UDP;
 	b->ip6h.hop_limit = 255;
 
-	if (c->mode == MODE_PASTA) {
-		void *frame = udp6_l2_iov_tap[n].iov_base;
+	buf_len = ip_len + sizeof(b->eh);
 
-		if (write(c->fd_tap, frame, sizeof(b->eh) + ip_len) < 0)
-			debug("tap write: %s", strerror(errno));
-		pcap(frame, sizeof(b->eh) + ip_len);
-
-		return;
+	if (c->mode == MODE_PASST) {
+		b->vnet_len = htonl(buf_len);
+		buf_len += sizeof(b->vnet_len);
 	}
 
-	b->vnet_len = htonl(ip_len + sizeof(struct ethhdr));
-	buf_len = sizeof(uint32_t) + sizeof(struct ethhdr) + ip_len;
-	udp6_l2_iov_tap[n].iov_len = buf_len;
-
-	/* With bigger messages, qemu closes the connection. */
-	if (*msg_bufs && *msg_len + buf_len > SHRT_MAX) {
-		mh->msg_iovlen = *msg_bufs;
-
-		(*msg_idx)++;
-		udp6_l2_mh_tap[*msg_idx].msg_hdr.msg_iov = &udp6_l2_iov_tap[n];
-		*msg_len = *msg_bufs = 0;
-	}
-
-	*msg_len += buf_len;
-	(*msg_bufs)++;
+	return buf_len;
 }
 
 /**
@@ -836,6 +796,7 @@ static void udp_sock_fill_data_v6(const struct ctx *c, int n,
 void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 		      const struct timespec *now)
 {
+	in_port_t dstport = ref.r.p.udp.udp.port;
 	ssize_t n, msg_len = 0, missing = 0;
 	struct mmsghdr *tap_mmh, *sock_mmh;
 	int msg_bufs = 0, msg_i = 0, ret;
@@ -867,12 +828,33 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 
 	tap_mmh[0].msg_hdr.msg_iov = &tap_iov[0];
 	for (i = 0; i < (unsigned)n; i++) {
+		size_t buf_len;
+
 		if (ref.r.p.udp.udp.v6)
-			udp_sock_fill_data_v6(c, i, ref,
-					      &msg_i, &msg_bufs, &msg_len, now);
+			buf_len = udp_update_hdr6(c, i, dstport, now);
 		else
-			udp_sock_fill_data_v4(c, i, ref,
-					      &msg_i, &msg_bufs, &msg_len, now);
+			buf_len = udp_update_hdr4(c, i, dstport, now);
+
+		if (c->mode == MODE_PASTA) {
+			void *frame = tap_iov[i].iov_base;
+
+			if (write(c->fd_tap, frame, buf_len) < 0)
+				debug("tap write: %s", strerror(errno));
+			pcap(frame, buf_len);
+		} else {
+			tap_iov[i].iov_len = buf_len;
+
+			/* With bigger messages, qemu closes the connection. */
+			if (msg_bufs && msg_len + buf_len > SHRT_MAX) {
+				tap_mmh[msg_i].msg_hdr.msg_iovlen = msg_bufs;
+				msg_i++;
+				tap_mmh[msg_i].msg_hdr.msg_iov = &tap_iov[i];
+				msg_len = msg_bufs = 0;
+			}
+
+			msg_len += buf_len;
+			msg_bufs++;
+		}
 	}
 	tap_mmh[msg_i].msg_hdr.msg_iovlen = msg_bufs;
 
