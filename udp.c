@@ -837,9 +837,10 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 		      const struct timespec *now)
 {
 	ssize_t n, msg_len = 0, missing = 0;
+	struct mmsghdr *tap_mmh, *sock_mmh;
 	int msg_bufs = 0, msg_i = 0, ret;
-	struct mmsghdr *tap_mmh;
 	struct msghdr *last_mh;
+	struct iovec *tap_iov;
 	unsigned int i;
 
 	if (events == EPOLLERR)
@@ -851,34 +852,29 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 	}
 
 	if (ref.r.p.udp.udp.v6) {
-		n = recvmmsg(ref.r.s, udp6_l2_mh_sock, UDP_TAP_FRAMES, 0, NULL);
-		if (n <= 0)
-			return;
+		tap_mmh = udp6_l2_mh_tap;
+		sock_mmh = udp6_l2_mh_sock;
+		tap_iov = udp6_l2_iov_tap;
+	} else {
+		tap_mmh = udp4_l2_mh_tap;
+		sock_mmh = udp4_l2_mh_sock;
+		tap_iov = udp4_l2_iov_tap;
+	}
 
-		udp6_l2_mh_tap[0].msg_hdr.msg_iov = &udp6_l2_iov_tap[0];
+	n = recvmmsg(ref.r.s, sock_mmh, UDP_TAP_FRAMES, 0, NULL);
+	if (n <= 0)
+		return;
 
-		for (i = 0; i < (unsigned)n; i++) {
+	tap_mmh[0].msg_hdr.msg_iov = &tap_iov[0];
+	for (i = 0; i < (unsigned)n; i++) {
+		if (ref.r.p.udp.udp.v6)
 			udp_sock_fill_data_v6(c, i, ref,
 					      &msg_i, &msg_bufs, &msg_len, now);
-		}
-
-		udp6_l2_mh_tap[msg_i].msg_hdr.msg_iovlen = msg_bufs;
-		tap_mmh = udp6_l2_mh_tap;
-	} else {
-		n = recvmmsg(ref.r.s, udp4_l2_mh_sock, UDP_TAP_FRAMES, 0, NULL);
-		if (n <= 0)
-			return;
-
-		udp4_l2_mh_tap[0].msg_hdr.msg_iov = &udp4_l2_iov_tap[0];
-
-		for (i = 0; i < (unsigned)n; i++) {
+		else
 			udp_sock_fill_data_v4(c, i, ref,
 					      &msg_i, &msg_bufs, &msg_len, now);
-		}
-
-		udp4_l2_mh_tap[msg_i].msg_hdr.msg_iovlen = msg_bufs;
-		tap_mmh = udp4_l2_mh_tap;
 	}
+	tap_mmh[msg_i].msg_hdr.msg_iovlen = msg_bufs;
 
 	if (c->mode == MODE_PASTA)
 		return;
