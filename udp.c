@@ -41,50 +41,50 @@
  * pair of recvmmsg() and sendmmsg() deals with this case.
  *
  * The connection tracking for PASTA mode is slightly complicated by the absence
- * of actual connections, see struct udp_splice_port, and these examples:
+ * of actual connections, see struct udp_splice_flow, and these examples:
  *
  * - from init to namespace:
  *
  *   - forward direction: 127.0.0.1:5000 -> 127.0.0.1:80 in init from bound
  *     socket s, with epoll reference: index = 80, splice = UDP_TO_NS
- *     - if udp_splice_map[V4][5000].ns_conn_sock:
- *       - send packet to udp4_splice_map[5000].ns_conn_sock
+ *     - if udp_splice_to_ns[V4][5000].target_sock:
+ *       - send packet to udp_splice_to_ns[V4][5000].target_sock
  *     - otherwise:
- *       - create new socket udp_splice_map[V4][5000].ns_conn_sock
+ *       - create new socket udp_splice_to_ns[V4][5000].target_sock
  *       - bind in namespace to 127.0.0.1:5000
  *       - connect in namespace to 127.0.0.1:80 (note: this destination port
  *         might be remapped to another port instead)
  *       - add to epoll with reference: index = 5000, splice: UDP_BACK_TO_INIT
- *       - set udp_splice_map[V4][5000].init_bound_sock to s
- *   - update udp_splice_map[V4][5000].ns_conn_ts with current time
+ *       - set udp_splice_to_ns[V4][5000].orig_sock to s
+ *     - update udp_splice_to_ns[V4][5000].ts with current time
  *
  *   - reverse direction: 127.0.0.1:80 -> 127.0.0.1:5000 in namespace from
  *     connected socket s, having epoll reference: index = 5000,
  *     splice = UDP_BACK_TO_INIT
- *     - if udp_splice_map[V4][5000].init_bound_sock:
- *       - send to udp_splice_map[V4][5000].init_bound_sock, with destination
- *         port 5000
+ *     - if udp_splice_to_ns[V4][5000].orig_sock:
+ *       - send to udp_splice_to_ns[V4][5000].orig_sock, with destination port
+ *         5000
  *     - otherwise, discard
  *
  * - from namespace to init:
  *
  *   - forward direction: 127.0.0.1:2000 -> 127.0.0.1:22 in namespace from bound
  *     socket s, with epoll reference: index = 22, splice = UDP_TO_INIT
- *     - if udp4_splice_map[V4][2000].init_conn_sock:
- *       - send packet to udp4_splice_map[2000].init_conn_sock
+ *     - if udp4_splice_to_init[V4][2000].target_sock:
+ *       - send packet to udp_splice_to_init[V4][2000].target_sock
  *     - otherwise:
- *       - create new socket udp_splice_map[V4][2000].init_conn_sock
+ *       - create new socket udp_splice_to_init[V4][2000].target_sock
  *       - bind in init to 127.0.0.1:2000
  *       - connect in init to 127.0.0.1:22 (note: this destination port
  *         might be remapped to another port instead)
  *       - add to epoll with reference: index = 2000, splice = UDP_BACK_TO_NS
- *       - set udp_splice_map[V4][2000].ns_bound_sock to s
- *     - update udp_splice_map[V4][2000].init_conn_ts with current time
+ *       - set udp_splice_to_init[V4][2000].orig_sock to s
+ *     - update udp_splice_to_init[V4][2000].ts with current time
  *
  *   - reverse direction: 127.0.0.1:22 -> 127.0.0.1:2000 in init from connected
  *     socket s, having epoll reference: index = 2000, splice = UDP_BACK_TO_NS
- *   - if udp_splice_map[V4][2000].ns_bound_sock:
- *     - send to udp_splice_map[V4][2000].ns_bound_sock, with destination port
+ *   - if udp_splice_to_init[V4][2000].orig_sock:
+ *     - send to udp_splice_to_init[V4][2000].orig_sock, with destination port
  *       2000
  *   - otherwise, discard
  */
@@ -138,28 +138,26 @@ struct udp_tap_port {
 };
 
 /**
- * struct udp_splice_port - Source port tracking for traffic between namespaces
- * @ns_conn_sock:	Socket connected in namespace for init source port
- * @init_conn_sock:	Socket connected in init for namespace source port
- * @ns_conn_ts:		Timestamp of activity for socket connected in namespace
- * @init_conn_ts:	Timestamp of activity for socket connceted in init
- * @ns_bound_sock:	Bound socket in namespace for this source port in init
- * @init_bound_sock:	Bound socket in init for this source port in namespace
+ * struct udp_splice_flow - Spliced "connection"
+ * @orig_sock:		Originating socket, bound to dest port in source ns of
+ *			originating datagram
+ * @target_sock:	Target socket, bound to source port of originating
+ *			datagram in dest ns, connected to dest port of
+ *			originating datagram in dest ns
+ * @ts:			Activity timestamp
  */
-struct udp_splice_port {
-	int ns_conn_sock;
-	int init_conn_sock;
-
-	time_t ns_conn_ts;
-	time_t init_conn_ts;
-
-	int ns_bound_sock;
-	int init_bound_sock;
+struct udp_splice_flow {
+	int orig_sock;
+	int target_sock;
+	time_t ts;
 };
 
 /* Port tracking, arrays indexed by packet source port (host order) */
 static struct udp_tap_port	udp_tap_map	[IP_VERSIONS][NUM_PORTS];
-static struct udp_splice_port	udp_splice_map	[IP_VERSIONS][NUM_PORTS];
+
+/* Spliced "connections" indexed by originating source port (host order) */
+static struct udp_splice_flow udp_splice_to_ns  [IP_VERSIONS][NUM_PORTS];
+static struct udp_splice_flow udp_splice_to_init[IP_VERSIONS][NUM_PORTS];
 
 enum udp_act_type {
 	UDP_ACT_TAP,
@@ -421,8 +419,16 @@ int udp_splice_connect(const struct ctx *c, int v6, int bound_sock,
 				.r.p.udp.udp = { .splice = splice, .v6 = v6,
 						 .port = src }
 			      };
-	struct udp_splice_port *sp = &udp_splice_map[v6 ? V6 : V4][src];
-	int s;
+	struct udp_splice_flow *flow;
+	int act, s;
+
+	if (splice == UDP_BACK_TO_INIT) {
+		flow = &udp_splice_to_ns[v6 ? V6 : V4][src];
+		act = UDP_ACT_NS_CONN;
+	} else {
+		flow = &udp_splice_to_init[v6 ? V6 : V4][src];
+		act = UDP_ACT_INIT_CONN;
+	}
 
 	s = socket(v6 ? AF_INET6 : AF_INET, SOCK_DGRAM | SOCK_NONBLOCK,
 		   IPPROTO_UDP);
@@ -461,15 +467,9 @@ int udp_splice_connect(const struct ctx *c, int v6, int bound_sock,
 			goto fail;
 	}
 
-	if (splice == UDP_BACK_TO_INIT) {
-		sp->init_bound_sock = bound_sock;
-		sp->ns_conn_sock = s;
-		bitmap_set(udp_act[v6 ? V6 : V4][UDP_ACT_NS_CONN], src);
-	} else if (splice == UDP_BACK_TO_NS) {
-		sp->ns_bound_sock = bound_sock;
-		sp->init_conn_sock = s;
-		bitmap_set(udp_act[v6 ? V6 : V4][UDP_ACT_INIT_CONN], src);
-	}
+	flow->orig_sock = bound_sock;
+	flow->target_sock = s;
+	bitmap_set(udp_act[v6 ? V6 : V4][act], src);
 
 	ev.data.u64 = ref.u64;
 	epoll_ctl(c->epollfd, EPOLL_CTL_ADD, s, &ev);
@@ -556,7 +556,7 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 	case UDP_TO_NS:
 		src += c->udp.fwd_out.rdelta[src];
 
-		if (!(s = udp_splice_map[v6][src].ns_conn_sock)) {
+		if (!(s = udp_splice_to_ns[v6][src].target_sock)) {
 			struct udp_splice_connect_ns_arg arg = {
 				c, v6, ref.r.s, src, dst, -1,
 			};
@@ -565,10 +565,10 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 			if ((s = arg.s) < 0)
 				return;
 		}
-		udp_splice_map[v6][src].ns_conn_ts = now->tv_sec;
+		udp_splice_to_ns[v6][src].ts = now->tv_sec;
 		break;
 	case UDP_BACK_TO_INIT:
-		if (!(s = udp_splice_map[v6][dst].init_bound_sock))
+		if (!(s = udp_splice_to_ns[v6][dst].orig_sock))
 			return;
 
 		send_dst = dst;
@@ -576,16 +576,16 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 	case UDP_TO_INIT:
 		src += c->udp.fwd_in.rdelta[src];
 
-		if (!(s = udp_splice_map[v6][src].init_conn_sock)) {
+		if (!(s = udp_splice_to_init[v6][src].target_sock)) {
 			s = udp_splice_connect(c, v6, ref.r.s, src, dst,
 					       UDP_BACK_TO_NS);
 			if (s < 0)
 				return;
 		}
-		udp_splice_map[v6][src].init_conn_ts = now->tv_sec;
+		udp_splice_to_init[v6][src].ts = now->tv_sec;
 		break;
 	case UDP_BACK_TO_NS:
-		if (!(s = udp_splice_map[v6][dst].ns_bound_sock))
+		if (!(s = udp_splice_to_init[v6][dst].orig_sock))
 			return;
 
 		send_dst = dst;
@@ -1286,7 +1286,7 @@ int udp_init(struct ctx *c)
 static void udp_timer_one(struct ctx *c, int v6, enum udp_act_type type,
 			  in_port_t port, const struct timespec *ts)
 {
-	struct udp_splice_port *sp;
+	struct udp_splice_flow *flow;
 	struct udp_tap_port *tp;
 	int s = -1;
 
@@ -1301,17 +1301,17 @@ static void udp_timer_one(struct ctx *c, int v6, enum udp_act_type type,
 
 		break;
 	case UDP_ACT_INIT_CONN:
-		sp = &udp_splice_map[v6 ? V6 : V4][port];
+		flow = &udp_splice_to_init[v6 ? V6 : V4][port];
 
-		if (ts->tv_sec - sp->init_conn_ts > UDP_CONN_TIMEOUT)
-			s = sp->init_conn_sock;
+		if (ts->tv_sec - flow->ts > UDP_CONN_TIMEOUT)
+			s = flow->target_sock;
 
 		break;
 	case UDP_ACT_NS_CONN:
-		sp = &udp_splice_map[v6 ? V6 : V4][port];
+		flow = &udp_splice_to_ns[v6 ? V6 : V4][port];
 
-		if (ts->tv_sec - sp->ns_conn_ts > UDP_CONN_TIMEOUT)
-			s = sp->ns_conn_sock;
+		if (ts->tv_sec - flow->ts > UDP_CONN_TIMEOUT)
+			s = flow->target_sock;
 
 		break;
 	default:
