@@ -498,6 +498,19 @@ static int udp_splice_new_ns(void *arg)
 }
 
 /**
+ * sa_port() - Determine port from a sockaddr_in or sockaddr_in6
+ * @v6:		Is @sa a sockaddr_in6 (otherwise sockaddr_in)?
+ * @sa:		Pointer to either sockaddr_in or sockaddr_in6
+ */
+static in_port_t sa_port(bool v6, const void *sa)
+{
+	const struct sockaddr_in6 *sa6 = sa;
+	const struct sockaddr_in *sa4 = sa;
+
+	return v6 ? ntohs(sa6->sin6_port) : ntohs(sa4->sin_port);
+}
+
+/**
  * udp_sock_handler_splice() - Handler for socket mapped to "spliced" connection
  * @c:		Execution context
  * @ref:	epoll reference
@@ -508,8 +521,6 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 				    uint32_t events, const struct timespec *now)
 {
 	in_port_t src, dst = ref.r.p.udp.udp.port;
-	struct msghdr *mh = &udp_mmh_recv[0].msg_hdr;
-	struct sockaddr_storage *sa_s = mh->msg_name;
 	int s, v6 = ref.r.p.udp.udp.v6, n, i;
 
 	if (!(events & EPOLLIN))
@@ -520,16 +531,7 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 	if (n <= 0)
 		return;
 
-	if (v6) {
-		struct sockaddr_in6 *sa = (struct sockaddr_in6 *)sa_s;
-
-		src = htons(sa->sin6_port);
-	} else {
-		struct sockaddr_in *sa = (struct sockaddr_in *)sa_s;
-
-		src = ntohs(sa->sin_port);
-	}
-
+	src = sa_port(v6, udp_mmh_recv[0].msg_hdr.msg_name);
 
 	if (ref.r.p.udp.udp.ns) {
 		src += c->udp.fwd_in.rdelta[src];
