@@ -51,20 +51,19 @@
  *       - send packet to udp4_splice_map[5000].ns_conn_sock
  *     - otherwise:
  *       - create new socket udp_splice_map[V4][5000].ns_conn_sock
+ *       - bind in namespace to 127.0.0.1:5000
  *       - connect in namespace to 127.0.0.1:80 (note: this destination port
  *         might be remapped to another port instead)
- *       - get source port of new connected socket (10000) with getsockname()
- *       - add to epoll with reference: index = 10000, splice: UDP_BACK_TO_INIT
- *       - set udp_splice_map[V4][10000].init_bound_sock to s
- *       - set udp_splice_map[V4][10000].init_dst_port to 5000
+ *       - add to epoll with reference: index = 5000, splice: UDP_BACK_TO_INIT
+ *       - set udp_splice_map[V4][5000].init_bound_sock to s
  *   - update udp_splice_map[V4][5000].ns_conn_ts with current time
  *
- *   - reverse direction: 127.0.0.1:80 -> 127.0.0.1:10000 in namespace from
- *     connected socket s, having epoll reference: index = 10000,
+ *   - reverse direction: 127.0.0.1:80 -> 127.0.0.1:5000 in namespace from
+ *     connected socket s, having epoll reference: index = 5000,
  *     splice = UDP_BACK_TO_INIT
- *     - if udp_splice_map[V4][10000].init_bound_sock:
- *       - send to udp_splice_map[V4][10000].init_bound_sock, with destination
- *         port udp_splice_map[V4][10000].init_dst_port (5000)
+ *     - if udp_splice_map[V4][5000].init_bound_sock:
+ *       - send to udp_splice_map[V4][5000].init_bound_sock, with destination
+ *         port 5000
  *     - otherwise, discard
  *
  * - from namespace to init:
@@ -75,19 +74,18 @@
  *       - send packet to udp4_splice_map[2000].init_conn_sock
  *     - otherwise:
  *       - create new socket udp_splice_map[V4][2000].init_conn_sock
+ *       - bind in init to 127.0.0.1:2000
  *       - connect in init to 127.0.0.1:22 (note: this destination port
  *         might be remapped to another port instead)
- *       - get source port of new connected socket (4000) with getsockname()
- *       - add to epoll with reference: index = 4000, splice = UDP_BACK_TO_NS
- *       - set udp_splice_map[V4][4000].ns_bound_sock to s
- *       - set udp_splice_map[V4][4000].ns_dst_port to 2000
- *     - update udp_splice_map[V4][4000].init_conn_ts with current time
+ *       - add to epoll with reference: index = 2000, splice = UDP_BACK_TO_NS
+ *       - set udp_splice_map[V4][2000].ns_bound_sock to s
+ *     - update udp_splice_map[V4][2000].init_conn_ts with current time
  *
- *   - reverse direction: 127.0.0.1:22 -> 127.0.0.1:4000 in init from connected
- *     socket s, having epoll reference: index = 4000, splice = UDP_BACK_TO_NS
- *   - if udp_splice_map[V4][4000].ns_bound_sock:
- *     - send to udp_splice_map[V4][4000].ns_bound_sock, with destination port
- *       udp_splice_map[4000].ns_dst_port (2000)
+ *   - reverse direction: 127.0.0.1:22 -> 127.0.0.1:2000 in init from connected
+ *     socket s, having epoll reference: index = 2000, splice = UDP_BACK_TO_NS
+ *   - if udp_splice_map[V4][2000].ns_bound_sock:
+ *     - send to udp_splice_map[V4][2000].ns_bound_sock, with destination port
+ *       2000
  *   - otherwise, discard
  */
 
@@ -145,8 +143,6 @@ struct udp_tap_port {
  * @init_conn_sock:	Socket connected in init for namespace source port
  * @ns_conn_ts:		Timestamp of activity for socket connected in namespace
  * @init_conn_ts:	Timestamp of activity for socket connceted in init
- * @ns_dst_port:	Destination port in namespace for init source port
- * @init_dst_port:	Destination port in init for namespace source port
  * @ns_bound_sock:	Bound socket in namespace for this source port in init
  * @init_bound_sock:	Bound socket in init for this source port in namespace
  */
@@ -156,9 +152,6 @@ struct udp_splice_port {
 
 	time_t ns_conn_ts;
 	time_t init_conn_ts;
-
-	in_port_t ns_dst_port;
-	in_port_t init_dst_port;
 
 	int ns_bound_sock;
 	int init_bound_sock;
@@ -425,11 +418,10 @@ int udp_splice_connect(const struct ctx *c, int v6, int bound_sock,
 {
 	struct epoll_event ev = { .events = EPOLLIN | EPOLLRDHUP | EPOLLHUP };
 	union epoll_ref ref = { .r.proto = IPPROTO_UDP,
-				.r.p.udp.udp = { .splice = splice, .v6 = v6 }
+				.r.p.udp.udp = { .splice = splice, .v6 = v6,
+						 .port = src }
 			      };
-	struct sockaddr_storage sa;
-	struct udp_splice_port *sp;
-	socklen_t sl = sizeof(sa);
+	struct udp_splice_port *sp = &udp_splice_map[v6 ? V6 : V4][src];
 	int s;
 
 	s = socket(v6 ? AF_INET6 : AF_INET, SOCK_DGRAM | SOCK_NONBLOCK,
@@ -448,46 +440,34 @@ int udp_splice_connect(const struct ctx *c, int v6, int bound_sock,
 	if (v6) {
 		struct sockaddr_in6 addr6 = {
 			.sin6_family = AF_INET6,
-			.sin6_port = htons(dst),
+			.sin6_port = htons(src),
 			.sin6_addr = IN6ADDR_LOOPBACK_INIT,
 		};
+		if (bind(s, (struct sockaddr *)&addr6, sizeof(addr6)))
+			goto fail;
+		addr6.sin6_port = htons(dst);
 		if (connect(s, (struct sockaddr *)&addr6, sizeof(addr6)))
 			goto fail;
 	} else {
 		struct sockaddr_in addr4 = {
 			.sin_family = AF_INET,
-			.sin_port = htons(dst),
+			.sin_port = htons(src),
 			.sin_addr = { .s_addr = htonl(INADDR_LOOPBACK) },
 		};
+		if (bind(s, (struct sockaddr *)&addr4, sizeof(addr4)))
+			goto fail;
+		addr4.sin_port = htons(dst);
 		if (connect(s, (struct sockaddr *)&addr4, sizeof(addr4)))
 			goto fail;
 	}
 
-	if (getsockname(s, (struct sockaddr *)&sa, &sl))
-		goto fail;
-
-	if (v6) {
-		struct sockaddr_in6 sa6;
-
-		memcpy(&sa6, &sa, sizeof(sa6));
-		ref.r.p.udp.udp.port = ntohs(sa6.sin6_port);
-	} else {
-		struct sockaddr_in sa4;
-
-		memcpy(&sa4, &sa, sizeof(sa4));
-		ref.r.p.udp.udp.port = ntohs(sa4.sin_port);
-	}
-
-	sp = &udp_splice_map[v6 ? V6 : V4][ref.r.p.udp.udp.port];
 	if (splice == UDP_BACK_TO_INIT) {
 		sp->init_bound_sock = bound_sock;
-		sp->init_dst_port = src;
-		udp_splice_map[v6 ? V6 : V4][src].ns_conn_sock = s;
+		sp->ns_conn_sock = s;
 		bitmap_set(udp_act[v6 ? V6 : V4][UDP_ACT_NS_CONN], src);
 	} else if (splice == UDP_BACK_TO_NS) {
 		sp->ns_bound_sock = bound_sock;
-		sp->ns_dst_port = src;
-		udp_splice_map[v6 ? V6 : V4][src].init_conn_sock = s;
+		sp->init_conn_sock = s;
 		bitmap_set(udp_act[v6 ? V6 : V4][UDP_ACT_INIT_CONN], src);
 	}
 
@@ -591,7 +571,7 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		if (!(s = udp_splice_map[v6][dst].init_bound_sock))
 			return;
 
-		send_dst = udp_splice_map[v6][dst].init_dst_port;
+		send_dst = dst;
 		break;
 	case UDP_TO_INIT:
 		src += c->udp.fwd_in.rdelta[src];
@@ -608,7 +588,7 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		if (!(s = udp_splice_map[v6][dst].ns_bound_sock))
 			return;
 
-		send_dst = udp_splice_map[v6][dst].ns_dst_port;
+		send_dst = dst;
 		break;
 	default:
 		return;
