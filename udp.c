@@ -584,8 +584,8 @@ static void udp_splice_sendfrom(const struct ctx *c, unsigned start, unsigned n,
 static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 				    uint32_t events, const struct timespec *now)
 {
-	in_port_t src, dst = ref.r.p.udp.udp.port;
-	int v6 = ref.r.p.udp.udp.v6, n;
+	in_port_t dst = ref.r.p.udp.udp.port;
+	int v6 = ref.r.p.udp.udp.v6, n, i, m;
 	struct mmsghdr *mmh_recv;
 
 	if (!(events & EPOLLIN))
@@ -619,9 +619,18 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		});
 	}
 
-	src = sa_port(v6, mmh_recv[0].msg_hdr.msg_name);
-	udp_splice_sendfrom(c, 0, n, src, dst, v6,
-			    ref.r.p.udp.udp.ns, ref.r.p.udp.udp.orig, now);
+	for (i = 0; i < n; i += m) {
+		in_port_t src = sa_port(v6, mmh_recv[i].msg_hdr.msg_name);
+
+		for (m = 1; i + m < n; m++) {
+			void *mname = mmh_recv[i + m].msg_hdr.msg_name;
+			if (sa_port(v6, mname) != src)
+				break;
+		}
+
+		udp_splice_sendfrom(c, i, m, src, dst, v6, ref.r.p.udp.udp.ns,
+				    ref.r.p.udp.udp.orig, now);
+	}
 }
 
 /**
