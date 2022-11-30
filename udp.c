@@ -153,7 +153,7 @@ struct udp_splice_flow {
 /* Port tracking, arrays indexed by packet source port (host order) */
 static struct udp_tap_port	udp_tap_map	[IP_VERSIONS][NUM_PORTS];
 
-/* Spliced "connections" indexed by originating source port (host order) */
+/* Spliced "connections" indexed by bound port of target_sock (host order) */
 static struct udp_splice_flow udp_splice_to_ns  [IP_VERSIONS][NUM_PORTS];
 static struct udp_splice_flow udp_splice_to_init[IP_VERSIONS][NUM_PORTS];
 
@@ -1095,16 +1095,18 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 				bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
 				uref.udp.splice = uref.udp.orig = true;
 
-				sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, ifname,
-					port, uref.u32);
+				s = sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr,
+					    ifname, port, uref.u32);
+				udp_splice_to_init[V4][port].target_sock = s;
 			}
 		} else {
 			uref.udp.splice = uref.udp.orig = uref.udp.ns = true;
 
 			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
 
-			sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, ifname,
-				port, uref.u32);
+			s = sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr,
+				    ifname, port, uref.u32);
+			udp_splice_to_ns[V4][port].target_sock = s;
 		}
 	}
 
@@ -1127,15 +1129,17 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 				bind_addr = &in6addr_loopback;
 				uref.udp.splice = uref.udp.orig = true;
 
-				sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, ifname,
-					port, uref.u32);
+				s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr,
+					    ifname, port, uref.u32);
+				udp_splice_to_init[V6][port].target_sock = s;
 			}
 		} else {
 			bind_addr = &in6addr_loopback;
 			uref.udp.splice = uref.udp.orig = uref.udp.ns = true;
 
-			sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, ifname,
-				port, uref.u32);
+			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr,
+				    ifname, port, uref.u32);
+			udp_splice_to_ns[V6][port].target_sock = s;
 		}
 	}
 }
