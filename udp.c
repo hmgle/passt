@@ -510,21 +510,26 @@ static in_port_t sa_port(bool v6, const void *sa)
 }
 
 /**
- * udp_sock_handler_splice() - Handler for socket mapped to "spliced" connection
+ * udp_splice_sendfrom() - Send datagrams from given port to given port
  * @c:		Execution context
- * @ref:	epoll reference
- * @events:	epoll events bitmap
- * @now:	Current timestamp
+ * @start:	Index of first datagram in udp[46]_l2_buf
+ * @n:		Number of datagrams to send
+ * @src:	Datagrams will be sent from this port (on origin side)
+ * @dst:	Datagrams will be send to this port (on destination side)
+ * @v6:		Send as IPv6?
+ * @from_ns:	If true send from pasta ns to init, otherwise reverse
+ * @allow_new:	If true create sending socket if needed, if false discard
+ *              if no sending socket is available
+ * @now:	Timestamp
  */
-static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
-				    uint32_t events, const struct timespec *now)
+static void udp_splice_sendfrom(const struct ctx *c, unsigned start, unsigned n,
+				in_port_t src, in_port_t dst,
+				bool v6, bool from_ns, bool allow_new,
+				const struct timespec *now)
 {
-	in_port_t src, dst = ref.r.p.udp.udp.port;
-	int s, v6 = ref.r.p.udp.udp.v6, n, i;
 	struct mmsghdr *mmh_recv, *mmh_send;
-
-	if (!(events & EPOLLIN))
-		return;
+	unsigned int i;
+	int s;
 
 	if (v6) {
 		mmh_recv = udp6_l2_mh_sock;
@@ -534,17 +539,10 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		mmh_send = udp4_mh_splice;
 	}
 
-	n = recvmmsg(ref.r.s, mmh_recv, UDP_MAX_FRAMES, 0, NULL);
-
-	if (n <= 0)
-		return;
-
-	src = sa_port(v6, mmh_recv[0].msg_hdr.msg_name);
-
-	if (ref.r.p.udp.udp.ns) {
+	if (from_ns) {
 		src += c->udp.fwd_in.rdelta[src];
 		s = udp_splice_init[v6][src].sock;
-		if (!s && ref.r.p.udp.udp.orig)
+		if (!s && allow_new)
 			s = udp_splice_new(c, v6, src, false);
 
 		if (s < 0)
@@ -555,7 +553,7 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 	} else {
 		src += c->udp.fwd_out.rdelta[src];
 		s = udp_splice_ns[v6][src].sock;
-		if (!s && ref.r.p.udp.udp.orig) {
+		if (!s && allow_new) {
 			struct udp_splice_new_ns_arg arg = {
 				c, v6, src, -1,
 			};
@@ -570,8 +568,38 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		udp_splice_ns[v6][src].ts = now->tv_sec;
 	}
 
-	for (i = 0; i < n; i++)
+	for (i = start; i < start + n; i++)
 		mmh_send[i].msg_hdr.msg_iov->iov_len = mmh_recv[i].msg_len;
+
+	sendmmsg(s, mmh_send + start, n, MSG_NOSIGNAL);
+}
+
+/**
+ * udp_sock_handler_splice() - Handler for socket mapped to "spliced" connection
+ * @c:		Execution context
+ * @ref:	epoll reference
+ * @events:	epoll events bitmap
+ * @now:	Current timestamp
+ */
+static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
+				    uint32_t events, const struct timespec *now)
+{
+	in_port_t src, dst = ref.r.p.udp.udp.port;
+	int v6 = ref.r.p.udp.udp.v6, n;
+	struct mmsghdr *mmh_recv;
+
+	if (!(events & EPOLLIN))
+		return;
+
+	if (v6)
+		mmh_recv = udp6_l2_mh_sock;
+	else
+		mmh_recv = udp4_l2_mh_sock;
+
+	n = recvmmsg(ref.r.s, mmh_recv, UDP_MAX_FRAMES, 0, NULL);
+
+	if (n <= 0)
+		return;
 
 	if (v6) {
 		*((struct sockaddr_in6 *)&udp_splice_namebuf) =
@@ -591,7 +619,9 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		});
 	}
 
-	sendmmsg(s, mmh_send, n, MSG_NOSIGNAL);
+	src = sa_port(v6, mmh_recv[0].msg_hdr.msg_name);
+	udp_splice_sendfrom(c, 0, n, src, dst, v6,
+			    ref.r.p.udp.udp.ns, ref.r.p.udp.udp.orig, now);
 }
 
 /**
