@@ -55,12 +55,15 @@
  *       - bind in namespace to 127.0.0.1:5000
  *       - add to epoll with reference: index = 5000, splice = 1, orig = 0,
  *         ns = 1
- *     - update udp_splice_ns[V4][5000].ts with current time
+ *     - update udp_splice_init[V4][80].ts and udp_splice_ns[V4][5000].ts with
+ *       current time
  *
  *   - reverse direction: 127.0.0.1:80 -> 127.0.0.1:5000 in namespace socket s,
  *     having epoll reference: index = 5000, splice = 1, orig = 0, ns = 1
  *     - if udp_splice_init[V4][80].sock:
  *       - send to udp_splice_init[V4][80].sock, with destination port 5000
+ *       - update udp_splice_init[V4][80].ts and udp_splice_ns[V4][5000].ts with
+ *         current time
  *     - otherwise, discard
  *
  * - from namespace to init:
@@ -75,12 +78,15 @@
  *       - bind in init to 127.0.0.1:2000
  *       - add to epoll with reference: index = 2000, splice = 1, orig = 0,
  *         ns = 0
- *     - update udp_splice_init[V4][2000].ts with current time
+ *     - update udp_splice_ns[V4][22].ts and udp_splice_init[V4][2000].ts with
+ *       current time
  *
  *   - reverse direction: 127.0.0.1:22 -> 127.0.0.1:2000 in init from socket s,
  *     having epoll reference: index = 2000, splice = 1, orig = 0, ns = 0
  *   - if udp_splice_ns[V4][22].sock:
  *     - send to udp_splice_ns[V4][22].sock, with destination port 2000
+ *     - update udp_splice_ns[V4][22].ts and udp_splice_init[V4][2000].ts with
+ *       current time
  *   - otherwise, discard
  */
 
@@ -539,12 +545,16 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 				return;
 		}
 
+		udp_splice_init[v6][dst].ts = now->tv_sec;
 		udp_splice_ns[v6][src].ts = now->tv_sec;
 	} else if (!ref.r.p.udp.udp.orig && ref.r.p.udp.udp.ns) {
 		src += c->udp.fwd_in.rdelta[src];
 
 		if (!(s = udp_splice_init[v6][src].sock))
 			return;
+
+		udp_splice_ns[v6][dst].ts = now->tv_sec;
+		udp_splice_init[v6][src].ts = now->tv_sec;
 	} else if (ref.r.p.udp.udp.orig && ref.r.p.udp.udp.ns) {
 		src += c->udp.fwd_in.rdelta[src];
 
@@ -553,12 +563,17 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 			if (s < 0)
 				return;
 		}
+
+		udp_splice_ns[v6][dst].ts = now->tv_sec;
 		udp_splice_init[v6][src].ts = now->tv_sec;
 	} else if (!ref.r.p.udp.udp.orig && !ref.r.p.udp.udp.ns) {
 		src += c->udp.fwd_out.rdelta[src];
 
 		if (!(s = udp_splice_ns[v6][src].sock))
 			return;
+
+		udp_splice_init[v6][dst].ts = now->tv_sec;
+		udp_splice_ns[v6][src].ts = now->tv_sec;
 	} else {
 		return;
 	}
