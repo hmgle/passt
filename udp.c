@@ -951,8 +951,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		sl = sizeof(s_in);
 
 		if (!(s = udp_tap_map[V4][src].sock)) {
-			union udp_epoll_ref uref = { .udp.bound = 1,
-						     .udp.port = src };
+			union udp_epoll_ref uref = { .udp.port = src };
 
 			s = sock_l4(c, AF_INET, IPPROTO_UDP, NULL, NULL, src,
 				    uref.u32);
@@ -1004,8 +1003,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		}
 
 		if (!(s = udp_tap_map[V6][src].sock)) {
-			union udp_epoll_ref uref = { .udp.bound = 1,
-						     .udp.v6 = 1,
+			union udp_epoll_ref uref = { .udp.v6 = 1,
 						     .udp.port = src };
 
 			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, NULL,
@@ -1068,7 +1066,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		   const void *addr, const char *ifname, in_port_t port)
 {
-	union udp_epoll_ref uref = { .udp.bound = 1 };
+	union udp_epoll_ref uref = { .u32 = 0 };
 	const void *bind_addr;
 	int s;
 

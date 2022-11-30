@@ -29,8 +29,7 @@ void udp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
  */
 union udp_epoll_ref {
 	struct {
-		uint32_t	bound:1,
-				splice:3,
+		uint32_t	splice:3,
 #define UDP_TO_NS		1
 #define	UDP_TO_INIT		2
 #define UDP_BACK_TO_NS		3
