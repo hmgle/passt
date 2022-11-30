@@ -219,9 +219,6 @@ struct udp6_l2_buf_t {
 #endif
 udp6_l2_buf[UDP_MAX_FRAMES];
 
-static struct sockaddr_storage udp_splice_namebuf;
-static uint8_t udp_splice_buf[UDP_MAX_FRAMES][USHRT_MAX];
-
 /* recvmmsg()/sendmmsg() data for tap */
 static struct iovec	udp4_l2_iov_sock	[UDP_MAX_FRAMES];
 static struct iovec	udp6_l2_iov_sock	[UDP_MAX_FRAMES];
@@ -236,11 +233,13 @@ static struct mmsghdr	udp4_l2_mh_tap		[UDP_MAX_FRAMES];
 static struct mmsghdr	udp6_l2_mh_tap		[UDP_MAX_FRAMES];
 
 /* recvmmsg()/sendmmsg() data for "spliced" connections */
-static struct iovec	udp_iov_recv		[UDP_MAX_FRAMES];
-static struct mmsghdr	udp_mmh_recv		[UDP_MAX_FRAMES];
+static struct sockaddr_storage udp_splice_namebuf;
 
-static struct iovec	udp_iov_sendto		[UDP_MAX_FRAMES];
-static struct mmsghdr	udp_mmh_sendto		[UDP_MAX_FRAMES];
+static struct iovec	udp4_iov_splice		[UDP_MAX_FRAMES];
+static struct iovec	udp6_iov_splice		[UDP_MAX_FRAMES];
+
+static struct mmsghdr	udp4_mh_splice		[UDP_MAX_FRAMES];
+static struct mmsghdr	udp6_mh_splice		[UDP_MAX_FRAMES];
 
 /**
  * udp_invert_portmap() - Compute reverse port translations for return packets
@@ -522,16 +521,25 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 {
 	in_port_t src, dst = ref.r.p.udp.udp.port;
 	int s, v6 = ref.r.p.udp.udp.v6, n, i;
+	struct mmsghdr *mmh_recv, *mmh_send;
 
 	if (!(events & EPOLLIN))
 		return;
 
-	n = recvmmsg(ref.r.s, udp_mmh_recv, UDP_MAX_FRAMES, 0, NULL);
+	if (v6) {
+		mmh_recv = udp6_l2_mh_sock;
+		mmh_send = udp6_mh_splice;
+	} else {
+		mmh_recv = udp4_l2_mh_sock;
+		mmh_send = udp4_mh_splice;
+	}
+
+	n = recvmmsg(ref.r.s, mmh_recv, UDP_MAX_FRAMES, 0, NULL);
 
 	if (n <= 0)
 		return;
 
-	src = sa_port(v6, udp_mmh_recv[0].msg_hdr.msg_name);
+	src = sa_port(v6, mmh_recv[0].msg_hdr.msg_name);
 
 	if (ref.r.p.udp.udp.ns) {
 		src += c->udp.fwd_in.rdelta[src];
@@ -562,11 +570,8 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		udp_splice_ns[v6][src].ts = now->tv_sec;
 	}
 
-	for (i = 0; i < n; i++) {
-		struct msghdr *mh_s = &udp_mmh_sendto[i].msg_hdr;
-
-		mh_s->msg_iov->iov_len = udp_mmh_recv[i].msg_len;
-	}
+	for (i = 0; i < n; i++)
+		mmh_send[i].msg_hdr.msg_iov->iov_len = mmh_recv[i].msg_len;
 
 	if (v6) {
 		*((struct sockaddr_in6 *)&udp_splice_namebuf) =
@@ -586,7 +591,7 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		});
 	}
 
-	sendmmsg(s, udp_mmh_sendto, n, MSG_NOSIGNAL);
+	sendmmsg(s, mmh_send, n, MSG_NOSIGNAL);
 }
 
 /**
@@ -1163,37 +1168,23 @@ int udp_sock_init_ns(void *arg)
  */
 static void udp_splice_iov_init(void)
 {
-	struct mmsghdr *h;
-	struct iovec *iov;
 	int i;
 
-	for (i = 0, h = udp_mmh_recv; i < UDP_MAX_FRAMES; i++, h++) {
-		struct msghdr *mh = &h->msg_hdr;
+	for (i = 0; i < UDP_MAX_FRAMES; i++) {
+		struct msghdr *mh4 = &udp4_mh_splice[i].msg_hdr;
+		struct msghdr *mh6 = &udp6_mh_splice[i].msg_hdr;
 
-		if (!i) {
-			mh->msg_name = &udp_splice_namebuf;
-			mh->msg_namelen = sizeof(udp_splice_namebuf);
-		}
+		mh4->msg_name = mh6->msg_name = &udp_splice_namebuf;
+		mh4->msg_namelen = sizeof(udp_splice_namebuf);
+		mh6->msg_namelen = sizeof(udp_splice_namebuf);
 
-		mh->msg_iov = &udp_iov_recv[i];
-		mh->msg_iovlen = 1;
+		udp4_iov_splice[i].iov_base = udp4_l2_buf[i].data;
+		udp6_iov_splice[i].iov_base = udp6_l2_buf[i].data;
+
+		mh4->msg_iov = &udp4_iov_splice[i];
+		mh6->msg_iov = &udp6_iov_splice[i];
+		mh4->msg_iovlen = mh6->msg_iovlen = 1;
 	}
-	for (i = 0, iov = udp_iov_recv; i < UDP_MAX_FRAMES; i++, iov++) {
-		iov->iov_base = udp_splice_buf[i];
-		iov->iov_len = sizeof(udp_splice_buf[i]);
-	}
-
-	for (i = 0, h = udp_mmh_sendto; i < UDP_MAX_FRAMES; i++, h++) {
-		struct msghdr *mh = &h->msg_hdr;
-
-		mh->msg_name = &udp_splice_namebuf;
-		mh->msg_namelen = sizeof(udp_splice_namebuf);
-
-		mh->msg_iov = &udp_iov_sendto[i];
-		mh->msg_iovlen = 1;
-	}
-	for (i = 0, iov = udp_iov_sendto; i < UDP_MAX_FRAMES; i++, iov++)
-		iov->iov_base = udp_splice_buf[i];
 }
 
 /**
