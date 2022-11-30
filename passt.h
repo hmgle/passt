@@ -31,6 +31,8 @@ struct tap_l4_msg {
 
 union epoll_ref;
 
+#include <stdbool.h>
+
 #include "packet.h"
 #include "icmp.h"
 #include "port_fwd.h"

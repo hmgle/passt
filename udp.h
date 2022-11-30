@@ -23,20 +23,19 @@ void udp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
  * union udp_epoll_ref - epoll reference portion for TCP connections
  * @bound:		Set if this file descriptor is a bound socket
  * @splice:		Set if descriptor is associated to "spliced" connection
+ * @orig:		Set if a spliced socket which can originate "connections"
+ * @ns:			Set if this is a socket in the pasta network namespace
  * @v6:			Set for IPv6 sockets or connections
  * @port:		Source port for connected sockets, bound port otherwise
  * @u32:		Opaque u32 value of reference
  */
 union udp_epoll_ref {
 	struct {
-		uint32_t	splice:3,
-#define UDP_TO_NS		1
-#define	UDP_TO_INIT		2
-#define UDP_BACK_TO_NS		3
-#define UDP_BACK_TO_INIT	4
-
-				v6:1,
-				port:16;
+		bool		splice:1,
+				orig:1,
+				ns:1,
+				v6:1;
+		uint32_t	port:16;
 	} udp;
 	uint32_t u32;
 };
