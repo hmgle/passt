@@ -48,7 +48,8 @@
  *   - forward direction: 127.0.0.1:5000 -> 127.0.0.1:80 in init from bound
  *     socket s, with epoll reference: index = 80, splice = UDP_TO_NS
  *     - if udp_splice_to_ns[V4][5000].target_sock:
- *       - send packet to udp_splice_to_ns[V4][5000].target_sock
+ *       - send packet to udp_splice_to_ns[V4][5000].target_sock, with
+ *         destination port 80
  *     - otherwise:
  *       - create new socket udp_splice_to_ns[V4][5000].target_sock
  *       - bind in namespace to 127.0.0.1:5000
@@ -71,7 +72,8 @@
  *   - forward direction: 127.0.0.1:2000 -> 127.0.0.1:22 in namespace from bound
  *     socket s, with epoll reference: index = 22, splice = UDP_TO_INIT
  *     - if udp4_splice_to_init[V4][2000].target_sock:
- *       - send packet to udp_splice_to_init[V4][2000].target_sock
+ *       - send packet to udp_splice_to_init[V4][2000].target_sock, with
+ *         destination port 22
  *     - otherwise:
  *       - create new socket udp_splice_to_init[V4][2000].target_sock
  *       - bind in init to 127.0.0.1:2000
@@ -243,9 +245,6 @@ static struct mmsghdr	udp6_l2_mh_tap		[UDP_TAP_FRAMES_MEM];
 /* recvmmsg()/sendmmsg() data for "spliced" connections */
 static struct iovec	udp_iov_recv		[UDP_SPLICE_FRAMES];
 static struct mmsghdr	udp_mmh_recv		[UDP_SPLICE_FRAMES];
-
-static struct iovec	udp_iov_send		[UDP_SPLICE_FRAMES];
-static struct mmsghdr	udp_mmh_send		[UDP_SPLICE_FRAMES];
 
 static struct iovec	udp_iov_sendto		[UDP_SPLICE_FRAMES];
 static struct mmsghdr	udp_mmh_sendto		[UDP_SPLICE_FRAMES];
@@ -529,7 +528,7 @@ static int udp_splice_connect_ns(void *arg)
 static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 				    uint32_t events, const struct timespec *now)
 {
-	in_port_t src, dst = ref.r.p.udp.udp.port, send_dst = 0;
+	in_port_t src, dst = ref.r.p.udp.udp.port;
 	struct msghdr *mh = &udp_mmh_recv[0].msg_hdr;
 	struct sockaddr_storage *sa_s = mh->msg_name;
 	int s, v6 = ref.r.p.udp.udp.v6, n, i;
@@ -570,8 +569,6 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 	case UDP_BACK_TO_INIT:
 		if (!(s = udp_splice_to_ns[v6][dst].orig_sock))
 			return;
-
-		send_dst = dst;
 		break;
 	case UDP_TO_INIT:
 		src += c->udp.fwd_in.rdelta[src];
@@ -587,22 +584,8 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 	case UDP_BACK_TO_NS:
 		if (!(s = udp_splice_to_init[v6][dst].orig_sock))
 			return;
-
-		send_dst = dst;
 		break;
 	default:
-		return;
-	}
-
-	if (ref.r.p.udp.udp.splice == UDP_TO_NS ||
-	    ref.r.p.udp.udp.splice == UDP_TO_INIT) {
-		for (i = 0; i < n; i++) {
-			struct msghdr *mh_s = &udp_mmh_send[i].msg_hdr;
-
-			mh_s->msg_iov->iov_len = udp_mmh_recv[i].msg_len;
-		}
-
-		sendmmsg(s, udp_mmh_send, n, MSG_NOSIGNAL);
 		return;
 	}
 
@@ -617,7 +600,7 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		 ((struct sockaddr_in6) {
 			.sin6_family = AF_INET6,
 			.sin6_addr = IN6ADDR_LOOPBACK_INIT,
-			.sin6_port = htons(send_dst),
+			.sin6_port = htons(dst),
 			.sin6_scope_id = 0,
 		});
 	} else {
@@ -625,7 +608,7 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 		 ((struct sockaddr_in) {
 			.sin_family = AF_INET,
 			.sin_addr = { .s_addr = htonl(INADDR_LOOPBACK) },
-			.sin_port = htons(send_dst),
+			.sin_port = htons(dst),
 			.sin_zero = { 0 },
 		});
 	}
@@ -1227,15 +1210,6 @@ static void udp_splice_iov_init(void)
 		iov->iov_base = udp_splice_buf[i];
 		iov->iov_len = sizeof(udp_splice_buf[i]);
 	}
-
-	for (i = 0, h = udp_mmh_send; i < UDP_SPLICE_FRAMES; i++, h++) {
-		struct msghdr *mh = &h->msg_hdr;
-
-		mh->msg_iov = &udp_iov_send[i];
-		mh->msg_iovlen = 1;
-	}
-	for (i = 0, iov = udp_iov_send; i < UDP_SPLICE_FRAMES; i++, iov++)
-		iov->iov_base = udp_splice_buf[i];
 
 	for (i = 0, h = udp_mmh_sendto; i < UDP_SPLICE_FRAMES; i++, h++) {
 		struct msghdr *mh = &h->msg_hdr;
