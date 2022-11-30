@@ -1090,17 +1090,15 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 				    port, uref.u32);
 
 			udp_tap_map[V4][uref.udp.port].sock = s;
-		}
 
-		if (c->mode == MODE_PASTA) {
-			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
-			uref.udp.splice = uref.udp.orig = true;
+			if (c->mode == MODE_PASTA) {
+				bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
+				uref.udp.splice = uref.udp.orig = true;
 
-			sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, ifname,
-				port, uref.u32);
-		}
-
-		if (ns) {
+				sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, ifname,
+					port, uref.u32);
+			}
+		} else {
 			uref.udp.splice = uref.udp.orig = uref.udp.ns = true;
 
 			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
@@ -1124,17 +1122,15 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 				    port, uref.u32);
 
 			udp_tap_map[V6][uref.udp.port].sock = s;
-		}
 
-		if (c->mode == MODE_PASTA) {
-			bind_addr = &in6addr_loopback;
-			uref.udp.splice = uref.udp.orig = true;
+			if (c->mode == MODE_PASTA) {
+				bind_addr = &in6addr_loopback;
+				uref.udp.splice = uref.udp.orig = true;
 
-			sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, ifname,
-				port, uref.u32);
-		}
-
-		if (ns) {
+				sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, ifname,
+					port, uref.u32);
+			}
+		} else {
 			bind_addr = &in6addr_loopback;
 			uref.udp.splice = uref.udp.orig = uref.udp.ns = true;
 
