@@ -532,50 +532,33 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 	}
 
 
-	if (ref.r.p.udp.udp.orig && !ref.r.p.udp.udp.ns) {
-		src += c->udp.fwd_out.rdelta[src];
+	if (ref.r.p.udp.udp.ns) {
+		src += c->udp.fwd_in.rdelta[src];
+		s = udp_splice_init[v6][src].sock;
+		if (!s && ref.r.p.udp.udp.orig)
+			s = udp_splice_new(c, v6, src, false);
 
-		if (!(s = udp_splice_ns[v6][src].sock)) {
+		if (s < 0)
+			return;
+
+		udp_splice_ns[v6][dst].ts = now->tv_sec;
+		udp_splice_init[v6][src].ts = now->tv_sec;
+	} else {
+		src += c->udp.fwd_out.rdelta[src];
+		s = udp_splice_ns[v6][src].sock;
+		if (!s && ref.r.p.udp.udp.orig) {
 			struct udp_splice_new_ns_arg arg = {
 				c, v6, src, -1,
 			};
 
 			NS_CALL(udp_splice_new_ns, &arg);
-			if ((s = arg.s) < 0)
-				return;
+			s = arg.s;
 		}
-
-		udp_splice_init[v6][dst].ts = now->tv_sec;
-		udp_splice_ns[v6][src].ts = now->tv_sec;
-	} else if (!ref.r.p.udp.udp.orig && ref.r.p.udp.udp.ns) {
-		src += c->udp.fwd_in.rdelta[src];
-
-		if (!(s = udp_splice_init[v6][src].sock))
-			return;
-
-		udp_splice_ns[v6][dst].ts = now->tv_sec;
-		udp_splice_init[v6][src].ts = now->tv_sec;
-	} else if (ref.r.p.udp.udp.orig && ref.r.p.udp.udp.ns) {
-		src += c->udp.fwd_in.rdelta[src];
-
-		if (!(s = udp_splice_init[v6][src].sock)) {
-			s = udp_splice_new(c, v6, src, false);
-			if (s < 0)
-				return;
-		}
-
-		udp_splice_ns[v6][dst].ts = now->tv_sec;
-		udp_splice_init[v6][src].ts = now->tv_sec;
-	} else if (!ref.r.p.udp.udp.orig && !ref.r.p.udp.udp.ns) {
-		src += c->udp.fwd_out.rdelta[src];
-
-		if (!(s = udp_splice_ns[v6][src].sock))
+		if (s < 0)
 			return;
 
 		udp_splice_init[v6][dst].ts = now->tv_sec;
 		udp_splice_ns[v6][src].ts = now->tv_sec;
-	} else {
-		return;
 	}
 
 	for (i = 0; i < n; i++) {
