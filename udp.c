@@ -41,50 +41,46 @@
  * pair of recvmmsg() and sendmmsg() deals with this case.
  *
  * The connection tracking for PASTA mode is slightly complicated by the absence
- * of actual connections, see struct udp_splice_flow, and these examples:
+ * of actual connections, see struct udp_splice_port, and these examples:
  *
  * - from init to namespace:
  *
  *   - forward direction: 127.0.0.1:5000 -> 127.0.0.1:80 in init from socket s,
  *     with epoll reference: index = 80, splice = 1, orig = 1, ns = 0
- *     - if udp_splice_to_ns[V4][5000].target_sock:
- *       - send packet to udp_splice_to_ns[V4][5000].target_sock, with
- *         destination port 80
+ *     - if udp_splice_ns[V4][5000].sock:
+ *       - send packet to udp_splice_ns[V4][5000].sock, with destination port
+ *         80
  *     - otherwise:
- *       - create new socket udp_splice_to_ns[V4][5000].target_sock
+ *       - create new socket udp_splice_ns[V4][5000].sock
  *       - bind in namespace to 127.0.0.1:5000
  *       - add to epoll with reference: index = 5000, splice = 1, orig = 0,
  *         ns = 1
- *       - set udp_splice_to_ns[V4][5000].orig_sock to s
- *     - update udp_splice_to_ns[V4][5000].ts with current time
+ *     - update udp_splice_ns[V4][5000].ts with current time
  *
  *   - reverse direction: 127.0.0.1:80 -> 127.0.0.1:5000 in namespace socket s,
  *     having epoll reference: index = 5000, splice = 1, orig = 0, ns = 1
- *     - if udp_splice_to_ns[V4][5000].orig_sock:
- *       - send to udp_splice_to_ns[V4][5000].orig_sock, with destination port
- *         5000
+ *     - if udp_splice_init[V4][80].sock:
+ *       - send to udp_splice_init[V4][80].sock, with destination port 5000
  *     - otherwise, discard
  *
  * - from namespace to init:
  *
  *   - forward direction: 127.0.0.1:2000 -> 127.0.0.1:22 in namespace from
  *     socket s, with epoll reference: index = 22, splice = 1, orig = 1, ns = 1
- *     - if udp4_splice_to_init[V4][2000].target_sock:
- *       - send packet to udp_splice_to_init[V4][2000].target_sock, with
- *         destination port 22
+ *     - if udp4_splice_init[V4][2000].sock:
+ *       - send packet to udp_splice_init[V4][2000].sock, with destination
+ *         port 22
  *     - otherwise:
- *       - create new socket udp_splice_to_init[V4][2000].target_sock
+ *       - create new socket udp_splice_init[V4][2000].sock
  *       - bind in init to 127.0.0.1:2000
  *       - add to epoll with reference: index = 2000, splice = 1, orig = 0,
  *         ns = 0
- *       - set udp_splice_to_init[V4][2000].orig_sock to s
- *     - update udp_splice_to_init[V4][2000].ts with current time
+ *     - update udp_splice_init[V4][2000].ts with current time
  *
  *   - reverse direction: 127.0.0.1:22 -> 127.0.0.1:2000 in init from socket s,
  *     having epoll reference: index = 2000, splice = 1, orig = 0, ns = 0
- *   - if udp_splice_to_init[V4][2000].orig_sock:
- *     - send to udp_splice_to_init[V4][2000].orig_sock, with destination port
- *       2000
+ *   - if udp_splice_ns[V4][22].sock:
+ *     - send to udp_splice_ns[V4][22].sock, with destination port 2000
  *   - otherwise, discard
  */
 
@@ -137,25 +133,21 @@ struct udp_tap_port {
 };
 
 /**
- * struct udp_splice_flow - Spliced "connection"
- * @orig_sock:		Originating socket, bound to dest port in source ns of
- *			originating datagram
- * @target_sock:	Target socket, bound to source port of originating
- *			datagram in dest ns
- * @ts:			Activity timestamp
+ * struct udp_splice_port - Bound socket for spliced communication
+ * @sock:	Socket bound to index port
+ * @ts:		Activity timestamp
  */
-struct udp_splice_flow {
-	int orig_sock;
-	int target_sock;
+struct udp_splice_port {
+	int sock;
 	time_t ts;
 };
 
 /* Port tracking, arrays indexed by packet source port (host order) */
 static struct udp_tap_port	udp_tap_map	[IP_VERSIONS][NUM_PORTS];
 
-/* Spliced "connections" indexed by bound port of target_sock (host order) */
-static struct udp_splice_flow udp_splice_to_ns  [IP_VERSIONS][NUM_PORTS];
-static struct udp_splice_flow udp_splice_to_init[IP_VERSIONS][NUM_PORTS];
+/* "Spliced" sockets indexed by bound port (host order) */
+static struct udp_splice_port udp_splice_ns  [IP_VERSIONS][NUM_PORTS];
+static struct udp_splice_port udp_splice_init[IP_VERSIONS][NUM_PORTS];
 
 enum udp_act_type {
 	UDP_ACT_TAP,
@@ -397,7 +389,6 @@ static void udp_sock6_iov_init(void)
  * udp_splice_new() - Create and prepare socket for "spliced" binding
  * @c:		Execution context
  * @v6:		Set for IPv6 sockets
- * @bound_sock:	Originating bound socket
  * @src:	Source port of original connection, host order
  * @splice:	UDP_BACK_TO_INIT from init, UDP_BACK_TO_NS from namespace
  *
@@ -405,22 +396,21 @@ static void udp_sock6_iov_init(void)
  *
  * #syscalls:pasta getsockname
  */
-int udp_splice_new(const struct ctx *c, int v6, int bound_sock, in_port_t src,
-		   bool ns)
+int udp_splice_new(const struct ctx *c, int v6, in_port_t src, bool ns)
 {
 	struct epoll_event ev = { .events = EPOLLIN | EPOLLRDHUP | EPOLLHUP };
 	union epoll_ref ref = { .r.proto = IPPROTO_UDP,
 				.r.p.udp.udp = { .splice = true, .ns = ns,
 						 .v6 = v6, .port = src }
 			      };
-	struct udp_splice_flow *flow;
+	struct udp_splice_port *sp;
 	int act, s;
 
 	if (ns) {
-		flow = &udp_splice_to_ns[v6 ? V6 : V4][src];
+		sp = &udp_splice_ns[v6 ? V6 : V4][src];
 		act = UDP_ACT_SPLICE_NS;
 	} else {
-		flow = &udp_splice_to_init[v6 ? V6 : V4][src];
+		sp = &udp_splice_init[v6 ? V6 : V4][src];
 		act = UDP_ACT_SPLICE_INIT;
 	}
 
@@ -455,8 +445,7 @@ int udp_splice_new(const struct ctx *c, int v6, int bound_sock, in_port_t src,
 			goto fail;
 	}
 
-	flow->orig_sock = bound_sock;
-	flow->target_sock = s;
+	sp->sock = s;
 	bitmap_set(udp_act[v6 ? V6 : V4][act], src);
 
 	ev.data.u64 = ref.u64;
@@ -472,7 +461,6 @@ fail:
  * struct udp_splice_new_ns_arg - Arguments for udp_splice_new_ns()
  * @c:		Execution context
  * @v6:		Set for IPv6
- * @bound_sock:	Originating bound socket
  * @src:	Source port of originating datagram, host order
  * @dst:	Destination port of originating datagram, host order
  * @s:		Newly created socket or negative error code
@@ -480,7 +468,6 @@ fail:
 struct udp_splice_new_ns_arg {
 	const struct ctx *c;
 	int v6;
-	int bound_sock;
 	in_port_t src;
 	int s;
 };
@@ -500,7 +487,7 @@ static int udp_splice_new_ns(void *arg)
 	if (ns_enter(a->c))
 		return 0;
 
-	a->s = udp_splice_new(a->c, a->v6, a->bound_sock, a->src, true);
+	a->s = udp_splice_new(a->c, a->v6, a->src, true);
 
 	return 0;
 }
@@ -542,9 +529,9 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 	if (ref.r.p.udp.udp.orig && !ref.r.p.udp.udp.ns) {
 		src += c->udp.fwd_out.rdelta[src];
 
-		if (!(s = udp_splice_to_ns[v6][src].target_sock)) {
+		if (!(s = udp_splice_ns[v6][src].sock)) {
 			struct udp_splice_new_ns_arg arg = {
-				c, v6, ref.r.s, src, -1,
+				c, v6, src, -1,
 			};
 
 			NS_CALL(udp_splice_new_ns, &arg);
@@ -552,21 +539,25 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 				return;
 		}
 
-		udp_splice_to_ns[v6][src].ts = now->tv_sec;
+		udp_splice_ns[v6][src].ts = now->tv_sec;
 	} else if (!ref.r.p.udp.udp.orig && ref.r.p.udp.udp.ns) {
-		if (!(s = udp_splice_to_ns[v6][dst].orig_sock))
+		src += c->udp.fwd_in.rdelta[src];
+
+		if (!(s = udp_splice_init[v6][src].sock))
 			return;
 	} else if (ref.r.p.udp.udp.orig && ref.r.p.udp.udp.ns) {
 		src += c->udp.fwd_in.rdelta[src];
 
-		if (!(s = udp_splice_to_init[v6][src].target_sock)) {
-			s = udp_splice_new(c, v6, ref.r.s, src, false);
+		if (!(s = udp_splice_init[v6][src].sock)) {
+			s = udp_splice_new(c, v6, src, false);
 			if (s < 0)
 				return;
 		}
-		udp_splice_to_init[v6][src].ts = now->tv_sec;
+		udp_splice_init[v6][src].ts = now->tv_sec;
 	} else if (!ref.r.p.udp.udp.orig && !ref.r.p.udp.udp.ns) {
-		if (!(s = udp_splice_to_init[v6][dst].orig_sock))
+		src += c->udp.fwd_out.rdelta[src];
+
+		if (!(s = udp_splice_ns[v6][src].sock))
 			return;
 	} else {
 		return;
@@ -1097,7 +1088,7 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 
 				s = sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr,
 					    ifname, port, uref.u32);
-				udp_splice_to_init[V4][port].target_sock = s;
+				udp_splice_init[V4][port].sock = s;
 			}
 		} else {
 			uref.udp.splice = uref.udp.orig = uref.udp.ns = true;
@@ -1106,7 +1097,7 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 
 			s = sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr,
 				    ifname, port, uref.u32);
-			udp_splice_to_ns[V4][port].target_sock = s;
+			udp_splice_ns[V4][port].sock = s;
 		}
 	}
 
@@ -1131,7 +1122,7 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 
 				s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr,
 					    ifname, port, uref.u32);
-				udp_splice_to_init[V6][port].target_sock = s;
+				udp_splice_init[V6][port].sock = s;
 			}
 		} else {
 			bind_addr = &in6addr_loopback;
@@ -1139,7 +1130,7 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 
 			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr,
 				    ifname, port, uref.u32);
-			udp_splice_to_ns[V6][port].target_sock = s;
+			udp_splice_ns[V6][port].sock = s;
 		}
 	}
 }
@@ -1242,7 +1233,7 @@ int udp_init(struct ctx *c)
 static void udp_timer_one(struct ctx *c, int v6, enum udp_act_type type,
 			  in_port_t port, const struct timespec *ts)
 {
-	struct udp_splice_flow *flow;
+	struct udp_splice_port *sp;
 	struct udp_tap_port *tp;
 	int s = -1;
 
@@ -1257,17 +1248,17 @@ static void udp_timer_one(struct ctx *c, int v6, enum udp_act_type type,
 
 		break;
 	case UDP_ACT_SPLICE_INIT:
-		flow = &udp_splice_to_init[v6 ? V6 : V4][port];
+		sp = &udp_splice_init[v6 ? V6 : V4][port];
 
-		if (ts->tv_sec - flow->ts > UDP_CONN_TIMEOUT)
-			s = flow->target_sock;
+		if (ts->tv_sec - sp->ts > UDP_CONN_TIMEOUT)
+			s = sp->sock;
 
 		break;
 	case UDP_ACT_SPLICE_NS:
-		flow = &udp_splice_to_ns[v6 ? V6 : V4][port];
+		sp = &udp_splice_ns[v6 ? V6 : V4][port];
 
-		if (ts->tv_sec - flow->ts > UDP_CONN_TIMEOUT)
-			s = flow->target_sock;
+		if (ts->tv_sec - sp->ts > UDP_CONN_TIMEOUT)
+			s = sp->sock;
 
 		break;
 	default:
