@@ -240,4 +240,61 @@ nsout	LAT tcp_crr --nolog -P 10003 -C 10013 -4 -c -H __GW__ | sed -n 's/^through
 hostw
 lat	__LAT__ 1500 500
 
+
+tr	TCP throughput over IPv6: host to ns
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope == "global" and .prefixlen == 64).local'
+bw	-
+bw	-
+bw	-
+iperf3	BW host ns __ADDR6__ 100${i}2 __THREADS__ __TIME__ __OPTS__
+bw	__BW__ 8.0 10.0
+
+tl	TCP RR latency over IPv6: host to ns
+lat	-
+lat	-
+lat	-
+nsb	tcp_rr --nolog -P 10002 -C 10012 -6
+hout	LAT tcp_rr --nolog -P 10002 -C 10012 -6 -c -H __ADDR6__ | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 150 100
+
+tl	TCP CRR latency over IPv6: host to ns
+lat	-
+lat	-
+lat	-
+sleep	1
+nsb	tcp_crr --nolog -P 10002 -C 10012 -6
+hout	LAT tcp_crr --nolog -P 10002 -C 10012 -6 -c -H __ADDR6__ | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 5000 10000
+
+
+tr	TCP throughput over IPv4: host to ns
+nsout	ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+bw	-
+bw	-
+bw	-
+iperf3	BW host ns __ADDR__ 100${i}2 __THREADS__ __TIME__ __OPTS__
+bw	__BW__ 8.0 10.0
+
+tl	TCP RR latency over IPv4: host to ns
+lat	-
+lat	-
+lat	-
+nsb	tcp_rr --nolog -P 10002 -C 10012 -4
+hout	LAT tcp_rr --nolog -P 10002 -C 10012 -4 -c -H __ADDR__ | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 150 100
+
+tl	TCP CRR latency over IPv4: host to ns
+lat	-
+lat	-
+lat	-
+sleep	1
+nsb	tcp_crr --nolog -P 10002 -C 10012 -4
+hout	LAT tcp_crr --nolog -P 10002 -C 10012 -4 -c -H __ADDR__ | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 5000 10000
+
 te
