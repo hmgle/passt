@@ -1146,6 +1146,10 @@ static int tcp_opt_get(const char *opts, size_t len, uint8_t type_find,
 			break;
 		default:
 			type = *(opts++);
+
+			if (*(uint8_t *)opts < 2 || *(uint8_t *)opts > len)
+				return -1;
+
 			optlen = *(opts++) - 2;
 			len -= 2;
 
