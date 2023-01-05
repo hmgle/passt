@@ -232,10 +232,17 @@ static struct mmsghdr	udp4_l2_mh_tap		[UDP_MAX_FRAMES];
 static struct mmsghdr	udp6_l2_mh_tap		[UDP_MAX_FRAMES];
 
 /* recvmmsg()/sendmmsg() data for "spliced" connections */
-static struct sockaddr_storage udp_splice_namebuf;
-
 static struct iovec	udp4_iov_splice		[UDP_MAX_FRAMES];
 static struct iovec	udp6_iov_splice		[UDP_MAX_FRAMES];
+
+static struct sockaddr_in udp4_localname = {
+	.sin_family = AF_INET,
+	.sin_addr = IN4ADDR_LOOPBACK_INIT,
+};
+static struct sockaddr_in6 udp6_localname = {
+	.sin6_family = AF_INET6,
+	.sin6_addr = IN6ADDR_LOOPBACK_INIT,
+};
 
 static struct mmsghdr	udp4_mh_splice		[UDP_MAX_FRAMES];
 static struct mmsghdr	udp6_mh_splice		[UDP_MAX_FRAMES];
@@ -610,23 +617,10 @@ static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
 	if (n <= 0)
 		return;
 
-	if (v6) {
-		*((struct sockaddr_in6 *)&udp_splice_namebuf) =
-		 ((struct sockaddr_in6) {
-			.sin6_family = AF_INET6,
-			.sin6_addr = IN6ADDR_LOOPBACK_INIT,
-			.sin6_port = htons(dst),
-			.sin6_scope_id = 0,
-		});
-	} else {
-		*((struct sockaddr_in *)&udp_splice_namebuf) =
-		 ((struct sockaddr_in) {
-			.sin_family = AF_INET,
-			.sin_addr = { .s_addr = htonl(INADDR_LOOPBACK) },
-			.sin_port = htons(dst),
-			.sin_zero = { 0 },
-		});
-	}
+	if (v6)
+		udp6_localname.sin6_port = htons(dst);
+	else
+		udp4_localname.sin_port = htons(dst);
 
 	for (i = 0; i < n; i += m) {
 		in_port_t src = sa_port(v6, mmh_recv[i].msg_hdr.msg_name);
@@ -1256,9 +1250,11 @@ static void udp_splice_iov_init(void)
 		struct msghdr *mh4 = &udp4_mh_splice[i].msg_hdr;
 		struct msghdr *mh6 = &udp6_mh_splice[i].msg_hdr;
 
-		mh4->msg_name = mh6->msg_name = &udp_splice_namebuf;
-		mh4->msg_namelen = sizeof(udp_splice_namebuf);
-		mh6->msg_namelen = sizeof(udp_splice_namebuf);
+		mh4->msg_name = &udp4_localname;
+		mh4->msg_namelen = sizeof(udp4_localname);
+
+		mh6->msg_name = &udp6_localname;
+		mh6->msg_namelen = sizeof(udp6_localname);
 
 		udp4_iov_splice[i].iov_base = udp4_l2_buf[i].data;
 		udp6_iov_splice[i].iov_base = udp6_l2_buf[i].data;

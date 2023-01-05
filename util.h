@@ -79,6 +79,13 @@
 	(IN_MULTICAST(ntohl((a)->s_addr)))
 #define IN4_ARE_ADDR_EQUAL(a, b) \
 	(((struct in_addr *)(a))->s_addr == ((struct in_addr *)b)->s_addr)
+#if __BYTE_ORDER == __BIG_ENDIAN
+#define IN4ADDR_LOOPBACK_INIT \
+	{ .s_addr	= INADDR_LOOPBACK }
+#else
+#define IN4ADDR_LOOPBACK_INIT \
+	{ .s_addr	= __bswap_constant_32(INADDR_LOOPBACK) }
+#endif
 
 #define NS_FN_STACK_SIZE	(RLIMIT_STACK_VAL * 1024 / 8)
 int do_clone(int (*fn)(void *), char *stack_area, size_t stack_size, int flags,
