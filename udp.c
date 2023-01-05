@@ -1124,7 +1124,6 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		   const void *addr, const char *ifname, in_port_t port)
 {
 	union udp_epoll_ref uref = { .u32 = 0 };
-	const void *bind_addr;
 	int s;
 
 	if (ns) {
@@ -1136,67 +1135,41 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 	}
 
 	if ((af == AF_INET || af == AF_UNSPEC) && c->ifi4) {
-		if (!addr && c->mode == MODE_PASTA)
-			bind_addr = &c->ip4.addr;
-		else
-			bind_addr = addr;
-
 		uref.udp.v6 = 0;
+		uref.udp.splice = (c->mode == MODE_PASTA);
+		uref.udp.orig = true;
 
 		if (!ns) {
-			uref.udp.splice = 0;
-			s = sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr, ifname,
+			s = sock_l4(c, AF_INET, IPPROTO_UDP, addr, ifname,
 				    port, uref.u32);
 
 			udp_tap_map[V4][uref.udp.port].sock = s;
-
-			if (c->mode == MODE_PASTA) {
-				bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
-				uref.udp.splice = uref.udp.orig = true;
-
-				s = sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr,
-					    ifname, port, uref.u32);
-				udp_splice_init[V4][port].sock = s;
-			}
+			udp_splice_init[V4][port].sock = s;
 		} else {
-			uref.udp.splice = uref.udp.orig = uref.udp.ns = true;
+			struct in_addr loopback = { htonl(INADDR_LOOPBACK) };
+			uref.udp.ns = true;
 
-			bind_addr = &(uint32_t){ htonl(INADDR_LOOPBACK) };
-
-			s = sock_l4(c, AF_INET, IPPROTO_UDP, bind_addr,
+			s = sock_l4(c, AF_INET, IPPROTO_UDP, &loopback,
 				    ifname, port, uref.u32);
 			udp_splice_ns[V4][port].sock = s;
 		}
 	}
 
 	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6) {
-		if (!addr && c->mode == MODE_PASTA)
-			bind_addr = &c->ip6.addr;
-		else
-			bind_addr = addr;
-
 		uref.udp.v6 = 1;
+		uref.udp.splice = (c->mode == MODE_PASTA);
+		uref.udp.orig = true;
 
 		if (!ns) {
-			uref.udp.splice = 0;
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, ifname,
+			s = sock_l4(c, AF_INET6, IPPROTO_UDP, addr, ifname,
 				    port, uref.u32);
 
 			udp_tap_map[V6][uref.udp.port].sock = s;
-
-			if (c->mode == MODE_PASTA) {
-				bind_addr = &in6addr_loopback;
-				uref.udp.splice = uref.udp.orig = true;
-
-				s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr,
-					    ifname, port, uref.u32);
-				udp_splice_init[V6][port].sock = s;
-			}
+			udp_splice_init[V6][port].sock = s;
 		} else {
-			bind_addr = &in6addr_loopback;
-			uref.udp.splice = uref.udp.orig = uref.udp.ns = true;
+			uref.udp.ns = true;
 
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr,
+			s = sock_l4(c, AF_INET6, IPPROTO_UDP, &in6addr_loopback,
 				    ifname, port, uref.u32);
 			udp_splice_ns[V6][port].sock = s;
 		}
