@@ -784,6 +784,35 @@ static size_t udp_update_hdr6(const struct ctx *c, int n, in_port_t dstport,
 }
 
 /**
+ * udp_tap_send_pasta() - Send datagrams to the pasta tap interface
+ * @c:		Execution context
+ * @mmh:	Array of message headers to send
+ * @n:		Number of message headers to send
+ *
+ * #syscalls:pasta write
+ */
+static void udp_tap_send_pasta(const struct ctx *c, struct mmsghdr *mmh,
+			       unsigned int n)
+{
+	unsigned int i, j;
+
+	for (i = 0; i < n; i++) {
+		for (j = 0; j < mmh[i].msg_hdr.msg_iovlen; j++) {
+			struct iovec *iov = &mmh[i].msg_hdr.msg_iov[j];
+
+			/* We can't use writev() because the tap
+			 * character device relies on the write()
+			 * boundaries to discern frame boundaries
+			 */
+			if (write(c->fd_tap, iov->iov_base, iov->iov_len) < 0)
+				debug("tap write: %s", strerror(errno));
+			else
+				pcap(iov->iov_base, iov->iov_len);
+		}
+	}
+}
+
+/**
  * udp_sock_handler() - Handle new data from socket
  * @c:		Execution context
  * @ref:	epoll reference
@@ -835,31 +864,25 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 		else
 			buf_len = udp_update_hdr4(c, i, dstport, now);
 
-		if (c->mode == MODE_PASTA) {
-			void *frame = tap_iov[i].iov_base;
+		tap_iov[i].iov_len = buf_len;
 
-			if (write(c->fd_tap, frame, buf_len) < 0)
-				debug("tap write: %s", strerror(errno));
-			pcap(frame, buf_len);
-		} else {
-			tap_iov[i].iov_len = buf_len;
-
-			/* With bigger messages, qemu closes the connection. */
-			if (msg_bufs && msg_len + buf_len > SHRT_MAX) {
-				tap_mmh[msg_i].msg_hdr.msg_iovlen = msg_bufs;
-				msg_i++;
-				tap_mmh[msg_i].msg_hdr.msg_iov = &tap_iov[i];
-				msg_len = msg_bufs = 0;
-			}
-
-			msg_len += buf_len;
-			msg_bufs++;
+		/* With bigger messages, qemu closes the connection. */
+		if (c->mode == MODE_PASST && msg_bufs &&
+		    msg_len + buf_len > SHRT_MAX) {
+			tap_mmh[msg_i].msg_hdr.msg_iovlen = msg_bufs;
+			msg_i++;
+			tap_mmh[msg_i].msg_hdr.msg_iov = &tap_iov[i];
+			msg_len = msg_bufs = 0;
 		}
+		msg_len += buf_len;
+		msg_bufs++;
 	}
 	tap_mmh[msg_i].msg_hdr.msg_iovlen = msg_bufs;
 
-	if (c->mode == MODE_PASTA)
+	if (c->mode == MODE_PASTA) {
+		udp_tap_send_pasta(c, tap_mmh, msg_i + 1);
 		return;
+	}
 
 	ret = sendmmsg(c->fd_tap, tap_mmh, msg_i + 1,
 		       MSG_NOSIGNAL | MSG_DONTWAIT);
