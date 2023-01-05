@@ -513,16 +513,25 @@ static int udp_splice_new_ns(void *arg)
 }
 
 /**
- * sa_port() - Determine port from a sockaddr_in or sockaddr_in6
+ * udp_mmh_splice_port() - Is source address of message suitable for splicing?
  * @v6:		Is @sa a sockaddr_in6 (otherwise sockaddr_in)?
- * @sa:		Pointer to either sockaddr_in or sockaddr_in6
+ * @mmh:	mmsghdr of incoming message
+ *
+ * Return: if @sa refers to localhost (127.0.0.1 or ::1) the port from
+ *         @sa in host order, otherwise -1.
  */
-static in_port_t sa_port(bool v6, const void *sa)
+static int udp_mmh_splice_port(bool v6, const struct mmsghdr *mmh)
 {
-	const struct sockaddr_in6 *sa6 = sa;
-	const struct sockaddr_in *sa4 = sa;
+	const struct sockaddr_in6 *sa6 = mmh->msg_hdr.msg_name;
+	const struct sockaddr_in *sa4 = mmh->msg_hdr.msg_name;
 
-	return v6 ? ntohs(sa6->sin6_port) : ntohs(sa4->sin_port);
+	if (v6 && IN6_IS_ADDR_LOOPBACK(&sa6->sin6_addr))
+		return ntohs(sa6->sin6_port);
+
+	if (!v6 && IN4_IS_ADDR_LOOPBACK(&sa4->sin_addr))
+		return ntohs(sa4->sin_port);
+
+	return -1;
 }
 
 /**
@@ -926,23 +935,28 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 	if (n <= 0)
 		return;
 
-	if (!ref.r.p.udp.udp.splice) {
-		udp_tap_send(c, 0, n, dstport, v6, now);
-		return;
-	}
-
 	for (i = 0; i < n; i += m) {
-		in_port_t src = sa_port(v6, mmh_recv[i].msg_hdr.msg_name);
+		int splicefrom = -1;
+		m = n;
 
-		for (m = 1; i + m < n; m++) {
-			void *mname = mmh_recv[i + m].msg_hdr.msg_name;
-			if (sa_port(v6, mname) != src)
-				break;
+		if (ref.r.p.udp.udp.splice) {
+			splicefrom = udp_mmh_splice_port(v6, mmh_recv + i);
+
+			for (m = 1; i + m < n; m++) {
+				int p;
+
+				p = udp_mmh_splice_port(v6, mmh_recv + i + m);
+				if (p != splicefrom)
+					break;
+			}
 		}
 
-		udp_splice_sendfrom(c, i, m, src, dstport, v6,
-				    ref.r.p.udp.udp.ns, ref.r.p.udp.udp.orig,
-				    now);
+		if (splicefrom >= 0)
+			udp_splice_sendfrom(c, i, m, splicefrom, dstport,
+					    v6, ref.r.p.udp.udp.ns,
+					    ref.r.p.udp.udp.orig, now);
+		else
+			udp_tap_send(c, i, m, dstport, v6, now);
 	}
 }
 

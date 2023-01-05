@@ -22,7 +22,7 @@ void udp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 /**
  * union udp_epoll_ref - epoll reference portion for TCP connections
  * @bound:		Set if this file descriptor is a bound socket
- * @splice:		Set if descriptor is associated to "spliced" connection
+ * @splice:		Set if descriptor packets to be "spliced"
  * @orig:		Set if a spliced socket which can originate "connections"
  * @ns:			Set if this is a socket in the pasta network namespace
  * @v6:			Set for IPv6 sockets or connections
