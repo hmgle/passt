@@ -813,6 +813,73 @@ static void udp_tap_send_pasta(const struct ctx *c, struct mmsghdr *mmh,
 }
 
 /**
+ * udp_tap_send_passt() - Send datagrams to the passt tap interface
+ * @c:		Execution context
+ * @mmh:	Array of message headers to send
+ * @n:		Number of message headers to send
+ *
+ * #syscalls:passt sendmmsg sendmsg
+ */
+static void udp_tap_send_passt(const struct ctx *c, struct mmsghdr *mmh, int n)
+{
+	struct msghdr *last_mh;
+	ssize_t missing = 0;
+	size_t msg_len = 0;
+	unsigned int i;
+	int ret;
+
+	ret = sendmmsg(c->fd_tap, mmh, n, MSG_NOSIGNAL | MSG_DONTWAIT);
+	if (ret <= 0)
+		return;
+
+	/* If we lose some messages to sendmmsg() here, fine, it's UDP. However,
+	 * the last message needs to be delivered completely, otherwise qemu
+	 * will fail to reassemble the next message and close the connection. Go
+	 * through headers from the last sent message, counting bytes, and, if
+	 * and as soon as we see more bytes than sendmmsg() sent, re-send the
+	 * rest with a blocking call.
+	 *
+	 * In pictures, given this example:
+	 *
+	 *				 	iov #0  iov #1  iov #2  iov #3
+	 * tap_mmh[ret - 1].msg_hdr:		....    ......  .....   ......
+	 * tap_mmh[ret - 1].msg_len:	7	....    ...
+	 *
+	 * when 'msglen' reaches:	10		      ^
+	 * and 'missing' below is:	3	           ---
+	 *
+	 * re-send everything from here:		   ^--  -----   ------
+	 */
+	last_mh = &mmh[ret - 1].msg_hdr;
+	for (i = 0; i < last_mh->msg_iovlen; i++) {
+		if (missing <= 0) {
+			msg_len += last_mh->msg_iov[i].iov_len;
+			missing = msg_len - mmh[ret - 1].msg_len;
+		}
+
+		if (missing > 0) {
+			uint8_t **iov_base;
+			int first_offset;
+
+			iov_base = (uint8_t **)&last_mh->msg_iov[i].iov_base;
+			first_offset = last_mh->msg_iov[i].iov_len - missing;
+			*iov_base += first_offset;
+			last_mh->msg_iov[i].iov_len = missing;
+
+			last_mh->msg_iov = &last_mh->msg_iov[i];
+
+			if (sendmsg(c->fd_tap, last_mh, MSG_NOSIGNAL) < 0)
+				debug("UDP: %li bytes to tap missing", missing);
+
+			*iov_base -= first_offset;
+			break;
+		}
+	}
+
+	pcapmm(mmh, ret);
+}
+
+/**
  * udp_sock_handler() - Handle new data from socket
  * @c:		Execution context
  * @ref:	epoll reference
@@ -820,16 +887,14 @@ static void udp_tap_send_pasta(const struct ctx *c, struct mmsghdr *mmh,
  * @now:	Current timestamp
  *
  * #syscalls recvmmsg
- * #syscalls:passt sendmmsg sendmsg
  */
 void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 		      const struct timespec *now)
 {
 	in_port_t dstport = ref.r.p.udp.udp.port;
-	ssize_t n, msg_len = 0, missing = 0;
 	struct mmsghdr *tap_mmh, *sock_mmh;
-	int msg_bufs = 0, msg_i = 0, ret;
-	struct msghdr *last_mh;
+	int msg_bufs = 0, msg_i = 0;
+	ssize_t n, msg_len = 0;
 	struct iovec *tap_iov;
 	unsigned int i;
 
@@ -879,61 +944,10 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 	}
 	tap_mmh[msg_i].msg_hdr.msg_iovlen = msg_bufs;
 
-	if (c->mode == MODE_PASTA) {
+	if (c->mode == MODE_PASTA)
 		udp_tap_send_pasta(c, tap_mmh, msg_i + 1);
-		return;
-	}
-
-	ret = sendmmsg(c->fd_tap, tap_mmh, msg_i + 1,
-		       MSG_NOSIGNAL | MSG_DONTWAIT);
-	if (ret <= 0)
-		return;
-
-	/* If we lose some messages to sendmmsg() here, fine, it's UDP. However,
-	 * the last message needs to be delivered completely, otherwise qemu
-	 * will fail to reassemble the next message and close the connection. Go
-	 * through headers from the last sent message, counting bytes, and, if
-	 * and as soon as we see more bytes than sendmmsg() sent, re-send the
-	 * rest with a blocking call.
-	 *
-	 * In pictures, given this example:
-	 *
-	 *				 	iov #0  iov #1  iov #2  iov #3
-	 * tap_mmh[ret - 1].msg_hdr:		....    ......  .....   ......
-	 * tap_mmh[ret - 1].msg_len:	7	....    ...
-	 *
-	 * when 'msglen' reaches:	10		      ^
-	 * and 'missing' below is:	3	           ---
-	 *
-	 * re-send everything from here:		   ^--  -----   ------
-	 */
-	last_mh = &tap_mmh[ret - 1].msg_hdr;
-	for (i = 0, msg_len = 0; i < last_mh->msg_iovlen; i++) {
-		if (missing <= 0) {
-			msg_len += last_mh->msg_iov[i].iov_len;
-			missing = msg_len - tap_mmh[ret - 1].msg_len;
-		}
-
-		if (missing > 0) {
-			uint8_t **iov_base;
-			int first_offset;
-
-			iov_base = (uint8_t **)&last_mh->msg_iov[i].iov_base;
-			first_offset = last_mh->msg_iov[i].iov_len - missing;
-			*iov_base += first_offset;
-			last_mh->msg_iov[i].iov_len = missing;
-
-			last_mh->msg_iov = &last_mh->msg_iov[i];
-
-			if (sendmsg(c->fd_tap, last_mh, MSG_NOSIGNAL) < 0)
-				debug("UDP: %li bytes to tap missing", missing);
-
-			*iov_base -= first_offset;
-			break;
-		}
-	}
-
-	pcapmm(tap_mmh, ret);
+	else
+		udp_tap_send_passt(c, tap_mmh, msg_i + 1);
 }
 
 /**
