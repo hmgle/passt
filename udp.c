@@ -880,51 +880,39 @@ static void udp_tap_send_passt(const struct ctx *c, struct mmsghdr *mmh, int n)
 }
 
 /**
- * udp_sock_handler() - Handle new data from socket
+ * udp_tap_send() - Prepare UDP datagrams and send to tap interface
  * @c:		Execution context
- * @ref:	epoll reference
- * @events:	epoll events bitmap
+ * @start:	Index of first datagram in udp[46]_l2_buf pool
+ * @n:		Number of datagrams to send
+ * @dstport:	Destination port number
+ * @v6:		True if using IPv6
  * @now:	Current timestamp
  *
- * #syscalls recvmmsg
+ * Return: size of tap frame with headers
  */
-void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
-		      const struct timespec *now)
+static void udp_tap_send(const struct ctx *c,
+			 unsigned int start, unsigned int n,
+			 in_port_t dstport, bool v6, const struct timespec *now)
 {
-	in_port_t dstport = ref.r.p.udp.udp.port;
-	struct mmsghdr *tap_mmh, *sock_mmh;
 	int msg_bufs = 0, msg_i = 0;
-	ssize_t n, msg_len = 0;
+	struct mmsghdr *tap_mmh;
 	struct iovec *tap_iov;
+	ssize_t msg_len = 0;
 	unsigned int i;
 
-	if (events == EPOLLERR)
-		return;
-
-	if (ref.r.p.udp.udp.splice) {
-		udp_sock_handler_splice(c, ref, events, now);
-		return;
-	}
-
-	if (ref.r.p.udp.udp.v6) {
+	if (v6) {
 		tap_mmh = udp6_l2_mh_tap;
-		sock_mmh = udp6_l2_mh_sock;
 		tap_iov = udp6_l2_iov_tap;
 	} else {
 		tap_mmh = udp4_l2_mh_tap;
-		sock_mmh = udp4_l2_mh_sock;
 		tap_iov = udp4_l2_iov_tap;
 	}
 
-	n = recvmmsg(ref.r.s, sock_mmh, UDP_TAP_FRAMES, 0, NULL);
-	if (n <= 0)
-		return;
-
-	tap_mmh[0].msg_hdr.msg_iov = &tap_iov[0];
-	for (i = 0; i < (unsigned)n; i++) {
+	tap_mmh[0].msg_hdr.msg_iov = &tap_iov[start];
+	for (i = start; i < start + n; i++) {
 		size_t buf_len;
 
-		if (ref.r.p.udp.udp.v6)
+		if (v6)
 			buf_len = udp_update_hdr6(c, i, dstport, now);
 		else
 			buf_len = udp_update_hdr4(c, i, dstport, now);
@@ -948,6 +936,43 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 		udp_tap_send_pasta(c, tap_mmh, msg_i + 1);
 	else
 		udp_tap_send_passt(c, tap_mmh, msg_i + 1);
+}
+
+/**
+ * udp_sock_handler() - Handle new data from socket
+ * @c:		Execution context
+ * @ref:	epoll reference
+ * @events:	epoll events bitmap
+ * @now:	Current timestamp
+ *
+ * #syscalls recvmmsg
+ */
+void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
+		      const struct timespec *now)
+{
+	in_port_t dstport = ref.r.p.udp.udp.port;
+	bool v6 = ref.r.p.udp.udp.v6;
+	struct mmsghdr *sock_mmh;
+	ssize_t n;
+
+	if (events == EPOLLERR)
+		return;
+
+	if (ref.r.p.udp.udp.splice) {
+		udp_sock_handler_splice(c, ref, events, now);
+		return;
+	}
+
+	if (ref.r.p.udp.udp.v6)
+		sock_mmh = udp6_l2_mh_sock;
+	else
+		sock_mmh = udp4_l2_mh_sock;
+
+	n = recvmmsg(ref.r.s, sock_mmh, UDP_TAP_FRAMES, 0, NULL);
+	if (n <= 0)
+		return;
+
+	udp_tap_send(c, 0, n, dstport, v6, now);
 }
 
 /**
