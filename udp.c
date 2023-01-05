@@ -591,52 +591,6 @@ static void udp_splice_sendfrom(const struct ctx *c, unsigned start, unsigned n,
 }
 
 /**
- * udp_sock_handler_splice() - Handler for socket mapped to "spliced" connection
- * @c:		Execution context
- * @ref:	epoll reference
- * @events:	epoll events bitmap
- * @now:	Current timestamp
- */
-static void udp_sock_handler_splice(const struct ctx *c, union epoll_ref ref,
-				    uint32_t events, const struct timespec *now)
-{
-	in_port_t dst = ref.r.p.udp.udp.port;
-	int v6 = ref.r.p.udp.udp.v6, n, i, m;
-	struct mmsghdr *mmh_recv;
-
-	if (!(events & EPOLLIN))
-		return;
-
-	if (v6)
-		mmh_recv = udp6_l2_mh_sock;
-	else
-		mmh_recv = udp4_l2_mh_sock;
-
-	n = recvmmsg(ref.r.s, mmh_recv, UDP_MAX_FRAMES, 0, NULL);
-
-	if (n <= 0)
-		return;
-
-	if (v6)
-		udp6_localname.sin6_port = htons(dst);
-	else
-		udp4_localname.sin_port = htons(dst);
-
-	for (i = 0; i < n; i += m) {
-		in_port_t src = sa_port(v6, mmh_recv[i].msg_hdr.msg_name);
-
-		for (m = 1; i + m < n; m++) {
-			void *mname = mmh_recv[i + m].msg_hdr.msg_name;
-			if (sa_port(v6, mname) != src)
-				break;
-		}
-
-		udp_splice_sendfrom(c, i, m, src, dst, v6, ref.r.p.udp.udp.ns,
-				    ref.r.p.udp.udp.orig, now);
-	}
-}
-
-/**
  * udp_update_hdr4() - Update headers for one IPv4 datagram
  * @c:		Execution context
  * @n:		Index of buffer in udp4_l2_buf pool
@@ -944,32 +898,52 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 		      const struct timespec *now)
 {
 	/* For not entirely clear reasons (data locality?) pasta gets
-	 * better throughput if we receive the datagrams one at a
-	 * time.
+	 * better throughput if we receive tap datagrams one at a
+	 * atime.  For small splice datagrams throughput is slightly
+	 * better if we do batch, but it's slightly worse for large
+	 * splice datagrams.  Since we don't know before we receive
+	 * whether we'll use tap or splice, always go one at a time
+	 * for pasta mode.
 	 */
 	ssize_t n = (c->mode == MODE_PASST ? UDP_MAX_FRAMES : 1);
 	in_port_t dstport = ref.r.p.udp.udp.port;
 	bool v6 = ref.r.p.udp.udp.v6;
-	struct mmsghdr *sock_mmh;
+	struct mmsghdr *mmh_recv;
+	unsigned int i, m;
 
-	if (events == EPOLLERR)
+	if (!(events & EPOLLIN))
 		return;
 
-	if (ref.r.p.udp.udp.splice) {
-		udp_sock_handler_splice(c, ref, events, now);
-		return;
+	if (v6) {
+		mmh_recv = udp6_l2_mh_sock;
+		udp6_localname.sin6_port = htons(dstport);
+	} else {
+		mmh_recv = udp4_l2_mh_sock;
+		udp4_localname.sin_port = htons(dstport);
 	}
 
-	if (ref.r.p.udp.udp.v6)
-		sock_mmh = udp6_l2_mh_sock;
-	else
-		sock_mmh = udp4_l2_mh_sock;
-
-	n = recvmmsg(ref.r.s, sock_mmh, n, 0, NULL);
+	n = recvmmsg(ref.r.s, mmh_recv, n, 0, NULL);
 	if (n <= 0)
 		return;
 
-	udp_tap_send(c, 0, n, dstport, v6, now);
+	if (!ref.r.p.udp.udp.splice) {
+		udp_tap_send(c, 0, n, dstport, v6, now);
+		return;
+	}
+
+	for (i = 0; i < n; i += m) {
+		in_port_t src = sa_port(v6, mmh_recv[i].msg_hdr.msg_name);
+
+		for (m = 1; i + m < n; m++) {
+			void *mname = mmh_recv[i + m].msg_hdr.msg_name;
+			if (sa_port(v6, mname) != src)
+				break;
+		}
+
+		udp_splice_sendfrom(c, i, m, src, dstport, v6,
+				    ref.r.p.udp.udp.ns, ref.r.p.udp.udp.orig,
+				    now);
+	}
 }
 
 /**
