@@ -119,7 +119,6 @@
 
 #define UDP_CONN_TIMEOUT	180 /* s, timeout for ephemeral or local bind */
 #define UDP_MAX_FRAMES		32  /* max # of frames to receive at once */
-#define UDP_TAP_FRAMES		(c->mode == MODE_PASST ? UDP_MAX_FRAMES : 1)
 
 /**
  * struct udp_tap_port - Port tracking based on tap-facing source port
@@ -950,10 +949,14 @@ static void udp_tap_send(const struct ctx *c,
 void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 		      const struct timespec *now)
 {
+	/* For not entirely clear reasons (data locality?) pasta gets
+	 * better throughput if we receive the datagrams one at a
+	 * time.
+	 */
+	ssize_t n = (c->mode == MODE_PASST ? UDP_MAX_FRAMES : 1);
 	in_port_t dstport = ref.r.p.udp.udp.port;
 	bool v6 = ref.r.p.udp.udp.v6;
 	struct mmsghdr *sock_mmh;
-	ssize_t n;
 
 	if (events == EPOLLERR)
 		return;
@@ -968,7 +971,7 @@ void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
 	else
 		sock_mmh = udp4_l2_mh_sock;
 
-	n = recvmmsg(ref.r.s, sock_mmh, UDP_TAP_FRAMES, 0, NULL);
+	n = recvmmsg(ref.r.s, sock_mmh, n, 0, NULL);
 	if (n <= 0)
 		return;
 
