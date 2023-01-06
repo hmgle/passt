@@ -102,13 +102,6 @@ int do_clone(int (*fn)(void *), char *stack_area, size_t stack_size, int flags,
 			 (void *)(arg));				\
 	} while (0)
 
-#define L2_BUF_ETH_INIT(proto)						\
-	{								\
-		.h_dest		= { 0 },				\
-		.h_source	= { 0 },				\
-		.h_proto	= htons_constant(proto),		\
-	}
-
 #define L2_BUF_IP4_INIT(proto)						\
 	{								\
 		.version	= 4,					\
