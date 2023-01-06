@@ -1417,22 +1417,27 @@ static int tcp_l2_buf_write_one(struct ctx *c, const struct iovec *iov)
 /**
  * tcp_l2_buf_flush_passt() - Send a message on the passt tap interface
  * @c:		Execution context
- * @mh:		Message header that was partially sent by sendmsg()
+ * @iov:	Pointer to array of buffers, one per frame
+ * @n:		Number of buffers/frames to flush
  */
-static void tcp_l2_buf_flush_passt(const struct ctx *c, const struct msghdr *mh)
+static void tcp_l2_buf_flush_passt(const struct ctx *c,
+				   const struct iovec *iov, size_t n)
 {
+	struct msghdr mh = {
+		.msg_iov = (void *)iov,
+		.msg_iovlen = n,
+	};
 	size_t end = 0, missing;
-	struct iovec *iov;
 	unsigned int i;
 	ssize_t sent;
 	char *p;
 
-	sent = sendmsg(c->fd_tap, mh, MSG_NOSIGNAL | MSG_DONTWAIT);
+	sent = sendmsg(c->fd_tap, &mh, MSG_NOSIGNAL | MSG_DONTWAIT);
 	if (sent < 0)
 		return;
 
 	/* Ensure a complete last message on partial sendmsg() */
-	for (i = 0, iov = mh->msg_iov; i < mh->msg_iovlen; i++, iov++) {
+	for (i = 0; i < n; i++, iov++) {
 		end += iov->iov_len;
 		if (end >= (size_t)sent)
 			break;
@@ -1450,30 +1455,24 @@ static void tcp_l2_buf_flush_passt(const struct ctx *c, const struct msghdr *mh)
 /**
  * tcp_l2_flags_buf_flush() - Send out buffers for segments with or without data
  * @c:		Execution context
- * @mh:		Message header pointing to buffers, msg_iovlen not set
- * @buf_used:	Pointer to count of used buffers, set to 0 on return
  */
-static void tcp_l2_buf_flush(struct ctx *c, struct msghdr *mh,
-			     unsigned int *buf_used)
+static void tcp_l2_buf_flush(struct ctx *c, const struct iovec *iov, size_t n)
 {
-	if (!(mh->msg_iovlen = *buf_used))
+	size_t i;
+
+	if (!n)
 		return;
 
 	if (c->mode == MODE_PASST) {
-		tcp_l2_buf_flush_passt(c, mh);
+		tcp_l2_buf_flush_passt(c, iov, n);
 	} else {
-		size_t i;
-
-		for (i = 0; i < mh->msg_iovlen; i++) {
-			struct iovec *iov = &mh->msg_iov[i];
-
-			if (tcp_l2_buf_write_one(c, iov))
+		for (i = 0; i < n; i++) {
+			if (tcp_l2_buf_write_one(c, iov + i))
 				i--;
 		}
 	}
-	*buf_used = 0;
 
-	pcap_multiple(mh->msg_iov, mh->msg_iovlen, sizeof(uint32_t));
+	pcap_multiple(iov, n, sizeof(uint32_t));
 }
 
 /**
@@ -1482,16 +1481,11 @@ static void tcp_l2_buf_flush(struct ctx *c, struct msghdr *mh,
  */
 static void tcp_l2_flags_buf_flush(struct ctx *c)
 {
-	struct msghdr mh = { 0 };
-	unsigned int *buf_used;
+	tcp_l2_buf_flush(c, tcp6_l2_flags_iov, tcp6_l2_flags_buf_used);
+	tcp6_l2_flags_buf_used = 0;
 
-	mh.msg_iov	= tcp6_l2_flags_iov;
-	buf_used	= &tcp6_l2_flags_buf_used;
-	tcp_l2_buf_flush(c, &mh, buf_used);
-
-	mh.msg_iov	= tcp4_l2_flags_iov;
-	buf_used	= &tcp4_l2_flags_buf_used;
-	tcp_l2_buf_flush(c, &mh, buf_used);
+	tcp_l2_buf_flush(c, tcp4_l2_flags_iov, tcp4_l2_flags_buf_used);
+	tcp4_l2_flags_buf_used = 0;
 }
 
 /**
@@ -1500,16 +1494,11 @@ static void tcp_l2_flags_buf_flush(struct ctx *c)
  */
 static void tcp_l2_data_buf_flush(struct ctx *c)
 {
-	struct msghdr mh = { 0 };
-	unsigned int *buf_used;
+	tcp_l2_buf_flush(c, tcp6_l2_iov, tcp6_l2_buf_used);
+	tcp6_l2_buf_used = 0;
 
-	mh.msg_iov = tcp6_l2_iov;
-	buf_used	= &tcp6_l2_buf_used;
-	tcp_l2_buf_flush(c, &mh, buf_used);
-
-	mh.msg_iov = tcp4_l2_iov;
-	buf_used	= &tcp4_l2_buf_used;
-	tcp_l2_buf_flush(c, &mh, buf_used);
+	tcp_l2_buf_flush(c, tcp4_l2_iov, tcp4_l2_buf_used);
+	tcp4_l2_buf_used = 0;
 }
 
 /**
