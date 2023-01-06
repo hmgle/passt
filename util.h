@@ -102,18 +102,11 @@ int do_clone(int (*fn)(void *), char *stack_area, size_t stack_size, int flags,
 			 (void *)(arg));				\
 	} while (0)
 
-#define L2_BUF_ETH_IP4_INIT						\
+#define L2_BUF_ETH_INIT(proto)						\
 	{								\
 		.h_dest		= { 0 },				\
 		.h_source	= { 0 },				\
-		.h_proto	= htons_constant(ETH_P_IP),		\
-	}
-
-#define L2_BUF_ETH_IP6_INIT						\
-	{								\
-		.h_dest		= { 0 },				\
-		.h_source	= { 0 },				\
-		.h_proto	= htons_constant(ETH_P_IPV6),		\
+		.h_proto	= htons_constant(proto),		\
 	}
 
 #define L2_BUF_IP4_INIT(proto)						\

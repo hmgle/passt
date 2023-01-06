@@ -1059,7 +1059,7 @@ static void tcp_sock4_iov_init(void)
 
 	for (i = 0; i < ARRAY_SIZE(tcp4_l2_buf); i++) {
 		tcp4_l2_buf[i] = (struct tcp4_l2_buf_t) {
-			.eh = L2_BUF_ETH_IP4_INIT,
+			.eh = L2_BUF_ETH_INIT(ETH_P_IP),
 			.iph = L2_BUF_IP4_INIT(IPPROTO_TCP),
 			.th = { .doff = sizeof(struct tcphdr) / 4, .ack = 1 }
 		};
@@ -1067,7 +1067,7 @@ static void tcp_sock4_iov_init(void)
 
 	for (i = 0; i < ARRAY_SIZE(tcp4_l2_flags_buf); i++) {
 		tcp4_l2_flags_buf[i] = (struct tcp4_l2_flags_buf_t) {
-			.eh = L2_BUF_ETH_IP4_INIT,
+			.eh = L2_BUF_ETH_INIT(ETH_P_IP),
 			.iph = L2_BUF_IP4_INIT(IPPROTO_TCP)
 		};
 	}
@@ -1091,7 +1091,7 @@ static void tcp_sock6_iov_init(void)
 
 	for (i = 0; i < ARRAY_SIZE(tcp6_l2_buf); i++) {
 		tcp6_l2_buf[i] = (struct tcp6_l2_buf_t) {
-			.eh = L2_BUF_ETH_IP6_INIT,
+			.eh = L2_BUF_ETH_INIT(ETH_P_IPV6),
 			.ip6h = L2_BUF_IP6_INIT(IPPROTO_TCP),
 			.th = { .doff = sizeof(struct tcphdr) / 4, .ack = 1 }
 		};
@@ -1099,7 +1099,7 @@ static void tcp_sock6_iov_init(void)
 
 	for (i = 0; i < ARRAY_SIZE(tcp6_l2_flags_buf); i++) {
 		tcp6_l2_flags_buf[i] = (struct tcp6_l2_flags_buf_t) {
-			.eh = L2_BUF_ETH_IP6_INIT,
+			.eh = L2_BUF_ETH_INIT(ETH_P_IPV6),
 			.ip6h = L2_BUF_IP6_INIT(IPPROTO_TCP)
 		};
 	}

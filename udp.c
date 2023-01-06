@@ -329,7 +329,7 @@ static void udp_sock4_iov_init(const struct ctx *c)
 
 	for (i = 0; i < ARRAY_SIZE(udp4_l2_buf); i++) {
 		udp4_l2_buf[i] = (struct udp4_l2_buf_t) {
-			.eh = L2_BUF_ETH_IP4_INIT,
+			.eh = L2_BUF_ETH_INIT(ETH_P_IP),
 			.iph = L2_BUF_IP4_INIT(IPPROTO_UDP)
 		};
 	}
@@ -370,7 +370,7 @@ static void udp_sock6_iov_init(const struct ctx *c)
 
 	for (i = 0; i < ARRAY_SIZE(udp6_l2_buf); i++) {
 		udp6_l2_buf[i] = (struct udp6_l2_buf_t) {
-			.eh = L2_BUF_ETH_IP6_INIT,
+			.eh = L2_BUF_ETH_INIT(ETH_P_IPV6),
 			.ip6h = L2_BUF_IP6_INIT(IPPROTO_UDP)
 		};
 	}
