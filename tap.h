@@ -22,6 +22,7 @@ void tap_icmp6_send(const struct ctx *c,
 		    const struct in6_addr *src, const struct in6_addr *dst,
 		    void *in, size_t len);
 int tap_send(const struct ctx *c, const void *data, size_t len);
+void tap_send_frames(struct ctx *c, const struct iovec *iov, size_t n);
 void tap_handler(struct ctx *c, int fd, uint32_t events,
 		 const struct timespec *now);
 void tap_sock_init(struct ctx *c);

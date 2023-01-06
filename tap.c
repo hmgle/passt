@@ -53,6 +53,7 @@
 #include "netlink.h"
 #include "pasta.h"
 #include "packet.h"
+#include "tap.h"
 #include "log.h"
 
 /* IPv4 (plus ARP) and IPv6 message batches from tap/guest to IP handlers */
@@ -300,6 +301,89 @@ void tap_icmp6_send(const struct ctx *c,
 
 	if (tap_send(c, buf, len + (data - buf)) < 1)
 		debug("tap: failed to send %lu bytes (IPv6)", len);
+}
+
+/**
+ * tap_send_frames_pasta() - Send multiple frames to the pasta tap
+ * @c:		Execution context
+ * @iov:	Array of buffers, each containing one frame
+ * @n:		Number of buffers/frames in @iov
+ *
+ * #syscalls:pasta write
+ */
+static void tap_send_frames_pasta(struct ctx *c,
+				  const struct iovec *iov, size_t n)
+{
+	size_t i;
+
+	for (i = 0; i < n; i++) {
+		if (write(c->fd_tap, (char *)iov->iov_base + 4,
+			  iov->iov_len - 4) < 0) {
+			debug("tap write: %s", strerror(errno));
+			if (errno != EAGAIN && errno != EWOULDBLOCK)
+				tap_handler(c, c->fd_tap, EPOLLERR, NULL);
+			i--;
+		}
+	}
+}
+
+/**
+ * tap_send_frames_passt() - Send multiple frames to the passt tap
+ * @c:		Execution context
+ * @iov:	Array of buffers, each containing one frame
+ * @n:		Number of buffers/frames in @iov
+ *
+ * #syscalls:passt sendmsg send
+ */
+static void tap_send_frames_passt(const struct ctx *c,
+				  const struct iovec *iov, size_t n)
+{
+	struct msghdr mh = {
+		.msg_iov = (void *)iov,
+		.msg_iovlen = n,
+	};
+	size_t end = 0, missing;
+	unsigned int i;
+	ssize_t sent;
+	char *p;
+
+	sent = sendmsg(c->fd_tap, &mh, MSG_NOSIGNAL | MSG_DONTWAIT);
+	if (sent < 0)
+		return;
+
+	/* Ensure a complete last message on partial sendmsg() */
+	for (i = 0; i < n; i++, iov++) {
+		end += iov->iov_len;
+		if (end >= (size_t)sent)
+			break;
+	}
+
+	missing = end - sent;
+	if (!missing)
+		return;
+
+	p = (char *)iov->iov_base + iov->iov_len - missing;
+	if (send(c->fd_tap, p, missing, MSG_NOSIGNAL))
+		debug("tap: failed to flush %lu missing bytes to tap", missing);
+}
+
+/**
+ * tap_send_frames() - Send out multiple prepared frames
+ * @c:		Execution context
+ * @iov:	Array of buffers, each containing one frame (with L2 headers)
+ * @n:		Number of buffers/frames in @iov
+ */
+void tap_send_frames(struct ctx *c, const struct iovec *iov, size_t n)
+{
+	if (!n)
+		return;
+
+	if (c->mode == MODE_PASST)
+		tap_send_frames_passt(c, iov, n);
+	else
+		tap_send_frames_pasta(c, iov, n);
+
+	pcap_multiple(iov, n, sizeof(uint32_t));
 }
 
 PACKET_POOL_DECL(pool_l4, UIO_MAXIOV, pkt_buf);

@@ -1395,92 +1395,15 @@ static void tcp_rst_do(struct ctx *c, struct tcp_tap_conn *conn);
 	} while (0)
 
 /**
- * tcp_l2_buf_flush_pasta() - Send frames on the pasta tap interface
- * @c:		Execution context
- * @iov:	Pointer to array of buffers, one per frame
- * @n:		Number of buffers/frames to flush
- */
-static void tcp_l2_buf_flush_pasta(struct ctx *c,
-				  const struct iovec *iov, size_t n)
-{
-	size_t i;
-
-	for (i = 0; i < n; i++) {
-		if (write(c->fd_tap, (char *)iov->iov_base + 4,
-			  iov->iov_len - 4) < 0) {
-			debug("tap write: %s", strerror(errno));
-			if (errno != EAGAIN && errno != EWOULDBLOCK)
-				tap_handler(c, c->fd_tap, EPOLLERR, NULL);
-			i--;
-		}
-	}
-}
-
-/**
- * tcp_l2_buf_flush_passt() - Send a message on the passt tap interface
- * @c:		Execution context
- * @iov:	Pointer to array of buffers, one per frame
- * @n:		Number of buffers/frames to flush
- */
-static void tcp_l2_buf_flush_passt(const struct ctx *c,
-				   const struct iovec *iov, size_t n)
-{
-	struct msghdr mh = {
-		.msg_iov = (void *)iov,
-		.msg_iovlen = n,
-	};
-	size_t end = 0, missing;
-	unsigned int i;
-	ssize_t sent;
-	char *p;
-
-	sent = sendmsg(c->fd_tap, &mh, MSG_NOSIGNAL | MSG_DONTWAIT);
-	if (sent < 0)
-		return;
-
-	/* Ensure a complete last message on partial sendmsg() */
-	for (i = 0; i < n; i++, iov++) {
-		end += iov->iov_len;
-		if (end >= (size_t)sent)
-			break;
-	}
-
-	missing = end - sent;
-	if (!missing)
-		return;
-
-	p = (char *)iov->iov_base + iov->iov_len - missing;
-	if (send(c->fd_tap, p, missing, MSG_NOSIGNAL))
-		debug("TCP: failed to flush %lu missing bytes to tap", missing);
-}
-
-/**
- * tcp_l2_flags_buf_flush() - Send out buffers for segments with or without data
- * @c:		Execution context
- */
-static void tcp_l2_buf_flush(struct ctx *c, const struct iovec *iov, size_t n)
-{
-	if (!n)
-		return;
-
-	if (c->mode == MODE_PASST)
-		tcp_l2_buf_flush_passt(c, iov, n);
-	else
-		tcp_l2_buf_flush_pasta(c, iov, n);
-
-	pcap_multiple(iov, n, sizeof(uint32_t));
-}
-
-/**
  * tcp_l2_flags_buf_flush() - Send out buffers for segments with no data (flags)
  * @c:		Execution context
  */
 static void tcp_l2_flags_buf_flush(struct ctx *c)
 {
-	tcp_l2_buf_flush(c, tcp6_l2_flags_iov, tcp6_l2_flags_buf_used);
+	tap_send_frames(c, tcp6_l2_flags_iov, tcp6_l2_flags_buf_used);
 	tcp6_l2_flags_buf_used = 0;
 
-	tcp_l2_buf_flush(c, tcp4_l2_flags_iov, tcp4_l2_flags_buf_used);
+	tap_send_frames(c, tcp4_l2_flags_iov, tcp4_l2_flags_buf_used);
 	tcp4_l2_flags_buf_used = 0;
 }
 
@@ -1490,10 +1413,10 @@ static void tcp_l2_flags_buf_flush(struct ctx *c)
  */
 static void tcp_l2_data_buf_flush(struct ctx *c)
 {
-	tcp_l2_buf_flush(c, tcp6_l2_iov, tcp6_l2_buf_used);
+	tap_send_frames(c, tcp6_l2_iov, tcp6_l2_buf_used);
 	tcp6_l2_buf_used = 0;
 
-	tcp_l2_buf_flush(c, tcp4_l2_iov, tcp4_l2_buf_used);
+	tap_send_frames(c, tcp4_l2_iov, tcp4_l2_buf_used);
 	tcp4_l2_buf_used = 0;
 }
 
