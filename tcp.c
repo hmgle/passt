@@ -1472,7 +1472,8 @@ static void tcp_l2_buf_flush(struct ctx *c, struct msghdr *mh,
 		}
 	}
 	*buf_used = *buf_bytes = 0;
-	pcapm(mh);
+
+	pcap_multiple(mh->msg_iov, mh->msg_iovlen, sizeof(uint32_t));
 }
 
 /**

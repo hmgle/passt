@@ -105,10 +105,12 @@ void pcap(const char *pkt, size_t len)
 }
 
 /**
- * pcapm() - Capture multiple frames from message header to pcap file
- * @mh:		Pointer to sendmsg() message header buffer
+ * pcap_multiple() - Capture multiple frames
+ * @iov:	Array of iovecs, one entry per frame
+ * @n:		Number of frames to capture
+ * @offset:	Offset of the frame within each iovec buffer
  */
-void pcapm(const struct msghdr *mh)
+void pcap_multiple(const struct iovec *iov, unsigned int n, size_t offset)
 {
 	struct timeval tv;
 	unsigned int i;
@@ -118,13 +120,11 @@ void pcapm(const struct msghdr *mh)
 
 	gettimeofday(&tv, NULL);
 
-	for (i = 0; i < mh->msg_iovlen; i++) {
-		const struct iovec *iov = &mh->msg_iov[i];
-
-		if (pcap_frame((char *)iov->iov_base + 4,
-			       iov->iov_len - 4, &tv) != 0) {
+	for (i = 0; i < n; i++) {
+		if (pcap_frame((char *)iov[i].iov_base + offset,
+			       iov[i].iov_len - offset, &tv) != 0) {
 			debug("Cannot log packet, length %lu",
-			      iov->iov_len - 4);
+			      iov->iov_len - offset);
 			return;
 		}
 	}
