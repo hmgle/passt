@@ -330,8 +330,7 @@ struct tcp4_l2_head {	/* For MSS4 macro: keep in sync with tcp4_l2_buf_t */
 #else
 	uint8_t pad[2];
 #endif
-	uint32_t vnet_len;
-	struct ethhdr eh;
+	struct tap_hdr taph;
 	struct iphdr iph;
 	struct tcphdr th;
 #ifdef __AVX2__
@@ -346,8 +345,7 @@ struct tcp6_l2_head {	/* For MSS6 macro: keep in sync with tcp6_l2_buf_t */
 #else
 	uint8_t pad[2];
 #endif
-	uint32_t vnet_len;
-	struct ethhdr eh;
+	struct tap_hdr taph;
 	struct ipv6hdr ip6h;
 	struct tcphdr th;
 #ifdef __AVX2__
@@ -448,8 +446,7 @@ static union inany_addr low_rtt_dst[LOW_RTT_TABLE_SIZE];
  * @psum:	Partial IP header checksum (excluding tot_len and saddr)
  * @tsum:	Partial TCP header checksum (excluding length and saddr)
  * @pad:	Align TCP header to 32 bytes, for AVX2 checksum calculation only
- * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
- * @eh:		Pre-filled Ethernet header
+ * @taph:	Tap-level headers (partially pre-filled)
  * @iph:	Pre-filled IP header (except for tot_len and saddr)
  * @uh:		Headroom for TCP header
  * @data:	Storage for TCP payload
@@ -462,8 +459,7 @@ static struct tcp4_l2_buf_t {
 #else
 	uint8_t pad[2];		/*	align iph to 4 bytes	8 */
 #endif
-	uint32_t vnet_len;	/* 26				10 */
-	struct ethhdr eh;	/* 30				14 */
+	struct tap_hdr taph;	/* 26				10 */
 	struct iphdr iph;	/* 44				28 */
 	struct tcphdr th;	/* 64				48 */
 	uint8_t data[MSS4];	/* 84				68 */
@@ -480,8 +476,7 @@ static unsigned int tcp4_l2_buf_used;
 /**
  * tcp6_l2_buf_t - Pre-cooked IPv6 packet buffers for tap connections
  * @pad:	Align IPv6 header for checksum calculation to 32B (AVX2) or 4B
- * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
- * @eh:		Pre-filled Ethernet header
+ * @taph:	Tap-level headers (partially pre-filled)
  * @ip6h:	Pre-filled IP header (except for payload_len and addresses)
  * @th:		Headroom for TCP header
  * @data:	Storage for TCP payload
@@ -492,8 +487,7 @@ struct tcp6_l2_buf_t {
 #else
 	uint8_t pad[2];		/*	align ip6h to 4 bytes	0 */
 #endif
-	uint32_t vnet_len;	/* 14				2 */
-	struct ethhdr eh;	/* 18				6 */
+	struct tap_hdr taph;	/* 14				2 */
 	struct ipv6hdr ip6h;	/* 32				20 */
 	struct tcphdr th;	/* 72				60 */
 	uint8_t data[MSS6];	/* 92				80 */
@@ -526,8 +520,7 @@ static struct iovec	tcp_iov			[UIO_MAXIOV];
  * @psum:	Partial IP header checksum (excluding tot_len and saddr)
  * @tsum:	Partial TCP header checksum (excluding length and saddr)
  * @pad:	Align TCP header to 32 bytes, for AVX2 checksum calculation only
- * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
- * @eh:		Pre-filled Ethernet header
+ * @taph:	Tap-level headers (partially pre-filled)
  * @iph:	Pre-filled IP header (except for tot_len and saddr)
  * @th:		Headroom for TCP header
  * @opts:	Headroom for TCP options
@@ -540,8 +533,7 @@ static struct tcp4_l2_flags_buf_t {
 #else
 	uint8_t pad[2];		/*	align iph to 4 bytes	8 */
 #endif
-	uint32_t vnet_len;	/* 26				10 */
-	struct ethhdr eh;	/* 30				14 */
+	struct tap_hdr taph;	/* 26				10 */
 	struct iphdr iph;	/* 44				28 */
 	struct tcphdr th;	/* 64				48 */
 	char opts[OPT_MSS_LEN + OPT_WS_LEN + 1];
@@ -557,8 +549,7 @@ static unsigned int tcp4_l2_flags_buf_used;
 /**
  * tcp6_l2_flags_buf_t - IPv6 packet buffers for segments without data (flags)
  * @pad:	Align IPv6 header for checksum calculation to 32B (AVX2) or 4B
- * @vnet_len:	4-byte qemu vnet buffer length descriptor, only for passt mode
- * @eh:		Pre-filled Ethernet header
+ * @taph:	Tap-level headers (partially pre-filled)
  * @ip6h:	Pre-filled IP header (except for payload_len and addresses)
  * @th:		Headroom for TCP header
  * @opts:	Headroom for TCP options
@@ -569,8 +560,7 @@ static struct tcp6_l2_flags_buf_t {
 #else
 	uint8_t pad[2];		/*	align ip6h to 4 bytes		   0 */
 #endif
-	uint32_t vnet_len;	/* 14					   2 */
-	struct ethhdr eh;	/* 18					   6 */
+	struct tap_hdr taph;	/* 14					   2 */
 	struct ipv6hdr ip6h;	/* 32					  20 */
 	struct tcphdr th	/* 72 */ __attribute__ ((aligned(4))); /* 60 */ 
 	char opts[OPT_MSS_LEN + OPT_WS_LEN + 1];
@@ -1013,21 +1003,10 @@ void tcp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 		struct tcp4_l2_buf_t *b4 = &tcp4_l2_buf[i];
 		struct tcp6_l2_buf_t *b6 = &tcp6_l2_buf[i];
 
-		if (eth_d) {
-			memcpy(b4->eh.h_dest, eth_d, ETH_ALEN);
-			memcpy(b6->eh.h_dest, eth_d, ETH_ALEN);
-
-			memcpy(b4f->eh.h_dest, eth_d, ETH_ALEN);
-			memcpy(b6f->eh.h_dest, eth_d, ETH_ALEN);
-		}
-
-		if (eth_s) {
-			memcpy(b4->eh.h_source, eth_s, ETH_ALEN);
-			memcpy(b6->eh.h_source, eth_s, ETH_ALEN);
-
-			memcpy(b4f->eh.h_source, eth_s, ETH_ALEN);
-			memcpy(b6f->eh.h_source, eth_s, ETH_ALEN);
-		}
+		tap_update_mac(&b4->taph, eth_d, eth_s);
+		tap_update_mac(&b6->taph, eth_d, eth_s);
+		tap_update_mac(&b4f->taph, eth_d, eth_s);
+		tap_update_mac(&b6f->taph, eth_d, eth_s);
 
 		if (ip_da) {
 			b4f->iph.daddr = b4->iph.daddr = ip_da->s_addr;
@@ -1051,15 +1030,16 @@ void tcp_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
 
 /**
  * tcp_sock4_iov_init() - Initialise scatter-gather L2 buffers for IPv4 sockets
+ * @c:		Execution context
  */
-static void tcp_sock4_iov_init(void)
+static void tcp_sock4_iov_init(const struct ctx *c)
 {
 	struct iovec *iov;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(tcp4_l2_buf); i++) {
 		tcp4_l2_buf[i] = (struct tcp4_l2_buf_t) {
-			.eh = L2_BUF_ETH_INIT(ETH_P_IP),
+			.taph = TAP_HDR_INIT(ETH_P_IP),
 			.iph = L2_BUF_IP4_INIT(IPPROTO_TCP),
 			.th = { .doff = sizeof(struct tcphdr) / 4, .ack = 1 }
 		};
@@ -1067,29 +1047,30 @@ static void tcp_sock4_iov_init(void)
 
 	for (i = 0; i < ARRAY_SIZE(tcp4_l2_flags_buf); i++) {
 		tcp4_l2_flags_buf[i] = (struct tcp4_l2_flags_buf_t) {
-			.eh = L2_BUF_ETH_INIT(ETH_P_IP),
+			.taph = TAP_HDR_INIT(ETH_P_IP),
 			.iph = L2_BUF_IP4_INIT(IPPROTO_TCP)
 		};
 	}
 
 	for (i = 0, iov = tcp4_l2_iov; i < TCP_FRAMES_MEM; i++, iov++)
-		iov->iov_base = &tcp4_l2_buf[i].vnet_len;
+		iov->iov_base = tap_iov_base(c, &tcp4_l2_buf[i].taph);
 
 	for (i = 0, iov = tcp4_l2_flags_iov; i < TCP_FRAMES_MEM; i++, iov++)
-		iov->iov_base = &tcp4_l2_flags_buf[i].vnet_len;
+		iov->iov_base = tap_iov_base(c, &tcp4_l2_flags_buf[i].taph);
 }
 
 /**
  * tcp_sock6_iov_init() - Initialise scatter-gather L2 buffers for IPv6 sockets
+ * @c:		Execution context
  */
-static void tcp_sock6_iov_init(void)
+static void tcp_sock6_iov_init(const struct ctx *c)
 {
 	struct iovec *iov;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(tcp6_l2_buf); i++) {
 		tcp6_l2_buf[i] = (struct tcp6_l2_buf_t) {
-			.eh = L2_BUF_ETH_INIT(ETH_P_IPV6),
+			.taph = TAP_HDR_INIT(ETH_P_IPV6),
 			.ip6h = L2_BUF_IP6_INIT(IPPROTO_TCP),
 			.th = { .doff = sizeof(struct tcphdr) / 4, .ack = 1 }
 		};
@@ -1097,16 +1078,16 @@ static void tcp_sock6_iov_init(void)
 
 	for (i = 0; i < ARRAY_SIZE(tcp6_l2_flags_buf); i++) {
 		tcp6_l2_flags_buf[i] = (struct tcp6_l2_flags_buf_t) {
-			.eh = L2_BUF_ETH_INIT(ETH_P_IPV6),
+			.taph = TAP_HDR_INIT(ETH_P_IPV6),
 			.ip6h = L2_BUF_IP6_INIT(IPPROTO_TCP)
 		};
 	}
 
 	for (i = 0, iov = tcp6_l2_iov; i < TCP_FRAMES_MEM; i++, iov++)
-		iov->iov_base = &tcp6_l2_buf[i].vnet_len;
+		iov->iov_base = tap_iov_base(c, &tcp6_l2_buf[i].taph);
 
 	for (i = 0, iov = tcp6_l2_flags_iov; i < TCP_FRAMES_MEM; i++, iov++)
-		iov->iov_base = &tcp6_l2_flags_buf[i].vnet_len;
+		iov->iov_base = tap_iov_base(c, &tcp6_l2_flags_buf[i].taph);
 }
 
 /**
@@ -1493,10 +1474,7 @@ do {									\
 
 		tcp_update_check_tcp4(b);
 
-		tlen = ip_len + sizeof(struct ethhdr);
-		if (c->mode == MODE_PASST)
-			b->vnet_len = htonl(tlen);
-		tlen += sizeof(b->vnet_len);
+		tlen = tap_iov_len(c, &b->taph, ip_len);
 	} else {
 		struct tcp6_l2_buf_t *b = (struct tcp6_l2_buf_t *)p;
 
@@ -1519,10 +1497,7 @@ do {									\
 		b->ip6h.flow_lbl[1] = (conn->sock >> 8) & 0xff;
 		b->ip6h.flow_lbl[2] = (conn->sock >> 0) & 0xff;
 
-		tlen = ip_len + sizeof(struct ethhdr);
-		if (c->mode == MODE_PASST)
-			b->vnet_len = htonl(tlen);
-		tlen += sizeof(b->vnet_len);
+		tlen = tap_iov_len(c, &b->taph, ip_len);
 	}
 #undef SET_TCP_HEADER_COMMON_V4_V6
 
@@ -3117,10 +3092,10 @@ int tcp_init(struct ctx *c)
 		tcp_l2_mh[i] = (struct mmsghdr) { .msg_hdr.msg_iovlen = 1 };
 
 	if (c->ifi4)
-		tcp_sock4_iov_init();
+		tcp_sock4_iov_init(c);
 
 	if (c->ifi6)
-		tcp_sock6_iov_init();
+		tcp_sock6_iov_init(c);
 
 	memset(init_sock_pool4,		0xff,	sizeof(init_sock_pool4));
 	memset(init_sock_pool6,		0xff,	sizeof(init_sock_pool6));
