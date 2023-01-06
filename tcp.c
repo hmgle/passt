@@ -1395,23 +1395,25 @@ static void tcp_rst_do(struct ctx *c, struct tcp_tap_conn *conn);
 	} while (0)
 
 /**
- * tcp_l2_buf_write_one() - Write a single buffer to tap file descriptor
+ * tcp_l2_buf_flush_pasta() - Send frames on the pasta tap interface
  * @c:		Execution context
- * @iov:	struct iovec item pointing to buffer
- * @ts:		Current timestamp
- *
- * Return: 0 on success, negative error code on failure (tap reset possible)
+ * @iov:	Pointer to array of buffers, one per frame
+ * @n:		Number of buffers/frames to flush
  */
-static int tcp_l2_buf_write_one(struct ctx *c, const struct iovec *iov)
+static void tcp_l2_buf_flush_pasta(struct ctx *c,
+				  const struct iovec *iov, size_t n)
 {
-	if (write(c->fd_tap, (char *)iov->iov_base + 4, iov->iov_len - 4) < 0) {
-		debug("tap write: %s", strerror(errno));
-		if (errno != EAGAIN && errno != EWOULDBLOCK)
-			tap_handler(c, c->fd_tap, EPOLLERR, NULL);
-		return -errno;
-	}
+	size_t i;
 
-	return 0;
+	for (i = 0; i < n; i++) {
+		if (write(c->fd_tap, (char *)iov->iov_base + 4,
+			  iov->iov_len - 4) < 0) {
+			debug("tap write: %s", strerror(errno));
+			if (errno != EAGAIN && errno != EWOULDBLOCK)
+				tap_handler(c, c->fd_tap, EPOLLERR, NULL);
+			i--;
+		}
+	}
 }
 
 /**
@@ -1458,19 +1460,13 @@ static void tcp_l2_buf_flush_passt(const struct ctx *c,
  */
 static void tcp_l2_buf_flush(struct ctx *c, const struct iovec *iov, size_t n)
 {
-	size_t i;
-
 	if (!n)
 		return;
 
-	if (c->mode == MODE_PASST) {
+	if (c->mode == MODE_PASST)
 		tcp_l2_buf_flush_passt(c, iov, n);
-	} else {
-		for (i = 0; i < n; i++) {
-			if (tcp_l2_buf_write_one(c, iov + i))
-				i--;
-		}
-	}
+	else
+		tcp_l2_buf_flush_pasta(c, iov, n);
 
 	pcap_multiple(iov, n, sizeof(uint32_t));
 }
