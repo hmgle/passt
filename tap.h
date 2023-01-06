@@ -20,8 +20,10 @@ struct tap_hdr {
 
 static inline size_t tap_hdr_len_(const struct ctx *c)
 {
-	(void)c;
-	return sizeof(struct tap_hdr);
+	if (c->mode == MODE_PASST)
+		return sizeof(struct tap_hdr);
+	else
+		return sizeof(struct ethhdr);
 }
 
 /**

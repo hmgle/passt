@@ -317,8 +317,7 @@ static void tap_send_frames_pasta(struct ctx *c,
 	size_t i;
 
 	for (i = 0; i < n; i++) {
-		if (write(c->fd_tap, (char *)iov->iov_base + 4,
-			  iov->iov_len - 4) < 0) {
+		if (write(c->fd_tap, (char *)iov->iov_base, iov->iov_len) < 0) {
 			debug("tap write: %s", strerror(errno));
 			if (errno != EAGAIN && errno != EWOULDBLOCK)
 				tap_handler(c, c->fd_tap, EPOLLERR, NULL);
@@ -383,7 +382,7 @@ void tap_send_frames(struct ctx *c, const struct iovec *iov, size_t n)
 	else
 		tap_send_frames_pasta(c, iov, n);
 
-	pcap_multiple(iov, n, sizeof(uint32_t));
+	pcap_multiple(iov, n, c->mode == MODE_PASST ? sizeof(uint32_t) : 0);
 }
 
 /**
