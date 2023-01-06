@@ -66,24 +66,41 @@ struct pcap_pkthdr {
 };
 
 /**
+ * pcap_frame() - Capture a single frame to pcap file with given timestamp
+ * @pkt:	Pointer to data buffer, including L2 headers
+ * @len:	L2 packet length
+ * @tv:		Timestamp
+ *
+ * Returns: 0 on success, -errno on error writing to the file
+ */
+static int pcap_frame(const char *pkt, size_t len, const struct timeval *tv)
+{
+	struct pcap_pkthdr h;
+
+	h.tv_sec = tv->tv_sec;
+	h.tv_usec = tv->tv_usec;
+	h.caplen = h.len = len;
+
+	if (write(pcap_fd, &h, sizeof(h)) < 0 || write(pcap_fd, pkt, len) < 0)
+		return -errno;
+
+	return 0;
+}
+
+/**
  * pcap() - Capture a single frame to pcap file
  * @pkt:	Pointer to data buffer, including L2 headers
  * @len:	L2 packet length
  */
 void pcap(const char *pkt, size_t len)
 {
-	struct pcap_pkthdr h;
 	struct timeval tv;
 
 	if (pcap_fd == -1)
 		return;
 
 	gettimeofday(&tv, NULL);
-	h.tv_sec = tv.tv_sec;
-	h.tv_usec = tv.tv_usec;
-	h.caplen = h.len = len;
-
-	if (write(pcap_fd, &h, sizeof(h)) < 0 || write(pcap_fd, pkt, len) < 0)
+	if (pcap_frame(pkt, len, &tv) != 0)
 		debug("Cannot log packet, length %lu", len);
 }
 
@@ -93,8 +110,6 @@ void pcap(const char *pkt, size_t len)
  */
 void pcapm(const struct msghdr *mh)
 {
-	struct pcap_pkthdr h;
-	struct iovec *iov;
 	struct timeval tv;
 	unsigned int i;
 
@@ -102,24 +117,17 @@ void pcapm(const struct msghdr *mh)
 		return;
 
 	gettimeofday(&tv, NULL);
-	h.tv_sec = tv.tv_sec;
-	h.tv_usec = tv.tv_usec;
 
 	for (i = 0; i < mh->msg_iovlen; i++) {
-		iov = &mh->msg_iov[i];
+		const struct iovec *iov = &mh->msg_iov[i];
 
-		h.caplen = h.len = iov->iov_len - 4;
-
-		if (write(pcap_fd, &h, sizeof(h)) < 0)
-			goto fail;
-		if (write(pcap_fd, (char *)iov->iov_base + 4,
-			  iov->iov_len - 4) < 0)
-			goto fail;
+		if (pcap_frame((char *)iov->iov_base + 4,
+			       iov->iov_len - 4, &tv) != 0) {
+			debug("Cannot log packet, length %lu",
+			      iov->iov_len - 4);
+			return;
+		}
 	}
-
-	return;
-fail:
-	debug("Cannot log packet, length %lu", iov->iov_len - 4);
 }
 
 /**
@@ -128,8 +136,6 @@ fail:
  */
 void pcapmm(const struct mmsghdr *mmh, unsigned int vlen)
 {
-	struct pcap_pkthdr h;
-	struct iovec *iov;
 	struct timeval tv;
 	unsigned int i, j;
 
@@ -137,27 +143,21 @@ void pcapmm(const struct mmsghdr *mmh, unsigned int vlen)
 		return;
 
 	gettimeofday(&tv, NULL);
-	h.tv_sec = tv.tv_sec;
-	h.tv_usec = tv.tv_usec;
 
 	for (i = 0; i < vlen; i++) {
 		const struct msghdr *mh = &mmh[i].msg_hdr;
 
 		for (j = 0; j < mh->msg_iovlen; j++) {
-			iov = &mh->msg_iov[j];
+			const struct iovec *iov = &mh->msg_iov[j];
 
-			h.caplen = h.len = iov->iov_len - 4;
-
-			if (write(pcap_fd, &h, sizeof(h)) < 0)
-				goto fail;
-			if (write(pcap_fd, (char *)iov->iov_base + 4,
-				  iov->iov_len - 4) < 0)
-				goto fail;
+			if (pcap_frame((char *)iov->iov_base + 4,
+				       iov->iov_len - 4, &tv) != 0) {
+				debug("Cannot log packet, length %lu",
+				      iov->iov_len - 4);
+				return;
+			}
 		}
 	}
-	return;
-fail:
-	debug("Cannot log packet, length %lu", iov->iov_len - 4);
 }
 
 /**
