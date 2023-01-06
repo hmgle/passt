@@ -1451,7 +1451,7 @@ void tcp_defer_handler(struct ctx *c)
  * @check:	Checksum, if already known
  * @seq:	Sequence number for this segment
  *
- * Return: 802.3 length, host order
+ * Return: frame length including L2 headers, host order
  */
 static size_t tcp_l2_buf_fill_headers(const struct ctx *c,
 				      const struct tcp_tap_conn *conn,
@@ -1459,7 +1459,7 @@ static size_t tcp_l2_buf_fill_headers(const struct ctx *c,
 				      const uint16_t *check, uint32_t seq)
 {
 	const struct in_addr *a4 = inany_v4(&conn->addr);
-	size_t ip_len, eth_len;
+	size_t ip_len, tlen;
 
 #define SET_TCP_HEADER_COMMON_V4_V6(b, conn, seq)			\
 do {									\
@@ -1493,9 +1493,10 @@ do {									\
 
 		tcp_update_check_tcp4(b);
 
-		eth_len = ip_len + sizeof(struct ethhdr);
+		tlen = ip_len + sizeof(struct ethhdr);
 		if (c->mode == MODE_PASST)
-			b->vnet_len = htonl(eth_len);
+			b->vnet_len = htonl(tlen);
+		tlen += sizeof(b->vnet_len);
 	} else {
 		struct tcp6_l2_buf_t *b = (struct tcp6_l2_buf_t *)p;
 
@@ -1518,14 +1519,14 @@ do {									\
 		b->ip6h.flow_lbl[1] = (conn->sock >> 8) & 0xff;
 		b->ip6h.flow_lbl[2] = (conn->sock >> 0) & 0xff;
 
-		eth_len = ip_len + sizeof(struct ethhdr);
+		tlen = ip_len + sizeof(struct ethhdr);
 		if (c->mode == MODE_PASST)
-			b->vnet_len = htonl(eth_len);
+			b->vnet_len = htonl(tlen);
+		tlen += sizeof(b->vnet_len);
 	}
-
 #undef SET_TCP_HEADER_COMMON_V4_V6
 
-	return eth_len;
+	return tlen;
 }
 
 /**
@@ -1631,8 +1632,8 @@ static int tcp_send_flag(struct ctx *c, struct tcp_tap_conn *conn, int flags)
 	struct tcp6_l2_flags_buf_t *b6 = NULL;
 	struct tcp_info tinfo = { 0 };
 	socklen_t sl = sizeof(tinfo);
-	size_t optlen = 0, eth_len;
 	int s = conn->sock;
+	size_t optlen = 0;
 	struct iovec *iov;
 	struct tcphdr *th;
 	char *data;
@@ -1721,9 +1722,8 @@ static int tcp_send_flag(struct ctx *c, struct tcp_tap_conn *conn, int flags)
 	th->syn = !!(flags & SYN);
 	th->fin = !!(flags & FIN);
 
-	eth_len = tcp_l2_buf_fill_headers(c, conn, p, optlen,
-					  NULL, conn->seq_to_tap);
-	iov->iov_len = eth_len + sizeof(uint32_t);
+	iov->iov_len = tcp_l2_buf_fill_headers(c, conn, p, optlen,
+					       NULL, conn->seq_to_tap);
 
 	if (th->ack)
 		conn_flag(c, conn, ~ACK_TO_TAP_DUE);
@@ -2083,25 +2083,22 @@ static void tcp_data_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 			    ssize_t plen, int no_csum, uint32_t seq)
 {
 	struct iovec *iov;
-	size_t len;
 
 	if (CONN_V4(conn)) {
 		struct tcp4_l2_buf_t *b = &tcp4_l2_buf[tcp4_l2_buf_used];
 		uint16_t *check = no_csum ? &(b - 1)->iph.check : NULL;
 
-		len = tcp_l2_buf_fill_headers(c, conn, b, plen, check, seq);
-
 		iov = tcp4_l2_iov + tcp4_l2_buf_used++;
-		iov->iov_len = len + sizeof(b->vnet_len);
+		iov->iov_len = tcp_l2_buf_fill_headers(c, conn, b, plen,
+						       check, seq);
 		if (tcp4_l2_buf_used > ARRAY_SIZE(tcp4_l2_buf) - 1)
 			tcp_l2_data_buf_flush(c);
 	} else if (CONN_V6(conn)) {
 		struct tcp6_l2_buf_t *b = &tcp6_l2_buf[tcp6_l2_buf_used];
 
-		len = tcp_l2_buf_fill_headers(c, conn, b, plen, NULL, seq);
-
 		iov = tcp6_l2_iov + tcp6_l2_buf_used++;
-		iov->iov_len = len + sizeof(b->vnet_len);
+		iov->iov_len = tcp_l2_buf_fill_headers(c, conn, b, plen,
+						       NULL, seq);
 		if (tcp6_l2_buf_used > ARRAY_SIZE(tcp6_l2_buf) - 1)
 			tcp_l2_data_buf_flush(c);
 	}
