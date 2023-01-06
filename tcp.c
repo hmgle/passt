@@ -1072,10 +1072,8 @@ static void tcp_sock4_iov_init(void)
 		};
 	}
 
-	for (i = 0, iov = tcp4_l2_iov; i < TCP_FRAMES_MEM; i++, iov++) {
+	for (i = 0, iov = tcp4_l2_iov; i < TCP_FRAMES_MEM; i++, iov++)
 		iov->iov_base = &tcp4_l2_buf[i].vnet_len;
-		iov->iov_len = MSS_DEFAULT;
-	}
 
 	for (i = 0, iov = tcp4_l2_flags_iov; i < TCP_FRAMES_MEM; i++, iov++)
 		iov->iov_base = &tcp4_l2_flags_buf[i].vnet_len;
@@ -1104,10 +1102,8 @@ static void tcp_sock6_iov_init(void)
 		};
 	}
 
-	for (i = 0, iov = tcp6_l2_iov; i < TCP_FRAMES_MEM; i++, iov++) {
+	for (i = 0, iov = tcp6_l2_iov; i < TCP_FRAMES_MEM; i++, iov++)
 		iov->iov_base = &tcp6_l2_buf[i].vnet_len;
-		iov->iov_len = MSS_DEFAULT;
-	}
 
 	for (i = 0, iov = tcp6_l2_flags_iov; i < TCP_FRAMES_MEM; i++, iov++)
 		iov->iov_base = &tcp6_l2_flags_buf[i].vnet_len;
