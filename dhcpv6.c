@@ -39,37 +39,21 @@
  */
 struct opt_hdr {
 	uint16_t t;
-#if __BYTE_ORDER == __BIG_ENDIAN
-# define OPT_CLIENTID		1
-# define OPT_SERVERID		2
-# define OPT_IA_NA		3
-# define OPT_IA_TA		4
-# define OPT_IAAADR		5
-# define OPT_STATUS_CODE	13
-# define  STATUS_NOTONLINK	4
-# define OPT_DNS_SERVERS	23
-# define OPT_DNS_SEARCH		24
-#else
-# define OPT_CLIENTID		__bswap_constant_16(1)
-# define OPT_SERVERID		__bswap_constant_16(2)
-# define OPT_IA_NA		__bswap_constant_16(3)
-# define OPT_IA_TA		__bswap_constant_16(4)
-# define OPT_IAAADR		__bswap_constant_16(5)
-# define OPT_STATUS_CODE	__bswap_constant_16(13)
-# define  STATUS_NOTONLINK	__bswap_constant_16(4)
-# define OPT_DNS_SERVERS	__bswap_constant_16(23)
-# define OPT_DNS_SEARCH		__bswap_constant_16(24)
-#endif
+# define OPT_CLIENTID		htons_constant(1)
+# define OPT_SERVERID		htons_constant(2)
+# define OPT_IA_NA		htons_constant(3)
+# define OPT_IA_TA		htons_constant(4)
+# define OPT_IAAADR		htons_constant(5)
+# define OPT_STATUS_CODE	htons_constant(13)
+# define  STATUS_NOTONLINK	htons_constant(4)
+# define OPT_DNS_SERVERS	htons_constant(23)
+# define OPT_DNS_SEARCH		htons_constant(24)
 #define   STR_NOTONLINK		"Prefix not appropriate for link."
 
 	uint16_t l;
 } __attribute__((packed));
 
-#if __BYTE_ORDER == __BIG_ENDIAN
-# define OPT_SIZE_CONV(x)	(x)
-#else
-# define OPT_SIZE_CONV(x)	(__bswap_constant_16(x))
-#endif
+# define OPT_SIZE_CONV(x)	(htons_constant(x))
 #define OPT_SIZE(x)		OPT_SIZE_CONV(sizeof(struct opt_##x) -	\
 					      sizeof(struct opt_hdr))
 #define OPT_VSIZE(x)		(sizeof(struct opt_##x) - 		\
@@ -103,19 +87,11 @@ struct opt_server_id {
 	uint8_t duid_lladdr[ETH_ALEN];
 } __attribute__ ((packed));
 
-#if __BYTE_ORDER == __BIG_ENDIAN
-#define SERVER_ID {						\
+#define SERVER_ID {							\
 	{ OPT_SERVERID,	OPT_SIZE(server_id) },				\
-	  DUID_TYPE_LLT, ARPHRD_ETHER, 0, { 0 }				\
+	  htons_constant(DUID_TYPE_LLT),				\
+	  htons_constant(ARPHRD_ETHER), 0, { 0 }			\
 }
-#else
-#define SERVER_ID {						\
-	{ OPT_SERVERID,	OPT_SIZE(server_id) },				\
-	__bswap_constant_16(DUID_TYPE_LLT),				\
-	__bswap_constant_16(ARPHRD_ETHER),				\
-	0, { 0 }							\
-}
-#endif
 
 /**
  * struct opt_ia_na - Identity Association for Non-temporary Addresses Option

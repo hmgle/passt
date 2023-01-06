@@ -69,6 +69,14 @@
 #define MAC_ZERO		((uint8_t [ETH_ALEN]){ 0 })
 #define MAC_IS_ZERO(addr)	(!memcmp((addr), MAC_ZERO, ETH_ALEN))
 
+#if __BYTE_ORDER == __BIG_ENDIAN
+#define	htons_constant(x)	(x)
+#define	htonl_constant(x)	(x)
+#else
+#define	htons_constant(x)	(__bswap_constant_16(x))
+#define	htonl_constant(x)	(__bswap_constant_32(x))
+#endif
+
 #define IN4_IS_ADDR_UNSPECIFIED(a) \
 	((a)->s_addr == htonl(INADDR_ANY))
 #define IN4_IS_ADDR_BROADCAST(a) \
@@ -79,13 +87,8 @@
 	(IN_MULTICAST(ntohl((a)->s_addr)))
 #define IN4_ARE_ADDR_EQUAL(a, b) \
 	(((struct in_addr *)(a))->s_addr == ((struct in_addr *)b)->s_addr)
-#if __BYTE_ORDER == __BIG_ENDIAN
 #define IN4ADDR_LOOPBACK_INIT \
-	{ .s_addr	= INADDR_LOOPBACK }
-#else
-#define IN4ADDR_LOOPBACK_INIT \
-	{ .s_addr	= __bswap_constant_32(INADDR_LOOPBACK) }
-#endif
+	{ .s_addr	= htonl_constant(INADDR_LOOPBACK) }
 
 #define NS_FN_STACK_SIZE	(RLIMIT_STACK_VAL * 1024 / 8)
 int do_clone(int (*fn)(void *), char *stack_area, size_t stack_size, int flags,
@@ -99,37 +102,19 @@ int do_clone(int (*fn)(void *), char *stack_area, size_t stack_size, int flags,
 			 (void *)(arg));				\
 	} while (0)
 
-#if __BYTE_ORDER == __BIG_ENDIAN
 #define L2_BUF_ETH_IP4_INIT						\
 	{								\
 		.h_dest		= { 0 },				\
 		.h_source	= { 0 },				\
-		.h_proto	= ETH_P_IP,				\
+		.h_proto	= htons_constant(ETH_P_IP),		\
 	}
-#else
-#define L2_BUF_ETH_IP4_INIT						\
-	{								\
-		.h_dest		= { 0 },				\
-		.h_source	= { 0 },				\
-		.h_proto	= __bswap_constant_16(ETH_P_IP),	\
-	}
-#endif
 
-#if __BYTE_ORDER == __BIG_ENDIAN
 #define L2_BUF_ETH_IP6_INIT						\
 	{								\
 		.h_dest		= { 0 },				\
 		.h_source	= { 0 },				\
-		.h_proto	= ETH_P_IPV6,				\
+		.h_proto	= htons_constant(ETH_P_IPV6),		\
 	}
-#else
-#define L2_BUF_ETH_IP6_INIT						\
-	{								\
-		.h_dest		= { 0 },				\
-		.h_source	= { 0 },				\
-		.h_proto	= __bswap_constant_16(ETH_P_IPV6),	\
-	}
-#endif
 
 #define L2_BUF_IP4_INIT(proto)						\
 	{								\
