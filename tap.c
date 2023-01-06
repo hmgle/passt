@@ -327,12 +327,36 @@ static void tap_send_frames_pasta(struct ctx *c,
 }
 
 /**
+ * tap_send_remainder() - Send remainder of a partially sent frame
+ * @c:		Execution context
+ * @iov:	Partially sent buffer
+ * @offset:	Number of bytes already sent from @iov
+ */
+static void tap_send_remainder(const struct ctx *c, const struct iovec *iov,
+			       size_t offset)
+{
+	const char *base = (char *)iov->iov_base;
+	size_t len = iov->iov_len;
+
+	while (offset < len) {
+		ssize_t sent = send(c->fd_tap, base + offset, len - offset,
+				    MSG_NOSIGNAL);
+		if (sent < 0) {
+			err("tap: partial frame send (missing %lu bytes): %s",
+			    len - offset, strerror(errno));
+			return;
+		}
+		offset += sent;
+	}
+}
+
+/**
  * tap_send_frames_passt() - Send multiple frames to the passt tap
  * @c:		Execution context
  * @iov:	Array of buffers, each containing one frame
  * @n:		Number of buffers/frames in @iov
  *
- * #syscalls:passt sendmsg send
+ * #syscalls:passt sendmsg
  */
 static void tap_send_frames_passt(const struct ctx *c,
 				  const struct iovec *iov, size_t n)
@@ -341,29 +365,28 @@ static void tap_send_frames_passt(const struct ctx *c,
 		.msg_iov = (void *)iov,
 		.msg_iovlen = n,
 	};
-	size_t end = 0, missing;
 	unsigned int i;
 	ssize_t sent;
-	char *p;
 
 	sent = sendmsg(c->fd_tap, &mh, MSG_NOSIGNAL | MSG_DONTWAIT);
 	if (sent < 0)
 		return;
 
-	/* Ensure a complete last message on partial sendmsg() */
-	for (i = 0; i < n; i++, iov++) {
-		end += iov->iov_len;
-		if (end >= (size_t)sent)
+	/* Check for any partial frames due to short send */
+	for (i = 0; i < n; i++) {
+		if ((size_t)sent < iov[i].iov_len)
 			break;
+		sent -= iov[i].iov_len;
 	}
 
-	missing = end - sent;
-	if (!missing)
-		return;
+	if (i < n && sent) {
+		/* A partial frame was sent */
+		tap_send_remainder(c, &iov[i], sent);
+		i++;
+	}
 
-	p = (char *)iov->iov_base + iov->iov_len - missing;
-	if (send(c->fd_tap, p, missing, MSG_NOSIGNAL))
-		debug("tap: failed to flush %lu missing bytes to tap", missing);
+	if (i < n)
+		debug("tap: dropped %lu frames due to short send", n - i);
 }
 
 /**
