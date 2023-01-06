@@ -131,36 +131,6 @@ void pcap_multiple(const struct iovec *iov, unsigned int n, size_t offset)
 }
 
 /**
- * pcapm() - Capture multiple frames from multiple message headers to pcap file
- * @mmh:	Pointer to first sendmmsg() header
- */
-void pcapmm(const struct mmsghdr *mmh, unsigned int vlen)
-{
-	struct timeval tv;
-	unsigned int i, j;
-
-	if (pcap_fd == -1)
-		return;
-
-	gettimeofday(&tv, NULL);
-
-	for (i = 0; i < vlen; i++) {
-		const struct msghdr *mh = &mmh[i].msg_hdr;
-
-		for (j = 0; j < mh->msg_iovlen; j++) {
-			const struct iovec *iov = &mh->msg_iov[j];
-
-			if (pcap_frame((char *)iov->iov_base + 4,
-				       iov->iov_len - 4, &tv) != 0) {
-				debug("Cannot log packet, length %lu",
-				      iov->iov_len - 4);
-				return;
-			}
-		}
-	}
-}
-
-/**
  * pcap_init() - Initialise pcap file
  * @c:		Execution context
  */

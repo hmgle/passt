@@ -224,9 +224,6 @@ static struct iovec	udp6_l2_iov_tap		[UDP_MAX_FRAMES];
 static struct mmsghdr	udp4_l2_mh_sock		[UDP_MAX_FRAMES];
 static struct mmsghdr	udp6_l2_mh_sock		[UDP_MAX_FRAMES];
 
-static struct mmsghdr	udp4_l2_mh_tap		[UDP_MAX_FRAMES];
-static struct mmsghdr	udp6_l2_mh_tap		[UDP_MAX_FRAMES];
-
 /* recvmmsg()/sendmmsg() data for "spliced" connections */
 static struct iovec	udp4_iov_splice		[UDP_MAX_FRAMES];
 static struct iovec	udp6_iov_splice		[UDP_MAX_FRAMES];
@@ -336,12 +333,9 @@ static void udp_sock4_iov_init(const struct ctx *c)
 	}
 
 	for (i = 0; i < UDP_MAX_FRAMES; i++) {
-		struct msghdr *mh = &udp4_l2_mh_tap[i].msg_hdr;
 		struct iovec *iov = &udp4_l2_iov_tap[i];
 
-		iov->iov_base	= tap_iov_base(c, &udp4_l2_buf[i].taph);
-		mh->msg_iov	= iov;
-		mh->msg_iovlen	= 1;
+		iov->iov_base = tap_iov_base(c, &udp4_l2_buf[i].taph);
 	}
 }
 
@@ -374,12 +368,9 @@ static void udp_sock6_iov_init(const struct ctx *c)
 	}
 
 	for (i = 0; i < UDP_MAX_FRAMES; i++) {
-		struct msghdr *mh = &udp6_l2_mh_tap[i].msg_hdr;
 		struct iovec *iov = &udp6_l2_iov_tap[i];
 
-		iov->iov_base	= tap_iov_base(c, &udp6_l2_buf[i].taph);
-		mh->msg_iov	= iov;
-		mh->msg_iovlen	= 1;
+		iov->iov_base = tap_iov_base(c, &udp6_l2_buf[i].taph);
 	}
 }
 
@@ -704,102 +695,6 @@ static size_t udp_update_hdr6(const struct ctx *c, int n, in_port_t dstport,
 }
 
 /**
- * udp_tap_send_pasta() - Send datagrams to the pasta tap interface
- * @c:		Execution context
- * @mmh:	Array of message headers to send
- * @n:		Number of message headers to send
- *
- * #syscalls:pasta write
- */
-static void udp_tap_send_pasta(const struct ctx *c, struct mmsghdr *mmh,
-			       unsigned int n)
-{
-	unsigned int i, j;
-
-	for (i = 0; i < n; i++) {
-		for (j = 0; j < mmh[i].msg_hdr.msg_iovlen; j++) {
-			struct iovec *iov = &mmh[i].msg_hdr.msg_iov[j];
-
-			/* We can't use writev() because the tap
-			 * character device relies on the write()
-			 * boundaries to discern frame boundaries
-			 */
-			if (write(c->fd_tap, iov->iov_base, iov->iov_len) < 0)
-				debug("tap write: %s", strerror(errno));
-			else
-				pcap(iov->iov_base, iov->iov_len);
-		}
-	}
-}
-
-/**
- * udp_tap_send_passt() - Send datagrams to the passt tap interface
- * @c:		Execution context
- * @mmh:	Array of message headers to send
- * @n:		Number of message headers to send
- *
- * #syscalls:passt sendmmsg sendmsg
- */
-static void udp_tap_send_passt(const struct ctx *c, struct mmsghdr *mmh, int n)
-{
-	struct msghdr *last_mh;
-	ssize_t missing = 0;
-	size_t msg_len = 0;
-	unsigned int i;
-	int ret;
-
-	ret = sendmmsg(c->fd_tap, mmh, n, MSG_NOSIGNAL | MSG_DONTWAIT);
-	if (ret <= 0)
-		return;
-
-	/* If we lose some messages to sendmmsg() here, fine, it's UDP. However,
-	 * the last message needs to be delivered completely, otherwise qemu
-	 * will fail to reassemble the next message and close the connection. Go
-	 * through headers from the last sent message, counting bytes, and, if
-	 * and as soon as we see more bytes than sendmmsg() sent, re-send the
-	 * rest with a blocking call.
-	 *
-	 * In pictures, given this example:
-	 *
-	 *				 	iov #0  iov #1  iov #2  iov #3
-	 * tap_mmh[ret - 1].msg_hdr:		....    ......  .....   ......
-	 * tap_mmh[ret - 1].msg_len:	7	....    ...
-	 *
-	 * when 'msglen' reaches:	10		      ^
-	 * and 'missing' below is:	3	           ---
-	 *
-	 * re-send everything from here:		   ^--  -----   ------
-	 */
-	last_mh = &mmh[ret - 1].msg_hdr;
-	for (i = 0; i < last_mh->msg_iovlen; i++) {
-		if (missing <= 0) {
-			msg_len += last_mh->msg_iov[i].iov_len;
-			missing = msg_len - mmh[ret - 1].msg_len;
-		}
-
-		if (missing > 0) {
-			uint8_t **iov_base;
-			int first_offset;
-
-			iov_base = (uint8_t **)&last_mh->msg_iov[i].iov_base;
-			first_offset = last_mh->msg_iov[i].iov_len - missing;
-			*iov_base += first_offset;
-			last_mh->msg_iov[i].iov_len = missing;
-
-			last_mh->msg_iov = &last_mh->msg_iov[i];
-
-			if (sendmsg(c->fd_tap, last_mh, MSG_NOSIGNAL) < 0)
-				debug("UDP: %li bytes to tap missing", missing);
-
-			*iov_base -= first_offset;
-			break;
-		}
-	}
-
-	pcapmm(mmh, ret);
-}
-
-/**
  * udp_tap_send() - Prepare UDP datagrams and send to tap interface
  * @c:		Execution context
  * @start:	Index of first datagram in udp[46]_l2_buf pool
@@ -810,25 +705,18 @@ static void udp_tap_send_passt(const struct ctx *c, struct mmsghdr *mmh, int n)
  *
  * Return: size of tap frame with headers
  */
-static void udp_tap_send(const struct ctx *c,
+static void udp_tap_send(struct ctx *c,
 			 unsigned int start, unsigned int n,
 			 in_port_t dstport, bool v6, const struct timespec *now)
 {
-	int msg_bufs = 0, msg_i = 0;
-	struct mmsghdr *tap_mmh;
 	struct iovec *tap_iov;
-	ssize_t msg_len = 0;
 	unsigned int i;
 
-	if (v6) {
-		tap_mmh = udp6_l2_mh_tap;
+	if (v6)
 		tap_iov = udp6_l2_iov_tap;
-	} else {
-		tap_mmh = udp4_l2_mh_tap;
+	else
 		tap_iov = udp4_l2_iov_tap;
-	}
 
-	tap_mmh[0].msg_hdr.msg_iov = &tap_iov[start];
 	for (i = start; i < start + n; i++) {
 		size_t buf_len;
 
@@ -838,24 +726,9 @@ static void udp_tap_send(const struct ctx *c,
 			buf_len = udp_update_hdr4(c, i, dstport, now);
 
 		tap_iov[i].iov_len = buf_len;
-
-		/* With bigger messages, qemu closes the connection. */
-		if (c->mode == MODE_PASST && msg_bufs &&
-		    msg_len + buf_len > SHRT_MAX) {
-			tap_mmh[msg_i].msg_hdr.msg_iovlen = msg_bufs;
-			msg_i++;
-			tap_mmh[msg_i].msg_hdr.msg_iov = &tap_iov[i];
-			msg_len = msg_bufs = 0;
-		}
-		msg_len += buf_len;
-		msg_bufs++;
 	}
-	tap_mmh[msg_i].msg_hdr.msg_iovlen = msg_bufs;
 
-	if (c->mode == MODE_PASTA)
-		udp_tap_send_pasta(c, tap_mmh, msg_i + 1);
-	else
-		udp_tap_send_passt(c, tap_mmh, msg_i + 1);
+	tap_send_frames(c, tap_iov + start, n);
 }
 
 /**
@@ -867,7 +740,7 @@ static void udp_tap_send(const struct ctx *c,
  *
  * #syscalls recvmmsg
  */
-void udp_sock_handler(const struct ctx *c, union epoll_ref ref, uint32_t events,
+void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		      const struct timespec *now)
 {
 	/* For not entirely clear reasons (data locality?) pasta gets
