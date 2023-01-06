@@ -476,7 +476,6 @@ static struct tcp4_l2_buf_t {
 tcp4_l2_buf[TCP_FRAMES_MEM];
 
 static unsigned int tcp4_l2_buf_used;
-static size_t tcp4_l2_buf_bytes;
 
 /**
  * tcp6_l2_buf_t - Pre-cooked IPv6 packet buffers for tap connections
@@ -507,7 +506,6 @@ struct tcp6_l2_buf_t {
 tcp6_l2_buf[TCP_FRAMES_MEM];
 
 static unsigned int tcp6_l2_buf_used;
-static size_t tcp6_l2_buf_bytes;
 
 /* recvmsg()/sendmsg() data for tap */
 static char 		tcp_buf_discard		[MAX_WINDOW];
@@ -555,7 +553,6 @@ static struct tcp4_l2_flags_buf_t {
 tcp4_l2_flags_buf[TCP_FRAMES_MEM];
 
 static unsigned int tcp4_l2_flags_buf_used;
-static size_t tcp4_l2_flags_buf_bytes;
 
 /**
  * tcp6_l2_flags_buf_t - IPv6 packet buffers for segments without data (flags)
@@ -585,7 +582,6 @@ static struct tcp6_l2_flags_buf_t {
 tcp6_l2_flags_buf[TCP_FRAMES_MEM];
 
 static unsigned int tcp6_l2_flags_buf_used;
-static size_t tcp6_l2_flags_buf_bytes;
 
 /* TCP connections */
 union tcp_conn tc[TCP_MAX_CONNS];
@@ -1422,29 +1418,30 @@ static int tcp_l2_buf_write_one(struct ctx *c, const struct iovec *iov)
  * tcp_l2_buf_flush_passt() - Send a message on the passt tap interface
  * @c:		Execution context
  * @mh:		Message header that was partially sent by sendmsg()
- * @buf_bytes:	Total number of bytes to send
  */
-static void tcp_l2_buf_flush_passt(const struct ctx *c,
-				   const struct msghdr *mh, size_t buf_bytes)
+static void tcp_l2_buf_flush_passt(const struct ctx *c, const struct msghdr *mh)
 {
-	size_t end = 0, missing, sent;
+	size_t end = 0, missing;
 	struct iovec *iov;
 	unsigned int i;
-	ssize_t n;
+	ssize_t sent;
 	char *p;
 
-	n = sendmsg(c->fd_tap, mh, MSG_NOSIGNAL | MSG_DONTWAIT);
-	if (n < 0 || ((sent = (size_t)n) == buf_bytes))
+	sent = sendmsg(c->fd_tap, mh, MSG_NOSIGNAL | MSG_DONTWAIT);
+	if (sent < 0)
 		return;
 
 	/* Ensure a complete last message on partial sendmsg() */
 	for (i = 0, iov = mh->msg_iov; i < mh->msg_iovlen; i++, iov++) {
 		end += iov->iov_len;
-		if (end >= sent)
+		if (end >= (size_t)sent)
 			break;
 	}
 
 	missing = end - sent;
+	if (!missing)
+		return;
+
 	p = (char *)iov->iov_base + iov->iov_len - missing;
 	if (send(c->fd_tap, p, missing, MSG_NOSIGNAL))
 		debug("TCP: failed to flush %lu missing bytes to tap", missing);
@@ -1455,16 +1452,15 @@ static void tcp_l2_buf_flush_passt(const struct ctx *c,
  * @c:		Execution context
  * @mh:		Message header pointing to buffers, msg_iovlen not set
  * @buf_used:	Pointer to count of used buffers, set to 0 on return
- * @buf_bytes:	Pointer to count of buffer bytes, set to 0 on return
  */
 static void tcp_l2_buf_flush(struct ctx *c, struct msghdr *mh,
-			     unsigned int *buf_used, size_t *buf_bytes)
+			     unsigned int *buf_used)
 {
 	if (!(mh->msg_iovlen = *buf_used))
 		return;
 
 	if (c->mode == MODE_PASST) {
-		tcp_l2_buf_flush_passt(c, mh, *buf_bytes);
+		tcp_l2_buf_flush_passt(c, mh);
 	} else {
 		size_t i;
 
@@ -1475,7 +1471,7 @@ static void tcp_l2_buf_flush(struct ctx *c, struct msghdr *mh,
 				i--;
 		}
 	}
-	*buf_used = *buf_bytes = 0;
+	*buf_used = 0;
 
 	pcap_multiple(mh->msg_iov, mh->msg_iovlen, sizeof(uint32_t));
 }
@@ -1488,17 +1484,14 @@ static void tcp_l2_flags_buf_flush(struct ctx *c)
 {
 	struct msghdr mh = { 0 };
 	unsigned int *buf_used;
-	size_t *buf_bytes;
 
 	mh.msg_iov	= tcp6_l2_flags_iov;
 	buf_used	= &tcp6_l2_flags_buf_used;
-	buf_bytes	= &tcp6_l2_flags_buf_bytes;
-	tcp_l2_buf_flush(c, &mh, buf_used, buf_bytes);
+	tcp_l2_buf_flush(c, &mh, buf_used);
 
 	mh.msg_iov	= tcp4_l2_flags_iov;
 	buf_used	= &tcp4_l2_flags_buf_used;
-	buf_bytes	= &tcp4_l2_flags_buf_bytes;
-	tcp_l2_buf_flush(c, &mh, buf_used, buf_bytes);
+	tcp_l2_buf_flush(c, &mh, buf_used);
 }
 
 /**
@@ -1509,17 +1502,14 @@ static void tcp_l2_data_buf_flush(struct ctx *c)
 {
 	struct msghdr mh = { 0 };
 	unsigned int *buf_used;
-	size_t *buf_bytes;
 
 	mh.msg_iov = tcp6_l2_iov;
 	buf_used	= &tcp6_l2_buf_used;
-	buf_bytes	= &tcp6_l2_buf_bytes;
-	tcp_l2_buf_flush(c, &mh, buf_used, buf_bytes);
+	tcp_l2_buf_flush(c, &mh, buf_used);
 
 	mh.msg_iov = tcp4_l2_iov;
 	buf_used	= &tcp4_l2_buf_used;
-	buf_bytes	= &tcp4_l2_buf_bytes;
-	tcp_l2_buf_flush(c, &mh, buf_used, buf_bytes);
+	tcp_l2_buf_flush(c, &mh, buf_used);
 }
 
 /**
@@ -1833,11 +1823,6 @@ static int tcp_send_flag(struct ctx *c, struct tcp_tap_conn *conn, int flags)
 					  NULL, conn->seq_to_tap);
 	iov->iov_len = eth_len + sizeof(uint32_t);
 
-	if (CONN_V4(conn))
-		tcp4_l2_flags_buf_bytes += iov->iov_len;
-	else
-		tcp6_l2_flags_buf_bytes += iov->iov_len;
-
 	if (th->ack)
 		conn_flag(c, conn, ~ACK_TO_TAP_DUE);
 
@@ -1853,7 +1838,6 @@ static int tcp_send_flag(struct ctx *c, struct tcp_tap_conn *conn, int flags)
 			memcpy(b4 + 1, b4, sizeof(*b4));
 			(iov + 1)->iov_len = iov->iov_len;
 			tcp4_l2_flags_buf_used++;
-			tcp4_l2_flags_buf_bytes += iov->iov_len;
 		}
 
 		if (tcp4_l2_flags_buf_used > ARRAY_SIZE(tcp4_l2_flags_buf) - 2)
@@ -1863,7 +1847,6 @@ static int tcp_send_flag(struct ctx *c, struct tcp_tap_conn *conn, int flags)
 			memcpy(b6 + 1, b6, sizeof(*b6));
 			(iov + 1)->iov_len = iov->iov_len;
 			tcp6_l2_flags_buf_used++;
-			tcp6_l2_flags_buf_bytes += iov->iov_len;
 		}
 
 		if (tcp6_l2_flags_buf_used > ARRAY_SIZE(tcp6_l2_flags_buf) - 2)
@@ -2207,7 +2190,7 @@ static void tcp_data_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		len = tcp_l2_buf_fill_headers(c, conn, b, plen, check, seq);
 
 		iov = tcp4_l2_iov + tcp4_l2_buf_used++;
-		tcp4_l2_buf_bytes += iov->iov_len = len + sizeof(b->vnet_len);
+		iov->iov_len = len + sizeof(b->vnet_len);
 		if (tcp4_l2_buf_used > ARRAY_SIZE(tcp4_l2_buf) - 1)
 			tcp_l2_data_buf_flush(c);
 	} else if (CONN_V6(conn)) {
@@ -2216,7 +2199,7 @@ static void tcp_data_to_tap(struct ctx *c, struct tcp_tap_conn *conn,
 		len = tcp_l2_buf_fill_headers(c, conn, b, plen, NULL, seq);
 
 		iov = tcp6_l2_iov + tcp6_l2_buf_used++;
-		tcp6_l2_buf_bytes += iov->iov_len = len + sizeof(b->vnet_len);
+		iov->iov_len = len + sizeof(b->vnet_len);
 		if (tcp6_l2_buf_used > ARRAY_SIZE(tcp6_l2_buf) - 1)
 			tcp_l2_data_buf_flush(c);
 	}
