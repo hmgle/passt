@@ -1419,19 +1419,25 @@ static int tcp_l2_buf_write_one(struct ctx *c, const struct iovec *iov)
 }
 
 /**
- * tcp_l2_buf_flush_part() - Ensure a complete last message on partial sendmsg()
+ * tcp_l2_buf_flush_passt() - Send a message on the passt tap interface
  * @c:		Execution context
  * @mh:		Message header that was partially sent by sendmsg()
- * @sent:	Bytes already sent
+ * @buf_bytes:	Total number of bytes to send
  */
-static void tcp_l2_buf_flush_part(const struct ctx *c,
-				  const struct msghdr *mh, size_t sent)
+static void tcp_l2_buf_flush_passt(const struct ctx *c,
+				   const struct msghdr *mh, size_t buf_bytes)
 {
-	size_t end = 0, missing;
+	size_t end = 0, missing, sent;
 	struct iovec *iov;
 	unsigned int i;
+	ssize_t n;
 	char *p;
 
+	n = sendmsg(c->fd_tap, mh, MSG_NOSIGNAL | MSG_DONTWAIT);
+	if (n < 0 || ((sent = (size_t)n) == buf_bytes))
+		return;
+
+	/* Ensure a complete last message on partial sendmsg() */
 	for (i = 0, iov = mh->msg_iov; i < mh->msg_iovlen; i++, iov++) {
 		end += iov->iov_len;
 		if (end >= sent)
@@ -1458,9 +1464,7 @@ static void tcp_l2_buf_flush(struct ctx *c, struct msghdr *mh,
 		return;
 
 	if (c->mode == MODE_PASST) {
-		size_t n = sendmsg(c->fd_tap, mh, MSG_NOSIGNAL | MSG_DONTWAIT);
-		if (n > 0 && n < *buf_bytes)
-			tcp_l2_buf_flush_part(c, mh, n);
+		tcp_l2_buf_flush_passt(c, mh, *buf_bytes);
 	} else {
 		size_t i;
 
