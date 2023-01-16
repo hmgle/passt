@@ -16,10 +16,10 @@
 #include <fcntl.h>
 #include <string.h>
 #include <stdbool.h>
-#include <assert.h>
 #include <unistd.h>
 
 #include "lineread.h"
+#include "util.h"
 
 /**
  * lineread_init() - Prepare for line by line file reading without allocation
@@ -44,10 +44,10 @@ static int peek_line(struct lineread *lr, bool eof)
 	char *nl;
 
 	/* Sanity checks (which also document invariants) */
-	assert(lr->count >= 0);
-	assert(lr->next_line >= 0);
-	assert(lr->next_line + lr->count >= lr->next_line);
-	assert(lr->next_line + lr->count <= LINEREAD_BUFFER_SIZE);
+	ASSERT(lr->count >= 0);
+	ASSERT(lr->next_line >= 0);
+	ASSERT(lr->next_line + lr->count >= lr->next_line);
+	ASSERT(lr->next_line + lr->count <= LINEREAD_BUFFER_SIZE);
 
 	nl = memchr(lr->buf + lr->next_line, '\n', lr->count);
 

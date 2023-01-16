@@ -108,7 +108,6 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include <time.h>
-#include <assert.h>
 
 #include "checksum.h"
 #include "util.h"
@@ -248,7 +247,7 @@ static void udp_invert_portmap(struct udp_port_fwd *fwd)
 {
 	int i;
 
-	assert(ARRAY_SIZE(fwd->f.delta) == ARRAY_SIZE(fwd->rdelta));
+	ASSERT(ARRAY_SIZE(fwd->f.delta) == ARRAY_SIZE(fwd->rdelta));
 	for (i = 0; i < ARRAY_SIZE(fwd->f.delta); i++) {
 		in_port_t delta = fwd->f.delta[i];
 

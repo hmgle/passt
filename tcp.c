@@ -288,7 +288,6 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include <time.h>
-#include <assert.h>
 
 #include <linux/tcp.h> /* For struct tcp_info */
 
@@ -588,7 +587,7 @@ static inline struct tcp_tap_conn *conn_at_idx(int index)
 {
 	if ((index < 0) || (index >= TCP_MAX_CONNS))
 		return NULL;
-	assert(!(CONN(index)->c.spliced));
+	ASSERT(!(CONN(index)->c.spliced));
 	return CONN(index);
 }
 
@@ -2695,7 +2694,7 @@ static void tcp_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	socklen_t sl;
 	int s;
 
-	assert(ref.r.p.tcp.tcp.listen);
+	ASSERT(ref.r.p.tcp.tcp.listen);
 
 	if (c->tcp.conn_count >= TCP_MAX_CONNS)
 		return;
@@ -2937,7 +2936,7 @@ static void tcp_ns_sock_init4(const struct ctx *c, in_port_t port)
 	struct in_addr loopback = { htonl(INADDR_LOOPBACK) };
 	int s;
 
-	assert(c->mode == MODE_PASTA);
+	ASSERT(c->mode == MODE_PASTA);
 
 	s = sock_l4(c, AF_INET, IPPROTO_TCP, &loopback, NULL, port, tref.u32);
 	if (s >= 0)
@@ -2961,7 +2960,7 @@ static void tcp_ns_sock_init6(const struct ctx *c, in_port_t port)
 				     .tcp.index = idx };
 	int s;
 
-	assert(c->mode == MODE_PASTA);
+	ASSERT(c->mode == MODE_PASTA);
 
 	s = sock_l4(c, AF_INET6, IPPROTO_TCP, &in6addr_loopback, NULL, port,
 		    tref.u32);

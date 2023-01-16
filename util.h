@@ -6,6 +6,11 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <stdlib.h>
+#include <stdarg.h>
+
+#include "log.h"
+
 #define VERSION_BLOB							       \
 	VERSION "\n"							       \
 	"Copyright Red Hat\n"						       \
@@ -46,6 +51,18 @@
 
 #define STRINGIFY(x)	#x
 #define STR(x)		STRINGIFY(x)
+
+#define ASSERT(expr)							\
+	do {								\
+		if (!(expr)) {						\
+			err("ASSERTION FAILED in %s (%s:%d): %s",	\
+			    __func__, __FILE__, __LINE__, STRINGIFY(expr)); \
+			/* This may actually SIGSYS, due to seccomp,	\
+			 * but that will still get the job done		\
+			 */						\
+			abort();					\
+		}							\
+	} while (0)
 
 #ifdef P_tmpdir
 #define TMPDIR		P_tmpdir
@@ -134,7 +151,8 @@ int do_clone(int (*fn)(void *), char *stack_area, size_t stack_size, int flags,
 
 #include <net/if.h>
 #include <limits.h>
-#include <stdarg.h>
+#include <stdint.h>
+#include <netinet/ip6.h>
 
 #include "packet.h"
 

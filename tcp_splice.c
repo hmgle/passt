@@ -46,7 +46,6 @@
 #include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <assert.h>
 
 #include "util.h"
 #include "passt.h"
@@ -519,7 +518,7 @@ bool tcp_splice_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	union inany_addr aany;
 	in_port_t port;
 
-	assert(c->mode == MODE_PASTA);
+	ASSERT(c->mode == MODE_PASTA);
 
 	inany_from_sockaddr(&aany, &port, sa);
 	a4 = inany_v4(&aany);

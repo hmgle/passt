@@ -6,8 +6,6 @@
  *           IPv6 or IPv4 (encoded as IPv4-mapped IPv6 addresses)
  */
 
-#include <assert.h>
-
 /** union inany_addr - Represents either an IPv4 or IPv6 address
  * @a6:			Address as an IPv6 address, may be IPv4-mapped
  * @v4mapped.zero:	All zero-bits for an IPv4 address
@@ -63,7 +61,7 @@ static inline void inany_from_af(union inany_addr *aa, int af, const void *addr)
 		aa->v4mapped.a4 = *((struct in_addr *)addr);
 	} else {
 		/* Not valid to call with other address families */
-		assert(0);
+		ASSERT(0);
 	}
 }
 
@@ -89,6 +87,6 @@ static inline void inany_from_sockaddr(union inany_addr *aa, in_port_t *port,
 		*port = ntohs(sa4->sin_port);
 	} else {
 		/* Not valid to call with other address families */
-		assert(0);
+		ASSERT(0);
 	}
 }
