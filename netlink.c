@@ -56,8 +56,8 @@ static int nl_sock_init_do(void *arg)
 	if (arg)
 		ns_enter((struct ctx *)arg);
 
-	if (((*s) = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE)) < 0 ||
-	    bind(*s, (struct sockaddr *)&addr, sizeof(addr))) {
+	*s = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
+	if (*s < 0 || bind(*s, (struct sockaddr *)&addr, sizeof(addr))) {
 		*s = -1;
 		return 0;
 	}
