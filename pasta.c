@@ -241,7 +241,7 @@ void pasta_start_ns(struct ctx *c, uid_t uid, gid_t gid,
 	pasta_child_pid = do_clone(pasta_spawn_cmd, ns_fn_stack,
 				   sizeof(ns_fn_stack),
 				   CLONE_NEWIPC | CLONE_NEWPID | CLONE_NEWNET |
-				   CLONE_NEWUTS,
+				   CLONE_NEWUTS | SIGCHLD,
 				   (void *)&arg);
 
 	if (pasta_child_pid == -1) {
