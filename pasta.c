@@ -64,9 +64,17 @@ void pasta_child_handler(int signal)
 
 	if (pasta_child_pid &&
 	    !waitid(P_PID, pasta_child_pid, &infop, WEXITED | WNOHANG)) {
-		if (infop.si_pid == pasta_child_pid)
-			exit(EXIT_SUCCESS);
+		if (infop.si_pid == pasta_child_pid) {
+			if (infop.si_code == CLD_EXITED)
+				exit(infop.si_status);
+
+			/* If killed by a signal, si_status is the number.
+			 * Follow common shell convention of returning it + 128.
+			 */
+			exit(infop.si_status + 128);
+
 			/* Nothing to do, detached PID namespace going away */
+		}
 	}
 
 	waitid(P_ALL, 0, NULL, WEXITED | WNOHANG);
