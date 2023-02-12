@@ -34,12 +34,14 @@ set	PORTS -t 10001,10002 -u 10001,10002
 set	LOG_FILE __STATEDIR__/pasta.log
 
 passt	./pasta -l __LOG_FILE__
-passt	exit
+passtb	exit
+sleep	1
 check	[ -s __LOG_FILE__ ]
 
 test	Log truncated on creation
 passt	./pasta -l __LOG_FILE__
-passt	exit
+passtb	exit
+sleep	1
 check	[ $(cat __LOG_FILE__ | wc -l) -eq 1 ]
 
 test	Maximum log size
@@ -85,6 +87,7 @@ check_log_size_mountns
 test	Timestamp consistency after rotations (no FALLOC_FL_COLLAPSE_RANGE)
 check	tail -n +2 __LOG_FILE__ | cut -f1 -d' ' | tr -d [.:] | sort -c
 
-passt	exit
+passtb	exit
+sleep	1
 passt	umount __STATEDIR__/t
 passt	exit
