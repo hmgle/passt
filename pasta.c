@@ -47,7 +47,7 @@
 #include "log.h"
 
 /* PID of child, in case we created a namespace */
-static int pasta_child_pid;
+int pasta_child_pid;
 
 /**
  * pasta_child_handler() - Exit once shell exits (if we started it), reap clones
@@ -166,9 +166,15 @@ struct pasta_spawn_cmd_arg {
 static int pasta_spawn_cmd(void *arg)
 {
 	const struct pasta_spawn_cmd_arg *a;
+	sigset_t set;
 
 	if (write_file("/proc/sys/net/ipv4/ping_group_range", "0 0"))
 		warn("Cannot set ping_group_range, ICMP requests might fail");
+
+	/* Wait for the parent to be ready: see main() */
+	sigemptyset(&set);
+	sigaddset(&set, SIGUSR1);
+	sigwaitinfo(&set, NULL);
 
 	a = (const struct pasta_spawn_cmd_arg *)arg;
 	execvp(a->exe, a->argv);
@@ -196,6 +202,7 @@ void pasta_start_ns(struct ctx *c, uid_t uid, gid_t gid,
 	char ns_fn_stack[NS_FN_STACK_SIZE];
 	char *sh_argv[] = { NULL, NULL };
 	char sh_arg0[PATH_MAX + 1];
+	sigset_t set;
 
 	c->foreground = 1;
 	if (!c->debug)
@@ -225,6 +232,11 @@ void pasta_start_ns(struct ctx *c, uid_t uid, gid_t gid,
 		sh_argv[0] = sh_arg0;
 		arg.argv = sh_argv;
 	}
+
+	/* Block SIGUSR1 in child, we queue it in main() when we're ready */
+	sigemptyset(&set);
+	sigaddset(&set, SIGUSR1);
+	sigprocmask(SIG_BLOCK, &set, NULL);
 
 	pasta_child_pid = do_clone(pasta_spawn_cmd, ns_fn_stack,
 				   sizeof(ns_fn_stack),

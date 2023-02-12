@@ -301,6 +301,9 @@ int main(int argc, char **argv)
 	else
 		write_pidfile(pidfile_fd, getpid());
 
+	if (pasta_child_pid)
+		kill(pasta_child_pid, SIGUSR1);
+
 	isolate_postfork(&c);
 
 	timer_init(&c, &now);
