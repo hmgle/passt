@@ -757,8 +757,18 @@ static void conn_flag_do(const struct ctx *c, struct tcp_tap_conn *conn,
 			      tcp_flag_str[fls(~flag)]);
 		}
 	} else {
-		if (conn->flags & flag)
+		if (conn->flags & flag) {
+			/* Special case: setting ACK_FROM_TAP_DUE on a
+			 * connection where it's already set is used to
+			 * re-schedule the existing timer.
+			 * TODO: define clearer semantics for timer-related
+			 * flags and factor this into the logic below.
+			 */
+			if (flag == ACK_FROM_TAP_DUE)
+				tcp_timer_ctl(c, conn);
+
 			return;
+		}
 
 		conn->flags |= flag;
 		if (fls(flag) >= 0) {
@@ -1592,6 +1602,26 @@ out:
 }
 
 /**
+ * tcp_update_seqack_from_tap() - ACK number from tap and related flags/counters
+ * @c:		Execution context
+ * @conn:	Connection pointer
+ * @seq		Current ACK sequence, host order
+ */
+static void tcp_update_seqack_from_tap(const struct ctx *c,
+				       struct tcp_tap_conn *conn, uint32_t seq)
+{
+	if (SEQ_GT(seq, conn->seq_ack_from_tap)) {
+		if (seq == conn->seq_to_tap)
+			conn_flag(c, conn, ~ACK_FROM_TAP_DUE);
+		else
+			conn_flag(c, conn, ACK_FROM_TAP_DUE);
+
+		conn->retrans = 0;
+		conn->seq_ack_from_tap = seq;
+	}
+}
+
+/**
  * tcp_send_flag() - Send segment with flags to tap (no payload)
  * @c:		Execution context
  * @conn:	Connection pointer
@@ -2041,7 +2071,6 @@ static int tcp_sock_consume(struct tcp_tap_conn *conn, uint32_t ack_seq)
 		 MSG_DONTWAIT | MSG_TRUNC) < 0)
 		return -errno;
 
-	conn->seq_ack_from_tap = ack_seq;
 	return 0;
 }
 
@@ -2333,14 +2362,9 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 
 	tcp_clamp_window(c, conn, max_ack_seq_wnd);
 
-	if (ack) {
-		if (max_ack_seq == conn->seq_to_tap) {
-			conn_flag(c, conn, ~ACK_FROM_TAP_DUE);
-			conn->retrans = 0;
-		}
-
-		tcp_sock_consume(conn, max_ack_seq);
-	}
+	/* On socket flush failure, pretend there was no ACK, try again later */
+	if (ack && !tcp_sock_consume(conn, max_ack_seq))
+		tcp_update_seqack_from_tap(c, conn, max_ack_seq);
 
 	if (retr) {
 		trace("TCP: fast re-transmit, ACK: %u, previous sequence: %u",
@@ -2492,10 +2516,8 @@ int tcp_tap_handler(struct ctx *c, int af, const void *addr,
 		return p->count;
 	}
 
-	if (th->ack) {
-		conn_flag(c, conn, ~ACK_FROM_TAP_DUE);
-		conn->retrans = 0;
-	}
+	if (th->ack && !(conn->events & ESTABLISHED))
+		tcp_update_seqack_from_tap(c, conn, ntohl(th->ack_seq));
 
 	conn_flag(c, conn, ~STALLED);
 
@@ -2543,6 +2565,8 @@ int tcp_tap_handler(struct ctx *c, int af, const void *addr,
 
 	/* Established connections not accepting data from tap */
 	if (conn->events & TAP_FIN_RCVD) {
+		tcp_update_seqack_from_tap(c, conn, ntohl(th->ack_seq));
+
 		if (conn->events & SOCK_FIN_RCVD &&
 		    conn->seq_ack_from_tap == conn->seq_to_tap)
 			conn_event(c, conn, CLOSED);
