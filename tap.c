@@ -316,12 +316,13 @@ static void tap_send_frames_pasta(struct ctx *c,
 {
 	size_t i;
 
-	for (i = 0; i < n; i++) {
+	for (i = 0; i < n; i++, iov++) {
 		if (write(c->fd_tap, (char *)iov->iov_base, iov->iov_len) < 0) {
 			debug("tap write: %s", strerror(errno));
 			if (errno != EAGAIN && errno != EWOULDBLOCK)
 				tap_handler(c, c->fd_tap, EPOLLERR, NULL);
 			i--;
+			iov--;
 		}
 	}
 }
