@@ -3010,6 +3010,34 @@ static int tcp_ns_socks_init(void *arg)
 }
 
 /**
+ * tcp_sock_refill_pool() - Refill one pool of pre-opened sockets
+ * @c:		Execution context
+ * @pool:	Pool of sockets to refill
+ * @af:		Address family to use
+ */
+static void tcp_sock_refill_pool(const struct ctx *c, int pool[], int af)
+{
+	int i;
+
+	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++) {
+		int *s = &pool[i];
+
+		if (*s >= 0)
+			break;
+
+		*s = socket(af, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
+		if (*s > SOCKET_MAX) {
+			close(*s);
+			*s = -1;
+			return;
+		}
+
+		if (*s >= 0)
+			tcp_sock_set_bufsize(c, *s);
+	}
+}
+
+/**
  * struct tcp_sock_refill_arg - Arguments for tcp_sock_refill()
  * @c:		Execution context
  * @ns:		Set to refill pool of sockets created in namespace
@@ -3028,7 +3056,7 @@ struct tcp_sock_refill_arg {
 static int tcp_sock_refill(void *arg)
 {
 	struct tcp_sock_refill_arg *a = (struct tcp_sock_refill_arg *)arg;
-	int i, *p4, *p6;
+	int *p4, *p6;
 
 	if (a->ns) {
 		ns_enter(a->c);
@@ -3039,36 +3067,11 @@ static int tcp_sock_refill(void *arg)
 		p6 = init_sock_pool6;
 	}
 
-	for (i = 0; a->c->ifi4 && i < TCP_SOCK_POOL_SIZE; i++, p4++) {
-		if (*p4 >= 0)
-			break;
+	if (a->c->ifi4)
+		tcp_sock_refill_pool(a->c, p4, AF_INET);
 
-		*p4 = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
-		if (*p4 > SOCKET_MAX) {
-			close(*p4);
-			*p4 = -1;
-			return -EIO;
-		}
-
-		if (*p4 >= 0)
-			tcp_sock_set_bufsize(a->c, *p4);
-	}
-
-	for (i = 0; a->c->ifi6 && i < TCP_SOCK_POOL_SIZE; i++, p6++) {
-		if (*p6 >= 0)
-			break;
-
-		*p6 = socket(AF_INET6, SOCK_STREAM | SOCK_NONBLOCK,
-			     IPPROTO_TCP);
-		if (*p6 > SOCKET_MAX) {
-			close(*p6);
-			*p6 = -1;
-			return -EIO;
-		}
-
-		if (*p6 >= 0)
-			tcp_sock_set_bufsize(a->c, *p6);
-	}
+	if (a->c->ifi6)
+		tcp_sock_refill_pool(a->c, p6, AF_INET6);
 
 	return 0;
 }
