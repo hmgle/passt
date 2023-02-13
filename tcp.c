@@ -3038,40 +3038,33 @@ static void tcp_sock_refill_pool(const struct ctx *c, int pool[], int af)
 }
 
 /**
- * struct tcp_sock_refill_arg - Arguments for tcp_sock_refill()
+ * tcp_sock_refill_init() - Refill pools of pre-opened sockets in init ns
  * @c:		Execution context
- * @ns:		Set to refill pool of sockets created in namespace
  */
-struct tcp_sock_refill_arg {
-	struct ctx *c;
-	int ns;
-};
+static void tcp_sock_refill_init(const struct ctx *c)
+{
+	if (c->ifi4)
+		tcp_sock_refill_pool(c, init_sock_pool4, AF_INET);
+	if (c->ifi6)
+		tcp_sock_refill_pool(c, init_sock_pool6, AF_INET6);
+}
 
 /**
- * tcp_sock_refill() - Refill pool of pre-opened sockets
- * @arg:	See @tcp_sock_refill_arg
+ * tcp_sock_refill_ns() - Refill pools of pre-opened sockets in namespace
+ * @arg:	Execution context cast to void *
  *
  * Return: 0
  */
-static int tcp_sock_refill(void *arg)
+static int tcp_sock_refill_ns(void *arg)
 {
-	struct tcp_sock_refill_arg *a = (struct tcp_sock_refill_arg *)arg;
-	int *p4, *p6;
+	const struct ctx *c = (const struct ctx *)arg;
 
-	if (a->ns) {
-		ns_enter(a->c);
-		p4 = ns_sock_pool4;
-		p6 = ns_sock_pool6;
-	} else {
-		p4 = init_sock_pool4;
-		p6 = init_sock_pool6;
-	}
+	ns_enter(c);
 
-	if (a->c->ifi4)
-		tcp_sock_refill_pool(a->c, p4, AF_INET);
-
-	if (a->c->ifi6)
-		tcp_sock_refill_pool(a->c, p6, AF_INET6);
+	if (c->ifi4)
+		tcp_sock_refill_pool(c, ns_sock_pool4, AF_INET);
+	if (c->ifi6)
+		tcp_sock_refill_pool(c, ns_sock_pool6, AF_INET6);
 
 	return 0;
 }
@@ -3084,7 +3077,6 @@ static int tcp_sock_refill(void *arg)
  */
 int tcp_init(struct ctx *c)
 {
-	struct tcp_sock_refill_arg refill_arg = { c, 0 };
 	int i;
 #ifndef HAS_GETRANDOM
 	int dev_random = open("/dev/random", O_RDONLY);
@@ -3130,15 +3122,14 @@ int tcp_init(struct ctx *c)
 	memset(tcp_sock_init_ext,	0xff,	sizeof(tcp_sock_init_ext));
 	memset(tcp_sock_ns,		0xff,	sizeof(tcp_sock_ns));
 
-	tcp_sock_refill(&refill_arg);
+	tcp_sock_refill_init(c);
 
 	if (c->mode == MODE_PASTA) {
 		tcp_splice_init(c);
 
 		NS_CALL(tcp_ns_socks_init, c);
 
-		refill_arg.ns = 1;
-		NS_CALL(tcp_sock_refill, &refill_arg);
+		NS_CALL(tcp_sock_refill_ns, c);
 	}
 
 	return 0;
@@ -3258,7 +3249,6 @@ static int tcp_port_rebind(void *arg)
  */
 void tcp_timer(struct ctx *c, const struct timespec *ts)
 {
-	struct tcp_sock_refill_arg refill_arg = { c, 0 };
 	union tcp_conn *conn;
 
 	(void)ts;
@@ -3291,12 +3281,11 @@ void tcp_timer(struct ctx *c, const struct timespec *ts)
 		}
 	}
 
-	tcp_sock_refill(&refill_arg);
+	tcp_sock_refill_init(c);
 	if (c->mode == MODE_PASTA) {
-		refill_arg.ns = 1;
 		if ((c->ifi4 && ns_sock_pool4[TCP_SOCK_POOL_TSH] < 0) ||
 		    (c->ifi6 && ns_sock_pool6[TCP_SOCK_POOL_TSH] < 0))
-			NS_CALL(tcp_sock_refill, &refill_arg);
+			NS_CALL(tcp_sock_refill_ns, c);
 
 		tcp_splice_pipe_refill(c);
 	}
