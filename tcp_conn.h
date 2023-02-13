@@ -193,6 +193,7 @@ void tcp_table_compact(struct ctx *c, union tcp_conn *hole);
 void tcp_splice_destroy(struct ctx *c, union tcp_conn *conn_union);
 void tcp_splice_timer(struct ctx *c, union tcp_conn *conn_union);
 int tcp_conn_pool_sock(int pool[]);
+int tcp_conn_new_sock(const struct ctx *c, sa_family_t af);
 void tcp_sock_refill_pool(const struct ctx *c, int pool[], int af);
 void tcp_splice_refill(const struct ctx *c);
 

@@ -87,6 +87,9 @@ static const char *tcp_splice_flag_str[] __attribute((__unused__)) = {
 	"RCVLOWAT_ACT_B", "CLOSING",
 };
 
+/* Forward declaration */
+static int tcp_sock_refill_ns(void *arg);
+
 /**
  * tcp_splice_conn_epoll_events() - epoll events masks for given state
  * @events:	Connection event flags
@@ -347,12 +350,8 @@ static int tcp_splice_connect_finish(const struct ctx *c,
  * Return: 0 for connect() succeeded or in progress, negative value on error
  */
 static int tcp_splice_connect(const struct ctx *c, struct tcp_splice_conn *conn,
-			      int s, in_port_t port)
+			      int sock_conn, in_port_t port)
 {
-	int sock_conn = (s >= 0) ? s : socket(CONN_V6(conn) ? AF_INET6 :
-							      AF_INET,
-					      SOCK_STREAM | SOCK_NONBLOCK,
-					      IPPROTO_TCP);
 	struct sockaddr_in6 addr6 = {
 		.sin6_family = AF_INET6,
 		.sin6_port = htons(port),
@@ -366,18 +365,7 @@ static int tcp_splice_connect(const struct ctx *c, struct tcp_splice_conn *conn,
 	const struct sockaddr *sa;
 	socklen_t sl;
 
-	if (sock_conn < 0)
-		return -errno;
-
-	if (sock_conn > SOCKET_MAX) {
-		close(sock_conn);
-		return -EIO;
-	}
-
 	conn->b = sock_conn;
-
-	if (s < 0)
-		tcp_sock_set_bufsize(c, conn->b);
 
 	if (setsockopt(conn->b, SOL_TCP, TCP_QUICKACK,
 		       &((int){ 1 }), sizeof(int))) {
@@ -410,36 +398,6 @@ static int tcp_splice_connect(const struct ctx *c, struct tcp_splice_conn *conn,
 }
 
 /**
- * struct tcp_splice_connect_ns_arg - Arguments for tcp_splice_connect_ns()
- * @c:		Execution context
- * @conn:	Accepted inbound connection
- * @port:	Destination port, host order
- * @ret:	Return value of tcp_splice_connect_ns()
- */
-struct tcp_splice_connect_ns_arg {
-	const struct ctx *c;
-	struct tcp_splice_conn *conn;
-	in_port_t port;
-	int ret;
-};
-
-/**
- * tcp_splice_connect_ns() - Enter namespace and call tcp_splice_connect()
- * @arg:	See struct tcp_splice_connect_ns_arg
- *
- * Return: 0
- */
-static int tcp_splice_connect_ns(void *arg)
-{
-	struct tcp_splice_connect_ns_arg *a;
-
-	a = (struct tcp_splice_connect_ns_arg *)arg;
-	ns_enter(a->c);
-	a->ret = tcp_splice_connect(a->c, a->conn, -1, a->port);
-	return 0;
-}
-
-/**
  * tcp_splice_new() - Handle new spliced connection
  * @c:		Execution context
  * @conn:	Connection pointer
@@ -451,24 +409,37 @@ static int tcp_splice_connect_ns(void *arg)
 static int tcp_splice_new(const struct ctx *c, struct tcp_splice_conn *conn,
 			  in_port_t port, int outbound)
 {
-	int *p, s = -1;
+	int s = -1;
 
-	if (outbound)
-		p = CONN_V6(conn) ? init_sock_pool6 : init_sock_pool4;
-	else
-		p = CONN_V6(conn) ? ns_sock_pool6 : ns_sock_pool4;
+	/* If the pool is empty we take slightly different approaches
+	 * for init or ns sockets.  For init sockets we just open a
+	 * new one without refilling the pool to keep latency down.
+	 * For ns sockets, we're going to incur the latency of
+	 * entering the ns anyway, so we might as well refill the
+	 * pool.
+	 */
+	if (outbound) {
+		int *p = CONN_V6(conn) ? init_sock_pool6 : init_sock_pool4;
+		int af = CONN_V6(conn) ? AF_INET6 : AF_INET;
 
-	s = tcp_conn_pool_sock(p);
+		s = tcp_conn_pool_sock(p);
+		if (s < 0)
+			s = tcp_conn_new_sock(c, af);
+	} else {
+		int *p = CONN_V6(conn) ? ns_sock_pool6 : ns_sock_pool4;
 
-	/* No socket available in namespace: create a new one for connect() */
-	if (s < 0 && !outbound) {
-		struct tcp_splice_connect_ns_arg ns_arg = { c, conn, port, 0 };
+		/* If pool is empty, refill it first */
+		if (p[TCP_SOCK_POOL_SIZE-1] < 0)
+			NS_CALL(tcp_sock_refill_ns, c);
 
-		NS_CALL(tcp_splice_connect_ns, &ns_arg);
-		return ns_arg.ret;
+		s = tcp_conn_pool_sock(p);
 	}
 
-	/* Otherwise, the socket will connect on the side it was created on */
+	if (s < 0) {
+		warn("Couldn't open connectable socket for splice (%d)", s);
+		return s;
+	}
+
 	return tcp_splice_connect(c, conn, s, port);
 }
 

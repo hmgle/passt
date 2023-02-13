@@ -1882,7 +1882,7 @@ int tcp_conn_pool_sock(int pool[])
  *
  * Return: socket number on success, negative code if socket creation failed
  */
-static int tcp_conn_new_sock(const struct ctx *c, sa_family_t af)
+int tcp_conn_new_sock(const struct ctx *c, sa_family_t af)
 {
 	int s;
 
