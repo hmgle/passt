@@ -11,8 +11,6 @@
 #define TCP_CONN_INDEX_BITS		17	/* 128k */
 #define TCP_MAX_CONNS			(1 << TCP_CONN_INDEX_BITS)
 
-#define TCP_SOCK_POOL_SIZE		32
-
 struct ctx;
 
 void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,

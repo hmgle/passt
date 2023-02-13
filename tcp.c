@@ -369,8 +369,6 @@ struct tcp6_l2_head {	/* For MSS6 macro: keep in sync with tcp6_l2_buf_t */
 #define FIN_TIMEOUT			60
 #define ACT_TIMEOUT			7200
 
-#define TCP_SOCK_POOL_TSH		16 /* Refill in ns if > x used */
-
 #define LOW_RTT_TABLE_SIZE		8
 #define LOW_RTT_THRESHOLD		10 /* us */
 
@@ -594,11 +592,9 @@ static inline struct tcp_tap_conn *conn_at_idx(int index)
 /* Table for lookup from remote address, local port, remote port */
 static struct tcp_tap_conn *tc_hash[TCP_HASH_TABLE_SIZE];
 
-/* Pools for pre-opened sockets */
+/* Pools for pre-opened sockets (in init) */
 int init_sock_pool4		[TCP_SOCK_POOL_SIZE];
 int init_sock_pool6		[TCP_SOCK_POOL_SIZE];
-int ns_sock_pool4		[TCP_SOCK_POOL_SIZE];
-int ns_sock_pool6		[TCP_SOCK_POOL_SIZE];
 
 /**
  * tcp_conn_epoll_events() - epoll events mask for given connection state
@@ -3015,7 +3011,7 @@ static int tcp_ns_socks_init(void *arg)
  * @pool:	Pool of sockets to refill
  * @af:		Address family to use
  */
-static void tcp_sock_refill_pool(const struct ctx *c, int pool[], int af)
+void tcp_sock_refill_pool(const struct ctx *c, int pool[], int af)
 {
 	int i;
 
@@ -3047,26 +3043,6 @@ static void tcp_sock_refill_init(const struct ctx *c)
 		tcp_sock_refill_pool(c, init_sock_pool4, AF_INET);
 	if (c->ifi6)
 		tcp_sock_refill_pool(c, init_sock_pool6, AF_INET6);
-}
-
-/**
- * tcp_sock_refill_ns() - Refill pools of pre-opened sockets in namespace
- * @arg:	Execution context cast to void *
- *
- * Return: 0
- */
-static int tcp_sock_refill_ns(void *arg)
-{
-	const struct ctx *c = (const struct ctx *)arg;
-
-	ns_enter(c);
-
-	if (c->ifi4)
-		tcp_sock_refill_pool(c, ns_sock_pool4, AF_INET);
-	if (c->ifi6)
-		tcp_sock_refill_pool(c, ns_sock_pool6, AF_INET6);
-
-	return 0;
 }
 
 /**
@@ -3117,8 +3093,6 @@ int tcp_init(struct ctx *c)
 
 	memset(init_sock_pool4,		0xff,	sizeof(init_sock_pool4));
 	memset(init_sock_pool6,		0xff,	sizeof(init_sock_pool6));
-	memset(ns_sock_pool4,		0xff,	sizeof(ns_sock_pool4));
-	memset(ns_sock_pool6,		0xff,	sizeof(ns_sock_pool6));
 	memset(tcp_sock_init_ext,	0xff,	sizeof(tcp_sock_init_ext));
 	memset(tcp_sock_ns,		0xff,	sizeof(tcp_sock_ns));
 
@@ -3128,8 +3102,6 @@ int tcp_init(struct ctx *c)
 		tcp_splice_init(c);
 
 		NS_CALL(tcp_ns_socks_init, c);
-
-		NS_CALL(tcp_sock_refill_ns, c);
 	}
 
 	return 0;
@@ -3282,11 +3254,6 @@ void tcp_timer(struct ctx *c, const struct timespec *ts)
 	}
 
 	tcp_sock_refill_init(c);
-	if (c->mode == MODE_PASTA) {
-		if ((c->ifi4 && ns_sock_pool4[TCP_SOCK_POOL_TSH] < 0) ||
-		    (c->ifi6 && ns_sock_pool6[TCP_SOCK_POOL_TSH] < 0))
-			NS_CALL(tcp_sock_refill_ns, c);
-
-		tcp_splice_pipe_refill(c);
-	}
+	if (c->mode == MODE_PASTA)
+		tcp_splice_refill(c);
 }

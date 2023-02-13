@@ -60,11 +60,11 @@
 #define TCP_SPLICE_CONN_PRESSURE	30	/* % of conn_count */
 #define TCP_SPLICE_FILE_PRESSURE	30	/* % of c->nofile */
 
-/* From tcp.c */
-extern int init_sock_pool4		[TCP_SOCK_POOL_SIZE];
-extern int init_sock_pool6		[TCP_SOCK_POOL_SIZE];
-extern int ns_sock_pool4		[TCP_SOCK_POOL_SIZE];
-extern int ns_sock_pool6		[TCP_SOCK_POOL_SIZE];
+/* Pools for pre-opened sockets (in namespace) */
+#define TCP_SOCK_POOL_TSH		16 /* Refill in ns if > x used */
+
+static int ns_sock_pool4	[TCP_SOCK_POOL_SIZE];
+static int ns_sock_pool6	[TCP_SOCK_POOL_SIZE];
 
 /* Pool of pre-opened pipes */
 static int splice_pipe_pool		[TCP_SPLICE_PIPE_POOL_SIZE][2][2];
@@ -782,7 +782,7 @@ smaller:
  * tcp_splice_pipe_refill() - Refill pool of pre-opened pipes
  * @c:		Execution context
  */
-void tcp_splice_pipe_refill(const struct ctx *c)
+static void tcp_splice_pipe_refill(const struct ctx *c)
 {
 	int i;
 
@@ -812,6 +812,39 @@ void tcp_splice_pipe_refill(const struct ctx *c)
 }
 
 /**
+ * tcp_sock_refill_ns() - Refill pools of pre-opened sockets in namespace
+ * @arg:	Execution context cast to void *
+ *
+ * Return: 0
+ */
+static int tcp_sock_refill_ns(void *arg)
+{
+	const struct ctx *c = (const struct ctx *)arg;
+
+	ns_enter(c);
+
+	if (c->ifi4)
+		tcp_sock_refill_pool(c, ns_sock_pool4, AF_INET);
+	if (c->ifi6)
+		tcp_sock_refill_pool(c, ns_sock_pool6, AF_INET6);
+
+	return 0;
+}
+
+/**
+ * tcp_splice_refill() - Refill pools of resources needed for splicing
+ * @c:		Execution context
+ */
+void tcp_splice_refill(const struct ctx *c)
+{
+	if ((c->ifi4 && ns_sock_pool4[TCP_SOCK_POOL_TSH] < 0) ||
+	    (c->ifi6 && ns_sock_pool6[TCP_SOCK_POOL_TSH] < 0))
+		NS_CALL(tcp_sock_refill_ns, c);
+
+	tcp_splice_pipe_refill(c);
+}
+
+/**
  * tcp_splice_init() - Initialise pipe pool and size
  * @c:		Execution context
  */
@@ -819,7 +852,10 @@ void tcp_splice_init(struct ctx *c)
 {
 	memset(splice_pipe_pool, 0xff, sizeof(splice_pipe_pool));
 	tcp_set_pipe_size(c);
-	tcp_splice_pipe_refill(c);
+
+	memset(&ns_sock_pool4,		0xff,	sizeof(ns_sock_pool4));
+	memset(&ns_sock_pool6,		0xff,	sizeof(ns_sock_pool6));
+	NS_CALL(tcp_sock_refill_ns, c);
 }
 
 /**

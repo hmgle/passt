@@ -182,11 +182,17 @@ union tcp_conn {
 /* TCP connections */
 extern union tcp_conn tc[];
 
+/* Socket pools */
+#define TCP_SOCK_POOL_SIZE		32
+
+extern int init_sock_pool4	[TCP_SOCK_POOL_SIZE];
+extern int init_sock_pool6	[TCP_SOCK_POOL_SIZE];
+
 void tcp_splice_conn_update(struct ctx *c, struct tcp_splice_conn *new);
 void tcp_table_compact(struct ctx *c, union tcp_conn *hole);
 void tcp_splice_destroy(struct ctx *c, union tcp_conn *conn_union);
 void tcp_splice_timer(struct ctx *c, union tcp_conn *conn_union);
-void tcp_splice_pipe_refill(const struct ctx *c);
-
+void tcp_sock_refill_pool(const struct ctx *c, int pool[], int af);
+void tcp_splice_refill(const struct ctx *c);
 
 #endif /* TCP_CONN_H */
