@@ -162,16 +162,16 @@ Fedora-Cloud-Base-31-1.9.%.qcow2:
 	$(WGET) -O $@ http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/31/Cloud/$*/images/Fedora-Cloud-Base-31-1.9.$*.qcow2
 
 Fedora-Cloud-Base-32-1.6.%.qcow2:
-	$(WGET) -O $@ https://download.fedoraproject.org/pub/fedora/linux/releases/32/Cloud/$*/images/Fedora-Cloud-Base-32-1.6.$*.qcow2
+	$(WGET) -O $@ https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/32/Cloud/$*/images/Fedora-Cloud-Base-32-1.6.$*.qcow2
 
 Fedora-Cloud-Base-33-1.2.%.qcow2:
-	$(WGET) -O $@ https://download.fedoraproject.org/pub/fedora/linux/releases/33/Cloud/$*/images/Fedora-Cloud-Base-33-1.2.$*.qcow2
+	$(WGET) -O $@ https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/33/Cloud/$*/images/Fedora-Cloud-Base-33-1.2.$*.qcow2
 
 Fedora-Cloud-Base-34-1.2.%.qcow2:
-	$(WGET) -O $@ https://download.fedoraproject.org/pub/fedora/linux//releases/34/Cloud/$*/images/Fedora-Cloud-Base-34-1.2.$*.qcow2
+	$(WGET) -O $@ https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/34/Cloud/$*/images/Fedora-Cloud-Base-34-1.2.$*.qcow2
 
 Fedora-Cloud-Base-35-1.2.%.qcow2:
-	$(WGET) -O $@ https://download.fedoraproject.org/pub/fedora/linux/releases/35/Cloud/$*/images/Fedora-Cloud-Base-35-1.2.$*.qcow2
+	$(WGET) -O $@ https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/35/Cloud/$*/images/Fedora-Cloud-Base-35-1.2.$*.qcow2
 
 # OpenSuSE downloads
 openSUSE-Leap-15.1-JeOS.x86_64-kvm-and-xen.qcow2:
