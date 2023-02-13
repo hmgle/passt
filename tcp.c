@@ -1858,24 +1858,35 @@ static void tcp_seq_init(const struct ctx *c, struct tcp_tap_conn *conn,
 }
 
 /**
- * tcp_conn_new_sock() - Get socket for new connection from pool or make new one
+ * tcp_conn_pool_sock() - Get socket for new connection from pre-opened pool
+ * @pool:	Pool of pre-opened sockets
+ *
+ * Return: socket number if available, negative code if pool is empty
+ */
+int tcp_conn_pool_sock(int pool[])
+{
+	int s = -1, i;
+
+	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++) {
+		SWAP(s, pool[i]);
+		if (s >= 0)
+			return s;
+	}
+	return -1;
+}
+
+/**
+ * tcp_conn_new_sock() - Open and prepare new socket for connection
  * @c:		Execution context
  * @af:		Address family
  *
- * Return: socket number if available, negative code if socket creation failed
+ * Return: socket number on success, negative code if socket creation failed
  */
 static int tcp_conn_new_sock(const struct ctx *c, sa_family_t af)
 {
-	int *p = af == AF_INET6 ? init_sock_pool6 : init_sock_pool4, i, s = -1;
+	int s;
 
-	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++, p++) {
-		SWAP(s, *p);
-		if (s >= 0)
-			break;
-	}
-
-	if (s < 0)
-		s = socket(af, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
+	s = socket(af, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
 
 	if (s > SOCKET_MAX) {
 		close(s);
@@ -1936,6 +1947,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 			      const struct tcphdr *th, const char *opts,
 			      size_t optlen, const struct timespec *now)
 {
+	int *pool = af == AF_INET6 ? init_sock_pool6 : init_sock_pool4;
 	struct sockaddr_in addr4 = {
 		.sin_family = AF_INET,
 		.sin_port = th->dest,
@@ -1954,8 +1966,9 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	if (c->tcp.conn_count >= TCP_MAX_CONNS)
 		return;
 
-	if ((s = tcp_conn_new_sock(c, af)) < 0)
-		return;
+	if ((s = tcp_conn_pool_sock(pool)) < 0)
+		if ((s = tcp_conn_new_sock(c, af)) < 0)
+			return;
 
 	if (!c->no_map_gw) {
 		if (af == AF_INET && IN4_ARE_ADDR_EQUAL(addr, &c->ip4.gw))
@@ -3016,20 +3029,10 @@ void tcp_sock_refill_pool(const struct ctx *c, int pool[], int af)
 	int i;
 
 	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++) {
-		int *s = &pool[i];
-
-		if (*s >= 0)
+		if (pool[i] >= 0)
 			break;
 
-		*s = socket(af, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
-		if (*s > SOCKET_MAX) {
-			close(*s);
-			*s = -1;
-			return;
-		}
-
-		if (*s >= 0)
-			tcp_sock_set_bufsize(c, *s);
+		pool[i] = tcp_conn_new_sock(c, af);
 	}
 }
 

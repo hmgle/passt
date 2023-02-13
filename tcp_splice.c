@@ -451,18 +451,14 @@ static int tcp_splice_connect_ns(void *arg)
 static int tcp_splice_new(const struct ctx *c, struct tcp_splice_conn *conn,
 			  in_port_t port, int outbound)
 {
-	int *p, i, s = -1;
+	int *p, s = -1;
 
 	if (outbound)
 		p = CONN_V6(conn) ? init_sock_pool6 : init_sock_pool4;
 	else
 		p = CONN_V6(conn) ? ns_sock_pool6 : ns_sock_pool4;
 
-	for (i = 0; i < TCP_SOCK_POOL_SIZE; i++, p++) {
-		SWAP(s, *p);
-		if (s >= 0)
-			break;
-	}
+	s = tcp_conn_pool_sock(p);
 
 	/* No socket available in namespace: create a new one for connect() */
 	if (s < 0 && !outbound) {
