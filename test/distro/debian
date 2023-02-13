@@ -118,7 +118,7 @@ sleep	1
 
 test	Debian GNU/Linux 10 (buster, oldstable), ppc64le
 
-host	qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-generic-ppc64el.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+host	qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-generic-ppc64el-20220911-1135.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
 host	PS1='$ '
 sleep	2
 host	apt-get update

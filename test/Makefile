@@ -11,7 +11,7 @@ DEBIAN_IMGS = debian-8.11.0-openstack-amd64.qcow2 \
 	debian-9-nocloud-amd64-daily-20200210-166.qcow2 \
 	debian-10-nocloud-amd64.qcow2 \
 	debian-10-generic-arm64.qcow2 \
-	debian-10-generic-ppc64el.qcow2 \
+	debian-10-generic-ppc64el-20220911-1135.qcow2 \
 	debian-11-nocloud-amd64.qcow2 \
 	debian-11-generic-arm64.qcow2 \
 	debian-11-generic-ppc64el.qcow2 \
@@ -126,6 +126,9 @@ debian-9-nocloud-%-daily-20200210-166.qcow2:
 
 debian-10-nocloud-%.qcow2:
 	$(WGET) -O $@ https://cloud.debian.org/images/cloud/buster/latest/debian-10-nocloud-$*.qcow2
+
+debian-10-generic-ppc64el-20220911-1135.qcow2:
+	$(WGET) -O $@ https://cloud.debian.org/images/cloud/buster/20220911-1135/debian-10-generic-ppc64el-20220911-1135.qcow2
 
 debian-10-generic-%.qcow2:
 	$(WGET) -O $@ https://cloud.debian.org/images/cloud/buster/latest/debian-10-generic-$*.qcow2
