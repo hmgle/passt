@@ -1156,69 +1156,57 @@ void conf(struct ctx *c, int argc, char **argv)
 		case 0:
 			break;
 		case 2:
-			if (c->mode != MODE_PASTA) {
-				err("--userns is for pasta mode only");
-				usage(argv[0]);
-			}
+			if (c->mode != MODE_PASTA)
+				die("--userns is for pasta mode only");
 
 			ret = snprintf(userns, sizeof(userns), "%s", optarg);
-			if (ret <= 0 || ret >= (int)sizeof(userns)) {
-				err("Invalid userns: %s", optarg);
-				usage(argv[0]);
-			}
+			if (ret <= 0 || ret >= (int)sizeof(userns))
+				die("Invalid userns: %s", optarg);
+
 			break;
 		case 3:
-			if (c->mode != MODE_PASTA) {
-				err("--netns is for pasta mode only");
-				usage(argv[0]);
-			}
+			if (c->mode != MODE_PASTA)
+				die("--netns is for pasta mode only");
 
 			ret = conf_netns_opt(netns, optarg);
 			if (ret < 0)
 				usage(argv[0]);
 			break;
 		case 4:
-			if (c->mode != MODE_PASTA) {
-				err("--ns-mac-addr is for pasta mode only");
-				usage(argv[0]);
-			}
+			if (c->mode != MODE_PASTA)
+				die("--ns-mac-addr is for pasta mode only");
 
 			for (i = 0; i < ETH_ALEN; i++) {
 				errno = 0;
 				b = strtol(optarg + (intptr_t)i * 3, NULL, 16);
-				if (b < 0 || b > UCHAR_MAX || errno) {
-					err("Invalid MAC address: %s", optarg);
-					usage(argv[0]);
-				}
+				if (b < 0 || b > UCHAR_MAX || errno)
+					die("Invalid MAC address: %s", optarg);
+
 				c->mac_guest[i] = b;
 			}
 			break;
 		case 5:
-			if (c->mode != MODE_PASTA) {
-				err("--dhcp-dns is for pasta mode only");
-				usage(argv[0]);
-			}
+			if (c->mode != MODE_PASTA)
+				die("--dhcp-dns is for pasta mode only");
+
 			c->no_dhcp_dns = 0;
 			break;
 		case 6:
-			if (c->mode != MODE_PASST) {
-				err("--no-dhcp-dns is for passt mode only");
-				usage(argv[0]);
-			}
+			if (c->mode != MODE_PASST)
+				die("--no-dhcp-dns is for passt mode only");
+
 			c->no_dhcp_dns = 1;
 			break;
 		case 7:
-			if (c->mode != MODE_PASTA) {
-				err("--dhcp-search is for pasta mode only");
-				usage(argv[0]);
-			}
+			if (c->mode != MODE_PASTA)
+				die("--dhcp-search is for pasta mode only");
+
 			c->no_dhcp_dns_search = 0;
 			break;
 		case 8:
-			if (c->mode != MODE_PASST) {
-				err("--no-dhcp-search is for passt mode only");
-				usage(argv[0]);
-			}
+			if (c->mode != MODE_PASST)
+				die("--no-dhcp-search is for passt mode only");
+
 			c->no_dhcp_dns_search = 1;
 			break;
 		case 9:
@@ -1235,50 +1223,39 @@ void conf(struct ctx *c, int argc, char **argv)
 			    !IN4_IS_ADDR_LOOPBACK(&c->ip4.dns_match))
 				break;
 
-			err("Invalid DNS forwarding address: %s", optarg);
-			usage(argv[0]);
+			die("Invalid DNS forwarding address: %s", optarg);
 			break;
 		case 10:
-			if (c->mode != MODE_PASTA) {
-				err("--no-netns-quit is for pasta mode only");
-				usage(argv[0]);
-			}
+			if (c->mode != MODE_PASTA)
+				die("--no-netns-quit is for pasta mode only");
+
 			c->no_netns_quit = 1;
 			break;
 		case 11:
-			if (c->trace) {
-				err("Multiple --trace options given");
-				usage(argv[0]);
-			}
+			if (c->trace)
+				die("Multiple --trace options given");
 
-			if (c->quiet) {
-				err("Either --trace or --quiet");
-				usage(argv[0]);
-			}
+			if (c->quiet)
+				die("Either --trace or --quiet");
 
 			c->trace = c->debug = 1;
 			break;
 		case 12:
-			if (runas) {
-				err("Multiple --runas options given");
-				usage(argv[0]);
-			}
+			if (runas)
+				die("Multiple --runas options given");
 
 			runas = optarg;
 			break;
 		case 13:
-			if (logsize) {
-				err("Multiple --log-size options given");
-				usage(argv[0]);
-			}
+			if (logsize)
+				die("Multiple --log-size options given");
 
 			errno = 0;
 			logsize = strtol(optarg, NULL, 0);
 
-			if (logsize < LOGFILE_SIZE_MIN || errno) {
-				err("Invalid --log-size: %s", optarg);
-				usage(argv[0]);
-			}
+			if (logsize < LOGFILE_SIZE_MIN || errno)
+				die("Invalid --log-size: %s", optarg);
+
 			break;
 		case 14:
 			fprintf(stdout,
@@ -1286,138 +1263,102 @@ void conf(struct ctx *c, int argc, char **argv)
 			fprintf(stdout, VERSION_BLOB);
 			exit(EXIT_SUCCESS);
 		case 'd':
-			if (c->debug) {
-				err("Multiple --debug options given");
-				usage(argv[0]);
-			}
+			if (c->debug)
+				die("Multiple --debug options given");
 
-			if (c->quiet) {
-				err("Either --debug or --quiet");
-				usage(argv[0]);
-			}
+			if (c->quiet)
+				die("Either --debug or --quiet");
 
 			c->debug = 1;
 			break;
 		case 'e':
-			if (logfile) {
-				err("Can't log to both file and stderr");
-				usage(argv[0]);
-			}
+			if (logfile)
+				die("Can't log to both file and stderr");
 
-			if (c->stderr) {
-				err("Multiple --stderr options given");
-				usage(argv[0]);
-			}
+			if (c->stderr)
+				die("Multiple --stderr options given");
 
 			c->stderr = 1;
 			break;
 		case 'l':
-			if (c->stderr) {
-				err("Can't log to both stderr and file");
-				usage(argv[0]);
-			}
+			if (c->stderr)
+				die("Can't log to both stderr and file");
 
-			if (logfile) {
-				err("Multiple --log-file options given");
-				usage(argv[0]);
-			}
+			if (logfile)
+				die("Multiple --log-file options given");
 
 			logfile = optarg;
 			break;
 		case 'q':
-			if (c->quiet) {
-				err("Multiple --quiet options given");
-				usage(argv[0]);
-			}
+			if (c->quiet)
+				die("Multiple --quiet options given");
 
-			if (c->debug) {
-				err("Either --debug or --quiet");
-				usage(argv[0]);
-			}
+			if (c->debug)
+				die("Either --debug or --quiet");
 
 			c->quiet = 1;
 			break;
 		case 'f':
-			if (c->foreground) {
-				err("Multiple --foreground options given");
-				usage(argv[0]);
-			}
+			if (c->foreground)
+				die("Multiple --foreground options given");
 
 			c->foreground = 1;
 			break;
 		case 's':
-			if (*c->sock_path) {
-				err("Multiple --socket options given");
-				usage(argv[0]);
-			}
+			if (*c->sock_path)
+				die("Multiple --socket options given");
 
 			ret = snprintf(c->sock_path, UNIX_SOCK_MAX - 1, "%s",
 				       optarg);
-			if (ret <= 0 || ret >= (int)sizeof(c->sock_path)) {
-				err("Invalid socket path: %s", optarg);
-				usage(argv[0]);
-			}
+			if (ret <= 0 || ret >= (int)sizeof(c->sock_path))
+				die("Invalid socket path: %s", optarg);
+
 			break;
 		case 'F':
-			if (c->fd_tap >= 0) {
-				err("Multiple --fd options given");
-				usage(argv[0]);
-			}
+			if (c->fd_tap >= 0)
+				die("Multiple --fd options given");
 
 			errno = 0;
 			c->fd_tap = strtol(optarg, NULL, 0);
 
-			if (c->fd_tap < 0 || errno) {
-				err("Invalid --fd: %s", optarg);
-				usage(argv[0]);
-			}
+			if (c->fd_tap < 0 || errno)
+				die("Invalid --fd: %s", optarg);
 
 			c->one_off = true;
 
 			break;
 		case 'I':
-			if (*c->pasta_ifn) {
-				err("Multiple --ns-ifname options given");
-				usage(argv[0]);
-			}
+			if (*c->pasta_ifn)
+				die("Multiple --ns-ifname options given");
 
 			ret = snprintf(c->pasta_ifn, IFNAMSIZ - 1, "%s",
 				       optarg);
-			if (ret <= 0 || ret >= IFNAMSIZ - 1) {
-				err("Invalid interface name: %s", optarg);
-				usage(argv[0]);
-			}
+			if (ret <= 0 || ret >= IFNAMSIZ - 1)
+				die("Invalid interface name: %s", optarg);
+
 			break;
 		case 'p':
-			if (*c->pcap) {
-				err("Multiple --pcap options given");
-				usage(argv[0]);
-			}
+			if (*c->pcap)
+				die("Multiple --pcap options given");
 
 			ret = snprintf(c->pcap, sizeof(c->pcap), "%s", optarg);
-			if (ret <= 0 || ret >= (int)sizeof(c->pcap)) {
-				err("Invalid pcap path: %s", optarg);
-				usage(argv[0]);
-			}
+			if (ret <= 0 || ret >= (int)sizeof(c->pcap))
+				die("Invalid pcap path: %s", optarg);
+
 			break;
 		case 'P':
-			if (*c->pid_file) {
-				err("Multiple --pid options given");
-				usage(argv[0]);
-			}
+			if (*c->pid_file)
+				die("Multiple --pid options given");
 
 			ret = snprintf(c->pid_file, sizeof(c->pid_file), "%s",
 				       optarg);
-			if (ret <= 0 || ret >= (int)sizeof(c->pid_file)) {
-				err("Invalid PID file: %s", optarg);
-				usage(argv[0]);
-			}
+			if (ret <= 0 || ret >= (int)sizeof(c->pid_file))
+				die("Invalid PID file: %s", optarg);
+
 			break;
 		case 'm':
-			if (c->mtu) {
-				err("Multiple --mtu options given");
-				usage(argv[0]);
-			}
+			if (c->mtu)
+				die("Multiple --mtu options given");
 
 			errno = 0;
 			c->mtu = strtol(optarg, NULL, 0);
@@ -1428,10 +1369,9 @@ void conf(struct ctx *c, int argc, char **argv)
 			}
 
 			if (c->mtu < ETH_MIN_MTU || c->mtu > (int)ETH_MAX_MTU ||
-			    errno) {
-				err("Invalid MTU: %s", optarg);
-				usage(argv[0]);
-			}
+			    errno)
+				die("Invalid MTU: %s", optarg);
+
 			break;
 		case 'a':
 			if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr)	&&
@@ -1451,24 +1391,21 @@ void conf(struct ctx *c, int argc, char **argv)
 			    !IN4_IS_ADDR_MULTICAST(&c->ip4.addr))
 				break;
 
-			err("Invalid address: %s", optarg);
-			usage(argv[0]);
+			die("Invalid address: %s", optarg);
 			break;
 		case 'n':
 			c->ip4.prefix_len = conf_ip4_prefix(optarg);
-			if (c->ip4.prefix_len < 0) {
-				err("Invalid netmask: %s", optarg);
-				usage(argv[0]);
-			}
+			if (c->ip4.prefix_len < 0)
+				die("Invalid netmask: %s", optarg);
+
 			break;
 		case 'M':
 			for (i = 0; i < ETH_ALEN; i++) {
 				errno = 0;
 				b = strtol(optarg + (intptr_t)i * 3, NULL, 16);
-				if (b < 0 || b > UCHAR_MAX || errno) {
-					err("Invalid MAC address: %s", optarg);
-					usage(argv[0]);
-				}
+				if (b < 0 || b > UCHAR_MAX || errno)
+					die("Invalid MAC address: %s", optarg);
+
 				c->mac[i] = b;
 			}
 			break;
@@ -1486,41 +1423,30 @@ void conf(struct ctx *c, int argc, char **argv)
 			    !IN4_IS_ADDR_LOOPBACK(&c->ip4.gw))
 				break;
 
-			err("Invalid gateway address: %s", optarg);
-			usage(argv[0]);
+			die("Invalid gateway address: %s", optarg);
 			break;
 		case 'i':
-			if (ifi) {
-				err("Redundant interface: %s", optarg);
-				usage(argv[0]);
-			}
+			if (ifi)
+				die("Redundant interface: %s", optarg);
 
-			if (!(ifi = if_nametoindex(optarg))) {
-				err("Invalid interface name %s: %s", optarg,
+			if (!(ifi = if_nametoindex(optarg)))
+				die("Invalid interface name %s: %s", optarg,
 				    strerror(errno));
-				usage(argv[0]);
-			}
 			break;
 		case 'D':
 			if (!strcmp(optarg, "none")) {
-				if (c->no_dns) {
-					err("Redundant DNS options");
-					usage(argv[0]);
-				}
+				if (c->no_dns)
+					die("Redundant DNS options");
 
-				if (dns4 - c->ip4.dns || dns6 - c->ip6.dns) {
-					err("Conflicting DNS options");
-					usage(argv[0]);
-				}
+				if (dns4 - c->ip4.dns || dns6 - c->ip6.dns)
+					die("Conflicting DNS options");
 
 				c->no_dns = 1;
 				break;
 			}
 
-			if (c->no_dns) {
-				err("Conflicting DNS options");
-				usage(argv[0]);
-			}
+			if (c->no_dns)
+				die("Conflicting DNS options");
 
 			if (dns4 - &c->ip4.dns[0] < ARRAY_SIZE(c->ip4.dns) &&
 			    inet_pton(AF_INET, optarg, dns4)) {
@@ -1534,29 +1460,22 @@ void conf(struct ctx *c, int argc, char **argv)
 				break;
 			}
 
-			err("Cannot use DNS address %s", optarg);
-			usage(argv[0]);
+			die("Cannot use DNS address %s", optarg);
 			break;
 		case 'S':
 			if (!strcmp(optarg, "none")) {
-				if (c->no_dns_search) {
-					err("Redundant DNS search options");
-					usage(argv[0]);
-				}
+				if (c->no_dns_search)
+					die("Redundant DNS search options");
 
-				if (dnss != c->dns_search) {
-					err("Conflicting DNS search options");
-					usage(argv[0]);
-				}
+				if (dnss != c->dns_search)
+					die("Conflicting DNS search options");
 
 				c->no_dns_search = 1;
 				break;
 			}
 
-			if (c->no_dns_search) {
-				err("Conflicting DNS search options");
-				usage(argv[0]);
-			}
+			if (c->no_dns_search)
+				die("Conflicting DNS search options");
 
 			if (dnss - c->dns_search < ARRAY_SIZE(c->dns_search)) {
 				ret = snprintf(dnss->n, sizeof(*c->dns_search),
@@ -1568,8 +1487,7 @@ void conf(struct ctx *c, int argc, char **argv)
 					break;
 			}
 
-			err("Cannot use DNS search domain %s", optarg);
-			usage(argv[0]);
+			die("Cannot use DNS search domain %s", optarg);
 			break;
 		case '4':
 			v4_only = true;
@@ -1578,15 +1496,11 @@ void conf(struct ctx *c, int argc, char **argv)
 			v6_only = true;
 			break;
 		case '1':
-			if (c->mode != MODE_PASST) {
-				err("--one-off is for passt mode only");
-				usage(argv[0]);
-			}
+			if (c->mode != MODE_PASST)
+				die("--one-off is for passt mode only");
 
-			if (c->one_off) {
-				err("Redundant --one-off option");
-				usage(argv[0]);
-			}
+			if (c->one_off)
+				die("Redundant --one-off option");
 
 			c->one_off = true;
 			break;
@@ -1604,15 +1518,11 @@ void conf(struct ctx *c, int argc, char **argv)
 		}
 	} while (name != -1);
 
-	if (v4_only && v6_only) {
-		err("Options ipv4-only and ipv6-only are mutually exclusive");
-		usage(argv[0]);
-	}
+	if (v4_only && v6_only)
+		die("Options ipv4-only and ipv6-only are mutually exclusive");
 
-	if (*c->sock_path && c->fd_tap >= 0) {
-		err("Options --socket and --fd are mutually exclusive");
-		usage(argv[0]);
-	}
+	if (*c->sock_path && c->fd_tap >= 0)
+		die("Options --socket and --fd are mutually exclusive");
 
 	ret = conf_ugid(runas, &uid, &gid);
 	if (ret)
@@ -1628,10 +1538,8 @@ void conf(struct ctx *c, int argc, char **argv)
 		c->ifi4 = conf_ip4(ifi, &c->ip4, c->mac);
 	if (!v4_only)
 		c->ifi6 = conf_ip6(ifi, &c->ip6, c->mac);
-	if (!c->ifi4 && !c->ifi6) {
-		err("External interface not usable");
-		exit(EXIT_FAILURE);
-	}
+	if (!c->ifi4 && !c->ifi6)
+		die("External interface not usable");
 
 	/* Inbound port options can be parsed now (after IPv4/IPv6 settings) */
 	optind = 1;
