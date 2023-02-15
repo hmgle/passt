@@ -10,6 +10,7 @@
 #define LOGFILE_CUT_RATIO		30	/* When full, cut ~30% size */
 #define LOGFILE_SIZE_MIN		(5UL * MAX(BUFSIZ, PAGE_SIZE))
 
+void die(const char *format, ...);
 void err(const char *format, ...);
 void warn(const char *format, ...);
 void info(const char *format, ...);

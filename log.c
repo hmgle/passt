@@ -44,7 +44,7 @@ static char	log_header[BUFSIZ];	/* File header, written back on cuts */
 static time_t	log_start;		/* Start timestamp */
 int		log_trace;		/* --trace mode enabled */
 
-#define logfn(name, level)						\
+#define logfn(name, level, doexit)					\
 void name(const char *format, ...) {					\
 	struct timespec tp;						\
 	va_list args;							\
@@ -74,6 +74,9 @@ void name(const char *format, ...) {					\
 		if (format[strlen(format)] != '\n')			\
 			fprintf(stderr, "\n");				\
 	}								\
+									\
+	if (doexit)							\
+		exit(EXIT_FAILURE);					\
 }
 
 /* Prefixes for log file messages, indexed by priority */
@@ -86,10 +89,11 @@ const char *logfile_prefix[] = {
 	"         ",		/* LOG_DEBUG */
 };
 
-logfn(err,   LOG_ERR)
-logfn(warn,  LOG_WARNING)
-logfn(info,  LOG_INFO)
-logfn(debug, LOG_DEBUG)
+logfn(die,  LOG_ERR,     1)
+logfn(err,  LOG_ERR,     0)
+logfn(warn, LOG_WARNING, 0)
+logfn(info, LOG_INFO,    0)
+logfn(debug,LOG_DEBUG,   0)
 
 /**
  * trace_init() - Set log_trace depending on trace (debug) mode
