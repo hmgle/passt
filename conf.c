@@ -995,22 +995,18 @@ static int conf_runas(char *opt, unsigned int *uid, unsigned int *gid)
  * @runas:	--runas option, may be NULL
  * @uid:	User ID, set on success
  * @gid:	Group ID, set on success
- *
- * Return: 0 on success, negative error code on failure
  */
-static int conf_ugid(char *runas, uid_t *uid, gid_t *gid)
+static void conf_ugid(char *runas, uid_t *uid, gid_t *gid)
 {
 	const char root_uid_map[] = "         0          0 4294967295";
 	char buf[BUFSIZ];
-	int ret;
 	int fd;
 
 	/* If user has specified --runas, that takes precedence... */
 	if (runas) {
-		ret = conf_runas(runas, uid, gid);
-		if (ret)
-			err("Invalid --runas option: %s", runas);
-		return ret;
+		if (conf_runas(runas, uid, gid))
+			die("Invalid --runas option: %s", runas);
+		return;
 	}
 
 	/* ...otherwise default to current user and group... */
@@ -1019,20 +1015,18 @@ static int conf_ugid(char *runas, uid_t *uid, gid_t *gid)
 
 	/* ...as long as it's not root... */
 	if (*uid)
-		return 0;
+		return;
 
 	/* ...or at least not root in the init namespace... */
 	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0) {
-		ret = -errno;
-		err("Can't determine if we're in init namespace: %s",
-		    strerror(-ret));
-		return ret;
+		die("Can't determine if we're in init namespace: %s",
+		    strerror(errno));
 	}
 
 	if (read(fd, buf, BUFSIZ) != sizeof(root_uid_map) ||
 	    strncmp(buf, root_uid_map, sizeof(root_uid_map) - 1)) {
 		close(fd);
-		return 0;
+		return;
 	}
 
 	close(fd);
@@ -1056,7 +1050,6 @@ static int conf_ugid(char *runas, uid_t *uid, gid_t *gid)
 		*uid = *gid = 65534;
 #endif
 	}
-	return 0;
 }
 
 /**
@@ -1520,9 +1513,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	if (*c->sock_path && c->fd_tap >= 0)
 		die("Options --socket and --fd are mutually exclusive");
 
-	ret = conf_ugid(runas, &uid, &gid);
-	if (ret)
-		usage(argv[0]);
+	conf_ugid(runas, &uid, &gid);
 
 	if (logfile) {
 		logfile_init(c->mode == MODE_PASST ? "passt" : "pasta",
