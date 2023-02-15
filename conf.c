@@ -173,11 +173,9 @@ static int parse_port_range(const char *s, char **endptr,
  * @optname:	Short option name, t, T, u, or U
  * @optarg:	Option argument (port specification)
  * @fwd:	Pointer to @port_fwd to be updated
- *
- * Return: -EINVAL on parsing error, 0 otherwise
  */
-static int conf_ports(const struct ctx *c, char optname, const char *optarg,
-		      struct port_fwd *fwd)
+static void conf_ports(const struct ctx *c, char optname, const char *optarg,
+		       struct port_fwd *fwd)
 {
 	char addr_buf[sizeof(struct in6_addr)] = { 0 }, *addr = addr_buf;
 	char buf[BUFSIZ], *spec, *ifname = NULL, *p;
@@ -187,23 +185,32 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 
 	if (!strcmp(optarg, "none")) {
 		if (fwd->mode)
-			return -EINVAL;
+			goto mode_conflict;
+
 		fwd->mode = FWD_NONE;
-		return 0;
+		return;
 	}
 
 	if (!strcmp(optarg, "auto")) {
-		if (fwd->mode || c->mode != MODE_PASTA)
-			return -EINVAL;
+		if (fwd->mode)
+			goto mode_conflict;
+
+		if (c->mode != MODE_PASTA)
+			die("'auto' port forwarding is only allowed for pasta");
+
 		fwd->mode = FWD_AUTO;
-		return 0;
+		return;
 	}
 
 	if (!strcmp(optarg, "all")) {
 		unsigned i;
 
-		if (fwd->mode || c->mode != MODE_PASST)
-			return -EINVAL;
+		if (fwd->mode)
+			goto mode_conflict;
+
+		if (c->mode != MODE_PASST)
+			die("'all' port forwarding is only allowed for passt");
+
 		fwd->mode = FWD_ALL;
 		memset(fwd->map, 0xff, PORT_EPHEMERAL_MIN / 8);
 
@@ -214,11 +221,11 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 				udp_sock_init(c, 0, AF_UNSPEC, NULL, NULL, i);
 		}
 
-		return 0;
+		return;
 	}
 
 	if (fwd->mode > FWD_SPEC)
-		return -EINVAL;
+		die("Specific ports cannot be specified together with all/none/auto");
 
 	fwd->mode = FWD_SPEC;
 
@@ -292,7 +299,7 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 				udp_sock_init(c, 0, af, addr, ifname, i);
 		}
 
-		return 0;
+		return;
 	}
 
 	/* Now process base ranges, skipping exclusions */
@@ -339,14 +346,13 @@ static int conf_ports(const struct ctx *c, char optname, const char *optarg,
 		}
 	} while ((p = next_chunk(p, ',')));
 
-	return 0;
+	return;
 bad:
-	err("Invalid port specifier %s", optarg);
-	return -EINVAL;
-
+	die("Invalid port specifier %s", optarg);
 overlap:
-	err("Overlapping port specifier %s", optarg);
-	return -EINVAL;
+	die("Overlapping port specifier %s", optarg);
+mode_conflict:
+	die("Port forwarding mode '%s' conflicts with previous mode", optarg);
 }
 
 /**
@@ -1550,8 +1556,7 @@ void conf(struct ctx *c, int argc, char **argv)
 
 		if ((name == 't' && (fwd = &c->tcp.fwd_in)) ||
 		    (name == 'u' && (fwd = &c->udp.fwd_in.f))) {
-			if (!optarg || conf_ports(c, name, optarg, fwd))
-				usage(argv[0]);
+			conf_ports(c, name, optarg, fwd);
 		}
 	} while (name != -1);
 
@@ -1589,8 +1594,7 @@ void conf(struct ctx *c, int argc, char **argv)
 
 		if ((name == 'T' && (fwd = &c->tcp.fwd_out)) ||
 		    (name == 'U' && (fwd = &c->udp.fwd_out.f))) {
-			if (!optarg || conf_ports(c, name, optarg, fwd))
-				usage(argv[0]);
+			conf_ports(c, name, optarg, fwd);
 		}
 	} while (name != -1);
 
