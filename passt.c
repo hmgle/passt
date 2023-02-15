@@ -246,13 +246,6 @@ int main(int argc, char **argv)
 	if (c.stderr || isatty(fileno(stdout)))
 		__openlog(log_name, LOG_PERROR, LOG_DAEMON);
 
-	if (c.debug)
-		__setlogmask(LOG_UPTO(LOG_DEBUG));
-	else if (c.quiet)
-		__setlogmask(LOG_UPTO(LOG_ERR));
-	else
-		__setlogmask(LOG_UPTO(LOG_INFO));
-
 	quit_fd = pasta_netns_quit_init(&c);
 
 	tap_sock_init(&c);
@@ -295,6 +288,16 @@ int main(int argc, char **argv)
 		err("Failed to sandbox process, exiting\n");
 		exit(EXIT_FAILURE);
 	}
+
+	/* Once the log mask is not LOG_EMERG, we will no longer
+	 * log to stderr if there was a log file specified.
+	 */
+	if (c.debug)
+		__setlogmask(LOG_UPTO(LOG_DEBUG));
+	else if (c.quiet)
+		__setlogmask(LOG_UPTO(LOG_ERR));
+	else
+		__setlogmask(LOG_UPTO(LOG_INFO));
 
 	if (!c.foreground)
 		__daemon(pidfile_fd, devnull_fd);

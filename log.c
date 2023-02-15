@@ -66,8 +66,8 @@ void name(const char *format, ...) {					\
 		va_end(args);						\
 	}								\
 									\
-	if ((setlogmask(0) & LOG_MASK(LOG_DEBUG) ||			\
-	     setlogmask(0) == LOG_MASK(LOG_EMERG)) && log_file == -1) {	\
+	if ((setlogmask(0) & LOG_MASK(LOG_DEBUG) && log_file == -1) ||	\
+	     setlogmask(0) == LOG_MASK(LOG_EMERG)) {			\
 		va_start(args, format);					\
 		(void)vfprintf(stderr, format, args); 			\
 		va_end(args);						\
