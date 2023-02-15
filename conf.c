@@ -1536,7 +1536,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	if (c->mode == MODE_PASTA)
 		conf_pasta_ns(&netns_only, userns, netns, optind, argc, argv);
 	else if (optind != argc)
-		usage(argv[0]);
+		die("Extra non-option argument: %s", argv[optind]);
 
 	isolate_user(uid, gid, !netns_only, userns, c->mode);
 
