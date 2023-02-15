@@ -44,6 +44,8 @@ static char	log_header[BUFSIZ];	/* File header, written back on cuts */
 static time_t	log_start;		/* Start timestamp */
 int		log_trace;		/* --trace mode enabled */
 
+#define BEFORE_DAEMON		(setlogmask(0) == LOG_MASK(LOG_EMERG))
+
 #define logfn(name, level, doexit)					\
 void name(const char *format, ...) {					\
 	struct timespec tp;						\
@@ -56,8 +58,7 @@ void name(const char *format, ...) {					\
 			tp.tv_nsec / (100L * 1000));			\
 	}								\
 									\
-	if ((LOG_MASK(LOG_PRI(level)) & log_mask) ||			\
-	    setlogmask(0) == LOG_MASK(LOG_EMERG)) {			\
+	if ((LOG_MASK(LOG_PRI(level)) & log_mask) || BEFORE_DAEMON) {	\
 		va_start(args, format);					\
 		if (log_file != -1)					\
 			logfile_write(level, format, args);		\
@@ -67,7 +68,7 @@ void name(const char *format, ...) {					\
 	}								\
 									\
 	if ((setlogmask(0) & LOG_MASK(LOG_DEBUG) && log_file == -1) ||	\
-	     setlogmask(0) == LOG_MASK(LOG_EMERG)) {			\
+	    (BEFORE_DAEMON && !(log_opt & LOG_PERROR))) {		\
 		va_start(args, format);					\
 		(void)vfprintf(stderr, format, args); 			\
 		va_end(args);						\
