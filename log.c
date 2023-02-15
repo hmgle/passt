@@ -193,10 +193,8 @@ void logfile_init(const char *name, const char *path, size_t size)
 
 	log_file = open(path, O_CREAT | O_TRUNC | O_APPEND | O_RDWR | O_CLOEXEC,
 			S_IRUSR | S_IWUSR);
-	if (log_file == -1) {
-		err("Couldn't open log file %s: %s", path, strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+	if (log_file == -1)
+		die("Couldn't open log file %s: %s", path, strerror(errno));
 
 	log_size = size ? size : LOGFILE_SIZE_DEFAULT;
 

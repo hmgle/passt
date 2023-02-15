@@ -103,10 +103,8 @@ static void drop_caps_ep_except(uint64_t keep)
 	struct __user_cap_data_struct data[CAP_WORDS];
 	int i;
 
-	if (syscall(SYS_capget, &hdr, data)) {
-		err("Couldn't get current capabilities: %s", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+	if (syscall(SYS_capget, &hdr, data))
+		die("Couldn't get current capabilities: %s", strerror(errno));
 
 	for (i = 0; i < CAP_WORDS; i++) {
 		uint32_t mask = keep >> (32 * i);
@@ -115,10 +113,8 @@ static void drop_caps_ep_except(uint64_t keep)
 		data[i].permitted &= mask;
 	}
 
-	if (syscall(SYS_capset, &hdr, data)) {
-		err("Couldn't drop capabilities: %s", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+	if (syscall(SYS_capset, &hdr, data))
+		die("Couldn't drop capabilities: %s", strerror(errno));
 }
 
 /**
@@ -154,26 +150,20 @@ static void clamp_caps(void)
 		 *   normal operation, so carry on without it.
 		 */
 		if (prctl(PR_CAPBSET_DROP, i, 0, 0, 0) &&
-		    errno != EINVAL && errno != EPERM) {
-			err("Couldn't drop cap %i from bounding set: %s",
+		    errno != EINVAL && errno != EPERM)
+			die("Couldn't drop cap %i from bounding set: %s",
 			    i, strerror(errno));
-			exit(EXIT_FAILURE);
-		}
 	}
 
-	if (syscall(SYS_capget, &hdr, data)) {
-		err("Couldn't get current capabilities: %s", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+	if (syscall(SYS_capget, &hdr, data))
+		die("Couldn't get current capabilities: %s", strerror(errno));
 
 	for (i = 0; i < CAP_WORDS; i++)
 		data[i].inheritable = 0;
 
-	if (syscall(SYS_capset, &hdr, data)) {
-		err("Couldn't drop inheritable capabilities: %s",
+	if (syscall(SYS_capset, &hdr, data))
+		die("Couldn't drop inheritable capabilities: %s",
 		    strerror(errno));
-		exit(EXIT_FAILURE);
-	}
 }
 
 /**
@@ -229,46 +219,35 @@ void isolate_user(uid_t uid, gid_t gid, bool use_userns, const char *userns,
 	/* First set our UID & GID in the original namespace */
 	if (setgroups(0, NULL)) {
 		/* If we don't have CAP_SETGID, this will EPERM */
-		if (errno != EPERM) {
-			err("Can't drop supplementary groups: %s",
+		if (errno != EPERM)
+			die("Can't drop supplementary groups: %s",
 			    strerror(errno));
-			exit(EXIT_FAILURE);
-		}
 	}
 
-	if (setgid(gid) != 0) {
-		err("Can't set GID to %u: %s", gid, strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+	if (setgid(gid) != 0)
+		die("Can't set GID to %u: %s", gid, strerror(errno));
 
-	if (setuid(uid) != 0) {
-		err("Can't set UID to %u: %s", uid, strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+	if (setuid(uid) != 0)
+		die("Can't set UID to %u: %s", uid, strerror(errno));
 
 	if (*userns) { /* If given a userns, join it */
 		int ufd;
 
 		ufd = open(userns, O_RDONLY | O_CLOEXEC);
-		if (ufd < 0) {
-			err("Couldn't open user namespace %s: %s",
+		if (ufd < 0)
+			die("Couldn't open user namespace %s: %s",
 			    userns, strerror(errno));
-			exit(EXIT_FAILURE);
-		}
 
-		if (setns(ufd, CLONE_NEWUSER) != 0) {
-			err("Couldn't enter user namespace %s: %s",
+		if (setns(ufd, CLONE_NEWUSER) != 0)
+			die("Couldn't enter user namespace %s: %s",
 			    userns, strerror(errno));
-			exit(EXIT_FAILURE);
-		}
 
 		close(ufd);
 
 	} else if (use_userns) { /* Create and join a new userns */
-		if (unshare(CLONE_NEWUSER) != 0) {
-			err("Couldn't create user namespace: %s", strerror(errno));
-			exit(EXIT_FAILURE);
-		}
+		if (unshare(CLONE_NEWUSER) != 0)
+			die("Couldn't create user namespace: %s",
+			    strerror(errno));
 	}
 
 	/* Joining a new userns gives us full capabilities; drop the

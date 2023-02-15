@@ -90,8 +90,7 @@ void nl_sock_init(const struct ctx *c, bool ns)
 	return;
 
 fail:
-	err("Failed to get netlink socket");
-	exit(EXIT_FAILURE);
+	die("Failed to get netlink socket");
 }
 
 /**

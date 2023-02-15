@@ -131,19 +131,15 @@ void pasta_open_ns(struct ctx *c, const char *netns)
 	int nfd = -1;
 
 	nfd = open(netns, O_RDONLY | O_CLOEXEC);
-	if (nfd < 0) {
-		err("Couldn't open network namespace %s", netns);
-		exit(EXIT_FAILURE);
-	}
+	if (nfd < 0)
+		die("Couldn't open network namespace %s", netns);
 
 	c->pasta_netns_fd = nfd;
 
 	NS_CALL(ns_check, c);
 
-	if (c->pasta_netns_fd < 0) {
-		err("Couldn't switch to pasta namespaces");
-		exit(EXIT_FAILURE);
-	}
+	if (c->pasta_netns_fd < 0)
+		die("Couldn't switch to pasta namespaces");
 
 	if (!c->no_netns_quit) {
 		char buf[PATH_MAX] = { 0 };
@@ -232,11 +228,9 @@ void pasta_start_ns(struct ctx *c, uid_t uid, gid_t gid,
 			arg.exe = "/bin/sh";
 
 		if ((size_t)snprintf(sh_arg0, sizeof(sh_arg0),
-				     "-%s", arg.exe) >= sizeof(sh_arg0)) {
-			err("$SHELL is too long (%u bytes)",
-			    strlen(arg.exe));
-			exit(EXIT_FAILURE);
-		}
+				     "-%s", arg.exe) >= sizeof(sh_arg0))
+			die("$SHELL is too long (%u bytes)", strlen(arg.exe));
+
 		sh_argv[0] = sh_arg0;
 		arg.argv = sh_argv;
 	}

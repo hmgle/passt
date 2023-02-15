@@ -202,10 +202,8 @@ int main(int argc, char **argv)
 	name = basename(argv0);
 	if (strstr(name, "pasta")) {
 		sa.sa_handler = pasta_child_handler;
-		if (sigaction(SIGCHLD, &sa, NULL) || signal(SIGPIPE, SIG_IGN)) {
-			err("Couldn't install signal handlers");
-			exit(EXIT_FAILURE);
-		}
+		if (sigaction(SIGCHLD, &sa, NULL) || signal(SIGPIPE, SIG_IGN))
+			die("Couldn't install signal handlers");
 
 		c.mode = MODE_PASTA;
 		log_name = "pasta";
@@ -284,10 +282,8 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (isolate_prefork(&c)) {
-		err("Failed to sandbox process, exiting\n");
-		exit(EXIT_FAILURE);
-	}
+	if (isolate_prefork(&c))
+		die("Failed to sandbox process, exiting");
 
 	/* Once the log mask is not LOG_EMERG, we will no longer
 	 * log to stderr if there was a log file specified.

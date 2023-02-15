@@ -1008,10 +1008,8 @@ static void tap_sock_unix_init(struct ctx *c)
 	};
 	int i;
 
-	if (fd < 0) {
-		err("UNIX socket: %s", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+	if (fd < 0)
+		die("UNIX socket: %s", strerror(errno));
 
 	/* In passt mode, we don't know the guest's MAC until it sends
 	 * us packets.  Use the broadcast address so our first packets
@@ -1029,18 +1027,14 @@ static void tap_sock_unix_init(struct ctx *c)
 			snprintf(path, UNIX_PATH_MAX - 1, UNIX_SOCK_PATH, i);
 
 		ex = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
-		if (ex < 0) {
-			err("UNIX domain socket check: %s", strerror(errno));
-			exit(EXIT_FAILURE);
-		}
+		if (ex < 0)
+			die("UNIX domain socket check: %s", strerror(errno));
 
 		ret = connect(ex, (const struct sockaddr *)&addr, sizeof(addr));
 		if (!ret || (errno != ENOENT && errno != ECONNREFUSED &&
 			     errno != EACCES)) {
-			if (*c->sock_path) {
-				err("Socket path %s already in use", path);
-				exit(EXIT_FAILURE);
-			}
+			if (*c->sock_path)
+				die("Socket path %s already in use", path);
 
 			close(ex);
 			continue;
@@ -1053,10 +1047,8 @@ static void tap_sock_unix_init(struct ctx *c)
 			break;
 	}
 
-	if (i == UNIX_SOCK_MAX) {
-		err("UNIX socket bind: %s", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
+	if (i == UNIX_SOCK_MAX)
+		die("UNIX socket bind: %s", strerror(errno));
 
 	info("UNIX domain socket bound at %s\n", addr.sun_path);
 
@@ -1159,10 +1151,8 @@ static void tap_sock_tun_init(struct ctx *c)
 	struct epoll_event ev = { 0 };
 
 	NS_CALL(tap_ns_tun, c);
-	if (tun_ns_fd == -1) {
-		err("Failed to open tun socket in namespace");
-		exit(EXIT_FAILURE);
-	}
+	if (tun_ns_fd == -1)
+		die("Failed to open tun socket in namespace");
 
 	pasta_ns_conf(c);
 
