@@ -464,10 +464,8 @@ out:
  * conf_netns_opt() - Parse --netns option
  * @netns:	buffer of size PATH_MAX, updated with netns path
  * @arg:	--netns argument
- *
- * Return: 0 on success, negative error code otherwise
  */
-static int conf_netns_opt(char *netns, const char *arg)
+static void conf_netns_opt(char *netns, const char *arg)
 {
 	int ret;
 
@@ -479,12 +477,8 @@ static int conf_netns_opt(char *netns, const char *arg)
 		ret = snprintf(netns, PATH_MAX, "%s", arg);
 	}
 
-	if (ret <= 0 || ret > PATH_MAX) {
-		err("Network namespace name/path %s too long");
-		return -E2BIG;
-	}
-
-	return 0;
+	if (ret <= 0 || ret > PATH_MAX)
+		die("Network namespace name/path %s too long");
 }
 
 /**
@@ -1157,9 +1151,7 @@ void conf(struct ctx *c, int argc, char **argv)
 			if (c->mode != MODE_PASTA)
 				die("--netns is for pasta mode only");
 
-			ret = conf_netns_opt(netns, optarg);
-			if (ret < 0)
-				usage(argv[0]);
+			conf_netns_opt(netns, optarg);
 			break;
 		case 4:
 			if (c->mode != MODE_PASTA)
