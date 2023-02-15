@@ -497,21 +497,15 @@ static int conf_netns_opt(char *netns, const char *arg)
  * @optind:	Index of first non-option argument
  * @argc:	Number of arguments
  * @argv:	Command line arguments
- *
- * Return: 0 on success, negative error code otherwise
  */
-static int conf_pasta_ns(int *netns_only, char *userns, char *netns,
-			 int optind, int argc, char *argv[])
+static void conf_pasta_ns(int *netns_only, char *userns, char *netns,
+			  int optind, int argc, char *argv[])
 {
-	if (*netns_only && *userns) {
-		err("Both --userns and --netns-only given");
-		return -EINVAL;
-	}
+	if (*netns_only && *userns)
+		die("Both --userns and --netns-only given");
 
-	if (*netns && optind != argc) {
-		err("Both --netns and PID or command given");
-		return -EINVAL;
-	}
+	if (*netns && optind != argc)
+		die("Both --netns and PID or command given");
 
 	if (optind + 1 == argc) {
 		char *endptr;
@@ -520,10 +514,8 @@ static int conf_pasta_ns(int *netns_only, char *userns, char *netns,
 		pidval = strtol(argv[optind], &endptr, 10);
 		if (!*endptr) {
 			/* Looks like a pid */
-			if (pidval < 0 || pidval > INT_MAX) {
-				err("Invalid PID %s", argv[optind]);
-				return -EINVAL;
-			}
+			if (pidval < 0 || pidval > INT_MAX)
+				die("Invalid PID %s", argv[optind]);
 
 			snprintf(netns, PATH_MAX, "/proc/%ld/ns/net", pidval);
 			if (!*userns)
@@ -535,8 +527,6 @@ static int conf_pasta_ns(int *netns_only, char *userns, char *netns,
 	/* Attaching to a netns/PID, with no userns given */
 	if (*netns && !*userns)
 		*netns_only = 1;
-
-	return 0;
 }
 
 /** conf_ip4_prefix() - Parse an IPv4 prefix length or netmask
@@ -1560,13 +1550,10 @@ void conf(struct ctx *c, int argc, char **argv)
 		}
 	} while (name != -1);
 
-	if (c->mode == MODE_PASTA) {
-		if (conf_pasta_ns(&netns_only, userns, netns,
-				  optind, argc, argv) < 0)
-			usage(argv[0]);
-	} else if (optind != argc) {
+	if (c->mode == MODE_PASTA)
+		conf_pasta_ns(&netns_only, userns, netns, optind, argc, argv);
+	else if (optind != argc)
 		usage(argv[0]);
-	}
 
 	isolate_user(uid, gid, !netns_only, userns, c->mode);
 
