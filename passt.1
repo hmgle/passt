@@ -338,7 +338,7 @@ Examples:
 .RS
 .TP
 -t 22
-Forward local port 22 to 22 on the guest
+Forward local port 22 to port 22 on the guest
 .TP
 -t 22:23
 Forward local port 22 to port 23 on the guest
@@ -347,10 +347,10 @@ Forward local port 22 to port 23 on the guest
 Forward local ports 22 and 25 to ports 22 and 25 on the guest
 .TP
 -t 22-80
-Forward local ports 22 to 80 to corresponding ports on the guest
+Forward local ports between 22 and 80 to corresponding ports on the guest
 .TP
--t 22-80-32:90
-Forward local ports 22 to 80 to corresponding ports on the guest plus 10
+-t 22-80:32-90
+Forward local ports between 22 and 80 to ports between 32 and 90 on the guest
 .TP
 -t 192.0.2.1/22
 Forward local port 22, bound to 192.0.2.1, to port 22 on the guest
@@ -359,10 +359,12 @@ Forward local port 22, bound to 192.0.2.1, to port 22 on the guest
 Forward local port 22, bound to 192.0.2.1 and interface eth0, to port 22
 .TP
 -t 2000-5000,~3000-3010
-Forward local ports 2000 to 5000, but not 3000 to 3010
+Forward local ports between 2000 and 5000, except for those between 3000 and
+3010
 .TP
 -t 192.0.2.1/20-30,~25
-Forward local ports 20 to 24, and 26 to 30, bound to 192.0.2.1
+For the local address 192.0.2.1, forward ports between 20 and 24 and between 26
+and 30
 .TP
 -t ~20000-20010
 Forward all ports to the guest, except for the range from 20000 to 20010
@@ -425,10 +427,11 @@ Forward local port 22 to port 23 in the target namespace
 Forward local ports 22 and 25 to ports 22 and 25 in the target namespace
 .TP
 -t 22-80
-Forward local ports 22 to 80 to corresponding ports in the target namespace
+Forward local ports between 22 and 80 to corresponding ports in the target
+namespace
 .TP
--t 22-80-32:90
-Forward local ports 22 to 80 to corresponding ports plus 10 in the target
+-t 22-80:32-90
+Forward local ports between 22 and 80 to ports between 32 and 90 in the target
 namespace
 .TP
 -t 192.0.2.1/22
@@ -438,13 +441,15 @@ Forward local port 22, bound to 192.0.2.1, to port 22 in the target namespace
 Forward local port 22, bound to 192.0.2.1 and interface eth0, to port 22
 .TP
 -t 2000-5000,~3000-3010
-Forward local ports 2000 to 5000, but not 3000 to 3010
+Forward local ports between 2000 and 5000, except for those between 3000 and
+3010
 .TP
 -t 192.0.2.1/20-30,~25
-Forward local ports 20 to 24, and 26 to 30, bound to 192.0.2.1
+For the local address 192.0.2.1, forward ports between 20 and 24 and between 26
+and 30
 .TP
 -t ~20000-20010
-Forward all ports to the namespace, except for the range from 20000 to 20010
+Forward all ports to the namespace, except for those between 20000 and 20010
 .RE
 
 IPv6 bound ports are also forwarded for IPv4.
