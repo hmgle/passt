@@ -306,6 +306,9 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 			} else if (optname == 'u') {
 				if (!udp_sock_init(c, 0, af, addr, ifname, i))
 					bound_one = true;
+			} else {
+				/* No way to check in advance for -T and -U */
+				bound_one = true;
 			}
 		}
 
@@ -356,8 +359,11 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 				if (!tcp_sock_init(c, af, addr, ifname, i))
 					bound_one = true;
 			} else if (optname == 'u') {
-				if (udp_sock_init(c, 0, af, addr, ifname, i))
+				if (!udp_sock_init(c, 0, af, addr, ifname, i))
 					bound_one = true;
+			} else {
+				/* No way to check in advance for -T and -U */
+				bound_one = true;
 			}
 		}
 	} while ((p = next_chunk(p, ',')));
