@@ -309,10 +309,12 @@ void tap_icmp6_send(const struct ctx *c,
  * @iov:	Array of buffers, each containing one frame
  * @n:		Number of buffers/frames in @iov
  *
+ * Return: number of frames successfully sent
+ *
  * #syscalls:pasta write
  */
-static void tap_send_frames_pasta(struct ctx *c,
-				  const struct iovec *iov, size_t n)
+static size_t tap_send_frames_pasta(struct ctx *c,
+				    const struct iovec *iov, size_t n)
 {
 	size_t i;
 
@@ -325,6 +327,8 @@ static void tap_send_frames_pasta(struct ctx *c,
 			i--;
 		}
 	}
+
+	return n;
 }
 
 /**
@@ -357,10 +361,12 @@ static void tap_send_remainder(const struct ctx *c, const struct iovec *iov,
  * @iov:	Array of buffers, each containing one frame
  * @n:		Number of buffers/frames in @iov
  *
+ * Return: number of frames successfully sent
+ *
  * #syscalls:passt sendmsg
  */
-static void tap_send_frames_passt(const struct ctx *c,
-				  const struct iovec *iov, size_t n)
+static size_t tap_send_frames_passt(const struct ctx *c,
+				    const struct iovec *iov, size_t n)
 {
 	struct msghdr mh = {
 		.msg_iov = (void *)iov,
@@ -371,7 +377,7 @@ static void tap_send_frames_passt(const struct ctx *c,
 
 	sent = sendmsg(c->fd_tap, &mh, MSG_NOSIGNAL | MSG_DONTWAIT);
 	if (sent < 0)
-		return;
+		return 0;
 
 	/* Check for any partial frames due to short send */
 	for (i = 0; i < n; i++) {
@@ -386,8 +392,7 @@ static void tap_send_frames_passt(const struct ctx *c,
 		i++;
 	}
 
-	if (i < n)
-		debug("tap: dropped %lu frames due to short send", n - i);
+	return i;
 }
 
 /**
@@ -398,15 +403,20 @@ static void tap_send_frames_passt(const struct ctx *c,
  */
 void tap_send_frames(struct ctx *c, const struct iovec *iov, size_t n)
 {
+	size_t m;
+
 	if (!n)
 		return;
 
 	if (c->mode == MODE_PASST)
-		tap_send_frames_passt(c, iov, n);
+		m = tap_send_frames_passt(c, iov, n);
 	else
-		tap_send_frames_pasta(c, iov, n);
+		m = tap_send_frames_pasta(c, iov, n);
 
-	pcap_multiple(iov, n, c->mode == MODE_PASST ? sizeof(uint32_t) : 0);
+	if (m < n)
+		debug("tap: dropped %lu frames of %lu due to short send", n - m, n);
+
+	pcap_multiple(iov, m, c->mode == MODE_PASST ? sizeof(uint32_t) : 0);
 }
 
 /**
