@@ -2193,8 +2193,18 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn)
 	if (len < 0)
 		goto err;
 
-	if (!len)
-		goto zero_len;
+	if (!len) {
+		if ((conn->events & (SOCK_FIN_RCVD | TAP_FIN_SENT)) == SOCK_FIN_RCVD) {
+			if ((ret = tcp_send_flag(c, conn, FIN | ACK))) {
+				tcp_rst(c, conn);
+				return ret;
+			}
+
+			conn_event(c, conn, TAP_FIN_SENT);
+		}
+
+		return 0;
+	}
 
 	sendlen = len - already_sent;
 	if (sendlen <= 0) {
@@ -2233,18 +2243,6 @@ err:
 	}
 
 	return ret;
-
-zero_len:
-	if ((conn->events & (SOCK_FIN_RCVD | TAP_FIN_SENT)) == SOCK_FIN_RCVD) {
-		if ((ret = tcp_send_flag(c, conn, FIN | ACK))) {
-			tcp_rst(c, conn);
-			return ret;
-		}
-
-		conn_event(c, conn, TAP_FIN_SENT);
-	}
-
-	return 0;
 }
 
 /**
