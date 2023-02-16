@@ -2186,13 +2186,12 @@ static int tcp_data_from_sock(struct ctx *c, struct tcp_tap_conn *conn)
 		iov_sock[fill_bufs].iov_len = iov_rem;
 
 	/* Receive into buffers, don't dequeue until acknowledged by guest. */
-recvmsg:
-	len = recvmsg(s, &mh_sock, MSG_PEEK);
-	if (len < 0) {
-		if (errno == EINTR)
-			goto recvmsg;
+	do
+		len = recvmsg(s, &mh_sock, MSG_PEEK);
+	while (len < 0 && errno == EINTR);
+
+	if (len < 0)
 		goto err;
-	}
 
 	if (!len)
 		goto zero_len;
