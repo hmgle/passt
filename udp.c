@@ -955,12 +955,14 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
  * @addr:	Pointer to address for binding, NULL if not configured
  * @ifname:	Name of interface to bind to, NULL if not configured
  * @port:	Port, host order
+ *
+ * Return: 0 on (partial) success, -1 on (complete) failure
  */
-void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
-		   const void *addr, const char *ifname, in_port_t port)
+int udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
+		  const void *addr, const char *ifname, in_port_t port)
 {
 	union udp_epoll_ref uref = { .u32 = 0 };
-	int s;
+	int s, ret = 0;
 
 	if (ns) {
 		uref.udp.port = (in_port_t)(port +
@@ -989,6 +991,9 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 				    ifname, port, uref.u32);
 			udp_splice_ns[V4][port].sock = s;
 		}
+
+		if (s < 0)
+			ret = -1;
 	}
 
 	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6) {
@@ -1009,7 +1014,12 @@ void udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 				    ifname, port, uref.u32);
 			udp_splice_ns[V6][port].sock = s;
 		}
+
+		if (s < 0)
+			ret = -1;
 	}
+
+	return ret;
 }
 
 /**

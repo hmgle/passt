@@ -179,9 +179,9 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 {
 	char addr_buf[sizeof(struct in6_addr)] = { 0 }, *addr = addr_buf;
 	char buf[BUFSIZ], *spec, *ifname = NULL, *p;
+	bool exclude_only = true, bound_one = false;
 	uint8_t exclude[PORT_BITMAP_SIZE] = { 0 };
 	sa_family_t af = AF_UNSPEC;
-	bool exclude_only = true;
 
 	if (!strcmp(optarg, "none")) {
 		if (fwd->mode)
@@ -215,11 +215,18 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 		memset(fwd->map, 0xff, PORT_EPHEMERAL_MIN / 8);
 
 		for (i = 0; i < PORT_EPHEMERAL_MIN; i++) {
-			if (optname == 't')
-				tcp_sock_init(c, AF_UNSPEC, NULL, NULL, i);
-			else if (optname == 'u')
-				udp_sock_init(c, 0, AF_UNSPEC, NULL, NULL, i);
+			if (optname == 't') {
+				if (!tcp_sock_init(c, AF_UNSPEC, NULL, NULL, i))
+					bound_one = true;
+			} else if (optname == 'u') {
+				if (!udp_sock_init(c, 0, AF_UNSPEC, NULL, NULL,
+						   i))
+					bound_one = true;
+			}
 		}
+
+		if (!bound_one)
+			goto bind_fail;
 
 		return;
 	}
@@ -293,11 +300,17 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 
 			bitmap_set(fwd->map, i);
 
-			if (optname == 't')
-				tcp_sock_init(c, af, addr, ifname, i);
-			else if (optname == 'u')
-				udp_sock_init(c, 0, af, addr, ifname, i);
+			if (optname == 't') {
+				if (!tcp_sock_init(c, af, addr, ifname, i))
+					bound_one = true;
+			} else if (optname == 'u') {
+				if (!udp_sock_init(c, 0, af, addr, ifname, i))
+					bound_one = true;
+			}
 		}
+
+		if (!bound_one)
+			goto bind_fail;
 
 		return;
 	}
@@ -339,12 +352,18 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 
 			fwd->delta[i] = mapped_range.first - orig_range.first;
 
-			if (optname == 't')
-				tcp_sock_init(c, af, addr, ifname, i);
-			else if (optname == 'u')
-				udp_sock_init(c, 0, af, addr, ifname, i);
+			if (optname == 't') {
+				if (!tcp_sock_init(c, af, addr, ifname, i))
+					bound_one = true;
+			} else if (optname == 'u') {
+				if (udp_sock_init(c, 0, af, addr, ifname, i))
+					bound_one = true;
+			}
 		}
 	} while ((p = next_chunk(p, ',')));
+
+	if (!bound_one)
+		goto bind_fail;
 
 	return;
 bad:
@@ -353,6 +372,8 @@ overlap:
 	die("Overlapping port specifier %s", optarg);
 mode_conflict:
 	die("Port forwarding mode '%s' conflicts with previous mode", optarg);
+bind_fail:
+	die("Failed to bind any port for '-%c %s', exiting", optname, optarg);
 }
 
 /**
