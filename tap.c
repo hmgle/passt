@@ -1229,18 +1229,13 @@ void tap_handler(struct ctx *c, int fd, uint32_t events,
 	}
 
 	if ((c->mode == MODE_PASST && tap_handler_passt(c, now)) ||
-	    (c->mode == MODE_PASTA && tap_handler_pasta(c, now)))
-		goto reinit;
+	    (c->mode == MODE_PASTA && tap_handler_pasta(c, now)) ||
+	    (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))) {
+		if (c->one_off) {
+			info("Client closed connection, exiting");
+			exit(EXIT_SUCCESS);
+		}
 
-	if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
-		goto reinit;
-
-	return;
-reinit:
-	if (c->one_off) {
-		info("Client closed connection, exiting");
-		exit(EXIT_SUCCESS);
+		tap_sock_init(c);
 	}
-
-	tap_sock_init(c);
 }
