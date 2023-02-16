@@ -335,7 +335,7 @@ int dhcp(const struct ctx *c, const struct pool *p)
 	     m->chaddr[3], m->chaddr[4], m->chaddr[5]);
 
 	m->yiaddr = c->ip4.addr;
-	mask.s_addr = htonl(0xffffffff << c->ip4.prefix_len);
+	mask.s_addr = htonl(0xffffffff << (32 - c->ip4.prefix_len));
 	memcpy(opts[1].s,  &mask,        sizeof(mask));
 	memcpy(opts[3].s,  &c->ip4.gw,   sizeof(c->ip4.gw));
 	memcpy(opts[54].s, &c->ip4.gw,   sizeof(c->ip4.gw));
