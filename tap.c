@@ -1037,8 +1037,12 @@ static void tap_sock_unix_init(struct ctx *c)
 			snprintf(path, UNIX_PATH_MAX - 1, UNIX_SOCK_PATH, i);
 
 		ex = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
-		if (ex < 0)
+		if (ex < 0) {
 			die("UNIX domain socket check: %s", strerror(errno));
+
+			/* Silence cppcheck's invalidFunctionArg for 'ex' */
+			return;
+		}
 
 		ret = connect(ex, (const struct sockaddr *)&addr, sizeof(addr));
 		if (!ret || (errno != ENOENT && errno != ECONNREFUSED &&
