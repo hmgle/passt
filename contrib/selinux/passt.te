@@ -96,6 +96,7 @@ allow passt_t self:cap_userns { setpcap sys_admin sys_ptrace };
 
 allow passt_t proc_net_t:file read;
 allow passt_t net_conf_t:file { open read };
+allow passt_t net_conf_t:lnk_file read;
 allow passt_t tmp_t:sock_file { create unlink write };
 allow passt_t self:netlink_route_socket { bind create nlmsg_read read write };
 
