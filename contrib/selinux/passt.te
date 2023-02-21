@@ -19,6 +19,7 @@ require {
 	type user_home_dir_t;
 	type fs_t;
 	type tmp_t;
+	type user_tmp_t;
 	type tmpfs_t;
 	type root_t;
 
@@ -59,8 +60,6 @@ files_type(passt_exec_t);
 init_daemon_domain(passt_t, passt_exec_t)
 type passt_log_t;
 logging_log_file(passt_log_t);
-type passt_pid_t;
-files_pid_file(passt_pid_t);
 type passt_etc_t;
 files_config_file(passt_etc_t);
 
@@ -83,8 +82,8 @@ allow passt_t tmp_t:dir { add_name mounton remove_name write };
 allow passt_t tmpfs_t:filesystem mount;
 allow passt_t fs_t:filesystem unmount;
 
-manage_files_pattern(passt_t, passt_pid_t, passt_pid_t)
-files_pid_filetrans(passt_t, passt_pid_t, file)
+manage_files_pattern(passt_t, user_tmp_t, user_tmp_t)
+files_pid_filetrans(passt_t, user_tmp_t, file)
 
 allow passt_t console_device_t:chr_file { open write getattr ioctl };
 allow passt_t user_devpts_t:chr_file { getattr read write ioctl };
@@ -110,3 +109,7 @@ corenet_udp_bind_generic_node(passt_t)
 allow passt_t passt_port_t:udp_socket { name_bind };
 allow passt_t node_t:icmp_socket { name_bind node_bind };
 allow passt_t self:icmp_socket { bind create setopt read write };
+
+allow passt_t user_tmp_t:dir { add_name write };
+allow passt_t user_tmp_t:file { create open };
+allow passt_t user_tmp_t:sock_file { create read write unlink };

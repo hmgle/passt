@@ -10,4 +10,3 @@
 
 /usr/bin/passt(\.*)?		system_u:object_r:passt_exec_t:s0
 /tmp/passt\.pcap		system_u:object_r:passt_log_t:s0
-/var/run/passt\.pid		system_u:object_r:passt_pid_t:s0
