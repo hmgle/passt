@@ -56,6 +56,7 @@ type passt_t;
 domain_type(passt_t);
 type passt_exec_t;
 files_type(passt_exec_t);
+init_daemon_domain(passt_t, passt_exec_t)
 type passt_log_t;
 logging_log_file(passt_log_t);
 type passt_pid_t;

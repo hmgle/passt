@@ -15,3 +15,29 @@ interface(`passt_read_data',`
 	allow $1 passt_t:dir { search add_name };
 	allow $1 passt_t:file { open read getattr };
 ')
+
+interface(`passt_domtrans',`
+	gen_require(`
+		type passt_t, passt_exec_t;
+	')
+
+	corecmd_search_bin($1)
+	domtrans_pattern($1, passt_exec_t, passt_t)
+')
+
+interface(`passt_socket',`
+	gen_require(`
+		type passt_t;
+	')
+
+	allow $1 user_tmp_t:sock_file write;
+	allow $1 passt_t:unix_stream_socket connectto;
+')
+
+interface(`passt_kill',`
+	gen_require(`
+		type passt_t;
+	')
+
+	allow $1 passt_t:process { signal sigkill };
+')
