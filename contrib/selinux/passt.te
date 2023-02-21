@@ -90,6 +90,7 @@ allow passt_t user_devpts_t:chr_file { getattr read write ioctl };
 logging_send_syslog_msg(passt_t)
 allow syslogd_t self:cap_userns sys_ptrace;
 
+allow passt_t self:process setcap;
 allow passt_t self:capability { sys_tty_config setpcap net_bind_service };
 allow passt_t self:cap_userns { setpcap sys_admin sys_ptrace };
 
