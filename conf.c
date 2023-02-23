@@ -383,6 +383,53 @@ bind_fail:
 }
 
 /**
+ * add_dns4() - Possibly add the IPv4 address of a DNS resolver to configuration
+ * @c:		Execution context
+ * @addr:	Address found in /etc/resolv.conf
+ * @conf:	Pointer to reference of current entry in array of IPv4 resolvers
+ */
+static void add_dns4(struct ctx *c, struct in_addr *addr, struct in_addr **conf)
+{
+	/* Guest or container can only access local addresses via redirect */
+	if (IN4_IS_ADDR_LOOPBACK(addr)) {
+		if (!c->no_map_gw) {
+			**conf = c->ip4.gw;
+			(*conf)++;
+		}
+	} else {
+		**conf = *addr;
+		(*conf)++;
+	}
+
+	if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_host))
+		c->ip4.dns_host = *addr;
+}
+
+/**
+ * add_dns6() - Possibly add the IPv6 address of a DNS resolver to configuration
+ * @c:		Execution context
+ * @addr:	Address found in /etc/resolv.conf
+ * @conf:	Pointer to reference of current entry in array of IPv6 resolvers
+ */
+static void add_dns6(struct ctx *c,
+		     struct in6_addr *addr, struct in6_addr **conf)
+{
+	/* Guest or container can only access local addresses via redirect */
+	if (IN6_IS_ADDR_LOOPBACK(addr)) {
+		if (!c->no_map_gw) {
+			memcpy(*conf, &c->ip6.gw, sizeof(**conf));
+			(*conf)++;
+		}
+	} else {
+		memcpy(*conf, addr, sizeof(**conf));
+		(*conf)++;
+	}
+
+	if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_host))
+		c->ip6.dns_host = *addr;
+}
+
+/**
  * get_dns() - Get nameserver addresses from local /etc/resolv.conf
  * @c:		Execution context
  */
@@ -420,44 +467,13 @@ static void get_dns(struct ctx *c)
 
 			if (!dns4_set &&
 			    dns4 - &c->ip4.dns[0] < ARRAY_SIZE(c->ip4.dns) - 1
-			    && inet_pton(AF_INET, p + 1, &dns4_tmp)) {
-				/* Guest or container can only access local
-				 * addresses via local redirect
-				 */
-				if (IN4_IS_ADDR_LOOPBACK(&dns4_tmp)) {
-					if (!c->no_map_gw) {
-						*dns4 = c->ip4.gw;
-						dns4++;
-					}
-				} else {
-					*dns4 = dns4_tmp;
-					dns4++;
-				}
-
-				if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_host))
-					c->ip4.dns_host = dns4_tmp;
-			}
+			    && inet_pton(AF_INET, p + 1, &dns4_tmp))
+				add_dns4(c, &dns4_tmp, &dns4);
 
 			if (!dns6_set &&
 			    dns6 - &c->ip6.dns[0] < ARRAY_SIZE(c->ip6.dns) - 1
-			    && inet_pton(AF_INET6, p + 1, &dns6_tmp)) {
-				/* Guest or container can only access local
-				 * addresses via local redirect
-				 */
-				if (IN6_IS_ADDR_LOOPBACK(&dns6_tmp)) {
-					if (!c->no_map_gw) {
-						memcpy(dns6, &c->ip6.gw,
-						       sizeof(*dns6));
-						dns6++;
-					}
-				} else {
-					memcpy(dns6, &dns6_tmp, sizeof(*dns6));
-					dns6++;
-				}
-
-				if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_host))
-					c->ip6.dns_host = dns6_tmp;
-			}
+			    && inet_pton(AF_INET6, p + 1, &dns6_tmp))
+				add_dns6(c, &dns6_tmp, &dns6);
 		} else if (!dnss_set && strstr(line, "search ") == line &&
 			   s == c->dns_search) {
 			end = strpbrk(line, "\n");
