@@ -395,6 +395,9 @@ static void add_dns4(struct ctx *c, struct in_addr *addr, struct in_addr **conf)
 		if (!c->no_map_gw) {
 			**conf = c->ip4.gw;
 			(*conf)++;
+
+			if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_match))
+				c->ip4.dns_match = c->ip4.gw;
 		}
 	} else {
 		**conf = *addr;
@@ -419,6 +422,9 @@ static void add_dns6(struct ctx *c,
 		if (!c->no_map_gw) {
 			memcpy(*conf, &c->ip6.gw, sizeof(**conf));
 			(*conf)++;
+
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_match))
+				memcpy(&c->ip6.dns_match, addr, sizeof(*addr));
 		}
 	} else {
 		memcpy(*conf, addr, sizeof(**conf));
