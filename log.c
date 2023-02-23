@@ -106,7 +106,7 @@ void trace_init(int enable)
 }
 
 /**
- * __openlog() - Non-optional openlog() wrapper, to allow custom vsyslog()
+ * __openlog() - Non-optional openlog() implementation, for custom vsyslog()
  * @ident:	openlog() identity (program name)
  * @option:	openlog() options
  * @facility:	openlog() facility (LOG_DAEMON)
@@ -136,8 +136,6 @@ void __openlog(const char *ident, int option, int facility)
 	log_mask |= facility;
 	strncpy(log_ident, ident, sizeof(log_ident) - 1);
 	log_opt = option;
-
-	openlog(ident, option, facility);
 }
 
 /**
@@ -158,11 +156,11 @@ void __setlogmask(int mask)
  */
 void passt_vsyslog(int pri, const char *format, va_list ap)
 {
+	int prefix_len, n;
 	char buf[BUFSIZ];
-	int n;
 
-	/* Send without name and timestamp, the system logger should add them */
-	n = snprintf(buf, BUFSIZ, "<%i> ", pri);
+	/* Send without timestamp, the system logger should add it */
+	n = prefix_len = snprintf(buf, BUFSIZ, "<%i> %s: ", pri, log_ident);
 
 	n += vsnprintf(buf + n, BUFSIZ - n, format, ap);
 
@@ -170,7 +168,7 @@ void passt_vsyslog(int pri, const char *format, va_list ap)
 		n += snprintf(buf + n, BUFSIZ - n, "\n");
 
 	if (log_opt & LOG_PERROR)
-		fprintf(stderr, "%s", buf + sizeof("<0>"));
+		fprintf(stderr, "%s", buf + prefix_len);
 
 	if (send(log_sock, buf, n, 0) != n)
 		fprintf(stderr, "Failed to send %i bytes to syslog\n", n);
