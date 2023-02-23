@@ -867,7 +867,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		} else if (IN4_ARE_ADDR_EQUAL(&s_in.sin_addr,
 					      &c->ip4.dns_match) &&
 			   ntohs(s_in.sin_port) == 53) {
-			s_in.sin_addr = c->ip4.dns[0];
+			s_in.sin_addr = c->ip4.dns_host;
 		}
 	} else {
 		s_in6 = (struct sockaddr_in6) {
@@ -890,7 +890,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 				s_in6.sin6_addr = c->ip6.addr_seen;
 		} else if (IN6_ARE_ADDR_EQUAL(addr, &c->ip6.dns_match) &&
 			   ntohs(s_in6.sin6_port) == 53) {
-			s_in6.sin6_addr = c->ip6.dns[0];
+			s_in6.sin6_addr = c->ip6.dns_host;
 		} else if (IN6_IS_ADDR_LINKLOCAL(&s_in6.sin6_addr)) {
 			bind_addr = &c->ip6.addr_ll;
 		}
