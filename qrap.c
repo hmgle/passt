@@ -311,7 +311,11 @@ int main(int argc, char **argv)
 	}
 
 	qemu_argv[qemu_argc++] = "-netdev";
-	qemu_argv[qemu_argc++] = "socket,fd=" STR(DEFAULT_FD) ",id=hostnet0";
+	if (!has_json) {
+		qemu_argv[qemu_argc++] = "socket,fd=" STR(DEFAULT_FD) ",id=hostnet0";
+	} else {
+		qemu_argv[qemu_argc++] = "{\"type\":\"socket\",\"fd\":\"" STR(DEFAULT_FD) "\",\"id\":\"hostnet0\"}";
+	}
 	qemu_argv[qemu_argc] = NULL;
 
 valid_args:
