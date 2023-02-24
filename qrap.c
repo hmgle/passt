@@ -77,6 +77,7 @@ static const struct drop_arg {
  * @template_post:	Suffix for device specification (last part of address)
  * @template_json:		Device prefix for when JSON is used
  * @template_json_post:	Device suffix for when JSON is used
+ * @base:		Base used for PCI addresses
  * @first:		First usable PCI address
  * @last:		Last usable PCI address
  */
@@ -87,6 +88,7 @@ static const struct pci_dev {
 	char *template_post;
 	char *template_json;
 	char *template_json_post;
+	int base;
 	int first;
 	int last;
 } pci_devs[] = {
@@ -94,19 +96,19 @@ static const struct pci_dev {
 		"pc-q35", "virtio-net-pci",
 		"bus=pci.", ",addr=0x0",
 		"\"bus\":\"pci.", ",\"addr\":\"0x0\"",
-		3, /* 2: hotplug bus */ 31
+		10, 3, /* 2: hotplug bus */ 31
 	},
 	{
 		"pc-", "virtio-net-pci",
 		"bus=pci.0,addr=0x", "",
 		"\"bus\":\"pci.0\",\"addr\":\"0x", "",
-		2, /* 1: ISA bridge */ 31
+		16, 2, /* 1: ISA bridge */ 31
 	},
 	{
 		"s390-ccw", "virtio-net-ccw",
 		"devno=fe.0.", "",
 		"\"devno\":\"fe.0.", "",
-		1, 16
+		16, 1, 16
 	},
 	{ 0 },
 };
@@ -264,7 +266,7 @@ int main(int argc, char **argv)
 			if (template) {
 				long n;
 
-				n = strtol(p + strlen(template), NULL, 16);
+				n = strtol(p + strlen(template), NULL, dev->base);
 				if (!errno)
 					addr_map |= (1 << n);
 			}
@@ -285,13 +287,25 @@ int main(int argc, char **argv)
 	if (has_dev) {
 		qemu_argv[qemu_argc++] = "-device";
 		if (!has_json) {
-			snprintf(dev_str, ARG_MAX,
-			         "%s,%s%x%s,netdev=hostnet0,x-txburst=4096",
-			         dev->name, dev->template, i, dev->template_post);
+			if (dev->base == 16) {
+				snprintf(dev_str, ARG_MAX,
+				         "%s,%s%x%s,netdev=hostnet0,x-txburst=4096",
+				         dev->name, dev->template, i, dev->template_post);
+			} else if (dev->base == 10) {
+				snprintf(dev_str, ARG_MAX,
+				         "%s,%s%d%s,netdev=hostnet0,x-txburst=4096",
+				         dev->name, dev->template, i, dev->template_post);
+			}
 		} else {
-			snprintf(dev_str, ARG_MAX,
-			         "{\"driver\":\"%s\",%s%x\"%s,\"netdev\":\"hostnet0\",\"x-txburst\":4096}",
-			         dev->name, dev->template_json, i, dev->template_json_post);
+			if (dev->base == 16) {
+				snprintf(dev_str, ARG_MAX,
+				         "{\"driver\":\"%s\",%s%x\"%s,\"netdev\":\"hostnet0\",\"x-txburst\":4096}",
+				         dev->name, dev->template_json, i, dev->template_json_post);
+			} else if (dev->base == 10) {
+				snprintf(dev_str, ARG_MAX,
+				         "{\"driver\":\"%s\",%s%d\"%s,\"netdev\":\"hostnet0\",\"x-txburst\":4096}",
+				         dev->name, dev->template_json, i, dev->template_json_post);
+			}
 		}
 		qemu_argv[qemu_argc++] = dev_str;
 	}
