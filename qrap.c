@@ -57,10 +57,15 @@ static const struct drop_arg {
 	{ "-netdev",	NULL },
 	{ "-net",	NULL },
 	{ "-device",	"virtio-net-pci," },
+	{ "-device",	"{\"driver\":\"virtio-net-pci\"," },
 	{ "-device",	"virtio-net-ccw," },
+	{ "-device",	"{\"driver\":\"virtio-net-ccw\"," },
 	{ "-device",	"e1000," },
+	{ "-device",	"{\"driver\":\"e1000\"," },
 	{ "-device",	"e1000e," },
+	{ "-device",	"{\"driver\":\"e1000e\"," },
 	{ "-device",	"rtl8139," },
+	{ "-device",	"{\"driver\":\"rtl8139\"," },
 	{ 0 },
 };
 
