@@ -94,7 +94,7 @@ static const struct pci_dev {
 	{
 		"pc-", "virtio-net-pci",
 		"bus=pci.0,addr=0x", "",
-		"\"bus\":\"pci.0\",\"addr=0x", "",
+		"\"bus\":\"pci.0\",\"addr\":\"0x", "",
 		2, /* 1: ISA bridge */ 31
 	},
 	{
