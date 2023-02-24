@@ -89,13 +89,13 @@ static const struct pci_dev {
 		"pc-q35", "virtio-net-pci",
 		"bus=pci.", ",addr=0x0",
 		"\"bus\":\"pci.", ",\"addr\":\"0x0\"",
-		3, /* 2: hotplug bus */ 16
+		3, /* 2: hotplug bus */ 31
 	},
 	{
 		"pc-", "virtio-net-pci",
 		"bus=pci.0,addr=0x", "",
 		"\"bus\":\"pci.0\",\"addr=0x", "",
-		2, /* 1: ISA bridge */ 16
+		2, /* 1: ISA bridge */ 31
 	},
 	{
 		"s390-ccw", "virtio-net-ccw",
