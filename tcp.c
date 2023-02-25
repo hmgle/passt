@@ -1812,6 +1812,15 @@ static void tcp_clamp_window(const struct ctx *c, struct tcp_tap_conn *conn,
 			return;
 
 		/* Discard +/- 1% updates to spare some syscalls. */
+		/* TODO: cppcheck, starting from commit b4d455df487c ("Fix
+		 * 11349: FP negativeIndex for clamped array index (#4627)"),
+		 * reports wnd > prev_scaled as always being true, see also:
+		 *
+		 *	https://github.com/danmar/cppcheck/pull/4627
+		 *
+		 * drop this suppression once that's resolved.
+		 */
+		/* cppcheck-suppress knownConditionTrueFalse */
 		if ((wnd > prev_scaled && wnd * 99 / 100 < prev_scaled) ||
 		    (wnd < prev_scaled && wnd * 101 / 100 > prev_scaled))
 			return;
