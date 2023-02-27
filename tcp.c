@@ -1182,12 +1182,6 @@ static int tcp_hash_match(const struct tcp_tap_conn *conn,
  *
  * Return: hash value, already modulo size of the hash table
  */
-#if TCP_HASH_NOINLINE
-__attribute__((__noinline__))	/* See comment in Makefile */
-#endif
-__attribute__((optimize("O0")))	/* TODO: with -O2 and -flto on gcc 12.2,
-				 * siphash_20b() doesn't see 'addr', why?
-				 */
 static unsigned int tcp_hash(const struct ctx *c, const union inany_addr *addr,
 			     in_port_t tap_port, in_port_t sock_port)
 {

@@ -104,6 +104,17 @@
  *
  * Return: the 64-bit hash output
  */
+/* Type-Based Alias Analysis (TBAA) optimisation in gcc 11 and 12 (-flto -O2)
+ * makes these functions essentially useless by allowing reordering of stores of
+ * input data across function calls. Not even declaring @in as char pointer is
+ * enough: disable gcc's interpretation of strict aliasing altogether. See also:
+ *
+ *	https://gcc.gnu.org/bugzilla/show_bug.cgi?id=106706
+ *	https://stackoverflow.com/questions/2958633/gcc-strict-aliasing-and-horror-stories
+ *	https://lore.kernel.org/all/alpine.LFD.2.00.0901121128080.6528__33422.5328093909$1232291247$gmane$org@localhost.localdomain/
+ */
+/* NOLINTNEXTLINE(clang-diagnostic-unknown-attributes) */
+__attribute__((optimize("-fno-strict-aliasing")))
 /* cppcheck-suppress unusedFunction */
 uint64_t siphash_8b(const uint8_t *in, const uint64_t *k)
 {
@@ -123,6 +134,8 @@ uint64_t siphash_8b(const uint8_t *in, const uint64_t *k)
  *
  * Return: 32 bits obtained by XORing the two halves of the 64-bit hash output
  */
+/* NOLINTNEXTLINE(clang-diagnostic-unknown-attributes) */
+__attribute__((optimize("-fno-strict-aliasing")))	/* See siphash_8b() */
 /* cppcheck-suppress unusedFunction */
 uint32_t siphash_12b(const uint8_t *in, const uint64_t *k)
 {
@@ -148,9 +161,8 @@ uint32_t siphash_12b(const uint8_t *in, const uint64_t *k)
  *
  * Return: the 64-bit hash output
  */
-#if SIPHASH_20B_NOINLINE
-__attribute__((__noinline__))	/* See comment in Makefile */
-#endif
+/* NOLINTNEXTLINE(clang-diagnostic-unknown-attributes) */
+__attribute__((optimize("-fno-strict-aliasing")))	/* See siphash_8b() */
 uint64_t siphash_20b(const uint8_t *in, const uint64_t *k)
 {
 	uint32_t *in32 = (uint32_t *)in;
@@ -179,6 +191,8 @@ uint64_t siphash_20b(const uint8_t *in, const uint64_t *k)
  *
  * Return: the 64-bit hash output
  */
+/* NOLINTNEXTLINE(clang-diagnostic-unknown-attributes) */
+__attribute__((optimize("-fno-strict-aliasing")))	/* See siphash_8b() */
 /* cppcheck-suppress unusedFunction */
 uint32_t siphash_32b(const uint8_t *in, const uint64_t *k)
 {
@@ -205,6 +219,8 @@ uint32_t siphash_32b(const uint8_t *in, const uint64_t *k)
  *
  * Return: 32 bits obtained by XORing the two halves of the 64-bit hash output
  */
+/* NOLINTNEXTLINE(clang-diagnostic-unknown-attributes) */
+__attribute__((optimize("-fno-strict-aliasing")))	/* See siphash_8b() */
 uint32_t siphash_36b(const uint8_t *in, const uint64_t *k)
 {
 	uint32_t *in32 = (uint32_t *)in;

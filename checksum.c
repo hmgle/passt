@@ -69,6 +69,8 @@
  *
  * Return: 32-bit sum of 16-bit words
 */
+/* NOLINTNEXTLINE(clang-diagnostic-unknown-attributes) */
+__attribute__((optimize("-fno-strict-aliasing")))	/* See siphash_8b() */
 uint32_t sum_16b(const void *buf, size_t len)
 {
 	const uint16_t *p = buf;
@@ -107,9 +109,8 @@ uint16_t csum_fold(uint32_t sum)
  *
  * Return: 16-bit IPv4-style checksum
  */
-#if CSUM_UNALIGNED_NO_IPA
-__attribute__((__noipa__))	/* See comment in Makefile */
-#endif
+/* NOLINTNEXTLINE(clang-diagnostic-unknown-attributes) */
+__attribute__((optimize("-fno-strict-aliasing")))	/* See siphash_8b() */
 uint16_t csum_unaligned(const void *buf, size_t len, uint32_t init)
 {
 	return (uint16_t)~csum_fold(sum_16b(buf, len) + init);
@@ -245,6 +246,8 @@ void csum_icmp6(struct icmp6hdr *icmp6hr,
  * - sum_a/sum_b unpacking is interleaved and not sequential to reduce stalls
  * - coding style adaptation
  */
+/* NOLINTNEXTLINE(clang-diagnostic-unknown-attributes) */
+__attribute__((optimize("-fno-strict-aliasing")))	/* See siphash_8b() */
 static uint32_t csum_avx2(const void *buf, size_t len, uint32_t init)
 {
 	__m256i a, b, sum256, sum_a_hi, sum_a_lo, sum_b_hi, sum_b_lo, c, d;
@@ -391,6 +394,8 @@ less_than_128_bytes:
  *
  * Return: 16-bit folded, complemented checksum sum
  */
+/* NOLINTNEXTLINE(clang-diagnostic-unknown-attributes) */
+__attribute__((optimize("-fno-strict-aliasing")))	/* See siphash_8b() */
 uint16_t csum(const void *buf, size_t len, uint32_t init)
 {
 	return (uint16_t)~csum_fold(csum_avx2(buf, len, init));
@@ -406,6 +411,8 @@ uint16_t csum(const void *buf, size_t len, uint32_t init)
  *
  * Return: 16-bit folded, complemented checksum
  */
+/* NOLINTNEXTLINE(clang-diagnostic-unknown-attributes) */
+__attribute__((optimize("-fno-strict-aliasing")))	/* See siphash_8b() */
 uint16_t csum(const void *buf, size_t len, uint32_t init)
 {
 	return csum_unaligned(buf, len, init);
