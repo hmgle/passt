@@ -8,8 +8,8 @@
 
 #define TCP_TIMER_INTERVAL		1000	/* ms */
 
-#define TCP_CONN_INDEX_BITS		17	/* 128k */
-#define TCP_MAX_CONNS			(1 << TCP_CONN_INDEX_BITS)
+#define TCP_CONN_INDEX_BITS		17	/* 128k - 1 */
+#define TCP_MAX_CONNS			MAX_FROM_BITS(TCP_CONN_INDEX_BITS)
 
 struct ctx;
 

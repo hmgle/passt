@@ -54,7 +54,7 @@ struct tcp_tap_conn {
 
 #define TCP_RETRANS_BITS		3
 	unsigned int	retrans		:TCP_RETRANS_BITS;
-#define TCP_MAX_RETRANS			((1U << TCP_RETRANS_BITS) - 1)
+#define TCP_MAX_RETRANS			MAX_FROM_BITS(TCP_RETRANS_BITS)
 
 #define TCP_WS_BITS			4	/* RFC 7323 */
 #define TCP_WS_MAX			14

@@ -40,6 +40,8 @@
 #define ROUND_DOWN(x, y)	((x) & ~((y) - 1))
 #define ROUND_UP(x, y)		(((x) + (y) - 1) & ~((y) - 1))
 
+#define MAX_FROM_BITS(n)	((int)((1U << (n)) - 1))
+
 #define BIT(n)			(1UL << (n))
 #define BITMAP_BIT(n)		(BIT((n) % (sizeof(long) * 8)))
 #define BITMAP_WORD(n)		(n / (sizeof(long) * 8))

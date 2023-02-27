@@ -42,7 +42,7 @@ union epoll_ref;
 /**
  * union epoll_ref - Breakdown of reference for epoll socket bookkeeping
  * @proto:	IP protocol number
- * @s:		Socket number (implies 2^24 limit on number of descriptors)
+ * @s:		Socket number (implies 2^24-1 limit on number of descriptors)
  * @tcp:	TCP-specific reference part
  * @udp:	UDP-specific reference part
  * @icmp:	ICMP-specific reference part
@@ -53,7 +53,7 @@ union epoll_ref {
 	struct {
 		int32_t		proto:8,
 #define SOCKET_REF_BITS		24
-#define SOCKET_MAX		(1 << SOCKET_REF_BITS)
+#define SOCKET_MAX		MAX_FROM_BITS(SOCKET_REF_BITS)
 				s:SOCKET_REF_BITS;
 		union {
 			union tcp_epoll_ref tcp;
