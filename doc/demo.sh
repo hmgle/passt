@@ -110,6 +110,7 @@ next() {
 }
 
 # cleanup() - Terminate pasta and passt, clean up, restore TTY settings
+# shellcheck disable=SC2317
 cleanup() {
 	[ -f "${DEMO_DIR}/pasta.pid" ] && kill "$(cat "${DEMO_DIR}/pasta.pid")"
 	[ -f "${DEMO_DIR}/passt.pid" ] && kill "$(cat "${DEMO_DIR}/passt.pid")"
@@ -223,7 +224,8 @@ into_ns() {
 	echo "Use ^C to terminate it."
 	next
 
-	cmd qrap 5 qemu-system-x86_64 -M pc,accel=kvm:tcg		    \
+	# shellcheck disable=SC2086
+	cmd qrap 5 ${__qemu_arch}					    \
 		-smp "$(nproc)" -m 1024					    \
 		-nographic -serial stdio -nodefaults -no-reboot -vga none   \
 		-initrd "${DEMO_DIR}/demo.img"				    \
