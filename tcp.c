@@ -743,15 +743,19 @@ static void conn_flag_do(const struct ctx *c, struct tcp_tap_conn *conn,
 			 unsigned long flag)
 {
 	if (flag & (flag - 1)) {
+		int flag_index = fls(~flag);
+
 		if (!(conn->flags & ~flag))
 			return;
 
 		conn->flags &= flag;
-		if (fls(~flag) >= 0) {
+		if (flag_index >= 0) {
 			debug("TCP: index %li: %s dropped", CONN_IDX(conn),
-			      tcp_flag_str[fls(~flag)]);
+			      tcp_flag_str[flag_index]);
 		}
 	} else {
+		int flag_index = fls(~flag);
+
 		if (conn->flags & flag) {
 			/* Special case: setting ACK_FROM_TAP_DUE on a
 			 * connection where it's already set is used to
@@ -766,9 +770,9 @@ static void conn_flag_do(const struct ctx *c, struct tcp_tap_conn *conn,
 		}
 
 		conn->flags |= flag;
-		if (fls(flag) >= 0) {
+		if (flag_index >= 0) {
 			debug("TCP: index %li: %s", CONN_IDX(conn),
-			      tcp_flag_str[fls(flag)]);
+			      tcp_flag_str[flag_index]);
 		}
 	}
 
