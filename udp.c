@@ -754,7 +754,7 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 	in_port_t dstport = ref.r.p.udp.udp.port;
 	bool v6 = ref.r.p.udp.udp.v6;
 	struct mmsghdr *mmh_recv;
-	unsigned int i, m;
+	int i, m;
 
 	if (!(events & EPOLLIN))
 		return;
