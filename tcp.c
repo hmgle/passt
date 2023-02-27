@@ -702,6 +702,9 @@ static void tcp_timer_ctl(const struct ctx *c, struct tcp_tap_conn *conn)
 		fd = timerfd_create(CLOCK_MONOTONIC, 0);
 		if (fd == -1 || fd > SOCKET_MAX) {
 			debug("TCP: failed to get timer: %s", strerror(errno));
+			if (fd > -1)
+				close(fd);
+			conn->timer = -1;
 			return;
 		}
 		conn->timer = fd;
