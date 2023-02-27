@@ -105,7 +105,7 @@ static: FLAGS += -static -DGLIBC_NO_STATIC_NSS
 static: clean all
 
 seccomp.h: seccomp.sh $(PASST_SRCS) $(PASST_HEADERS)
-	@ EXTRA_SYSCALLS="$(EXTRA_SYSCALLS)" ./seccomp.sh $(PASST_SRCS) $(PASST_HEADERS)
+	@ EXTRA_SYSCALLS="$(EXTRA_SYSCALLS)" ARCH="$(TARGET_ARCH)" CC="$(CC)" ./seccomp.sh $(PASST_SRCS) $(PASST_HEADERS)
 
 passt: $(PASST_SRCS) $(HEADERS)
 	$(CC) $(FLAGS) $(CFLAGS) $(CPPFLAGS) $(PASST_SRCS) -o passt $(LDFLAGS)
