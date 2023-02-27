@@ -16,38 +16,13 @@ abi <abi/3.0>,
 include <tunables/global>
 
 profile passt /usr/bin/passt{,.avx2} flags=(attach_disconnected) {
-  ### Common rules for passt and pasta
+  ### TODO: AppArmor doesn't give us the chance to attach a separate profile
+  ### depending on the executable symlink. That's possible with SELinux. Two
+  ### alternatives: implement that in AppArmor, or consider aa_change_hat(2).
+  ### With this, rules for passt(1) could be restricted significantly. Note that
+  ### the attach_disconnected flag is not needed for passt(1).
 
-  include <abstractions/base>
-
-  # Alternatively: include <abstractions/nameservice>
-  @{etc_ro}/resolv.conf			r,	# get_dns(), conf.c
-
-  capability net_bind_service,			# isolation.c, conf.c
-  capability setuid,
-  capability setgid,
-  capability sys_admin,
-  capability setpcap,
-  capability net_admin,
-  capability sys_ptrace,
-
-  /					r,	# isolate_prefork(), isolation.c
-  mount		""	-> "/",
-  mount		""	-> "/tmp/",
-  pivot_root	"/tmp/" -> "/tmp/",
-  umount	"/",
-
-  network netlink raw,				# nl_sock_init_do(), netlink.c
-
-  network inet stream,				# tcp.c
-  network inet6 stream,
-
-  network inet dgram,				# udp.c
-  network inet6 dgram,
-
-  network unix stream,				# tap.c
-
-  network unix dgram,				# __openlog(), log.c
+  include <abstractions/passt>
 
   # Alternatively: include <abstractions/user-tmp>
   owner /tmp/**				w,	# tap_sock_unix_init(), pcap(),
@@ -56,33 +31,5 @@ profile passt /usr/bin/passt{,.avx2} flags=(attach_disconnected) {
 
   owner @{HOME}/**			w,	# pcap(), write_pidfile()
 
-  /usr/bin/passt.avx2			ix,	# arch_avx2_exec(), arch.c
-
-
-  ### Rules for pasta
-  ###
-  ### TODO: AppArmor doesn't give us the chance to attach a separate profile
-  ### depending on the executable symlink. That's possible with SELinux. Two
-  ### alternatives: implement that in AppArmor, or consider aa_change_hat(2).
-  ### With this, rules for passt(1) could be restricted significantly. Note that
-  ### the attach_disconnected flag is not needed for passt(1).
-
-  @{PROC}/net/tcp			r,	# procfs_scan_listen(), util.c
-  @{PROC}/net/tcp6			r,
-  @{PROC}/net/udp			r,
-  @{PROC}/net/udp6			r,
-
-  @{run}/user/@{uid}/netns/*		r,	# pasta_open_ns(), pasta.c
-
-  @{PROC}/[0-9]*/ns/net			r,	# pasta_wait_for_ns(),
-  @{PROC}/[0-9]*/ns/user		r,	# conf_pasta_ns()
-
-  /dev/net/tun				rw,	# tap_ns_tun(), tap.c
-
-  owner @{PROC}/@{pid}/gid_map		w,	# pasta_start_ns(), conf_ugid()
-  owner @{PROC}/@{pid}/setgroups	w,
-  owner @{PROC}/@{pid}/uid_map		rw,
-
-  owner @{PROC}/sys/net/ipv4/ping_group_range w, # pasta_spawn_cmd(), pasta.c
-  /{usr/,}bin/**			Ux,
+  include <abstractions/pasta>
 }
