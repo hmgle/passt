@@ -495,6 +495,15 @@ int write_file(const char *path, const char *buf)
 	return len == 0 ? 0 : -1;
 }
 
+#ifdef __ia64__
+/* Needed by do_clone() below: glibc doesn't export the prototype of __clone2(),
+ * use the description from clone(2).
+ */
+int __clone2(int (*fn)(void *), void *stack_base, size_t stack_size, int flags,
+	     void *arg, ... /* pid_t *parent_tid, struct user_desc *tls,
+	     pid_t *child_tid */ );
+#endif
+
 /**
  * do_clone() - Wrapper of __clone2() for ia64, clone() for other architectures
  * @fn:		Entry point for child
