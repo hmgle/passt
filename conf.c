@@ -1064,9 +1064,6 @@ static void conf_ugid(char *runas, uid_t *uid, gid_t *gid)
 	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0) {
 		die("Can't determine if we're in init namespace: %s",
 		    strerror(errno));
-
-		/* Silence cppcheck's invalidFunctionArg for 'fd' in read() */
-		return;
 	}
 
 	if (read(fd, buf, BUFSIZ) != sizeof(root_uid_map) ||

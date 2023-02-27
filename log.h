@@ -10,11 +10,16 @@
 #define LOGFILE_CUT_RATIO		30	/* When full, cut ~30% size */
 #define LOGFILE_SIZE_MIN		(5UL * MAX(BUFSIZ, PAGE_SIZE))
 
-void die(const char *format, ...);
 void err(const char *format, ...);
 void warn(const char *format, ...);
 void info(const char *format, ...);
 void debug(const char *format, ...);
+
+#define die(...)							\
+	do {								\
+		err(__VA_ARGS__);					\
+		exit(EXIT_FAILURE);					\
+	} while (0)
 
 extern int log_trace;
 void trace_init(int enable);

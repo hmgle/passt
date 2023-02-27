@@ -46,7 +46,7 @@ int		log_trace;		/* --trace mode enabled */
 
 #define BEFORE_DAEMON		(setlogmask(0) == LOG_MASK(LOG_EMERG))
 
-#define logfn(name, level, doexit)					\
+#define logfn(name, level)						\
 void name(const char *format, ...) {					\
 	struct timespec tp;						\
 	va_list args;							\
@@ -75,9 +75,6 @@ void name(const char *format, ...) {					\
 		if (format[strlen(format)] != '\n')			\
 			fprintf(stderr, "\n");				\
 	}								\
-									\
-	if (doexit)							\
-		exit(EXIT_FAILURE);					\
 }
 
 /* Prefixes for log file messages, indexed by priority */
@@ -90,11 +87,10 @@ const char *logfile_prefix[] = {
 	"         ",		/* LOG_DEBUG */
 };
 
-logfn(die,  LOG_ERR,     1)
-logfn(err,  LOG_ERR,     0)
-logfn(warn, LOG_WARNING, 0)
-logfn(info, LOG_INFO,    0)
-logfn(debug,LOG_DEBUG,   0)
+logfn(err,  LOG_ERR)
+logfn(warn, LOG_WARNING)
+logfn(info, LOG_INFO)
+logfn(debug,LOG_DEBUG)
 
 /**
  * trace_init() - Set log_trace depending on trace (debug) mode
