@@ -72,6 +72,7 @@ type_transition unconfined_t passt_exec_t : process passt_t;
 allow unconfined_t passt_t : process transition ;
 
 init_daemon_domain(passt_t, passt_exec_t)
+term_use_all_inherited_terms(passt_t)
 
 allow passt_t bin_t:file { execute execute_no_trans map };
 allow passt_t user_home_dir_t:dir { search add_name write };
