@@ -30,8 +30,32 @@ interface(`passt_socket',`
 		type passt_t;
 	')
 
-	allow $1 user_tmp_t:sock_file write;
+	allow $1 $2:sock_file write;
 	allow $1 passt_t:unix_stream_socket connectto;
+
+	allow passt_t $2:sock_file { create read write unlink };
+')
+
+interface(`passt_logfile',`
+	gen_require(`
+		type passt_t;
+	')
+
+	logging_log_file($1);
+	allow passt_t $1:dir { search write add_name };
+	allow passt_t $1:file { create open read write };
+')
+
+interface(`passt_pidfile',`
+	gen_require(`
+		type passt_t;
+	')
+
+	allow $1 $2:file { open read unlink };
+
+	files_pid_file($2);
+	allow passt_t $2:dir { search write add_name };
+	allow passt_t $2:file { create open write };
 ')
 
 interface(`passt_kill',`
