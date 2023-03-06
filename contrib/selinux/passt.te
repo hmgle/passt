@@ -62,9 +62,6 @@ logging_log_file(passt_log_t);
 type passt_etc_t;
 files_config_file(passt_etc_t);
 
-type passt_port_t;
-typeattribute passt_port_t port_type;
-
 role unconfined_r types passt_t;
 
 allow passt_t passt_exec_t : file { ioctl read getattr lock execute execute_no_trans entrypoint open } ;
@@ -100,16 +97,22 @@ allow passt_t net_conf_t:lnk_file read;
 allow passt_t tmp_t:sock_file { create unlink write };
 allow passt_t self:netlink_route_socket { bind create nlmsg_read read write setopt };
 
-allow passt_t self:tcp_socket create_stream_socket_perms;
-corenet_tcp_sendrecv_generic_node(passt_t)
-corenet_tcp_bind_generic_node(passt_t)
-allow passt_t passt_port_t:tcp_socket { name_bind name_connect };
-allow passt_t http_port_t:tcp_socket { name_bind name_connect };
-allow passt_t self:udp_socket create_stream_socket_perms;
-corenet_udp_sendrecv_generic_node(passt_t)
-corenet_udp_bind_generic_node(passt_t)
-allow passt_t passt_port_t:udp_socket { name_bind };
+corenet_tcp_bind_all_nodes(passt_t)
+corenet_udp_bind_all_nodes(passt_t)
+
+corenet_tcp_bind_all_ports(passt_t)
+corenet_udp_bind_all_ports(passt_t)
+
+corenet_tcp_connect_all_ports(passt_t)
+
+corenet_tcp_sendrecv_all_ports(passt_t)
+corenet_udp_sendrecv_all_ports(passt_t)
+
 allow passt_t node_t:icmp_socket { name_bind node_bind };
+allow passt_t port_t:icmp_socket name_bind;
+
+allow passt_t self:tcp_socket { create getopt setopt connect bind listen accept shutdown read write };
+allow passt_t self:udp_socket { create getopt setopt connect bind read write };
 allow passt_t self:icmp_socket { bind create setopt read write };
 
 allow passt_t user_tmp_t:dir { add_name write };
