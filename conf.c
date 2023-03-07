@@ -903,10 +903,13 @@ static void conf_print(const struct ctx *c)
 	char buf4[INET_ADDRSTRLEN], ifn[IFNAMSIZ];
 	int i;
 
-	if (c->ifi4)
-		info("Outbound interface (IPv4): %s", if_indextoname(c->ifi4, ifn));
-	if (c->ifi6)
-		info("Outbound interface (IPv6): %s", if_indextoname(c->ifi6, ifn));
+	info("Template interface: %s%s%s%s%s",
+	     c->ifi4 ? if_indextoname(c->ifi4, ifn) : "",
+	     c->ifi4 ? " (IPv4)" : "",
+	     (c->ifi4 && c->ifi6) ? ", " : "",
+	     c->ifi6 ? if_indextoname(c->ifi6, ifn) : "",
+	     c->ifi6 ? " (IPv6)" : "");
+
 	if (c->mode == MODE_PASTA)
 		info("Namespace interface: %s", c->pasta_ifn);
 

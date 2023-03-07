@@ -164,10 +164,10 @@ struct ip6_ctx {
  * @fd_tap:		AF_UNIX socket, tuntap device, or pre-opened socket
  * @mac:		Host MAC address
  * @mac_guest:		MAC address of guest or namespace, seen or configured
- * @ifi4:		Index of routable interface for IPv4, 0 if IPv4 disabled
+ * @ifi4:		Index of template interface for IPv4, 0 if IPv4 disabled
  * @ip:			IPv4 configuration
  * @dns_search:		DNS search list
- * @ifi6:		Index of routable interface for IPv6, 0 if IPv6 disabled
+ * @ifi6:		Index of template interface for IPv6, 0 if IPv6 disabled
  * @ip6:		IPv6 configuration
  * @pasta_ifn:		Name of namespace interface for pasta
  * @pasta_ifn:		Index of namespace interface for pasta
