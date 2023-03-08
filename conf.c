@@ -184,6 +184,7 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 	bool exclude_only = true, bound_one = false;
 	uint8_t exclude[PORT_BITMAP_SIZE] = { 0 };
 	sa_family_t af = AF_UNSPEC;
+	int ret;
 
 	if (!strcmp(optarg, "none")) {
 		if (fwd->mode)
@@ -218,11 +219,18 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 
 		for (i = 0; i < PORT_EPHEMERAL_MIN; i++) {
 			if (optname == 't') {
-				if (!tcp_sock_init(c, AF_UNSPEC, NULL, NULL, i))
+				ret = tcp_sock_init(c, AF_UNSPEC, NULL, NULL,
+						    i);
+				if (ret == -ENFILE || ret == -EMFILE)
+					goto enfile;
+				if (!ret)
 					bound_one = true;
 			} else if (optname == 'u') {
-				if (!udp_sock_init(c, 0, AF_UNSPEC, NULL, NULL,
-						   i))
+				ret = udp_sock_init(c, 0, AF_UNSPEC, NULL, NULL,
+						    i);
+				if (ret == -ENFILE || ret == -EMFILE)
+					goto enfile;
+				if (!ret)
 					bound_one = true;
 			}
 		}
@@ -303,10 +311,16 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 			bitmap_set(fwd->map, i);
 
 			if (optname == 't') {
-				if (!tcp_sock_init(c, af, addr, ifname, i))
+				ret = tcp_sock_init(c, af, addr, ifname, i);
+				if (ret == -ENFILE || ret == -EMFILE)
+					goto enfile;
+				if (!ret)
 					bound_one = true;
 			} else if (optname == 'u') {
-				if (!udp_sock_init(c, 0, af, addr, ifname, i))
+				ret = udp_sock_init(c, 0, af, addr, ifname, i);
+				if (ret == -ENFILE || ret == -EMFILE)
+					goto enfile;
+				if (!ret)
 					bound_one = true;
 			} else {
 				/* No way to check in advance for -T and -U */
@@ -358,10 +372,16 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 			fwd->delta[i] = mapped_range.first - orig_range.first;
 
 			if (optname == 't') {
-				if (!tcp_sock_init(c, af, addr, ifname, i))
+				ret = tcp_sock_init(c, af, addr, ifname, i);
+				if (ret == -ENFILE || ret == -EMFILE)
+					goto enfile;
+				if (!ret)
 					bound_one = true;
 			} else if (optname == 'u') {
-				if (!udp_sock_init(c, 0, af, addr, ifname, i))
+				ret = udp_sock_init(c, 0, af, addr, ifname, i);
+				if (ret == -ENFILE || ret == -EMFILE)
+					goto enfile;
+				if (!ret)
 					bound_one = true;
 			} else {
 				/* No way to check in advance for -T and -U */
@@ -374,6 +394,8 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 		goto bind_fail;
 
 	return;
+enfile:
+	die("Can't open enough sockets for port specifier: %s", optarg);
 bad:
 	die("Invalid port specifier %s", optarg);
 overlap:
