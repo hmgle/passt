@@ -2955,7 +2955,7 @@ void tcp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
  * @addr:	Pointer to address for binding, NULL if not configured
  * @ifname:	Name of interface to bind to, NULL if not configured
  *
- * Return: fd for the new listening socket, or -1 on failure
+ * Return: fd for the new listening socket, negative error code on failure
  */
 static int tcp_sock_init_af(const struct ctx *c, int af, in_port_t port,
 			    const struct in_addr *addr, const char *ifname)
@@ -2968,13 +2968,13 @@ static int tcp_sock_init_af(const struct ctx *c, int af, in_port_t port,
 
 	if (c->tcp.fwd_in.mode == FWD_AUTO) {
 		if (af == AF_INET  || af == AF_UNSPEC)
-			tcp_sock_init_ext[port][V4] = s;
+			tcp_sock_init_ext[port][V4] = s < 0 ? -1 : s;
 		if (af == AF_INET6 || af == AF_UNSPEC)
-			tcp_sock_init_ext[port][V6] = s;
+			tcp_sock_init_ext[port][V6] = s < 0 ? -1 : s;
 	}
 
 	if (s < 0)
-		return -1;
+		return s;
 
 	tcp_sock_set_bufsize(c, s);
 	return s;
@@ -2988,12 +2988,12 @@ static int tcp_sock_init_af(const struct ctx *c, int af, in_port_t port,
  * @ifname:	Name of interface to bind to, NULL if not configured
  * @port:	Port, host order
  *
- * Return: 0 on (partial) success, -1 on (complete) failure
+ * Return: 0 on (partial) success, negative error code on (complete) failure
  */
 int tcp_sock_init(const struct ctx *c, sa_family_t af, const void *addr,
 		  const char *ifname, in_port_t port)
 {
-	int ret = 0;
+	int ret = 0, af_ret;
 
 	if (af == AF_UNSPEC && c->ifi4 && c->ifi6)
 		/* Attempt to get a dual stack socket */
@@ -3002,13 +3002,15 @@ int tcp_sock_init(const struct ctx *c, sa_family_t af, const void *addr,
 
 	/* Otherwise create a socket per IP version */
 	if ((af == AF_INET  || af == AF_UNSPEC) && c->ifi4) {
-		if (tcp_sock_init_af(c, AF_INET, port, addr, ifname) < 0)
-			ret = -1;
+		af_ret = tcp_sock_init_af(c, AF_INET, port, addr, ifname);
+		if (af_ret < 0)
+			ret = af_ret;
 	}
 
 	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6) {
-		if (tcp_sock_init_af(c, AF_INET6, port, addr, ifname) < 0)
-			ret = -1;
+		af_ret = tcp_sock_init_af(c, AF_INET6, port, addr, ifname);
+		if (af_ret < 0)
+			ret = af_ret;
 	}
 
 	return ret;

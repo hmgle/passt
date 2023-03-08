@@ -96,7 +96,7 @@ found:
  * @port:	Port, host order
  * @data:	epoll reference portion for protocol handlers
  *
- * Return: newly created socket, -1 on error
+ * Return: newly created socket, negative error code on failure
  */
 int sock_l4(const struct ctx *c, int af, uint8_t proto,
 	    const void *bind_addr, const char *ifname, uint16_t port,
@@ -115,16 +115,16 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 	};
 	const struct sockaddr *sa;
 	bool dual_stack = false;
+	int fd, sl, y = 1, ret;
 	struct epoll_event ev;
-	int fd, sl, y = 1;
 
 	if (proto != IPPROTO_TCP && proto != IPPROTO_UDP &&
 	    proto != IPPROTO_ICMP && proto != IPPROTO_ICMPV6)
-		return -1;	/* Not implemented. */
+		return -EPFNOSUPPORT;	/* Not implemented. */
 
 	if (af == AF_UNSPEC) {
 		if (!DUAL_STACK_SOCKETS || bind_addr)
-			return -1;
+			return -EINVAL;
 		dual_stack = true;
 		af = AF_INET6;
 	}
@@ -134,14 +134,15 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 	else
 		fd = socket(af, SOCK_DGRAM | SOCK_NONBLOCK, proto);
 
+	ret = -errno;
 	if (fd < 0) {
-		warn("L4 socket: %s", strerror(errno));
-		return -1;
+		warn("L4 socket: %s", strerror(-ret));
+		return ret;
 	}
 
 	if (fd > SOCKET_MAX) {
 		close(fd);
-		return -1;
+		return -EBADF;
 	}
 
 	ref.r.s = fd;
@@ -186,10 +187,11 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 		 */
 		if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE,
 			       ifname, strlen(ifname))) {
+			ret = -errno;
 			warn("Can't bind socket for %s port %u to %s, closing",
 			     ip_proto_str[proto], port, ifname);
 			close(fd);
-			return -1;
+			return ret;
 		}
 	}
 
@@ -200,22 +202,25 @@ int sock_l4(const struct ctx *c, int af, uint8_t proto,
 		 * broken SELinux policy, see icmp_tap_handler().
 		 */
 		if (proto != IPPROTO_ICMP && proto != IPPROTO_ICMPV6) {
+			ret = -errno;
 			close(fd);
-			return -1;
+			return ret;
 		}
 	}
 
 	if (proto == IPPROTO_TCP && listen(fd, 128) < 0) {
-		warn("TCP socket listen: %s", strerror(errno));
+		ret = -errno;
+		warn("TCP socket listen: %s", strerror(-ret));
 		close(fd);
-		return -1;
+		return ret;
 	}
 
 	ev.events = EPOLLIN;
 	ev.data.u64 = ref.u64;
 	if (epoll_ctl(c->epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-		warn("L4 epoll_ctl: %s", strerror(errno));
-		return -1;
+		ret = -errno;
+		warn("L4 epoll_ctl: %s", strerror(-ret));
+		return ret;
 	}
 
 	return fd;

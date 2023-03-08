@@ -977,7 +977,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
  * @ifname:	Name of interface to bind to, NULL if not configured
  * @port:	Port, host order
  *
- * Return: 0 on (partial) success, -1 on (complete) failure
+ * Return: 0 on (partial) success, negative error code on (complete) failure
  */
 int udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		  const void *addr, const char *ifname, in_port_t port)
@@ -1002,19 +1002,19 @@ int udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			s = sock_l4(c, AF_INET, IPPROTO_UDP, addr, ifname,
 				    port, uref.u32);
 
-			udp_tap_map[V4][uref.udp.port].sock = s;
-			udp_splice_init[V4][port].sock = s;
+			udp_tap_map[V4][uref.udp.port].sock = s < 0 ? -1 : s;
+			udp_splice_init[V4][port].sock = s < 0 ? -1 : s;
 		} else {
 			struct in_addr loopback = { htonl(INADDR_LOOPBACK) };
 			uref.udp.ns = true;
 
 			s = sock_l4(c, AF_INET, IPPROTO_UDP, &loopback,
 				    ifname, port, uref.u32);
-			udp_splice_ns[V4][port].sock = s;
+			udp_splice_ns[V4][port].sock = s < 0 ? -1 : s;
 		}
 
 		if (s < 0)
-			ret = -1;
+			ret = s;
 	}
 
 	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6) {
@@ -1026,18 +1026,18 @@ int udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			s = sock_l4(c, AF_INET6, IPPROTO_UDP, addr, ifname,
 				    port, uref.u32);
 
-			udp_tap_map[V6][uref.udp.port].sock = s;
-			udp_splice_init[V6][port].sock = s;
+			udp_tap_map[V6][uref.udp.port].sock = s < 0 ? -1 : s;
+			udp_splice_init[V6][port].sock = s < 0 ? -1 : s;
 		} else {
 			uref.udp.ns = true;
 
 			s = sock_l4(c, AF_INET6, IPPROTO_UDP, &in6addr_loopback,
 				    ifname, port, uref.u32);
-			udp_splice_ns[V6][port].sock = s;
+			udp_splice_ns[V6][port].sock = s < 0 ? -1 : s;
 		}
 
 		if (s < 0)
-			ret = -1;
+			ret = s;
 	}
 
 	return ret;
