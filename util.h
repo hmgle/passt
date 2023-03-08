@@ -88,6 +88,17 @@
 #define MAC_ZERO		((uint8_t [ETH_ALEN]){ 0 })
 #define MAC_IS_ZERO(addr)	(!memcmp((addr), MAC_ZERO, ETH_ALEN))
 
+#ifndef __bswap_constant_16
+#define __bswap_constant_16(x)						\
+	((uint16_t) ((((x) >> 8) & 0xff) | (((x) & 0xff) << 8)))
+#endif
+
+#ifndef __bswap_constant_32
+#define __bswap_constant_32(x)						\
+	((((x) & 0xff000000) >> 24) | (((x) & 0x00ff0000) >>  8) |	\
+	 (((x) & 0x0000ff00) <<  8) | (((x) & 0x000000ff) << 24))
+#endif
+
 #if __BYTE_ORDER == __BIG_ENDIAN
 #define	htons_constant(x)	(x)
 #define	htonl_constant(x)	(x)
