@@ -34,6 +34,8 @@
 #include "log.h"
 #include "netlink.h"
 
+#define NLBUFSIZ	(8192 * sizeof(struct nlmsghdr)) /* See netlink(7) */
+
 /* Socket in init, in target namespace, sequence (just needs to be monotonic) */
 static int nl_sock	= -1;
 static int nl_sock_ns	= -1;
@@ -105,7 +107,7 @@ fail:
 static int nl_req(int ns, char *buf, const void *req, ssize_t len)
 {
 	int s = ns ? nl_sock_ns : nl_sock, done = 0;
-	char flush[BUFSIZ];
+	char flush[NLBUFSIZ];
 	ssize_t n;
 
 	while (!done && (n = recv(s, flush, sizeof(flush), MSG_DONTWAIT)) > 0) {
@@ -121,7 +123,8 @@ static int nl_req(int ns, char *buf, const void *req, ssize_t len)
 		}
 	}
 
-	if ((send(s, req, len, 0) < len) || (len = recv(s, buf, BUFSIZ, 0)) < 0)
+	if ((send(s, req, len, 0) < len) ||
+	    (len = recv(s, buf, NLBUFSIZ, 0)) < 0)
 		return -errno;
 
 	return len;
@@ -149,7 +152,7 @@ unsigned int nl_get_ext_if(sa_family_t af)
 	};
 	struct nlmsghdr *nh;
 	struct rtattr *rta;
-	char buf[BUFSIZ];
+	char buf[NLBUFSIZ];
 	ssize_t n;
 	size_t na;
 
@@ -227,7 +230,7 @@ void nl_route(int ns, unsigned int ifi, sa_family_t af, void *gw)
 	struct nlmsghdr *nh;
 	struct rtattr *rta;
 	struct rtmsg *rtm;
-	char buf[BUFSIZ];
+	char buf[NLBUFSIZ];
 	ssize_t n;
 	size_t na;
 
@@ -336,7 +339,7 @@ void nl_addr(int ns, unsigned int ifi, sa_family_t af,
 	struct ifaddrmsg *ifa;
 	struct nlmsghdr *nh;
 	struct rtattr *rta;
-	char buf[BUFSIZ];
+	char buf[NLBUFSIZ];
 	ssize_t n;
 	size_t na;
 
@@ -446,7 +449,7 @@ void nl_link(int ns, unsigned int ifi, void *mac, int up, int mtu)
 	struct ifinfomsg *ifm;
 	struct nlmsghdr *nh;
 	struct rtattr *rta;
-	char buf[BUFSIZ];
+	char buf[NLBUFSIZ];
 	ssize_t n;
 	size_t na;
 
