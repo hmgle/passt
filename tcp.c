@@ -2993,7 +2993,7 @@ static int tcp_sock_init_af(const struct ctx *c, int af, in_port_t port,
 int tcp_sock_init(const struct ctx *c, sa_family_t af, const void *addr,
 		  const char *ifname, in_port_t port)
 {
-	int ret = 0, af_ret;
+	int r4 = SOCKET_MAX + 1, r6 = SOCKET_MAX + 1;
 
 	if (af == AF_UNSPEC && c->ifi4 && c->ifi6)
 		/* Attempt to get a dual stack socket */
@@ -3001,19 +3001,16 @@ int tcp_sock_init(const struct ctx *c, sa_family_t af, const void *addr,
 			return 0;
 
 	/* Otherwise create a socket per IP version */
-	if ((af == AF_INET  || af == AF_UNSPEC) && c->ifi4) {
-		af_ret = tcp_sock_init_af(c, AF_INET, port, addr, ifname);
-		if (af_ret < 0)
-			ret = af_ret;
-	}
+	if ((af == AF_INET  || af == AF_UNSPEC) && c->ifi4)
+		r4 = tcp_sock_init_af(c, AF_INET, port, addr, ifname);
 
-	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6) {
-		af_ret = tcp_sock_init_af(c, AF_INET6, port, addr, ifname);
-		if (af_ret < 0)
-			ret = af_ret;
-	}
+	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6)
+		r6 = tcp_sock_init_af(c, AF_INET6, port, addr, ifname);
 
-	return ret;
+	if (IN_INTERVAL(0, SOCKET_MAX, r4) || IN_INTERVAL(0, SOCKET_MAX, r6))
+		return 0;
+
+	return r4 < 0 ? r4 : r6;
 }
 
 /**

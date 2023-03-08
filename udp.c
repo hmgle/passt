@@ -983,7 +983,7 @@ int udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		  const void *addr, const char *ifname, in_port_t port)
 {
 	union udp_epoll_ref uref = { .u32 = 0 };
-	int s, ret = 0;
+	int s, r4 = SOCKET_MAX + 1, r6 = SOCKET_MAX + 1;
 
 	if (ns) {
 		uref.udp.port = (in_port_t)(port +
@@ -999,8 +999,8 @@ int udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		uref.udp.orig = true;
 
 		if (!ns) {
-			s = sock_l4(c, AF_INET, IPPROTO_UDP, addr, ifname,
-				    port, uref.u32);
+			r4 = s = sock_l4(c, AF_INET, IPPROTO_UDP, addr,
+					 ifname, port, uref.u32);
 
 			udp_tap_map[V4][uref.udp.port].sock = s < 0 ? -1 : s;
 			udp_splice_init[V4][port].sock = s < 0 ? -1 : s;
@@ -1008,13 +1008,10 @@ int udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 			struct in_addr loopback = { htonl(INADDR_LOOPBACK) };
 			uref.udp.ns = true;
 
-			s = sock_l4(c, AF_INET, IPPROTO_UDP, &loopback,
-				    ifname, port, uref.u32);
+			r4 = s = sock_l4(c, AF_INET, IPPROTO_UDP, &loopback,
+					 ifname, port, uref.u32);
 			udp_splice_ns[V4][port].sock = s < 0 ? -1 : s;
 		}
-
-		if (s < 0)
-			ret = s;
 	}
 
 	if ((af == AF_INET6 || af == AF_UNSPEC) && c->ifi6) {
@@ -1023,24 +1020,25 @@ int udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 		uref.udp.orig = true;
 
 		if (!ns) {
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, addr, ifname,
-				    port, uref.u32);
+			r6 = s = sock_l4(c, AF_INET6, IPPROTO_UDP, addr,
+					 ifname, port, uref.u32);
 
 			udp_tap_map[V6][uref.udp.port].sock = s < 0 ? -1 : s;
 			udp_splice_init[V6][port].sock = s < 0 ? -1 : s;
 		} else {
 			uref.udp.ns = true;
 
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, &in6addr_loopback,
-				    ifname, port, uref.u32);
+			r6 = s = sock_l4(c, AF_INET6, IPPROTO_UDP,
+					 &in6addr_loopback,
+					 ifname, port, uref.u32);
 			udp_splice_ns[V6][port].sock = s < 0 ? -1 : s;
 		}
-
-		if (s < 0)
-			ret = s;
 	}
 
-	return ret;
+	if (IN_INTERVAL(0, SOCKET_MAX, r4) || IN_INTERVAL(0, SOCKET_MAX, r6))
+		return 0;
+
+	return r4 < 0 ? r4 : r6;
 }
 
 /**
