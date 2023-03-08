@@ -461,7 +461,7 @@ static struct tcp4_l2_buf_t {
 	struct iphdr iph;	/* 44				28 */
 	struct tcphdr th;	/* 64				48 */
 	uint8_t data[MSS4];	/* 84				68 */
-				/* 65541			65525 */
+				/* 65536			65532 */
 #ifdef __AVX2__
 } __attribute__ ((packed, aligned(32)))
 #else
@@ -489,7 +489,7 @@ struct tcp6_l2_buf_t {
 	struct ipv6hdr ip6h;	/* 32				20 */
 	struct tcphdr th;	/* 72				60 */
 	uint8_t data[MSS6];	/* 92				80 */
-				/* 65639			65627 */
+				/* 65536			65532 */
 #ifdef __AVX2__
 } __attribute__ ((packed, aligned(32)))
 #else
@@ -1917,15 +1917,13 @@ int tcp_conn_new_sock(const struct ctx *c, sa_family_t af)
 
 /**
  * tcp_conn_tap_mss() - Get MSS value advertised by tap/guest
- * @c:		Execution context
  * @conn:	Connection pointer
  * @opts:	Pointer to start of TCP options
  * @optlen:	Bytes in options: caller MUST ensure available length
  *
  * Return: clamped MSS value
  */
-static uint16_t tcp_conn_tap_mss(const struct ctx *c,
-				 const struct tcp_tap_conn *conn,
+static uint16_t tcp_conn_tap_mss(const struct tcp_tap_conn *conn,
 				 const char *opts, size_t optlen)
 {
 	unsigned int mss;
@@ -1936,13 +1934,10 @@ static uint16_t tcp_conn_tap_mss(const struct ctx *c,
 	else
 		mss = ret;
 
-	/* Don't upset qemu */
-	if (c->mode == MODE_PASST) {
-		if (CONN_V4(conn))
-			mss = MIN(MSS4, mss);
-		else
-			mss = MIN(MSS6, mss);
-	}
+	if (CONN_V4(conn))
+		mss = MIN(MSS4, mss);
+	else
+		mss = MIN(MSS6, mss);
 
 	return MIN(mss, USHRT_MAX);
 }
@@ -2066,7 +2061,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 
 	conn->wnd_to_tap = WINDOW_DEFAULT;
 
-	mss = tcp_conn_tap_mss(c, conn, opts, optlen);
+	mss = tcp_conn_tap_mss(conn, opts, optlen);
 	if (setsockopt(s, SOL_TCP, TCP_MAXSEG, &mss, sizeof(mss)))
 		trace("TCP: failed to set TCP_MAXSEG on socket %i", s);
 	MSS_SET(conn, mss);
@@ -2533,7 +2528,7 @@ static void tcp_conn_from_sock_finish(struct ctx *c, struct tcp_tap_conn *conn,
 	if (!(conn->wnd_from_tap >>= conn->ws_from_tap))
 		conn->wnd_from_tap = 1;
 
-	MSS_SET(conn, tcp_conn_tap_mss(c, conn, opts, optlen));
+	MSS_SET(conn, tcp_conn_tap_mss(conn, opts, optlen));
 
 	conn->seq_init_from_tap = ntohl(th->seq) + 1;
 	conn->seq_from_tap = conn->seq_init_from_tap;
