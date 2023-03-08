@@ -27,6 +27,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <signal.h>
+#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <time.h>

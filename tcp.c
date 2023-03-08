@@ -267,6 +267,7 @@
 #include <sched.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <limits.h>

@@ -23,8 +23,10 @@
 #include <limits.h>
 #include <grp.h>
 #include <pwd.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>
 #include <syslog.h>

@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
