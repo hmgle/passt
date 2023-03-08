@@ -1357,13 +1357,13 @@ void conf(struct ctx *c, int argc, char **argv)
 			if (logfile)
 				die("Can't log to both file and stderr");
 
-			if (c->stderr)
+			if (c->force_stderr)
 				die("Multiple --stderr options given");
 
-			c->stderr = 1;
+			c->force_stderr = 1;
 			break;
 		case 'l':
-			if (c->stderr)
+			if (c->force_stderr)
 				die("Can't log to both stderr and file");
 
 			if (logfile)

@@ -241,7 +241,7 @@ int main(int argc, char **argv)
 	conf(&c, argc, argv);
 	trace_init(c.trace);
 
-	if (c.stderr || isatty(fileno(stdout)))
+	if (c.force_stderr || isatty(fileno(stdout)))
 		__openlog(log_name, LOG_PERROR, LOG_DAEMON);
 
 	quit_fd = pasta_netns_quit_init(&c);
