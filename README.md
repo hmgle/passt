@@ -274,8 +274,10 @@ speeding up local connections, and usually requiring NAT. _pasta_:
     * ✅ starting from 4.18 kernel version
     * ✅ starting from 3.13 kernel version
 * ✅ run-time selection of AVX2 build
-* ⌚ [_musl_](https://bugs.passt.top/show_bug.cgi?id=4) and
-  [_uClibc-ng_](https://bugs.passt.top/show_bug.cgi?id=5)
+* C libraries:
+    * ✅ glibc
+    * ✅ [_musl_](https://bugs.passt.top/show_bug.cgi?id=4)
+    * ⌚ [_uClibc-ng_](https://bugs.passt.top/show_bug.cgi?id=5)
 * ⌚ [FreeBSD](https://bugs.passt.top/show_bug.cgi?id=6),
   [Darwin](https://bugs.passt.top/show_bug.cgi?id=6)
 * ⌚ [NetBSD](https://bugs.passt.top/show_bug.cgi?id=7),
@@ -306,8 +308,8 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ✅ optional NAT, not required
 * ✅ all protocols
 * ✅ _pasta_: auto-detection of bound ports
-* 🛠 run-time configuration of port ranges without autodetection
-* 🛠 configuration of port ranges for autodetection
+* ⌚ run-time configuration of port ranges without autodetection
+* ⌚ configuration of port ranges for autodetection
 * 💡 [add](https://lists.passt.top/) [your](https://bugs.passt.top/)
   [ideas](https://chat.passt.top)
 
@@ -327,33 +329,37 @@ speeding up local connections, and usually requiring NAT. _pasta_:
 * ⌚ eBPF support (might not improve performance over vhost-user)
 
 ### Interfaces
-* ✅ qemu, libvirt support with [`qrap` wrapper](/passt/tree/qrap.c)
-* ✅ out-of-tree patches for [qemu](/passt/tree/contrib/qemu) and
-  [libvirt](/passt/tree/contrib/libvirt) available
+* ✅ native [qemu](https://bugs.passt.top/show_bug.cgi?id=11) support (_passt_)
+* ✅ native [libvirt](https://bugs.passt.top/show_bug.cgi?id=12) support
+  (_passt_)
 * ✅ Podman [integration](https://github.com/containers/podman/pull/16141)
+  (_pasta_)
 * ✅ bug-to-bug compatible
   [_slirp4netns_ replacement](/passt/tree/slirp4netns.sh)
 * ✅ out-of-tree patch for
   [Kata Containers](/passt/tree/contrib/kata-containers) available
-* 🛠 native [qemu](https://bugs.passt.top/show_bug.cgi?id=11),
-  [libvirt](https://bugs.passt.top/show_bug.cgi?id=12) support
 * ⌚ drop-in replacement for VPNKit (rootless Docker)
 
 ### Availability
+* ✅ official [packages](https://gitlab.com/redhat/centos-stream/rpms/passt) for
+  CentOS Stream
 * ✅ official [packages](https://tracker.debian.org/pkg/passt) for Debian
 * ✅ official [packages](https://src.fedoraproject.org/rpms/passt) for Fedora
+* ✅ official [packages](https://packages.ubuntu.com/lunar/passt) for Ubuntu
+* ✅ unofficial [packages](https://aur.archlinux.org/packages/passt-git) for
+  Arch Linux
 * ✅ unofficial
-  [packages](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) for CentOS
-  Stream, EPEL, Mageia
+  [packages](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) for EPEL,
+  Mageia
+* 🛠 official
+  [packages](https://build.opensuse.org/package/show/Virtualization:containers/passt)
+  for openSUSE
 * ✅ unofficial [packages](https://passt.top/builds/latest/x86_64/) from x86_64
   static builds for other RPM-based distributions
 * ✅ unofficial [packages](https://passt.top/builds/latest/x86_64/) from x86_64
-  static builds for Debian-based distributions
+  static builds for other Debian-based distributions
 * ✅ testing on non-x86_64 architectures (aarch64, armv7l, i386, ppc64, ppc64le,
   s390x)
-* 🛠 official
-  [openSUSE packages](https://build.opensuse.org/package/show/home:dfaggioli:devel/passt)
-* ⌚ official packages for Arch Linux
 
 ### Services
 * ✅ built-in [ARP proxy](/passt/tree/arp.c)
@@ -534,16 +540,7 @@ See also the [test logs](/builds/latest/test/).
         cd passt
         make
 
-    * alternatively, install one of the available packages:
-
-        * [Debian](https://tracker.debian.org/pkg/passt) (official)
-        * [Fedora](https://src.fedoraproject.org/rpms/passt) (official)
-        * [CentOS Stream](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
-        * [EPEL](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
-        * [Mageia](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
-        * [openSUSE](https://build.opensuse.org/package/show/home:dfaggioli:devel/passt) (unofficial)
-        * [Debian-based](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
-        * [Other RPM-based distributions](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
+    * alternatively, install one of the [available packages](#availability)
 
         Static binaries and packages are simply built with:
 
@@ -558,17 +555,9 @@ See also the [test logs](/builds/latest/test/).
 
         doc/demo.sh
 
-* alternatively, you can use libvirt, with
-  [this patch](/passt/tree/libvirt/0001-conf-Introduce-support-for-UNIX-domain-socket-as-qem.patch),
-  to start qemu (with [these patches](/passt/tree/contrib/qemu)), and this kind
-  of network interface configuration:
-
-        <interface type='client'>
-          <mac address='52:54:00:02:6b:60'/>
-          <source path='/tmp/passt.socket'/>
-          <model type='virtio'/>
-          <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
-        </interface>
+* alternatively, you can use
+  [libvirt](https://libvirt.org/formatdomain.html#userspace-slirp-or-passt-connection)
+  to start QEMU
 
 * and that's it, you should now have TCP connections, UDP, and ICMP/ICMPv6
   echo working from/to the guest for IPv4 and IPv6
@@ -584,16 +573,7 @@ See also the [test logs](/builds/latest/test/).
         cd passt
         make
 
-    * alternatively, install one of the available packages:
-
-        * [Debian](https://tracker.debian.org/pkg/passt) (official)
-        * [Fedora](https://src.fedoraproject.org/rpms/passt) (official)
-        * [CentOS Stream](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
-        * [EPEL](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
-        * [Mageia](https://copr.fedorainfracloud.org/coprs/sbrivio/passt/) (unofficial)
-        * [openSUSE](https://build.opensuse.org/package/show/home:dfaggioli:devel/passt) (unofficial)
-        * [Debian-based](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
-        * [Other RPM-based distributions](/builds/latest/x86_64/) (unofficial, from static x86_64 builds)
+    * alternatively, install one of the [available packages](#availability)
 
         Static binaries and packages are simply built with:
 
@@ -655,7 +635,8 @@ See also the [test logs](/builds/latest/test/).
 * ...or [file a bug](https://bugs.passt.top/enter_bug.cgi)
 
 ### [Chat](/passt/chat)
-* Somebody might be available on [IRC](https://irc.passt.top)
+* Somebody might be available on [IRC](https://irc.passt.top) on `#passt` at
+  [Libera.Chat](https://libera.chat/)
 
 ### Weekly development [meeting](https://pad.passt.top/p/weekly)
 * Open to everybody! Feel free to join and propose a different time directly on
