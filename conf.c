@@ -775,7 +775,15 @@ static void usage(const char *name)
 	info(   "  -g, --gateway ADDR	Pass IPv4 or IPv6 address as gateway");
 	info(   "    default: gateway from interface with default route");
 	info(   "  -i, --interface NAME	Interface for addresses and routes");
-	info(   "    default: interface with first default route");
+	info(   "    default: from --outbound-if4 and --outbound-if6, if any");
+	info(   "             otherwise interface with first default route");
+	info(   "  -o, --outbound ADDR	Bind to address as outbound source");
+	info(   "    can be specified zero to two times (for IPv4 and IPv6)");
+	info(   "    default: use source address from routing tables");
+	info(   "  --outbound-if4 NAME	Bind to outbound interface for IPv4");
+	info(   "    default: use interface from default route");
+	info(   "  --outbound-if6 NAME	Bind to outbound interface for IPv6");
+	info(   "    default: use interface from default route");
 	info(   "  -D, --dns ADDR	Use IPv4 or IPv6 address as DNS");
 	info(   "    can be specified multiple times");
 	info(   "    a single, empty option disables DNS information");
@@ -900,7 +908,7 @@ pasta_opts:
  */
 static void conf_print(const struct ctx *c)
 {
-	char buf4[INET_ADDRSTRLEN], ifn[IFNAMSIZ];
+	char buf4[INET_ADDRSTRLEN], buf6[INET6_ADDRSTRLEN], ifn[IFNAMSIZ];
 	int i;
 
 	info("Template interface: %s%s%s%s%s",
@@ -909,6 +917,26 @@ static void conf_print(const struct ctx *c)
 	     (c->ifi4 && c->ifi6) ? ", " : "",
 	     c->ifi6 ? if_indextoname(c->ifi6, ifn) : "",
 	     c->ifi6 ? " (IPv6)" : "");
+
+	if (*c->ip4.ifname_out || *c->ip6.ifname_out) {
+		info("Outbound interface: %s%s%s%s%s",
+		     *c->ip4.ifname_out ? c->ip4.ifname_out : "",
+		     *c->ip4.ifname_out ? " (IPv4)" : "",
+		     (*c->ip4.ifname_out && *c->ip6.ifname_out) ? ", " : "",
+		     *c->ip6.ifname_out ? c->ip6.ifname_out : "",
+		     *c->ip6.ifname_out ? " (IPv6)" : "");
+	}
+
+	if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.addr_out) ||
+	    !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr_out)) {
+		info("Outbound address: %s%s%s",
+		     IN4_IS_ADDR_UNSPECIFIED(&c->ip4.addr_out) ? "" :
+		     inet_ntop(AF_INET, &c->ip4.addr_out, buf4, sizeof(buf4)),
+		     (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.addr_out) &&
+		      !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr_out)) ? ", " : "",
+		     IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr_out) ? "" :
+		     inet_ntop(AF_INET6, &c->ip6.addr_out, buf6, sizeof(buf6)));
+	}
 
 	if (c->mode == MODE_PASTA)
 		info("Namespace interface: %s", c->pasta_ifn);
@@ -948,8 +976,6 @@ static void conf_print(const struct ctx *c)
 	}
 
 	if (c->ifi6) {
-		char buf6[INET6_ADDRSTRLEN];
-
 		if (!c->no_ndp && !c->no_dhcpv6)
 			info("NDP/DHCPv6:");
 		else if (!c->no_ndp)
@@ -1125,6 +1151,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"mac-addr",	required_argument,	NULL,		'M' },
 		{"gateway",	required_argument,	NULL,		'g' },
 		{"interface",	required_argument,	NULL,		'i' },
+		{"outbound",	required_argument,	NULL,		'o' },
 		{"dns",		required_argument,	NULL,		'D' },
 		{"search",	required_argument,	NULL,		'S' },
 		{"no-tcp",	no_argument,		&c->no_tcp,	1 },
@@ -1157,6 +1184,8 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"runas",	required_argument,	NULL,		12 },
 		{"log-size",	required_argument,	NULL,		13 },
 		{"version",	no_argument,		NULL,		14 },
+		{"outbound-if4", required_argument,	NULL,		15 },
+		{"outbound-if6", required_argument,	NULL,		16 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
@@ -1166,8 +1195,8 @@ void conf(struct ctx *c, int argc, char **argv)
 	struct in6_addr *dns6 = c->ip6.dns;
 	struct fqdn *dnss = c->dns_search;
 	struct in_addr *dns4 = c->ip4.dns;
+	unsigned int ifi4 = 0, ifi6 = 0;
 	const char *optstring;
-	unsigned int ifi = 0;
 	int name, ret, b, i;
 	size_t logsize = 0;
 	uid_t uid;
@@ -1175,9 +1204,9 @@ void conf(struct ctx *c, int argc, char **argv)
 
 	if (c->mode == MODE_PASTA) {
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
-		optstring = "dqfel:hF:I:p:P:m:a:n:M:g:i:D:S:46t:u:T:U:";
+		optstring = "dqfel:hF:I:p:P:m:a:n:M:g:i:o:D:S:46t:u:T:U:";
 	} else {
-		optstring = "dqfel:hs:F:p:P:m:a:n:M:g:i:D:S:461t:u:";
+		optstring = "dqfel:hs:F:p:P:m:a:n:M:g:i:o:D:S:461t:u:";
 	}
 
 	c->tcp.fwd_in.mode = c->tcp.fwd_out.mode = 0;
@@ -1295,6 +1324,26 @@ void conf(struct ctx *c, int argc, char **argv)
 				c->mode == MODE_PASST ? "passt " : "pasta ");
 			fprintf(stdout, VERSION_BLOB);
 			exit(EXIT_SUCCESS);
+		case 15:
+			if (*c->ip4.ifname_out)
+				die("Redundant outbound interface: %s", optarg);
+
+			ret = snprintf(c->ip4.ifname_out,
+				       sizeof(c->ip4.ifname_out), "%s", optarg);
+			if (ret <= 0 || ret >= (int)sizeof(c->ip4.ifname_out))
+				die("Invalid interface name: %s", optarg);
+
+			break;
+		case 16:
+			if (*c->ip6.ifname_out)
+				die("Redundant outbound interface: %s", optarg);
+
+			ret = snprintf(c->ip6.ifname_out,
+				       sizeof(c->ip6.ifname_out), "%s", optarg);
+			if (ret <= 0 || ret >= (int)sizeof(c->ip6.ifname_out))
+				die("Invalid interface name: %s", optarg);
+
+			break;
 		case 'd':
 			if (c->debug)
 				die("Multiple --debug options given");
@@ -1459,12 +1508,32 @@ void conf(struct ctx *c, int argc, char **argv)
 			die("Invalid gateway address: %s", optarg);
 			break;
 		case 'i':
-			if (ifi)
+			if (ifi4 || ifi6)
 				die("Redundant interface: %s", optarg);
 
-			if (!(ifi = if_nametoindex(optarg)))
+			if (!(ifi4 = ifi6 = if_nametoindex(optarg)))
 				die("Invalid interface name %s: %s", optarg,
 				    strerror(errno));
+			break;
+		case 'o':
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr_out)	  &&
+			    inet_pton(AF_INET6, optarg, &c->ip6.addr_out) &&
+			    !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr_out)	  &&
+			    !IN6_IS_ADDR_LOOPBACK(&c->ip6.addr_out)	  &&
+			    !IN6_IS_ADDR_V4MAPPED(&c->ip6.addr_out)	  &&
+			    !IN6_IS_ADDR_V4COMPAT(&c->ip6.addr_out)	  &&
+			    !IN6_IS_ADDR_MULTICAST(&c->ip6.addr_out))
+				break;
+
+			if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.addr_out)	 &&
+			    inet_pton(AF_INET, optarg, &c->ip4.addr_out) &&
+			    !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.addr_out)	 &&
+			    !IN4_IS_ADDR_BROADCAST(&c->ip4.addr_out)	 &&
+			    !IN4_IS_ADDR_MULTICAST(&c->ip4.addr_out))
+				break;
+
+			die("Invalid or redundant outbound address: %s",
+			    optarg);
 			break;
 		case 'D':
 			if (!strcmp(optarg, "none")) {
@@ -1557,6 +1626,12 @@ void conf(struct ctx *c, int argc, char **argv)
 	if (*c->sock_path && c->fd_tap >= 0)
 		die("Options --socket and --fd are mutually exclusive");
 
+	if (!ifi4 && *c->ip4.ifname_out)
+		ifi4 = if_nametoindex(c->ip4.ifname_out);
+
+	if (!ifi6 && *c->ip6.ifname_out)
+		ifi6 = if_nametoindex(c->ip6.ifname_out);
+
 	conf_ugid(runas, &uid, &gid);
 
 	if (logfile) {
@@ -1566,10 +1641,12 @@ void conf(struct ctx *c, int argc, char **argv)
 
 	nl_sock_init(c, false);
 	if (!v6_only)
-		c->ifi4 = conf_ip4(ifi, &c->ip4, c->mac);
+		c->ifi4 = conf_ip4(ifi4, &c->ip4, c->mac);
 	if (!v4_only)
-		c->ifi6 = conf_ip6(ifi, &c->ip6, c->mac);
-	if (!c->ifi4 && !c->ifi6)
+		c->ifi6 = conf_ip6(ifi6, &c->ip6, c->mac);
+	if ((!c->ifi4 && !c->ifi6) ||
+	    (*c->ip4.ifname_out && !c->ifi4) ||
+	    (*c->ip6.ifname_out && !c->ifi6))
 		die("External interface not usable");
 
 	/* Inbound port options can be parsed now (after IPv4/IPv6 settings) */

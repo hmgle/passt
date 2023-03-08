@@ -106,6 +106,8 @@ enum passt_modes {
  * @dns:		DNS addresses for DHCP, zero-terminated, network order
  * @dns_match:		Forward DNS query if sent to this address, network order
  * @dns_host:		Use this DNS on the host for forwarding, network order
+ * @addr_out:		Optional source address for outbound traffic
+ * @ifname_out:		Optional interface name to bind outbound sockets to
  */
 struct ip4_ctx {
 	struct in_addr addr;
@@ -115,6 +117,9 @@ struct ip4_ctx {
 	struct in_addr dns[MAXNS + 1];
 	struct in_addr dns_match;
 	struct in_addr dns_host;
+
+	struct in_addr addr_out;
+	char ifname_out[IFNAMSIZ];
 };
 
 /**
@@ -127,6 +132,8 @@ struct ip4_ctx {
  * @dns:		DNS addresses for DHCPv6 and NDP, zero-terminated
  * @dns_match:		Forward DNS query if sent to this address
  * @dns_host:		Use this DNS on the host for forwarding
+ * @addr_out:		Optional source address for outbound traffic
+ * @ifname_out:		Optional interface name to bind outbound sockets to
  */
 struct ip6_ctx {
 	struct in6_addr addr;
@@ -137,6 +144,9 @@ struct ip6_ctx {
 	struct in6_addr dns[MAXNS + 1];
 	struct in6_addr dns_match;
 	struct in6_addr dns_host;
+
+	struct in6_addr addr_out;
+	char ifname_out[IFNAMSIZ];
 };
 
 #include <netinet/if_ether.h>

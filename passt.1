@@ -180,8 +180,33 @@ to allow mapping of local traffic to guest and target namespace. See the
 .TP
 .BR \-i ", " \-\-interface " " \fIname
 Use host interface \fIname\fR to derive addresses and routes.
-Default is to use the interfaces with the first default routes for each IP
-version.
+Default is to use the interfaces specified by \fB--outbound-if4\fR and
+\fB--outbound-if6\fR, for IPv4 and IPv6 addresses and routes, respectively. If
+no interfaces are given, the interface with the first default routes for each IP
+version is selected.
+
+.TP
+.BR \-o ", " \-\-outbound " " \fIaddr
+Use an IPv4 \fIaddr\fR as source address for IPv4 outbound TCP connections, UDP
+flows, ICMP requests, or an IPv6 \fIaddr\fR for IPv6 ones, by binding outbound
+sockets to it.
+This option can be specified zero (for defaults) to two times (once for IPv4,
+once for IPv6).
+By default, the source address is selected by the routing tables.
+
+.TP
+.BR \-\-outbound-if4 " " \fIname
+Bind IPv4 outbound sockets to host interface \fIname\fR, and, unless another
+interface is specified via \fB-i\fR, \fB--interface\fR, use this interface to
+derive IPv4 addresses and routes.
+By default, the interface given by the default route is selected.
+
+.TP
+.BR \-\-outbound-if6 " " \fIname
+Bind IPv6 outbound sockets to host interface \fIname\fR, and, unless another
+interface is specified via \fB-i\fR, \fB--interface\fR, use this interface to
+derive IPv6 addresses and routes.
+By default, the interface given by the default route is selected.
 
 .TP
 .BR \-D ", " \-\-dns " " \fIaddr

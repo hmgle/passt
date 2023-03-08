@@ -843,20 +843,6 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		sa = (struct sockaddr *)&s_in;
 		sl = sizeof(s_in);
 
-		if (!(s = udp_tap_map[V4][src].sock)) {
-			union udp_epoll_ref uref = { .udp.port = src };
-
-			s = sock_l4(c, AF_INET, IPPROTO_UDP, NULL, NULL, src,
-				    uref.u32);
-			if (s < 0)
-				return p->count;
-
-			udp_tap_map[V4][src].sock = s;
-			bitmap_set(udp_act[V4][UDP_ACT_TAP], src);
-		}
-
-		udp_tap_map[V4][src].ts = now->tv_sec;
-
 		if (IN4_ARE_ADDR_EQUAL(&s_in.sin_addr, &c->ip4.dns_match) &&
 		    ntohs(s_in.sin_port) == 53) {
 			s_in.sin_addr = c->ip4.dns_host;
@@ -868,13 +854,37 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 			else
 				s_in.sin_addr = c->ip4.addr_seen;
 		}
+
+		if (!(s = udp_tap_map[V4][src].sock)) {
+			union udp_epoll_ref uref = { .udp.port = src };
+			in_addr_t bind_addr = { 0 };
+			const char *bind_if = NULL;
+
+			if (!IN6_IS_ADDR_LOOPBACK(&s_in.sin_addr) &&
+			    *c->ip6.ifname_out)
+				bind_if = c->ip6.ifname_out;
+
+			if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.addr_out) &&
+			    !IN4_IS_ADDR_LOOPBACK(&s_in.sin_addr))
+				bind_addr = c->ip4.addr_out.s_addr;
+
+			s = sock_l4(c, AF_INET, IPPROTO_UDP, &bind_addr,
+				    bind_if, src, uref.u32);
+			if (s < 0)
+				return p->count;
+
+			udp_tap_map[V4][src].sock = s;
+			bitmap_set(udp_act[V4][UDP_ACT_TAP], src);
+		}
+
+		udp_tap_map[V4][src].ts = now->tv_sec;
 	} else {
 		s_in6 = (struct sockaddr_in6) {
 			.sin6_family = AF_INET6,
 			.sin6_port = uh->dest,
 			.sin6_addr = *(struct in6_addr *)addr,
 		};
-		const void *bind_addr = &in6addr_any;
+		const struct in6_addr *bind_addr = &in6addr_any;
 
 		sa = (struct sockaddr *)&s_in6;
 		sl = sizeof(s_in6);
@@ -898,9 +908,19 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		if (!(s = udp_tap_map[V6][src].sock)) {
 			union udp_epoll_ref uref = { .udp.v6 = 1,
 						     .udp.port = src };
+			const char *bind_if = NULL;
 
-			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr, NULL,
-				    src, uref.u32);
+			if (!IN6_IS_ADDR_LOOPBACK(&s_in6.sin6_addr) &&
+			    *c->ip6.ifname_out)
+				bind_if = c->ip6.ifname_out;
+
+			if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr_out) &&
+			    !IN6_IS_ADDR_LOOPBACK(&s_in6.sin6_addr) &&
+			    !IN6_IS_ADDR_LINKLOCAL(&s_in6.sin6_addr))
+				bind_addr = &c->ip6.addr_out;
+
+			s = sock_l4(c, AF_INET6, IPPROTO_UDP, bind_addr,
+				    bind_if, src, uref.u32);
 			if (s < 0)
 				return p->count;
 

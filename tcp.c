@@ -1947,6 +1947,61 @@ static uint16_t tcp_conn_tap_mss(const struct ctx *c,
 }
 
 /**
+ * tcp_bind_outbound() - Bind socket to outbound address and interface if given
+ * @c:		Execution context
+ * @s:		Outbound TCP socket
+ * @af:		Address family
+ */
+static void tcp_bind_outbound(const struct ctx *c, int s, sa_family_t af)
+{
+	if (af == AF_INET) {
+		if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.addr_out)) {
+			struct sockaddr_in addr4 = {
+				.sin_family = AF_INET,
+				.sin_port = 0,
+				.sin_addr = c->ip4.addr_out,
+			};
+
+			if (bind(s, (struct sockaddr *)&addr4, sizeof(addr4))) {
+				debug("Can't bind IPv4 TCP socket address: %s",
+				      strerror(errno));
+			}
+		}
+
+		if (*c->ip4.ifname_out) {
+			if (setsockopt(s, SOL_SOCKET, SO_BINDTODEVICE,
+				       c->ip4.ifname_out,
+				       strlen(c->ip4.ifname_out))) {
+				debug("Can't bind IPv4 TCP socket to interface:"
+				      " %s", strerror(errno));
+			}
+		}
+	} else if (af == AF_INET6) {
+		if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.addr_out)) {
+			struct sockaddr_in6 addr6 = {
+				.sin6_family = AF_INET6,
+				.sin6_port = 0,
+				.sin6_addr = c->ip6.addr_out,
+			};
+
+			if (bind(s, (struct sockaddr *)&addr6, sizeof(addr6))) {
+				debug("Can't bind IPv6 TCP socket address: %s",
+				      strerror(errno));
+			}
+		}
+
+		if (*c->ip6.ifname_out) {
+			if (setsockopt(s, SOL_SOCKET, SO_BINDTODEVICE,
+				       c->ip6.ifname_out,
+				       strlen(c->ip6.ifname_out))) {
+				debug("Can't bind IPv6 TCP socket to interface:"
+				      " %s", strerror(errno));
+			}
+		}
+	}
+}
+
+/**
  * tcp_conn_from_tap() - Handle connection request (SYN segment) from tap
  * @c:		Execution context
  * @af:		Address family, AF_INET or AF_INET6
@@ -2051,6 +2106,11 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	}
 	if (errno != EADDRNOTAVAIL && errno != EACCES)
 		conn_flag(c, conn, LOCAL);
+
+	if ((af == AF_INET &&  !IN4_IS_ADDR_LOOPBACK(&addr4.sin_addr)) ||
+	    (af == AF_INET6 && !IN6_IS_ADDR_LOOPBACK(&addr6.sin6_addr) &&
+			       !IN6_IS_ADDR_LINKLOCAL(&addr6.sin6_addr)))
+		tcp_bind_outbound(c, s, af);
 
 	if (connect(s, sa, sl)) {
 		if (errno != EINPROGRESS) {
