@@ -61,7 +61,9 @@ ln -sr %{buildroot}%{_mandir}/man1/pasta.1 %{buildroot}%{_mandir}/man1/pasta.avx
 pushd contrib/selinux
 make -f %{_datadir}/selinux/devel/Makefile
 install -p -m 644 -D passt.pp %{buildroot}%{_datadir}/selinux/packages/%{name}/passt.pp
+install -p -m 644 -D passt.if %{buildroot}%{_datadir}/selinux/devel/include/contrib/passt.if
 install -p -m 644 -D pasta.pp %{buildroot}%{_datadir}/selinux/packages/%{name}/pasta.pp
+install -p -m 644 -D pasta.if %{buildroot}%{_datadir}/selinux/devel/include/contrib/pasta.if
 popd
 
 %post selinux
@@ -93,7 +95,9 @@ semodule -r pasta 2>/dev/null || :
 %files selinux
 %dir %{_datadir}/selinux/packages/%{name}
 %{_datadir}/selinux/packages/%{name}/passt.pp
+%{_datadir}/selinux/devel/include/contrib/passt.if
 %{_datadir}/selinux/packages/%{name}/pasta.pp
+%{_datadir}/selinux/devel/include/contrib/pasta.if
 
 %changelog
 {{{ passt_git_changelog }}}
