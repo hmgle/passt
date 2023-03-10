@@ -53,9 +53,9 @@ void name(const char *format, ...) {					\
 									\
 	if (setlogmask(0) & LOG_MASK(LOG_DEBUG) && log_file == -1) {	\
 		clock_gettime(CLOCK_REALTIME, &tp);			\
-		fprintf(stderr, "%li.%04li: ",				\
-			tp.tv_sec - log_start,				\
-			tp.tv_nsec / (100L * 1000));			\
+		fprintf(stderr, "%lli.%04lli: ",			\
+			(long long int)tp.tv_sec - log_start,		\
+			(long long int)tp.tv_nsec / (100L * 1000));	\
 	}								\
 									\
 	if ((LOG_MASK(LOG_PRI(level)) & log_mask) || BEFORE_DAEMON) {	\
@@ -225,8 +225,9 @@ static void logfile_rotate_fallocate(int fd, struct timespec *ts)
 		return;
 
 	n = snprintf(buf, BUFSIZ,
-		     "%s - log truncated at %li.%04li", log_header,
-		     ts->tv_sec - log_start, ts->tv_nsec / (100L * 1000));
+		     "%s - log truncated at %lli.%04lli", log_header,
+		     (long long int)(ts->tv_sec - log_start),
+		     (long long int)(ts->tv_nsec / (100L * 1000)));
 
 	/* Avoid partial lines by padding the header with spaces */
 	nl = memchr(buf + n + 1, '\n', BUFSIZ - n - 1);
@@ -256,9 +257,9 @@ static void logfile_rotate_move(int fd, struct timespec *ts)
 	char buf[BUFSIZ], *nl;
 
 	header_len = snprintf(buf, BUFSIZ,
-			      "%s - log truncated at %li.%04li\n", log_header,
-			      ts->tv_sec - log_start,
-			      ts->tv_nsec / (100L * 1000));
+			      "%s - log truncated at %lli.%04lli\n", log_header,
+			      (long long int)(ts->tv_sec - log_start),
+			      (long long int)(ts->tv_nsec / (100L * 1000)));
 	if (lseek(fd, 0, SEEK_SET) == -1)
 		return;
 	if (write(fd, buf, header_len) == -1)
@@ -349,8 +350,9 @@ void logfile_write(int pri, const char *format, va_list ap)
 	if (clock_gettime(CLOCK_REALTIME, &ts))
 		return;
 
-	n = snprintf(buf, BUFSIZ, "%li.%04li: %s",
-		     ts.tv_sec - log_start, ts.tv_nsec / (100L * 1000),
+	n = snprintf(buf, BUFSIZ, "%lli.%04lli: %s",
+		     (long long int)(ts.tv_sec - log_start),
+		     (long long int)(ts.tv_nsec / (100L * 1000)),
 		     logfile_prefix[pri]);
 
 	n += vsnprintf(buf + n, BUFSIZ - n, format, ap);
