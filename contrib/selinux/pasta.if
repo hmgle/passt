@@ -3,7 +3,7 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# contrib/selinux/pasta.if - SELinux profile example: Interface File for pasta
+# contrib/selinux/pasta.if - SELinux profile: Interface File for pasta
 #
 # Copyright (c) 2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>

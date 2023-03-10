@@ -3,7 +3,7 @@
 # PASST - Plug A Simple Socket Transport
 #  for qemu/UNIX domain socket mode
 #
-# contrib/selinux/passt.fc - SELinux profile example: File Context for passt
+# contrib/selinux/passt.fc - SELinux profile: File Context for passt
 #
 # Copyright (c) 2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>

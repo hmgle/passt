@@ -3,7 +3,7 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# contrib/selinux/pasta.te - SELinux profile example: Type Enforcement for pasta
+# contrib/selinux/pasta.te - SELinux profile: Type Enforcement for pasta
 #
 # Copyright (c) 2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>

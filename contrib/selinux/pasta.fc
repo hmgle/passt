@@ -3,7 +3,7 @@
 # PASTA - Pack A Subtle Tap Abstraction
 #  for network namespace/tap device mode
 #
-# contrib/selinux/pasta.fc - SELinux profile example: File Context for pasta
+# contrib/selinux/pasta.fc - SELinux profile: File Context for pasta
 #
 # Copyright (c) 2022 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
