@@ -135,8 +135,10 @@ background (if configured to do so).
 
 .TP
 .BR \-m ", " \-\-mtu " " \fImtu
-Assign \fImtu\fR via DHCP (option 26) and NDP (option type 5).
-By default, no MTU options will be sent.
+Assign \fImtu\fR via DHCP (option 26) and NDP (option type 5). A zero value
+disables assignment.
+By default, the advertised MTU is 65520 bytes, that is, the maximum 802.3 MTU
+minus the length of a 802.3 header, rounded to 32 bits (IPv4 words).
 
 .TP
 .BR \-a ", " \-\-address " " \fIaddr
