@@ -8,6 +8,7 @@
 # Author: Stefano Brivio <sbrivio@redhat.com>
 
 %global git_hash {{{ git_head }}}
+%global selinuxtype targeted
 
 Name:		passt
 Version:	{{{ git_version }}}
@@ -19,6 +20,7 @@ URL:		https://passt.top/
 Source:		https://passt.top/passt/snapshot/passt-%{git_hash}.tar.xz
 
 BuildRequires:	gcc, make, checkpolicy, selinux-policy-devel
+Requires:	(%{name}-selinux = %{version}-%{release} if selinux-policy-%{selinuxtype})
 
 %description
 passt implements a translation layer between a Layer-2 network interface and
@@ -66,13 +68,21 @@ install -p -m 644 -D pasta.pp %{buildroot}%{_datadir}/selinux/packages/%{name}/p
 install -p -m 644 -D pasta.if %{buildroot}%{_datadir}/selinux/devel/include/contrib/pasta.if
 popd
 
-%post selinux
-semodule -i %{_datadir}/selinux/packages/%{name}/passt.pp 2>/dev/null || :
-semodule -i %{_datadir}/selinux/packages/%{name}/pasta.pp 2>/dev/null || :
+%pre selinux
+%selinux_relabel_pre -s %{selinuxtype}
 
-%preun selinux
-semodule -r passt 2>/dev/null || :
-semodule -r pasta 2>/dev/null || :
+%post selinux
+%selinux_modules_install -s %{selinuxtype} %{_datadir}/selinux/packages/%{name}/passt.pp
+%selinux_modules_install -s %{selinuxtype} %{_datadir}/selinux/packages/%{name}/pasta.pp
+
+%postun selinux
+if [ $1 -eq 0 ]; then
+	%selinux_modules_uninstall -s %{selinuxtype} passt
+	%selinux_modules_uninstall -s %{selinuxtype} pasta
+fi
+
+%posttrans selinux
+%selinux_relabel_post -s %{selinuxtype}
 
 %files
 %license LICENSES/{AGPL-3.0-or-later.txt,BSD-3-Clause.txt}
