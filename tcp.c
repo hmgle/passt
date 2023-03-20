@@ -89,7 +89,7 @@
  * No port translation is needed for connections initiated remotely or by the
  * local host: source port from socket is reused while establishing connections
  * to the guest.
- * 
+ *
  * For connections initiated by the guest, it's not possible to force the same
  * source port as connections are established by the host kernel: that's the
  * only port translation needed.
@@ -173,7 +173,7 @@
  *   new socket is created and mapped in connection tracking table, setting
  *   MSS and window clamping from header and option of the observed SYN segment
  *
- * 
+ *
  * Aging and timeout
  * -----------------
  *
@@ -560,7 +560,7 @@ static struct tcp6_l2_flags_buf_t {
 #endif
 	struct tap_hdr taph;	/* 14					   2 */
 	struct ipv6hdr ip6h;	/* 32					  20 */
-	struct tcphdr th	/* 72 */ __attribute__ ((aligned(4))); /* 60 */ 
+	struct tcphdr th	/* 72 */ __attribute__ ((aligned(4))); /* 60 */
 	char opts[OPT_MSS_LEN + OPT_WS_LEN + 1];
 #ifdef __AVX2__
 } __attribute__ ((packed, aligned(32)))
@@ -3308,14 +3308,14 @@ void tcp_timer(struct ctx *c, const struct timespec *ts)
 		struct tcp_port_detect_arg detect_arg = { c, 0 };
 		struct tcp_port_rebind_arg rebind_arg = { c, 0 };
 
-		if (c->tcp.fwd_in.mode == FWD_AUTO) {
+		if (c->tcp.fwd_out.mode == FWD_AUTO) {
 			detect_arg.detect_in_ns = 0;
 			tcp_port_detect(&detect_arg);
 			rebind_arg.bind_in_ns = 1;
 			NS_CALL(tcp_port_rebind, &rebind_arg);
 		}
 
-		if (c->tcp.fwd_out.mode == FWD_AUTO) {
+		if (c->tcp.fwd_in.mode == FWD_AUTO) {
 			detect_arg.detect_in_ns = 1;
 			NS_CALL(tcp_port_detect, &detect_arg);
 			rebind_arg.bind_in_ns = 0;
