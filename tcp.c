@@ -758,7 +758,7 @@ static void conn_flag_do(const struct ctx *c, struct tcp_tap_conn *conn,
 			      tcp_flag_str[flag_index]);
 		}
 	} else {
-		int flag_index = fls(~flag);
+		int flag_index = fls(flag);
 
 		if (conn->flags & flag) {
 			/* Special case: setting ACK_FROM_TAP_DUE on a
