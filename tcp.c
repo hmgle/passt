@@ -1822,7 +1822,7 @@ static void tcp_clamp_window(const struct ctx *c, struct tcp_tap_conn *conn,
 		 *
 		 * drop this suppression once that's resolved.
 		 */
-		/* cppcheck-suppress knownConditionTrueFalse */
+		/* cppcheck-suppress [knownConditionTrueFalse, unmatchedSuppression] */
 		if ((wnd > prev_scaled && wnd * 99 / 100 < prev_scaled) ||
 		    (wnd < prev_scaled && wnd * 101 / 100 > prev_scaled))
 			return;
