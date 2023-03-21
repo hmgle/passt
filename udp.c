@@ -1042,7 +1042,23 @@ int udp_sock_init(const struct ctx *c, int ns, sa_family_t af,
 }
 
 /**
- * udp_sock_init_ns() - Bind sockets in namespace for inbound connections
+ * udp_sock_init_init() - Bind sockets in init namespace for inbound connections
+ * @c:		Execution context
+ */
+static void udp_sock_init_init(struct ctx *c)
+{
+	unsigned dst;
+
+	for (dst = 0; dst < NUM_PORTS; dst++) {
+		if (!bitmap_isset(c->udp.fwd_in.f.map, dst))
+			continue;
+
+		udp_sock_init(c, 0, AF_UNSPEC, NULL, NULL, dst);
+	}
+}
+
+/**
+ * udp_sock_init_ns() - Bind sockets in namespace for outbound connections
  * @arg:	Execution context
  *
  * Return: 0
@@ -1110,6 +1126,7 @@ int udp_init(struct ctx *c)
 
 	if (c->mode == MODE_PASTA) {
 		udp_splice_iov_init();
+		udp_sock_init_init(c);
 		NS_CALL(udp_sock_init_ns, c);
 	}
 
