@@ -364,7 +364,7 @@ struct tcp6_l2_head {	/* For MSS6 macro: keep in sync with tcp6_l2_buf_t */
 # define KERNEL_REPORTS_SND_WND(c)	(0 && (c))
 #endif
 
-#define ACK_INTERVAL			50		/* ms */
+#define ACK_INTERVAL			10		/* ms */
 #define SYN_TIMEOUT			10		/* s */
 #define ACK_TIMEOUT			2
 #define FIN_TIMEOUT			60
@@ -1730,8 +1730,12 @@ static int tcp_send_flag(struct ctx *c, struct tcp_tap_conn *conn, int flags)
 	iov->iov_len = tcp_l2_buf_fill_headers(c, conn, p, optlen,
 					       NULL, conn->seq_to_tap);
 
-	if (th->ack)
-		conn_flag(c, conn, ~ACK_TO_TAP_DUE);
+	if (th->ack) {
+		if (SEQ_GE(conn->seq_ack_to_tap, conn->seq_from_tap))
+			conn_flag(c, conn, ~ACK_TO_TAP_DUE);
+		else
+			conn_flag(c, conn, ACK_TO_TAP_DUE);
+	}
 
 	if (th->fin)
 		conn_flag(c, conn, ACK_FROM_TAP_DUE);
@@ -2820,7 +2824,7 @@ static void tcp_timer_handler(struct ctx *c, union epoll_ref ref)
 
 	if (conn->flags & ACK_TO_TAP_DUE) {
 		tcp_send_flag(c, conn, ACK_IF_NEEDED);
-		conn_flag(c, conn, ~ACK_TO_TAP_DUE);
+		tcp_timer_ctl(c, conn);
 	} else if (conn->flags & ACK_FROM_TAP_DUE) {
 		if (!(conn->events & ESTABLISHED)) {
 			debug("TCP: index %li, handshake timeout", CONN_IDX(conn));
