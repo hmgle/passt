@@ -18,11 +18,11 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <limits.h>
+#include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>

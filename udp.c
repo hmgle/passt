@@ -91,6 +91,7 @@
  */
 
 #include <sched.h>
+#include <unistd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <errno.h>
@@ -107,7 +108,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
-#include <unistd.h>
 #include <time.h>
 
 #include "checksum.h"

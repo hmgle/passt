@@ -267,6 +267,7 @@
 #include <sched.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -287,7 +288,6 @@
 #include <sys/timerfd.h>
 #include <sys/types.h>
 #include <sys/uio.h>
-#include <unistd.h>
 #include <time.h>
 
 #include <linux/tcp.h> /* For struct tcp_info */

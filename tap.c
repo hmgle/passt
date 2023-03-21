@@ -14,6 +14,7 @@
  */
 
 #include <sched.h>
+#include <unistd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <errno.h>
@@ -33,7 +34,6 @@
 #include <sys/uio.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
