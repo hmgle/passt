@@ -1610,10 +1610,12 @@ out:
 static void tcp_update_seqack_from_tap(const struct ctx *c,
 				       struct tcp_tap_conn *conn, uint32_t seq)
 {
+	if (seq == conn->seq_to_tap)
+		conn_flag(c, conn, ~ACK_FROM_TAP_DUE);
+
 	if (SEQ_GT(seq, conn->seq_ack_from_tap)) {
-		if (seq == conn->seq_to_tap)
-			conn_flag(c, conn, ~ACK_FROM_TAP_DUE);
-		else
+		/* Forward progress, but more data to acknowledge: reschedule */
+		if (SEQ_LT(seq, conn->seq_to_tap))
 			conn_flag(c, conn, ACK_FROM_TAP_DUE);
 
 		conn->retrans = 0;
