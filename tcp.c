@@ -2337,6 +2337,11 @@ static void tcp_data_from_tap(struct ctx *c, struct tcp_tap_conn *conn,
 	size_t len;
 	ssize_t n;
 
+	if (conn->events == CLOSED)
+		return;
+
+	ASSERT(conn->events & ESTABLISHED);
+
 	for (i = 0, iov_i = 0; i < (int)p->count; i++) {
 		uint32_t seq, seq_offset, ack_seq;
 		struct tcphdr *th;
