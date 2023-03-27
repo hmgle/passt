@@ -385,6 +385,9 @@ Forward local port 22, bound to 192.0.2.1, to port 22 on the guest
 -t 192.0.2.1%eth0/22
 Forward local port 22, bound to 192.0.2.1 and interface eth0, to port 22
 .TP
+-t %eth0/22
+Forward local port 22, bound to any address on interface eth0, to port 22
+.TP
 -t 2000-5000,~3000-3010
 Forward local ports between 2000 and 5000, except for those between 3000 and
 3010
@@ -466,6 +469,9 @@ Forward local port 22, bound to 192.0.2.1, to port 22 in the target namespace
 .TP
 -t 192.0.2.1%eth0/22
 Forward local port 22, bound to 192.0.2.1 and interface eth0, to port 22
+.TP
+-t %eth0/22
+Forward local port 22, bound to any address on interface eth0, to port 22
 .TP
 -t 2000-5000,~3000-3010
 Forward local ports between 2000 and 5000, except for those between 3000 and

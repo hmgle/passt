@@ -263,7 +263,9 @@ static void conf_ports(const struct ctx *c, char optname, const char *optarg,
 			ifname++;
 		}
 
-		if (inet_pton(AF_INET, buf, addr))
+		if (ifname == buf + 1)		/* Interface without address */
+			addr = NULL;
+		else if (inet_pton(AF_INET, buf, addr))
 			af = AF_INET;
 		else if (inet_pton(AF_INET6, buf, addr))
 			af = AF_INET6;
