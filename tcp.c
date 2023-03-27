@@ -2096,7 +2096,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	conn->seq_ack_to_tap = conn->seq_from_tap;
 
 	tcp_seq_init(c, conn, now);
-	conn->seq_ack_from_tap = conn->seq_to_tap + 1;
+	conn->seq_ack_from_tap = conn->seq_to_tap;
 
 	tcp_hash_insert(c, conn);
 
@@ -2754,7 +2754,7 @@ static void tcp_tap_conn_from_sock(struct ctx *c, union epoll_ref ref,
 	tcp_seq_init(c, conn, now);
 	tcp_hash_insert(c, conn);
 
-	conn->seq_ack_from_tap = conn->seq_to_tap + 1;
+	conn->seq_ack_from_tap = conn->seq_to_tap;
 
 	conn->wnd_from_tap = WINDOW_DEFAULT;
 
