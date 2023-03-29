@@ -62,17 +62,17 @@ ln -sr %{buildroot}%{_mandir}/man1/pasta.1 %{buildroot}%{_mandir}/man1/pasta.avx
 
 pushd contrib/selinux
 make -f %{_datadir}/selinux/devel/Makefile
-install -p -m 644 -D passt.pp %{buildroot}%{_datadir}/selinux/packages/%{name}/passt.pp
-install -p -m 644 -D passt.if %{buildroot}%{_datadir}/selinux/devel/include/contrib/passt.if
-install -p -m 644 -D pasta.pp %{buildroot}%{_datadir}/selinux/packages/%{name}/pasta.pp
+install -p -m 644 -D passt.pp %{buildroot}%{_datadir}/selinux/packages/%{selinuxtype}/passt.pp
+install -p -m 644 -D passt.if %{buildroot}%{_datadir}/selinux/devel/include/distributed/passt.if
+install -p -m 644 -D pasta.pp %{buildroot}%{_datadir}/selinux/packages/%{selinuxtype}/pasta.pp
 popd
 
 %pre selinux
 %selinux_relabel_pre -s %{selinuxtype}
 
 %post selinux
-%selinux_modules_install -s %{selinuxtype} %{_datadir}/selinux/packages/%{name}/passt.pp
-%selinux_modules_install -s %{selinuxtype} %{_datadir}/selinux/packages/%{name}/pasta.pp
+%selinux_modules_install -s %{selinuxtype} %{_datadir}/selinux/packages/%{selinuxtype}/passt.pp
+%selinux_modules_install -s %{selinuxtype} %{_datadir}/selinux/packages/%{selinuxtype}/pasta.pp
 
 %postun selinux
 if [ $1 -eq 0 ]; then
@@ -102,10 +102,9 @@ fi
 %endif
 
 %files selinux
-%dir %{_datadir}/selinux/packages/%{name}
-%{_datadir}/selinux/packages/%{name}/passt.pp
-%{_datadir}/selinux/devel/include/contrib/passt.if
-%{_datadir}/selinux/packages/%{name}/pasta.pp
+%{_datadir}/selinux/packages/%{selinuxtype}/passt.pp
+%{_datadir}/selinux/devel/include/distributed/passt.if
+%{_datadir}/selinux/packages/%{selinuxtype}/pasta.pp
 
 %changelog
 {{{ passt_git_changelog }}}
