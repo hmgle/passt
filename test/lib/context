@@ -89,8 +89,8 @@ context_run() {
 	__name="$1"
 	__log="${LOGDIR}/context_${__name}.log"
 	__enter="${STATESETUP}/context_${__name}.enter"
-	__stdout="${STATESETUP}/context_${__name}.stdout"
-	__stderr="${STATESETUP}/context_${__name}.stderr"
+	__stdout="$(mktemp -u "${STATESETUP}/context_${__name}.stdout.XXXXXXXX")"
+	__stderr="$(mktemp -u "${STATESETUP}/context_${__name}.stderr.XXXXXXXX")"
 	shift
 	echo "$*" >> "${__log}"
 	mkfifo "${__stdout}" "${__stderr}"
