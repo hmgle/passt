@@ -14,7 +14,7 @@ Name:		passt
 Version:	{{{ git_version }}}
 Release:	1%{?dist}
 Summary:	User-mode networking daemons for virtual machines and namespaces
-License:	AGPLv3+ and BSD
+License:	GPLv2+ and BSD
 Group:		System Environment/Daemons
 URL:		https://passt.top/
 Source:		https://passt.top/passt/snapshot/passt-%{git_hash}.tar.xz
@@ -84,7 +84,7 @@ fi
 %selinux_relabel_post -s %{selinuxtype}
 
 %files
-%license LICENSES/{AGPL-3.0-or-later.txt,BSD-3-Clause.txt}
+%license LICENSES/{GPL-2.0-or-later.txt,BSD-3-Clause.txt}
 %dir %{_docdir}/%{name}
 %doc %{_docdir}/%{name}/README.md
 %doc %{_docdir}/%{name}/demo.sh
