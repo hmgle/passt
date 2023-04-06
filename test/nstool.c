@@ -19,10 +19,15 @@
 #include <stdarg.h>
 #include <limits.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <sys/syscall.h>
+#include <sys/prctl.h>
 #include <linux/un.h>
 #include <sched.h>
+#include <linux/capability.h>
 
 #define	ARRAY_SIZE(a)	((int)(sizeof(a) / sizeof((a)[0])))
 
@@ -75,11 +80,13 @@ static void usage(void)
 	    "  nstool info [-pw] pid SOCK\n"
 	    "    Print information about the nstool hold process with control\n"
 	    "    socket at SOCK\n"
-	    "      -p    Print just the holder's PID as seen by the caller\n"
-	    "      -w    Retry connecting to SOCK until it is ready\n"
-	    "  nstool exec SOCK [COMMAND [ARGS...]]\n"
+	    "      -p          Print just the holder's PID as seen by the caller\n"
+	    "      -w          Retry connecting to SOCK until it is ready\n"
+	    "  nstool exec [--keep-caps] SOCK [COMMAND [ARGS...]]\n"
 	    "    Execute command or shell in the namespaces of the nstool hold\n"
 	    "    with control socket at SOCK\n"
+	    "      --keep-caps Give all possible capabilities to COMMAND via\n"
+	    "                  the ambient capability mask\n"
 	    "  nstool stop SOCK\n"
 	    "    Instruct the nstool hold with control socket at SOCK to\n"
 	    "    terminate.\n");
@@ -278,7 +285,6 @@ static void cmd_info(int argc, char *argv[])
 	} while (opt != -1);
 
 	if (optind != argc - 1) {
-		fprintf(stderr, "B\n");
 		usage();
 	}
 
@@ -359,20 +365,80 @@ static void wait_for_child(pid_t pid)
 	die("Unexpected status for child %d\n", pid);
 }
 
+static void caps_to_ambient(void)
+{
+	/* Use raw system calls to avoid the overly complex caps
+	 * libraries. */
+	struct __user_cap_header_struct header = {
+		.version = _LINUX_CAPABILITY_VERSION_3,
+		.pid = 0,
+	};
+	struct __user_cap_data_struct payload[_LINUX_CAPABILITY_U32S_3] =
+		{{ 0 }};
+	uint64_t effective, cap;
+
+	if (syscall(SYS_capget, &header, payload) < 0)
+		die("capget(): %s\n", strerror(errno));
+
+	/* First make caps inheritable */
+	payload[0].inheritable = payload[0].permitted;
+	payload[1].inheritable = payload[1].permitted;
+
+	if (syscall(SYS_capset, &header, payload) < 0)
+		die("capset(): %s\n", strerror(errno));
+
+	effective = ((uint64_t)payload[1].effective << 32) | (uint64_t)payload[0].effective;
+
+	for (cap = 0; cap < (sizeof(effective) * 8); cap++) {
+		/* Skip non-existent caps */
+		if (prctl(PR_CAPBSET_READ, cap, 0, 0, 0) < 0)
+			continue;
+
+		if ((effective & (1 << cap))
+		    && prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, cap, 0, 0) < 0)
+			die("prctl(PR_CAP_AMBIENT): %s\n", strerror(errno));
+	}
+}
+
 static void cmd_exec(int argc, char *argv[])
 {
+	enum {
+		OPT_EXEC_KEEPCAPS = CHAR_MAX + 1,
+	};
+	const struct option options[] = {
+		{"keep-caps",	no_argument, 	NULL,	OPT_EXEC_KEEPCAPS },
+		{ 0 },
+	};
 	const char *shargs[] = { NULL, NULL };
 	const char *sockpath = argv[1];
 	int nfd[ARRAY_SIZE(nstypes)];
+	const char *optstring = "";
 	const struct ns_type *nst;
+	int ctlfd, flags, opt, rc;
 	const char *const *xargs;
+	bool keepcaps = false;
 	struct ucred peercred;
-	int ctlfd, flags, rc;
 	const char *exe;
 	pid_t xpid;
 
-	if (argc < 2)
+	do {
+		opt = getopt_long(argc, argv, optstring, options, NULL);
+
+		switch (opt) {
+		case OPT_EXEC_KEEPCAPS:
+			keepcaps = true;
+			break;
+		case -1:
+			break;
+		default:
+			usage();
+		}
+	} while (opt != -1);
+
+	if (argc < optind + 1)
 		usage();
+
+	sockpath = argv[optind];
 
 	ctlfd = connect_ctl(sockpath, false, NULL, &peercred);
 
@@ -418,9 +484,9 @@ static void cmd_exec(int argc, char *argv[])
 	}
 
 	/* CHILD */
-	if (argc > 2) {
-		exe = argv[2];
-		xargs = (const char * const*)(argv + 2);
+	if (argc > optind + 1) {
+		exe = argv[optind + 1];
+		xargs = (const char * const*)(argv + optind + 1);
 	} else {
 		exe = getenv("SHELL");
 		if (!exe)
@@ -430,6 +496,9 @@ static void cmd_exec(int argc, char *argv[])
 
 		xargs = shargs;
 	}
+
+	if (keepcaps)
+		caps_to_ambient();
 
 	rc = execvp(exe, (char *const *)xargs);
 	if (rc < 0)
