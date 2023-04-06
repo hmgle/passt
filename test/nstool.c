@@ -68,6 +68,7 @@ struct holder_info {
 	pid_t pid;
 	uid_t uid;
 	gid_t gid;
+	char cwd[PATH_MAX];
 };
 
 static void usage(void)
@@ -175,6 +176,8 @@ static void cmd_hold(int argc, char *argv[])
 	info.pid = getpid();
 	info.uid = getuid();
 	info.gid = getgid();
+	if (!getcwd(info.cwd, sizeof(info.cwd)))
+		die("getcwd(): %s\n", strerror(errno));
 
 	do {
 		int afd = accept(fd, NULL, NULL);
@@ -312,6 +315,7 @@ static void cmd_info(int argc, char *argv[])
 		printf("\tPID:\t%d\n", info.pid);
 		printf("\tUID:\t%u\n", info.uid);
 		printf("\tGID:\t%u\n", info.gid);
+		printf("\tCWD:\t%s\n", info.cwd);
 	}
 }
 
