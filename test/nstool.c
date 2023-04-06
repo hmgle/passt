@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <sys/socket.h>
 #include <linux/un.h>
 
@@ -30,9 +31,11 @@ static void usage(void)
 	    "    Run within a set of namespaces, open a Unix domain socket\n"
 	    "    (the \"control socket\") at SOCK and wait for requests from\n"
 	    "    other nstool subcommands.\n"
-	    "  nstool pid SOCK\n"
-	    "    Print the pid of the nstool hold process with control socket\n"
-	    "    at SOCK, as seen in the caller's namespace.\n"
+	    "  nstool info [-pw] pid SOCK\n"
+	    "    Print information about the nstool hold process with control\n"
+	    "    socket at SOCK\n"
+	    "      -p    Print just the holder's PID as seen by the caller\n"
+	    "      -w    Retry connecting to SOCK until it is ready\n"
 	    "  nstool stop SOCK\n"
 	    "    Instruct the nstool hold with control socket at SOCK to\n"
 	    "    terminate.\n");
@@ -103,17 +106,45 @@ static void cmd_hold(int argc, char *argv[])
 	unlink(sockpath);
 }
 
-static void cmd_pid(int argc, char *argv[])
+static void cmd_info(int argc, char *argv[])
 {
-	const char *sockpath = argv[1];
+	const struct option options[] = {
+		{"pid",		no_argument, 	NULL,	'p' },
+		{"wait",	no_argument,	NULL,	'w' },
+		{ 0 },
+	};
+	bool pidonly = false, waitforsock = false;
 	struct ucred peercred;
 	socklen_t optlen = sizeof(peercred);
-	int fd, rc;
+	const char *optstring = "pw";
+	const char *sockpath;
+	int fd, rc, opt;
 
-	if (argc != 2)
+	do {
+		opt = getopt_long(argc, argv, optstring, options, NULL);
+
+		switch (opt) {
+		case 'p':
+			pidonly = true;
+			break;
+		case 'w':
+			waitforsock = true;
+			break;
+		case -1:
+			break;
+		default:
+			usage();
+		}
+	} while (opt != -1);
+
+	if (optind != argc - 1) {
+		fprintf(stderr, "B\n");
 		usage();
+	}
 
-	fd = connect_ctl(sockpath, true);
+	sockpath = argv[optind];
+
+	fd = connect_ctl(sockpath, waitforsock);
 
 	rc = getsockopt(fd, SOL_SOCKET, SO_PEERCRED,
 			&peercred, &optlen);
@@ -123,7 +154,14 @@ static void cmd_pid(int argc, char *argv[])
 
 	close(fd);
 
-	printf("%d\n", peercred.pid);
+	if (pidonly) {
+		printf("%d\n", peercred.pid);
+	} else {
+		printf("As seen from calling context:\n");
+		printf("\tPID:\t%d\n", peercred.pid);
+		printf("\tUID:\t%u\n", peercred.uid);
+		printf("\tGID:\t%u\n", peercred.gid);
+	}
 }
 
 static void cmd_stop(int argc, char *argv[])
@@ -158,8 +196,8 @@ int main(int argc, char *argv[])
 
 	if (strcmp(subcmd, "hold") == 0)
 		cmd_hold(argc - 1, argv + 1);
-	else if (strcmp(subcmd, "pid") == 0)
-		cmd_pid(argc - 1, argv + 1);
+	else if (strcmp(subcmd, "info") == 0)
+		cmd_info(argc - 1, argv + 1);
 	else if (strcmp(subcmd, "stop") == 0)
 		cmd_stop(argc - 1, argv + 1);
 	else

@@ -78,7 +78,7 @@ setup_pasta() {
 	layout_pasta
 
 	context_run_bg unshare "unshare -rUnpf ${NSTOOL} hold ${STATESETUP}/ns.hold"
-	__target_pid=$(${NSTOOL} pid ${STATESETUP}/ns.hold)
+	__target_pid=$(${NSTOOL} info -pw ${STATESETUP}/ns.hold)
 
 	context_setup_nsenter ns -U -n -p --preserve-credentials -t ${__target_pid}
 
@@ -128,7 +128,7 @@ setup_passt_in_ns() {
 
 	context_run_bg pasta "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P ${STATESETUP}/pasta.pid --config-net ${NSTOOL} hold ${STATESETUP}/ns.hold"
 	wait_for [ -f "${STATESETUP}/pasta.pid" ]
-	__ns_pid=$(${NSTOOL} pid ${STATESETUP}/ns.hold)
+	__ns_pid=$(${NSTOOL} info -pw ${STATESETUP}/ns.hold)
 
 	context_setup_nsenter qemu "-t ${__ns_pid} -U -n -p --preserve-credentials"
 	context_setup_nsenter ns "-t ${__ns_pid} -U -n -p --preserve-credentials"
@@ -190,7 +190,7 @@ setup_two_guests() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 	context_run_bg pasta_1 "./pasta ${__opts} --trace -l /tmp/pasta1.log -P ${STATESETUP}/pasta_1.pid -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004 --config-net ${NSTOOL} hold ${STATESETUP}/ns1.hold"
-	__ns1_pid=$(${NSTOOL} pid ${STATESETUP}/ns1.hold)
+	__ns1_pid=$(${NSTOOL} info -pw ${STATESETUP}/ns1.hold)
 	context_setup_nsenter passt_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
 
 	__opts=
@@ -198,7 +198,7 @@ setup_two_guests() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 	context_run_bg pasta_2 "./pasta ${__opts} --trace -l /tmp/pasta2.log -P ${STATESETUP}/pasta_2.pid -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001 --config-net ${NSTOOL} hold ${STATESETUP}/ns2.hold"
-	__ns2_pid=$(${NSTOOL} pid ${STATESETUP}/ns2.hold)
+	__ns2_pid=$(${NSTOOL} info -pw ${STATESETUP}/ns2.hold)
 	context_setup_nsenter passt_2 -U -n -p --preserve-credentials -t ${__ns2_pid}
 
 	context_setup_nsenter qemu_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
@@ -310,8 +310,8 @@ teardown_passt_in_ns() {
 
 # teardown_two_guests() - Exit namespaces, kill qemu processes, passt and pasta
 teardown_two_guests() {
-	__ns1_pid=$(${NSTOOL} pid "${STATESETUP}/ns1.hold")
-	__ns2_pid=$(${NSTOOL} pid "${STATESETUP}/ns2.hold")
+	__ns1_pid=$(${NSTOOL} info -pw "${STATESETUP}/ns1.hold")
+	__ns2_pid=$(${NSTOOL} info -pw "${STATESETUP}/ns2.hold")
 	nsenter -U -p --preserve-credentials -t ${__ns1_pid} kill $(cat "${STATESETUP}/qemu_1.pid")
 	nsenter -U -p --preserve-credentials -t ${__ns2_pid} kill $(cat "${STATESETUP}/qemu_2.pid")
 	context_wait qemu_1
