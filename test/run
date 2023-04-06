@@ -32,6 +32,9 @@ FAST=${FAST:-1}
 # If set, run passt and pasta with debug options
 DEBUG=${DEBUG:-0}
 
+# If set, run passt and pasta with trace options
+TRACE=${TRACE:-0}
+
 # If set, tell passt and pasta to take packet captures
 PCAP=${PCAP:-0}
 
