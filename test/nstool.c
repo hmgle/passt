@@ -4,20 +4,6 @@
  *
  * Copyright Red Hat
  * Author: David Gibson <david@gibson.dropbear.id.au>
- *
- * Can run in 3 modes:
- *
- *   nstool hold <path>
- *      Designed to be run inside a namespace, opens a Unix domain
- *      control socket at <path> and waits until instructed to stop
- *      with "nstool stop <path>"
- *   nstool pid <path>
- *      Prints the PID of the nstool hold process with control socket
- *      <path>.  This is given in the PID namespace where nstool pid
- *      is executed, not the one where nstool hold is running
- *   nstool stop <path>
- *      Instruct the nstool hold with control socket at <path> to
- *      exit.
  */
 
 #define _GNU_SOURCE
@@ -38,7 +24,17 @@
 
 static void usage(void)
 {
-	die("Usage: nstool hold|pid|stop <socket path>\n");
+	die("Usage:\n"
+	    "  nstool hold SOCK\n"
+	    "    Run within a set of namespaces, open a Unix domain socket\n"
+	    "    (the \"control socket\") at SOCK and wait for requests from\n"
+	    "    other nstool subcommands.\n"
+	    "  nstool pid SOCK\n"
+	    "    Print the pid of the nstool hold process with control socket\n"
+	    "    at SOCK, as seen in the caller's namespace.\n"
+	    "  nstool stop SOCK\n"
+	    "    Instruct the nstool hold with control socket at SOCK to\n"
+	    "    terminate.\n");
 }
 
 static void hold(int fd, const struct sockaddr_un *addr)
