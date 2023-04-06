@@ -6,6 +6,6 @@ QEMU_EFI.fd
 *.raw
 *.raw.xz
 *.bin
-nsholder
+nstool
 guest-key
 guest-key.pub

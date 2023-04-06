@@ -58,7 +58,7 @@ TESTDATA_ASSETS = small.bin big.bin medium.bin
 LOCAL_ASSETS = mbuto.img mbuto.mem.img QEMU_EFI.fd \
 	$(DEBIAN_IMGS:%=prepared-%) $(FEDORA_IMGS:%=prepared-%) \
 	$(UBUNTU_NEW_IMGS:%=prepared-%) \
-	nsholder guest-key guest-key.pub \
+	nstool guest-key guest-key.pub \
 	$(TESTDATA_ASSETS)
 
 ASSETS = $(DOWNLOAD_ASSETS) $(LOCAL_ASSETS)
@@ -79,7 +79,7 @@ mbuto.img: passt.mbuto mbuto guest-key.pub $(TESTDATA_ASSETS)
 mbuto.mem.img: passt.mem.mbuto mbuto ../passt.avx2
 	./mbuto/mbuto -p ./$< -c lz4 -f $@
 
-nsholder: nsholder.c
+nstool: nstool.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 QEMU_EFI.fd:

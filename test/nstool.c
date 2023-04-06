@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-/* nsholder - maintain a namespace to be entered by other processes
+/* nstool - maintain a namespace to be entered by other processes
  *
  * Copyright Red Hat
  * Author: David Gibson <david@gibson.dropbear.id.au>
  *
  * Can run in 3 modes:
  *
- *   nsholder <path> hold
+ *   nstool <path> hold
  *      Designed to be run inside a namespace, opens a Unix domain
  *      control socket at <path> and waits until instructed to stop
- *      with "nsholder <path> stop"
- *   nsholder <path> pid
- *      Prints the PID of the nsholder hold process with control
+ *      with "nstool <path> stop"
+ *   nstool <path> pid
+ *      Prints the PID of the nstool hold process with control
  *      socket <path>.  This is given in the PID namespace where
- *      nsholder pid is executed, not the one where nsholder hold is
+ *      nstool pid is executed, not the one where nstool hold is
  *      running
- *   nsholder <path> stop
- *      Instruct the nsholder hold with control socket at <path> to exit.
+ *   nstool <path> stop
+ *      Instruct the nstool hold with control socket at <path> to exit.
  */
 
 #define _GNU_SOURCE
@@ -38,7 +38,7 @@
 
 static void usage(void)
 {
-	die("Usage: holder <socket path> hold|pid\n");
+	die("Usage: nstool <socket path> hold|pid\n");
 }
 
 static void hold(int fd, const struct sockaddr_un *addr)
@@ -53,7 +53,7 @@ static void hold(int fd, const struct sockaddr_un *addr)
 	if (rc < 0)
 		die("listen(): %s\n", strerror(errno));
 
-	printf("nsholder: local PID=%d  local UID=%u  local GID=%u\n",
+	printf("nstool: local PID=%d  local UID=%u  local GID=%u\n",
 	       getpid(), getuid(), getgid());
 	do {
 		int afd = accept(fd, NULL, NULL);
@@ -103,7 +103,7 @@ static void stop(int fd, const struct sockaddr_un *addr)
 
 	rc = write(fd, &buf, sizeof(buf));
 	if (rc < 0)
-		die("write(): %s\n",  strerror(errno));
+		die("write(): %s\n", strerror(errno));
 
 	close(fd);
 }
