@@ -46,6 +46,14 @@ const struct ns_type nstypes[] = {
 	{ CLONE_NEWUTS, "uts" },
 };
 
+#define for_each_nst(_nst, _flags)				\
+	for ((_nst) = &nstypes[0];				\
+	     ((_nst) - nstypes) < ARRAY_SIZE(nstypes);		\
+	     (_nst)++)						\
+		if ((_flags) & (_nst)->flag)
+
+#define for_every_nst(_nst)	for_each_nst(_nst, INT_MAX)
+
 #define NSTOOL_MAGIC	0x7570017575601d75ULL
 
 struct holder_info {
@@ -199,11 +207,10 @@ static ssize_t getlink(char *buf, size_t bufsiz, const char *fmt, ...)
 
 static int detect_namespaces(pid_t pid)
 {
-	int i;
+	const struct ns_type *nst;
 	int flags = 0;
 
-	for (i = 0; i < ARRAY_SIZE(nstypes); i++) {
-		const struct ns_type *nst = &nstypes[i];
+	for_every_nst(nst) {
 		char selflink[PATH_MAX], pidlink[PATH_MAX];
 		ssize_t selflen, pidlen;
 
@@ -221,15 +228,10 @@ static int detect_namespaces(pid_t pid)
 
 static void print_nstypes(int flags)
 {
+	const struct ns_type *nst;
 	bool first = true;
-	int i;
 
-	for (i = 0; i < ARRAY_SIZE(nstypes); i++) {
-		const struct ns_type *nst = &nstypes[i];
-
-		if (!(flags & nst->flag))
-			continue;
-
+	for_each_nst(nst, flags) {
 		printf("%s%s", first ? "" : ", " , nst->name);
 		first = false;
 		flags &= ~nst->flag;
