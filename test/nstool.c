@@ -420,6 +420,7 @@ static void cmd_exec(int argc, char *argv[])
 	const struct ns_type *nst;
 	int ctlfd, flags, opt, rc;
 	const char *const *xargs;
+	struct holder_info info;
 	bool keepcaps = false;
 	struct ucred peercred;
 	const char *exe;
@@ -444,7 +445,7 @@ static void cmd_exec(int argc, char *argv[])
 
 	sockpath = argv[optind];
 
-	ctlfd = connect_ctl(sockpath, false, NULL, &peercred);
+	ctlfd = connect_ctl(sockpath, false, &info, &peercred);
 
 	flags = detect_namespaces(peercred.pid);
 
@@ -473,6 +474,15 @@ static void cmd_exec(int argc, char *argv[])
 		if (rc < 0)
 			die("setns() type %s: %s\n",
 			    nst->name, strerror(errno));
+	}
+
+	/* If we've entered a mount ns, our cwd has changed to /.
+	 * Switch to the cwd of the holder, which is probably less
+	 * surprising. */
+	if (flags & CLONE_NEWNS) {
+		rc = chdir(info.cwd);
+		if (rc < 0)
+			die("chdir(\"%s\"): %s\n", info.cwd, strerror(errno));
 	}
 
 	/* Fork to properly enter PID namespace */
