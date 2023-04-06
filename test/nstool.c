@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <errno.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -45,7 +46,10 @@ const struct ns_type nstypes[] = {
 	{ CLONE_NEWUTS, "uts" },
 };
 
+#define NSTOOL_MAGIC	0x7570017575601d75ULL
+
 struct holder_info {
+	uint64_t magic;
 	pid_t pid;
 	uid_t uid;
 	gid_t gid;
@@ -104,6 +108,10 @@ static int connect_ctl(const char *sockpath, bool wait,
 	if ((size_t)len < sizeof(*info))
 		die("short read() on control socket %s\n", sockpath);
 
+	if (info->magic != NSTOOL_MAGIC)
+		die("Control socket %s doesn't appear to belong to nstool\n",
+		    sockpath);
+
 	if (peercred) {
 		socklen_t optlen = sizeof(*peercred);
 
@@ -143,6 +151,7 @@ static void cmd_hold(int argc, char *argv[])
 	if (rc < 0)
 		die("listen() on %s: %s\n", sockpath, strerror(errno));
 
+	info.magic = NSTOOL_MAGIC;
 	info.pid = getpid();
 	info.uid = getuid();
 	info.gid = getgid();
