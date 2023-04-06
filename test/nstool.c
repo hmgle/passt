@@ -18,7 +18,9 @@
 #include <getopt.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <linux/un.h>
 #include <sched.h>
 
@@ -75,6 +77,9 @@ static void usage(void)
 	    "    socket at SOCK\n"
 	    "      -p    Print just the holder's PID as seen by the caller\n"
 	    "      -w    Retry connecting to SOCK until it is ready\n"
+	    "  nstool exec SOCK [COMMAND [ARGS...]]\n"
+	    "    Execute command or shell in the namespaces of the nstool hold\n"
+	    "    with control socket at SOCK\n"
 	    "  nstool stop SOCK\n"
 	    "    Instruct the nstool hold with control socket at SOCK to\n"
 	    "    terminate.\n");
@@ -84,7 +89,7 @@ static int connect_ctl(const char *sockpath, bool wait,
 		       struct holder_info *info,
 		       struct ucred *peercred)
 {
-	int fd = socket(AF_UNIX, SOCK_STREAM, PF_UNIX);
+	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNIX);
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
 	};
@@ -135,7 +140,7 @@ static int connect_ctl(const char *sockpath, bool wait,
 
 static void cmd_hold(int argc, char *argv[])
 {
-	int fd = socket(AF_UNIX, SOCK_STREAM, PF_UNIX);
+	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNIX);
 	struct sockaddr_un addr = {
 		.sun_family = AF_UNIX,
 	};
@@ -304,6 +309,134 @@ static void cmd_info(int argc, char *argv[])
 	}
 }
 
+static int openns(const char *fmt, ...)
+{
+	char nspath[PATH_MAX];
+	va_list ap;
+	int fd;
+
+	va_start(ap, fmt);
+	if (vsnprintf(nspath, sizeof(nspath), fmt, ap) >= PATH_MAX)
+		die("Truncated path \"%s\"\n", nspath);
+	va_end(ap);
+
+	fd = open(nspath, O_RDONLY | O_CLOEXEC);
+	if (fd < 0)
+		die("open() %s: %s\n", nspath, strerror(errno));
+
+	return fd;
+}
+
+static void wait_for_child(pid_t pid)
+{
+	int status;
+
+	/* Match the child's exit status, if possible */
+	for (;;) {
+		pid_t rc;
+
+		rc = waitpid(pid, &status, WUNTRACED);
+		if (rc < 0)
+			die("waitpid() on %d: %s\n", pid, strerror(errno));
+		if (rc != pid)
+			die("waitpid() on %d returned %d", pid, rc);
+		if (WIFSTOPPED(status)) {
+			/* Stop the parent to patch */
+			kill(getpid(), SIGSTOP);
+			/* We must have resumed, resume the child */
+			kill(pid, SIGCONT);
+			continue;
+		}
+
+		break;
+	}
+
+	if (WIFEXITED(status))
+		exit(WEXITSTATUS(status));
+	else if (WIFSIGNALED(status))
+		kill(getpid(), WTERMSIG(status));
+
+	die("Unexpected status for child %d\n", pid);
+}
+
+static void cmd_exec(int argc, char *argv[])
+{
+	const char *shargs[] = { NULL, NULL };
+	const char *sockpath = argv[1];
+	int nfd[ARRAY_SIZE(nstypes)];
+	const struct ns_type *nst;
+	const char *const *xargs;
+	struct ucred peercred;
+	int ctlfd, flags, rc;
+	const char *exe;
+	pid_t xpid;
+
+	if (argc < 2)
+		usage();
+
+	ctlfd = connect_ctl(sockpath, false, NULL, &peercred);
+
+	flags = detect_namespaces(peercred.pid);
+
+	for_each_nst(nst, flags) {
+		int *fd = &nfd[nst - nstypes];
+		*fd = openns("/proc/%d/ns/%s", peercred.pid, nst->name);
+	}
+
+	/* First pass, will get things where we need the privileges of
+	 * the initial userns */
+	for_each_nst(nst, flags) {
+		int fd = nfd[nst - nstypes];
+
+		rc = setns(fd, nst->flag);
+		if (rc == 0) {
+			flags &= ~nst->flag;
+		}
+	}
+
+	/* Second pass, will get things where we need the privileges
+	 * of the target userns */
+	for_each_nst(nst, flags) {
+		int fd = nfd[nst - nstypes];
+
+		rc = setns(fd, nst->flag);
+		if (rc < 0)
+			die("setns() type %s: %s\n",
+			    nst->name, strerror(errno));
+	}
+
+	/* Fork to properly enter PID namespace */
+	xpid = fork();
+	if (xpid < 0)
+		die("fork(): %s\n", strerror(errno));
+
+	if (xpid > 0) {
+		/* Close the control socket so the waiting parent
+		 * doesn't block the holder */
+		close(ctlfd);
+		wait_for_child(xpid);
+	}
+
+	/* CHILD */
+	if (argc > 2) {
+		exe = argv[2];
+		xargs = (const char * const*)(argv + 2);
+	} else {
+		exe = getenv("SHELL");
+		if (!exe)
+			exe = "/bin/sh";
+
+		shargs[0] = exe;
+
+		xargs = shargs;
+	}
+
+	rc = execvp(exe, (char *const *)xargs);
+	if (rc < 0)
+		die("execv() %s: %s\n", exe, strerror(errno));
+	die("Returned from exec()\n");
+}
+
 static void cmd_stop(int argc, char *argv[])
 {
 	const char *sockpath = argv[1];
@@ -338,6 +471,8 @@ int main(int argc, char *argv[])
 		cmd_hold(argc - 1, argv + 1);
 	else if (strcmp(subcmd, "info") == 0)
 		cmd_info(argc - 1, argv + 1);
+	else if (strcmp(subcmd, "exec") == 0)
+		cmd_exec(argc - 1, argv + 1);
 	else if (strcmp(subcmd, "stop") == 0)
 		cmd_stop(argc - 1, argv + 1);
 	else
