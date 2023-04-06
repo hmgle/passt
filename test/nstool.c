@@ -7,17 +7,17 @@
  *
  * Can run in 3 modes:
  *
- *   nstool <path> hold
+ *   nstool hold <path>
  *      Designed to be run inside a namespace, opens a Unix domain
  *      control socket at <path> and waits until instructed to stop
- *      with "nstool <path> stop"
- *   nstool <path> pid
- *      Prints the PID of the nstool hold process with control
- *      socket <path>.  This is given in the PID namespace where
- *      nstool pid is executed, not the one where nstool hold is
- *      running
- *   nstool <path> stop
- *      Instruct the nstool hold with control socket at <path> to exit.
+ *      with "nstool stop <path>"
+ *   nstool pid <path>
+ *      Prints the PID of the nstool hold process with control socket
+ *      <path>.  This is given in the PID namespace where nstool pid
+ *      is executed, not the one where nstool hold is running
+ *   nstool stop <path>
+ *      Instruct the nstool hold with control socket at <path> to
+ *      exit.
  */
 
 #define _GNU_SOURCE
@@ -38,7 +38,7 @@
 
 static void usage(void)
 {
-	die("Usage: nstool <socket path> hold|pid\n");
+	die("Usage: nstool hold|pid|stop <socket path>\n");
 }
 
 static void hold(int fd, const struct sockaddr_un *addr)
@@ -119,18 +119,18 @@ int main(int argc, char *argv[])
 	if (argc != 3)
 		usage();
 
-	sockname = argv[1];
+	sockname = argv[2];
 	strncpy(sockaddr.sun_path, sockname, UNIX_PATH_MAX);
 
 	fd = socket(AF_UNIX, SOCK_STREAM, PF_UNIX);
 	if (fd < 0)
 		die("socket(): %s\n", strerror(errno));
 
-	if (strcmp(argv[2], "hold") == 0)
+	if (strcmp(argv[1], "hold") == 0)
 		hold(fd, &sockaddr);
-	else if (strcmp(argv[2], "pid") == 0)
+	else if (strcmp(argv[1], "pid") == 0)
 		pid(fd, &sockaddr);
-	else if (strcmp(argv[2], "stop") == 0)
+	else if (strcmp(argv[1], "stop") == 0)
 		stop(fd, &sockaddr);
 	else
 		usage();
