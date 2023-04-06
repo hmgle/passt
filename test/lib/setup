@@ -17,7 +17,6 @@ INITRAMFS="${BASEPATH}/mbuto.img"
 VCPUS="$( [ $(nproc) -ge 8 ] && echo 6 || echo $(( $(nproc) / 2 + 1 )) )"
 __mem_kib="$(sed -n 's/MemTotal:[ ]*\([0-9]*\) kB/\1/p' /proc/meminfo)"
 VMEM="$((${__mem_kib} / 1024 / 4))"
-NSTOOL="${BASEPATH}/nstool"
 
 # setup_build() - Set up pane layout for build tests
 setup_build() {
@@ -78,9 +77,8 @@ setup_pasta() {
 	layout_pasta
 
 	context_run_bg unshare "unshare -rUnpf ${NSTOOL} hold ${STATESETUP}/ns.hold"
-	__target_pid=$(${NSTOOL} info -pw ${STATESETUP}/ns.hold)
 
-	context_setup_nsenter ns -U -n -p --preserve-credentials -t ${__target_pid}
+	context_setup_nstool ns ${STATESETUP}/ns.hold
 
 	# Ports:
 	#
@@ -94,7 +92,7 @@ setup_pasta() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 
-	context_run_bg passt "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 -P ${STATESETUP}/passt.pid ${__target_pid}"
+	context_run_bg passt "./pasta ${__opts} -f -t 10002 -T 10003 -u 10002 -U 10003 -P ${STATESETUP}/passt.pid $(${NSTOOL} info -pw ${STATESETUP}/ns.hold)"
 
 	# pidfile isn't created until pasta is ready
 	wait_for [ -f "${STATESETUP}/passt.pid" ]
@@ -128,11 +126,10 @@ setup_passt_in_ns() {
 
 	context_run_bg pasta "./pasta ${__opts} -t 10001,10002,10011,10012 -T 10003,10013 -u 10001,10002,10011,10012 -U 10003,10013 -P ${STATESETUP}/pasta.pid --config-net ${NSTOOL} hold ${STATESETUP}/ns.hold"
 	wait_for [ -f "${STATESETUP}/pasta.pid" ]
-	__ns_pid=$(${NSTOOL} info -pw ${STATESETUP}/ns.hold)
 
-	context_setup_nsenter qemu "-t ${__ns_pid} -U -n -p --preserve-credentials"
-	context_setup_nsenter ns "-t ${__ns_pid} -U -n -p --preserve-credentials"
-	context_setup_nsenter passt "-t ${__ns_pid} -U -n -p --preserve-credentials"
+	context_setup_nstool qemu ${STATESETUP}/ns.hold
+	context_setup_nstool ns ${STATESETUP}/ns.hold
+	context_setup_nstool passt ${STATESETUP}/ns.hold
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/passt_in_pasta.pcap"
@@ -190,19 +187,17 @@ setup_two_guests() {
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 	context_run_bg pasta_1 "./pasta ${__opts} --trace -l /tmp/pasta1.log -P ${STATESETUP}/pasta_1.pid -t 10001,10002 -T 10003,10004 -u 10001,10002 -U 10003,10004 --config-net ${NSTOOL} hold ${STATESETUP}/ns1.hold"
-	__ns1_pid=$(${NSTOOL} info -pw ${STATESETUP}/ns1.hold)
-	context_setup_nsenter passt_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
+	context_setup_nstool passt_1 ${STATESETUP}/ns1.hold
 
 	__opts=
 	[ ${PCAP} -eq 1 ] && __opts="${__opts} -p ${LOGDIR}/pasta_2.pcap"
 	[ ${DEBUG} -eq 1 ] && __opts="${__opts} -d"
 	[ ${TRACE} -eq 1 ] && __opts="${__opts} --trace"
 	context_run_bg pasta_2 "./pasta ${__opts} --trace -l /tmp/pasta2.log -P ${STATESETUP}/pasta_2.pid -t 10004,10005 -T 10003,10001 -u 10004,10005 -U 10003,10001 --config-net ${NSTOOL} hold ${STATESETUP}/ns2.hold"
-	__ns2_pid=$(${NSTOOL} info -pw ${STATESETUP}/ns2.hold)
-	context_setup_nsenter passt_2 -U -n -p --preserve-credentials -t ${__ns2_pid}
+	context_setup_nstool passt_2 ${STATESETUP}/ns2.hold
 
-	context_setup_nsenter qemu_1 -U -n -p --preserve-credentials -t ${__ns1_pid}
-	context_setup_nsenter qemu_2 -U -n -p --preserve-credentials -t ${__ns2_pid}
+	context_setup_nstool qemu_1 ${STATESETUP}/ns1.hold
+	context_setup_nstool qemu_2 ${STATESETUP}/ns2.hold
 
 	__ifname="$(context_run qemu_1 "ip -j link show | jq -rM '.[] | select(.link_type == \"ether\").ifname'")"
 
@@ -310,15 +305,13 @@ teardown_passt_in_ns() {
 
 # teardown_two_guests() - Exit namespaces, kill qemu processes, passt and pasta
 teardown_two_guests() {
-	__ns1_pid=$(${NSTOOL} info -pw "${STATESETUP}/ns1.hold")
-	__ns2_pid=$(${NSTOOL} info -pw "${STATESETUP}/ns2.hold")
-	nsenter -U -p --preserve-credentials -t ${__ns1_pid} kill $(cat "${STATESETUP}/qemu_1.pid")
-	nsenter -U -p --preserve-credentials -t ${__ns2_pid} kill $(cat "${STATESETUP}/qemu_2.pid")
+	${NSTOOL} exec ${STATESETUP}/ns1.hold -- kill $(cat "${STATESETUP}/qemu_1.pid")
+	${NSTOOL} exec ${STATESETUP}/ns2.hold -- kill $(cat "${STATESETUP}/qemu_2.pid")
 	context_wait qemu_1
 	context_wait qemu_2
 
-	nsenter -U -p --preserve-credentials -t ${__ns1_pid} kill $(cat "${STATESETUP}/passt_1.pid")
-	nsenter -U -p --preserve-credentials -t ${__ns2_pid} kill $(cat "${STATESETUP}/passt_2.pid")
+	${NSTOOL} exec ${STATESETUP}/ns1.hold -- kill $(cat "${STATESETUP}/passt_1.pid")
+	${NSTOOL} exec ${STATESETUP}/ns2.hold -- kill $(cat "${STATESETUP}/passt_2.pid")
 	context_wait passt_1
 	context_wait passt_2
 	${NSTOOL} stop "${STATESETUP}/ns1.hold"

@@ -41,9 +41,9 @@ PCAP=${PCAP:-0}
 COMMIT="$(git log --oneline --no-decorate -1)"
 
 . lib/util
+. lib/context
 . lib/setup
 . lib/setup_ugly
-. lib/context
 . lib/term
 . lib/perf_report
 . lib/layout

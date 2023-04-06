@@ -13,6 +13,8 @@
 # Copyright Red Hat
 # Author: David Gibson <david@gibson.dropbear.id.au>
 
+NSTOOL="${BASEPATH}/nstool"
+
 # context_setup_common() - Create outline of a new context
 # $1:	Context name
 context_setup_common() {
@@ -30,15 +32,17 @@ context_setup_host() {
 	echo sh -c > "${__enter}"
 }
 
-# context_setup_nsenter() - Create a new context for running commands in a namespace
+# context_setup_nstool() - Create a new context for running commands with nstool exec
 # $1:	Context name
-# $2:	Namespace PID
-context_setup_nsenter() {
+# $2:	nstool control socket
+context_setup_nstool() {
 	__name="$1"
-	shift
+	__sock="$2"
 	__enter="${STATESETUP}/context_${__name}.enter"
+	# Wait for the ns to be ready
+	${NSTOOL} info -w "${__sock}" > /dev/null
 	context_setup_common "${__name}"
-	echo "nsenter $@ sh -c" > "${__enter}"
+	echo "${NSTOOL} exec ${__sock} -- sh -c" > "${__enter}"
 }
 
 # context_setup_guest() - Create a new context for running commands in a guest
