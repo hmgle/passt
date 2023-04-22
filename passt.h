@@ -117,6 +117,7 @@ struct ip4_ctx {
 	struct in_addr dns[MAXNS + 1];
 	struct in_addr dns_match;
 	struct in_addr dns_host;
+	struct in_addr dns_redirect;
 
 	struct in_addr addr_out;
 	char ifname_out[IFNAMSIZ];
@@ -144,6 +145,7 @@ struct ip6_ctx {
 	struct in6_addr dns[MAXNS + 1];
 	struct in6_addr dns_match;
 	struct in6_addr dns_host;
+	struct in6_addr dns_redirect;
 
 	struct in6_addr addr_out;
 	char ifname_out[IFNAMSIZ];

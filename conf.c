@@ -1213,6 +1213,7 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"version",	no_argument,		NULL,		14 },
 		{"outbound-if4", required_argument,	NULL,		15 },
 		{"outbound-if6", required_argument,	NULL,		16 },
+		{"dns-redirect", required_argument,	NULL,		17 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
@@ -1370,6 +1371,20 @@ void conf(struct ctx *c, int argc, char **argv)
 			if (ret <= 0 || ret >= (int)sizeof(c->ip6.ifname_out))
 				die("Invalid interface name: %s", optarg);
 
+			break;
+		case 17:
+			if (IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_redirect)    &&
+			    inet_pton(AF_INET, optarg, &c->ip4.dns_redirect) &&
+			    !IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_redirect)   &&
+			    !IN4_IS_ADDR_BROADCAST(&c->ip4.dns_redirect))
+				break;
+
+			if (IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_redirect)     &&
+			    inet_pton(AF_INET6, optarg, &c->ip6.dns_redirect) &&
+			    !IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_match))
+				break;
+
+			die("Invalid DNS redirect address: %s", optarg);
 			break;
 		case 'd':
 			if (c->debug)
@@ -1702,6 +1717,7 @@ void conf(struct ctx *c, int argc, char **argv)
 				if (*netns && !*userns)
 					netns_only = 1;
 				c->foreground = 1;
+				c->quiet = 1;
 				c->keep_child_pid = ch_pid;
 			}
 		}

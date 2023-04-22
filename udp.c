@@ -26,7 +26,7 @@
  *   packets sent as replies by the guest need their destination address to
  *   be changed back to the address of the local host. This is dynamic to allow
  *   connections from the gateway as well, and uses the same fixed 180s timeout
- * 
+ *
  * Sockets for bound ports are created at initialisation time, one set for IPv4
  * and one for IPv6.
  *
@@ -590,7 +590,11 @@ static size_t udp_update_hdr4(const struct ctx *c, int n, in_port_t dstport,
 
 	src_port = ntohs(b->s_in.sin_port);
 
-	if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_match) &&
+	if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_redirect) &&
+	    IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.dns_redirect) &&
+	    src_port == 53) {
+		b->iph.saddr = c->ip4.dns_host.s_addr;
+	} else if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_match) &&
 	    IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.dns_host) &&
 	    src_port == 53) {
 		b->iph.saddr = c->ip4.dns_match.s_addr;
@@ -646,6 +650,11 @@ static size_t udp_update_hdr6(const struct ctx *c, int n, in_port_t dstport,
 	if (IN6_IS_ADDR_LINKLOCAL(src)) {
 		b->ip6h.daddr = c->ip6.addr_ll_seen;
 		b->ip6h.saddr = b->s_in6.sin6_addr;
+	} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_redirect) &&
+		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.dns_redirect) &&
+		   src_port == 53) {
+		b->ip6h.daddr = c->ip6.addr_seen;
+		b->ip6h.saddr = c->ip6.dns_host;
 	} else if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_match) &&
 		   IN6_ARE_ADDR_EQUAL(src, &c->ip6.dns_host) &&
 		   src_port == 53) {
@@ -844,7 +853,11 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		sa = (struct sockaddr *)&s_in;
 		sl = sizeof(s_in);
 
-		if (IN4_ARE_ADDR_EQUAL(&s_in.sin_addr, &c->ip4.dns_match) &&
+		if (!IN4_IS_ADDR_UNSPECIFIED(&c->ip4.dns_redirect) &&
+		    IN4_ARE_ADDR_EQUAL(&s_in.sin_addr, &c->ip4.dns_host) &&
+		    ntohs(s_in.sin_port) == 53) {
+			s_in.sin_addr = c->ip4.dns_redirect;
+		} else if (IN4_ARE_ADDR_EQUAL(&s_in.sin_addr, &c->ip4.dns_match) &&
 		    ntohs(s_in.sin_port) == 53) {
 			s_in.sin_addr = c->ip4.dns_host;
 		} else if (IN4_ARE_ADDR_EQUAL(&s_in.sin_addr, &c->ip4.gw) &&
@@ -890,7 +903,11 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		sa = (struct sockaddr *)&s_in6;
 		sl = sizeof(s_in6);
 
-		if (IN6_ARE_ADDR_EQUAL(addr, &c->ip6.dns_match) &&
+		if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_redirect) &&
+		    IN6_ARE_ADDR_EQUAL(addr, &c->ip6.dns_host) &&
+		    ntohs(s_in6.sin6_port) == 53) {
+			s_in.sin_addr = c->ip4.dns_redirect;
+		} else if (IN6_ARE_ADDR_EQUAL(addr, &c->ip6.dns_match) &&
 		    ntohs(s_in6.sin6_port) == 53) {
 			s_in6.sin6_addr = c->ip6.dns_host;
 		} else if (IN6_ARE_ADDR_EQUAL(addr, &c->ip6.gw) &&
