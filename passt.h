@@ -261,6 +261,8 @@ struct ctx {
 
 	int low_wmem;
 	int low_rmem;
+
+	pid_t keep_child_pid;
 };
 
 void proto_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,

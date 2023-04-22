@@ -45,7 +45,7 @@ FLAGS += -DDUAL_STACK_SOCKETS=$(DUAL_STACK_SOCKETS)
 
 PASST_SRCS = arch.c arp.c checksum.c conf.c dhcp.c dhcpv6.c icmp.c igmp.c \
 	isolation.c lineread.c log.c mld.c ndp.c netlink.c packet.c passt.c \
-	pasta.c pcap.c siphash.c tap.c tcp.c tcp_splice.c udp.c util.c
+	pasta.c pcap.c siphash.c tap.c tcp.c tcp_splice.c udp.c util.c child.c
 QRAP_SRCS = qrap.c
 SRCS = $(PASST_SRCS) $(QRAP_SRCS)
 

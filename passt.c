@@ -302,8 +302,11 @@ int main(int argc, char **argv)
 	else
 		write_pidfile(pidfile_fd, getpid());
 
-	if (pasta_child_pid)
+	if (c.keep_child_pid > 0) {
+		kill(c.keep_child_pid, SIGUSR1);
+	} else if (pasta_child_pid) {
 		kill(pasta_child_pid, SIGUSR1);
+	}
 
 	isolate_postfork(&c);
 

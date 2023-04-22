@@ -43,6 +43,7 @@
 #include "lineread.h"
 #include "isolation.h"
 #include "log.h"
+#include "child.h"
 
 /**
  * get_bound_ports() - Get maps of ports with bound sockets
@@ -884,7 +885,7 @@ static void usage(const char *name)
 pasta_opts:
 
 	info(   "  -t, --tcp-ports SPEC	TCP port forwarding to namespace");
-	info(   "    can be specified multiple times"); 
+	info(   "    can be specified multiple times");
 	info(   "    SPEC can be:");
 	info(   "      'none': don't forward any ports");
 	info(   "      'auto': forward all ports currently bound in namespace");
@@ -1688,10 +1689,25 @@ void conf(struct ctx *c, int argc, char **argv)
 		}
 	} while (name != -1);
 
-	if (c->mode == MODE_PASTA)
+	if (c->mode == MODE_PASTA) {
 		conf_pasta_ns(&netns_only, userns, netns, optind, argc, argv);
-	else if (optind != argc)
+		if (!*netns) {
+			long ch_pid = pasta_start_child(c, uid, gid, argc - optind, argv + optind);
+			if (ch_pid > 0) {
+				*userns = 0;
+				snprintf(netns, PATH_MAX, "/proc/%ld/ns/net", ch_pid);
+				if (!*userns)
+					snprintf(userns, PATH_MAX, "/proc/%ld/ns/user",
+							ch_pid);
+				if (*netns && !*userns)
+					netns_only = 1;
+				c->foreground = 1;
+				c->keep_child_pid = ch_pid;
+			}
+		}
+	} else if (optind != argc) {
 		die("Extra non-option argument: %s", argv[optind]);
+	}
 
 	isolate_user(uid, gid, !netns_only, userns, c->mode);
 
