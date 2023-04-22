@@ -851,6 +851,10 @@ static void usage(const char *name)
 	info(   "  -4, --ipv4-only	Enable IPv4 operation only");
 	info(   "  -6, --ipv6-only	Enable IPv6 operation only");
 
+	info(   "  --dns-redirect ADDR	Redirect DNS queries sent to ADDR");
+	info(   "    can be specified zero to two times (for IPv4 and IPv6)");
+	info(   "    default: don't redirect DNS queries");
+
 	if (strstr(name, "pasta"))
 		goto pasta_opts;
 
