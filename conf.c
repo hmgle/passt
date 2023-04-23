@@ -1695,6 +1695,13 @@ void conf(struct ctx *c, int argc, char **argv)
 	    (*c->ip6.ifname_out && !c->ifi6))
 		die("External interface not usable");
 
+	if (!*c->pasta_ifn) {
+		if (c->ifi4)
+			if_indextoname(c->ifi4, c->pasta_ifn);
+		else
+			if_indextoname(c->ifi6, c->pasta_ifn);
+	}
+
 	/* Inbound port options can be parsed now (after IPv4/IPv6 settings) */
 	optind = 1;
 	do {
@@ -1721,7 +1728,8 @@ void conf(struct ctx *c, int argc, char **argv)
 				if (*netns && !*userns)
 					netns_only = 1;
 				c->foreground = 1;
-				c->quiet = 1;
+				if (!c->debug)
+					c->quiet = 1;
 				c->keep_child_pid = ch_pid;
 			}
 		}
@@ -1771,13 +1779,6 @@ void conf(struct ctx *c, int argc, char **argv)
 		c->mtu = ROUND_DOWN(ETH_MAX_MTU - ETH_HLEN, sizeof(uint32_t));
 
 	get_dns(c);
-
-	if (!*c->pasta_ifn) {
-		if (c->ifi4)
-			if_indextoname(c->ifi4, c->pasta_ifn);
-		else
-			if_indextoname(c->ifi6, c->pasta_ifn);
-	}
 
 	if (c->mode == MODE_PASTA) {
 		c->proc_net_tcp[V4][0] = c->proc_net_tcp[V4][1] = -1;

@@ -171,21 +171,19 @@ pid_t pasta_start_child(struct ctx *c, uid_t uid, gid_t gid, int argc, char **ar
 		sigprocmask(SIG_SETMASK, &oldset, NULL);
 
 		/* network config */
-		char ifnbuf[IFNAMSIZ];
 		char ipaddrbuf[INET_ADDRSTRLEN], maskbuf[INET_ADDRSTRLEN];
 		char routerbuf[INET_ADDRSTRLEN];
 		uint32_t mask = htonl(0xffffffff << (32 - c->ip4.prefix_len));
 
-		if_indextoname(c->ifi4, ifnbuf);
 		inet_ntop(AF_INET, &c->ip4.addr, ipaddrbuf, sizeof(ipaddrbuf));
 		inet_ntop(AF_INET, &mask, maskbuf, sizeof(maskbuf));
 		inet_ntop(AF_INET, &c->ip4.gw, routerbuf, sizeof(routerbuf));
 
-		if (up_network_interface(ifnbuf) < 0)
+		if (up_network_interface(c->pasta_ifn) < 0)
 			exit(EXIT_FAILURE);
-		if (set_ip(ifnbuf, ipaddrbuf, maskbuf))
+		if (set_ip(c->pasta_ifn, ipaddrbuf, maskbuf))
 			exit(EXIT_FAILURE);
-		if (add_routing_table(ifnbuf, routerbuf))
+		if (add_routing_table(c->pasta_ifn, routerbuf))
 			exit(EXIT_FAILURE);
 
 		if (write_file("/proc/sys/net/ipv4/ping_group_range", "0 0"))
