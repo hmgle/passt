@@ -48,7 +48,7 @@ static int up_network_interface(char *interface_name) {
 	return 0;
 }
 
-static int set_ip(const char *interface, const char *ip_address, const char *mask)
+static int set_ip4(const char *interface, const char *ip4_address, const char *mask)
 {
 	int fd;
 	struct ifreq ifr;
@@ -60,11 +60,12 @@ static int set_ip(const char *interface, const char *ip_address, const char *mas
 		perror("socket");
 		return -1;
 	}
+	memset(&ifr, 0, sizeof(struct ifreq));
 	ifr.ifr_addr.sa_family = AF_INET;
-	strcpy(ifr.ifr_name, interface);
+	strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
 
 	addr = (struct sockaddr_in*)&ifr.ifr_addr;
-	inet_pton(AF_INET, ip_address, &addr->sin_addr);
+	inet_pton(AF_INET, ip4_address, &addr->sin_addr);
 	ret = ioctl(fd, SIOCSIFADDR, &ifr);
 	if (ret) {
 		perror("SIOCSIFADDR");
@@ -73,15 +74,55 @@ static int set_ip(const char *interface, const char *ip_address, const char *mas
 
 	inet_pton(AF_INET, mask, &addr->sin_addr);
 	ret = ioctl(fd, SIOCSIFNETMASK, &ifr);
-	if (ret) {
+	if (ret)
 		perror("SIOCSIFNETMASK");
-	}
+
 end:
 	close(fd);
 	return ret;
 }
 
-static int add_routing_table(char *interface, const char *ip_address)
+struct in6_ifreq {
+	struct in6_addr	ifr6_addr;
+	uint32_t	ifr6_prefixlen;
+	int		ifr6_ifindex;
+};
+
+static int set_ip6(const char *interface, const char *ip6_address)
+{
+	int fd;
+	struct ifreq ifr;
+	struct in6_ifreq ifr6;
+	int ret;
+
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		perror("socket");
+		return -1;
+	}
+	memset(&ifr, 0, sizeof(struct ifreq));
+	strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
+
+	ret = ioctl(fd, SIOGIFINDEX, &ifr);
+	if (ret) {
+		perror("SIOGIFINDEX");
+		goto end;
+	}
+
+	inet_pton(AF_INET6, ip6_address, &ifr6.ifr6_addr);
+	ifr6.ifr6_ifindex = ifr.ifr_ifindex;
+	ifr6.ifr6_prefixlen = 64;
+	ret = ioctl(fd, SIOCSIFADDR, &ifr6);
+	if (ret)
+		perror("SIOCSIFADDR");
+
+end:
+	close(fd);
+	return ret;
+}
+
+
+static int add_routing_table(char *interface, const char *ip4_addr)
 {
 	int sockfd;
 	struct rtentry rt;
@@ -95,7 +136,7 @@ static int add_routing_table(char *interface, const char *ip_address)
 	memset(&rt, 0, sizeof(rt));
 	struct sockaddr_in *sockinfo = (struct sockaddr_in *)&rt.rt_gateway;
 	sockinfo->sin_family = AF_INET;
-	sockinfo->sin_addr.s_addr = inet_addr(ip_address);
+	sockinfo->sin_addr.s_addr = inet_addr(ip4_addr);
 
 	sockinfo = (struct sockaddr_in *)&rt.rt_dst;
 	sockinfo->sin_family = AF_INET;
@@ -113,6 +154,47 @@ static int add_routing_table(char *interface, const char *ip_address)
 	close(sockfd);
 	return 0;
 }
+
+static int add_routing_ip6_table(const char *interface_name, const char *ip6_addr) {
+	int sockfd;
+	struct in6_rtmsg route;
+	struct sockaddr_in6 *addr;
+	int err;
+
+	memset(&route, 0, sizeof(route));
+
+	// Set gateway address
+	addr = (struct sockaddr_in6 *)&route.rtmsg_gateway;
+	addr->sin6_family = AF_INET6;
+	if (inet_pton(AF_INET6, ip6_addr, &addr->sin6_addr) != 1) {
+		perror("inet_pton");
+		return -1;
+	}
+
+	// TODO Set prefix length
+
+	memset(&addr->sin6_addr, 0, sizeof(addr->sin6_addr));
+
+	route.rtmsg_flags = RTF_UP;
+	route.rtmsg_ifindex = if_nametoindex(interface_name);
+
+	sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
+	if (sockfd < 0) {
+		perror("socket");
+		return -1;
+	}
+
+	err = ioctl(sockfd, SIOCADDRT, &route);
+	if (err < 0) {
+		perror("ioctl(SIOCADDRT)");
+		close(sockfd);
+		return -1;
+	}
+
+	close(sockfd);
+	return 0;
+}
+
 
 static void do_child(int argc, char **argv)
 {
@@ -171,20 +253,32 @@ pid_t pasta_start_child(struct ctx *c, uid_t uid, gid_t gid, int argc, char **ar
 		sigprocmask(SIG_SETMASK, &oldset, NULL);
 
 		/* network config */
+		if (up_network_interface(c->pasta_ifn) < 0)
+			exit(EXIT_FAILURE);
+
 		char ipaddrbuf[INET_ADDRSTRLEN], maskbuf[INET_ADDRSTRLEN];
 		char routerbuf[INET_ADDRSTRLEN];
 		uint32_t mask = htonl(0xffffffff << (32 - c->ip4.prefix_len));
 
-		inet_ntop(AF_INET, &c->ip4.addr, ipaddrbuf, sizeof(ipaddrbuf));
-		inet_ntop(AF_INET, &mask, maskbuf, sizeof(maskbuf));
-		inet_ntop(AF_INET, &c->ip4.gw, routerbuf, sizeof(routerbuf));
+		if (c->ifi4) {
+			inet_ntop(AF_INET, &c->ip4.addr, ipaddrbuf, sizeof(ipaddrbuf));
+			inet_ntop(AF_INET, &mask, maskbuf, sizeof(maskbuf));
+			inet_ntop(AF_INET, &c->ip4.gw, routerbuf, sizeof(routerbuf));
 
-		if (up_network_interface(c->pasta_ifn) < 0)
-			exit(EXIT_FAILURE);
-		if (set_ip(c->pasta_ifn, ipaddrbuf, maskbuf))
-			exit(EXIT_FAILURE);
-		if (add_routing_table(c->pasta_ifn, routerbuf))
-			exit(EXIT_FAILURE);
+			if (set_ip4(c->pasta_ifn, ipaddrbuf, maskbuf))
+				exit(EXIT_FAILURE);
+			if (add_routing_table(c->pasta_ifn, routerbuf))
+				exit(EXIT_FAILURE);
+		}
+		if (c->ifi6) {
+			inet_ntop(AF_INET, &c->ip6.addr, ipaddrbuf, sizeof(ipaddrbuf));
+			inet_ntop(AF_INET, &c->ip6.gw, routerbuf, sizeof(routerbuf));
+
+			if (set_ip6(c->pasta_ifn, ipaddrbuf))
+				exit(EXIT_FAILURE);
+			if (add_routing_ip6_table(c->pasta_ifn, routerbuf))
+				exit(EXIT_FAILURE);
+		}
 
 		if (write_file("/proc/sys/net/ipv4/ping_group_range", "0 0"))
 			warn("Cannot set ping_group_range, ICMP requests might fail");
