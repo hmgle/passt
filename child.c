@@ -4,6 +4,7 @@
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#include "log.h"
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,7 +49,7 @@ static int up_network_interface(char *interface_name) {
 	return 0;
 }
 
-static int set_ip4(const char *interface, const char *ip4_address, const char *mask)
+static int set_ip4(const char *interface, const char *ip4_addr, const char *mask)
 {
 	int fd;
 	struct ifreq ifr;
@@ -65,14 +66,22 @@ static int set_ip4(const char *interface, const char *ip4_address, const char *m
 	strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
 
 	addr = (struct sockaddr_in*)&ifr.ifr_addr;
-	inet_pton(AF_INET, ip4_address, &addr->sin_addr);
+	if (inet_pton(AF_INET, ip4_addr, &addr->sin_addr) != 1) {
+		warn("%s is not a valid IPv4 network address", ip4_addr);
+		ret = EXIT_FAILURE;
+		goto end;
+	}
 	ret = ioctl(fd, SIOCSIFADDR, &ifr);
 	if (ret) {
 		perror("SIOCSIFADDR");
 		goto end;
 	}
 
-	inet_pton(AF_INET, mask, &addr->sin_addr);
+	if (inet_pton(AF_INET, mask, &addr->sin_addr) != 1) {
+		warn("%s is not a valid IPv4 network address", mask);
+		ret = EXIT_FAILURE;
+		goto end;
+	}
 	ret = ioctl(fd, SIOCSIFNETMASK, &ifr);
 	if (ret)
 		perror("SIOCSIFNETMASK");
@@ -88,14 +97,14 @@ struct in6_ifreq {
 	int		ifr6_ifindex;
 };
 
-static int set_ip6(const char *interface, const char *ip6_address)
+static int set_ip6(const char *interface, const char *ip6_addr)
 {
 	int fd;
 	struct ifreq ifr;
 	struct in6_ifreq ifr6;
 	int ret;
 
-	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_IP);
 	if (fd < 0) {
 		perror("socket");
 		return -1;
@@ -109,7 +118,11 @@ static int set_ip6(const char *interface, const char *ip6_address)
 		goto end;
 	}
 
-	inet_pton(AF_INET6, ip6_address, &ifr6.ifr6_addr);
+	if (inet_pton(AF_INET6, ip6_addr, &ifr6.ifr6_addr) != 1) {
+		warn("%s is not a valid IPv6 network address", ip6_addr);
+		ret = EXIT_FAILURE;
+		goto end;
+	}
 	ifr6.ifr6_ifindex = ifr.ifr_ifindex;
 	ifr6.ifr6_prefixlen = 64;
 	ret = ioctl(fd, SIOCSIFADDR, &ifr6);
@@ -159,7 +172,7 @@ static int add_routing_ip6_table(const char *interface_name, const char *ip6_add
 	int sockfd;
 	struct in6_rtmsg route;
 	struct sockaddr_in6 *addr;
-	int err;
+	int ret;
 
 	memset(&route, 0, sizeof(route));
 
@@ -167,11 +180,12 @@ static int add_routing_ip6_table(const char *interface_name, const char *ip6_add
 	addr = (struct sockaddr_in6 *)&route.rtmsg_gateway;
 	addr->sin6_family = AF_INET6;
 	if (inet_pton(AF_INET6, ip6_addr, &addr->sin6_addr) != 1) {
-		perror("inet_pton");
-		return -1;
+		warn("%s is not a valid IPv6 network address", ip6_addr);
+		return EXIT_FAILURE;
 	}
 
-	// TODO Set prefix length
+	// Set prefix length
+	route.rtmsg_dst_len = 64;
 
 	memset(&addr->sin6_addr, 0, sizeof(addr->sin6_addr));
 
@@ -184,15 +198,11 @@ static int add_routing_ip6_table(const char *interface_name, const char *ip6_add
 		return -1;
 	}
 
-	err = ioctl(sockfd, SIOCADDRT, &route);
-	if (err < 0) {
+	ret = ioctl(sockfd, SIOCADDRT, &route);
+	if (ret < 0)
 		perror("ioctl(SIOCADDRT)");
-		close(sockfd);
-		return -1;
-	}
-
 	close(sockfd);
-	return 0;
+	return ret;
 }
 
 
