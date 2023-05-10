@@ -5,6 +5,7 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #include "log.h"
+#include <strings.h>
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,7 +33,10 @@ static int up_network_interface(char *interface_name) {
 	}
 
 	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, interface_name, IFNAMSIZ);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
+	strncpy(ifr.ifr_name, interface_name, IFNAMSIZ - 1);
+#pragma GCC diagnostic pop
 
 	if (ioctl(sockfd, SIOCGIFFLAGS, &ifr) < 0) {
 		perror("ioctl(SIOCGIFFLAGS)");
@@ -63,7 +67,10 @@ static int set_ip4(const char *interface, const char *ip4_addr, const char *mask
 	}
 	memset(&ifr, 0, sizeof(struct ifreq));
 	ifr.ifr_addr.sa_family = AF_INET;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
 	strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
+#pragma GCC diagnostic pop
 
 	addr = (struct sockaddr_in*)&ifr.ifr_addr;
 	if (inet_pton(AF_INET, ip4_addr, &addr->sin_addr) != 1) {
@@ -110,7 +117,10 @@ static int set_ip6(const char *interface, const char *ip6_addr)
 		return -1;
 	}
 	memset(&ifr, 0, sizeof(struct ifreq));
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
 	strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
+#pragma GCC diagnostic pop
 
 	ret = ioctl(fd, SIOGIFINDEX, &ifr);
 	if (ret) {
