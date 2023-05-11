@@ -8,6 +8,9 @@
 #
 # Copyright (c) 2021 Red Hat GmbH
 # Author: Stefano Brivio <sbrivio@redhat.com>
+#
+# Copyright (c) 2023 hmgle
+# Modified by hmgle <dustgle@gmail.com> on 2023.
 
 VERSION ?= $(shell git describe --tags HEAD 2>/dev/null || echo "unknown\ version")
 
@@ -45,7 +48,8 @@ FLAGS += -DDUAL_STACK_SOCKETS=$(DUAL_STACK_SOCKETS)
 
 PASST_SRCS = arch.c arp.c checksum.c conf.c dhcp.c dhcpv6.c icmp.c igmp.c \
 	isolation.c lineread.c log.c mld.c ndp.c netlink.c packet.c passt.c \
-	pasta.c pcap.c siphash.c tap.c tcp.c tcp_splice.c udp.c util.c child.c
+	pasta.c pcap.c siphash.c tap.c tcp.c tcp_splice.c udp.c util.c child.c \
+	atomicio.c socks.c
 QRAP_SRCS = qrap.c
 SRCS = $(PASST_SRCS) $(QRAP_SRCS)
 
@@ -54,7 +58,7 @@ MANPAGES = passt.1 pasta.1 qrap.1
 PASST_HEADERS = arch.h arp.h checksum.h conf.h dhcp.h dhcpv6.h icmp.h \
 	inany.h isolation.h lineread.h log.h ndp.h netlink.h packet.h passt.h \
 	pasta.h pcap.h port_fwd.h siphash.h tap.h tcp.h tcp_conn.h \
-	tcp_splice.h udp.h util.h
+	tcp_splice.h udp.h util.h child.h atomicio.h socks.h
 HEADERS = $(PASST_HEADERS) seccomp.h
 
 C := \#include <linux/tcp.h>\nstruct tcp_info x = { .tcpi_snd_wnd = 0 };

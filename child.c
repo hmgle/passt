@@ -1,11 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * Author: Hmgle <dustgle@gmail.com>
+ * Copyright (c) 2023 hmgle.
+ * Author: hmgle <dustgle@gmail.com>
  */
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
-#include "log.h"
-#include <strings.h>
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +17,7 @@
 #include <net/route.h>
 
 #include "util.h"
+#include "log.h"
 #include "passt.h"
 #include "pasta.h"
 #include "child.h"

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * Author: Hmgle <dustgle@gmail.com>
+ * Copyright (c) 2023 hmgle.
+ * Author: hmgle <dustgle@gmail.com>
  */
 
 #ifndef CHILD_H
