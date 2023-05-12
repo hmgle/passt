@@ -10,9 +10,13 @@
  *
  * Copyright (c) 2020-2021 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
+ *
+ * Changes:
+ *      hmgle <dustgle@gmail.com> add socks5-proxy support
  */
 
 #include <arpa/inet.h>
+#include <bits/getopt_core.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -34,6 +38,7 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 
+#include "socks.h"
 #include "util.h"
 #include "passt.h"
 #include "netlink.h"
@@ -1218,6 +1223,9 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"outbound-if4", required_argument,	NULL,		15 },
 		{"outbound-if6", required_argument,	NULL,		16 },
 		{"dns-redirect", required_argument,	NULL,		17 },
+		{"socks5-proxy", required_argument,	NULL,		18 },
+		{"socks5-user",	 required_argument,	NULL,		19 },
+		{"socks5-passwd", required_argument,	NULL,		20 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
@@ -1233,6 +1241,7 @@ void conf(struct ctx *c, int argc, char **argv)
 	size_t logsize = 0;
 	uid_t uid;
 	gid_t gid;
+	char *proxy = NULL;
 
 	if (c->mode == MODE_PASTA) {
 		c->no_dhcp_dns = c->no_dhcp_dns_search = 1;
@@ -1389,6 +1398,17 @@ void conf(struct ctx *c, int argc, char **argv)
 				break;
 
 			die("Invalid DNS redirect address: %s", optarg);
+			break;
+		case 18:
+			if ((proxy = strdup(optarg)) == NULL)
+				die("Invalid socks5 address: %s", optarg);
+			c->socks5.host = strsep(&proxy, ":");
+			c->socks5.port = proxy;
+			if (get_socks5_addr(c->socks5.host, c->socks5.port,
+					&c->socks5.addr, &c->socks5.addrlen,
+					&c->socks5.ai_family))
+				die("Parse socks5 (host: %s, port: %s) failed",
+					c->socks5.host, c->socks5.port);
 			break;
 		case 'd':
 			if (c->debug)

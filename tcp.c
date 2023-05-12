@@ -10,6 +10,9 @@
  *
  * Copyright (c) 2020-2022 Red Hat GmbH
  * Author: Stefano Brivio <sbrivio@redhat.com>
+ *
+ * Changes:
+ *      hmgle <dustgle@gmail.com> add socks5-proxy support
  */
 
 /**
@@ -2012,6 +2015,8 @@ static void tcp_bind_outbound(const struct ctx *c, int s, sa_family_t af)
  * @opts:	Pointer to start of options
  * @optlen:	Bytes in options: caller MUST ensure available length
  * @now:	Current timestamp
+ *
+ * #syscalls dup2
  */
 static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 			      const struct tcphdr *th, const char *opts,
@@ -2032,6 +2037,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	struct tcp_tap_conn *conn;
 	socklen_t sl;
 	int s, mss;
+	int conn_ret = -1;
 
 	if (c->tcp.conn_count >= TCP_MAX_CONNS)
 		return;
@@ -2039,6 +2045,33 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	if ((s = tcp_conn_pool_sock(pool)) < 0)
 		if ((s = tcp_conn_new_sock(c, af)) < 0)
 			return;
+
+	if (af == AF_INET) {
+		sa = (struct sockaddr *)&addr4;
+		sl = sizeof(addr4);
+	} else {
+		sa = (struct sockaddr *)&addr6;
+		sl = sizeof(addr6);
+	}
+
+	if (c->socks5.addr != NULL) {
+		char *ip_str, *port_str;
+		int socks5_fd;
+		int flags;
+		struct addrinfo _h = {0};
+
+		parse_sockaddr(sa, &ip_str, &port_str);
+		socks5_fd = socks_connect(ip_str, port_str, _h, c->socks5.host,
+			c->socks5.port, c->socks5.addr, c->socks5.addrlen,
+			5, c->socks5.user, c->socks5.pwd);
+		if (socks5_fd != -1)  {
+			conn_ret = 0;
+			flags = fcntl(s, F_GETFL, 0);
+			dup2(socks5_fd, s);
+			fcntl(s, F_SETFL, flags);
+			close(socks5_fd);
+		}
+	}
 
 	if (!c->no_map_gw) {
 		if (af == AF_INET && IN4_ARE_ADDR_EQUAL(addr, &c->ip4.gw))
@@ -2068,8 +2101,10 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	conn->wnd_to_tap = WINDOW_DEFAULT;
 
 	mss = tcp_conn_tap_mss(conn, opts, optlen);
-	if (setsockopt(s, SOL_TCP, TCP_MAXSEG, &mss, sizeof(mss)))
-		trace("TCP: failed to set TCP_MAXSEG on socket %i", s);
+	if (!c->socks5.addr) {
+		if (setsockopt(s, SOL_TCP, TCP_MAXSEG, &mss, sizeof(mss)))
+			trace("TCP: failed to set TCP_MAXSEG on socket %i", s);
+	}
 	MSS_SET(conn, mss);
 
 	tcp_get_tap_ws(conn, opts, optlen);
@@ -2081,14 +2116,6 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 		conn->wnd_from_tap = 1;
 
 	inany_from_af(&conn->addr, af, addr);
-
-	if (af == AF_INET) {
-		sa = (struct sockaddr *)&addr4;
-		sl = sizeof(addr4);
-	} else {
-		sa = (struct sockaddr *)&addr6;
-		sl = sizeof(addr6);
-	}
 
 	conn->sock_port = ntohs(th->dest);
 	conn->tap_port = ntohs(th->source);
@@ -2102,19 +2129,23 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 
 	tcp_hash_insert(c, conn);
 
-	if (!bind(s, sa, sl)) {
-		tcp_rst(c, conn);	/* Nobody is listening then */
-		return;
+	if (!c->socks5.addr) {
+		if (!bind(s, sa, sl)) {
+			tcp_rst(c, conn);	/* Nobody is listening then */
+			return;
+		}
 	}
 	if (errno != EADDRNOTAVAIL && errno != EACCES)
 		conn_flag(c, conn, LOCAL);
 
-	if ((af == AF_INET &&  !IN4_IS_ADDR_LOOPBACK(&addr4.sin_addr)) ||
-	    (af == AF_INET6 && !IN6_IS_ADDR_LOOPBACK(&addr6.sin6_addr) &&
-			       !IN6_IS_ADDR_LINKLOCAL(&addr6.sin6_addr)))
-		tcp_bind_outbound(c, s, af);
-
-	if (connect(s, sa, sl)) {
+	if (!c->socks5.addr) {
+		if ((af == AF_INET && !IN4_IS_ADDR_LOOPBACK(&addr4.sin_addr)) ||
+		   (af == AF_INET6 && !IN6_IS_ADDR_LOOPBACK(&addr6.sin6_addr) &&
+		   !IN6_IS_ADDR_LINKLOCAL(&addr6.sin6_addr)))
+			tcp_bind_outbound(c, s, af);
+		conn_ret = connect(s, sa, sl);
+	}
+	if (conn_ret) {
 		if (errno != EINPROGRESS) {
 			tcp_rst(c, conn);
 			return;

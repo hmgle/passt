@@ -38,6 +38,7 @@ union epoll_ref;
 #include "port_fwd.h"
 #include "tcp.h"
 #include "udp.h"
+#include "socks.h"
 
 /**
  * union epoll_ref - Breakdown of reference for epoll socket bookkeeping
@@ -265,6 +266,7 @@ struct ctx {
 	int low_rmem;
 
 	pid_t keep_child_pid;
+	struct socks5_conf socks5;
 };
 
 void proto_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,
