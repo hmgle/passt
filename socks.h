@@ -14,6 +14,7 @@
 
 enum proxy_type {
         NONE_PROXY = 0,
+	SOCKS4_PROXY = 4,
 	SOCKS5_PROXY = 5,
 	HTTP_PROXY = -1,
 };

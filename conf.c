@@ -862,7 +862,7 @@ static void usage(const char *name)
 
 	info(   "  --proxy ADDR:PORT	Specify proxy address and port");
 	info(   "    default: don't use any proxy");
-	info(   "  --proxy-type TYPE	Specify proxy type (\"socks5\", \"http\")");
+	info(   "  --proxy-type TYPE	Specify proxy type: socks5|http|socks4");
 	info(   "    default: socks5 if proxy has been set");
 	info(   "  --proxy-user NAME	username for proxy authentication");
 	info(   "  --proxy-passwd PWD	password for proxy authentication");
@@ -1423,6 +1423,8 @@ void conf(struct ctx *c, int argc, char **argv)
 		case 19:
 			if (!strcmp(optarg, "http"))
 				c->proxy.prox_typ = HTTP_PROXY;
+			else if (!strcmp(optarg, "socks4"))
+				c->proxy.prox_typ = SOCKS4_PROXY;
 			else if (!strcmp(optarg, "socks5"))
 				c->proxy.prox_typ = SOCKS5_PROXY;
 			else
