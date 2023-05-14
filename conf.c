@@ -860,6 +860,13 @@ static void usage(const char *name)
 	info(   "    can be specified zero to two times (for IPv4 and IPv6)");
 	info(   "    default: don't redirect DNS queries");
 
+	info(   "  --proxy ADDR:PORT	Specify proxy address and port");
+	info(   "    default: don't use any proxy");
+	info(   "  --proxy-type TYPE	Specify proxy type (\"socks5\", \"http\")");
+	info(   "    default: socks5 if proxy has been set");
+	info(   "  --proxy-user NAME	username for proxy authentication");
+	info(   "  --proxy-passwd PWD	password for proxy authentication");
+
 	if (strstr(name, "pasta"))
 		goto pasta_opts;
 
@@ -1223,9 +1230,10 @@ void conf(struct ctx *c, int argc, char **argv)
 		{"outbound-if4", required_argument,	NULL,		15 },
 		{"outbound-if6", required_argument,	NULL,		16 },
 		{"dns-redirect", required_argument,	NULL,		17 },
-		{"socks5-proxy", required_argument,	NULL,		18 },
-		{"socks5-user",	 required_argument,	NULL,		19 },
-		{"socks5-passwd", required_argument,	NULL,		20 },
+		{"proxy",	required_argument,	NULL,		18 },
+		{"proxy-type",	required_argument,	NULL,		19 },
+		{"proxy-user",	 required_argument,	NULL,		20 },
+		{"proxy-passwd", required_argument,	NULL,		21 },
 		{ 0 },
 	};
 	struct get_bound_ports_ns_arg ns_ports_arg = { .c = c };
@@ -1401,14 +1409,30 @@ void conf(struct ctx *c, int argc, char **argv)
 			break;
 		case 18:
 			if ((proxy = strdup(optarg)) == NULL)
-				die("Invalid socks5 address: %s", optarg);
-			c->socks5.host = strsep(&proxy, ":");
-			c->socks5.port = proxy;
-			if (get_socks5_addr(c->socks5.host, c->socks5.port,
-					&c->socks5.addr, &c->socks5.addrlen,
-					&c->socks5.ai_family))
-				die("Parse socks5 (host: %s, port: %s) failed",
-					c->socks5.host, c->socks5.port);
+				die("Invalid proxy address: %s", optarg);
+			c->proxy.host = strsep(&proxy, ":");
+			c->proxy.port = proxy;
+			if (get_proxy_addr(c->proxy.host, c->proxy.port,
+					&c->proxy.addr, &c->proxy.addrlen,
+					&c->proxy.ai_family))
+				die("Parse proxy (host: %s, port: %s) failed",
+					c->proxy.host, c->proxy.port);
+			if (!c->proxy.prox_typ)
+				c->proxy.prox_typ = SOCKS5_PROXY;
+			break;
+		case 19:
+			if (!strcmp(optarg, "http"))
+				c->proxy.prox_typ = HTTP_PROXY;
+			else if (!strcmp(optarg, "socks5"))
+				c->proxy.prox_typ = SOCKS5_PROXY;
+			else
+				die("Invalid proxy type: %s", optarg);
+			break;
+		case 20:
+			c->proxy.user = optarg;
+			break;
+		case 21:
+			c->proxy.pwd = optarg;
 			break;
 		case 'd':
 			if (c->debug)

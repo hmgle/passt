@@ -2054,22 +2054,22 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 		sl = sizeof(addr6);
 	}
 
-	if (c->socks5.addr != NULL) {
+	if (c->proxy.prox_typ) {
 		char *ip_str, *port_str;
-		int socks5_fd;
+		int proxy_fd;
 		int flags;
 		struct addrinfo _h = {0};
 
 		parse_sockaddr(sa, &ip_str, &port_str);
-		socks5_fd = socks_connect(ip_str, port_str, _h, c->socks5.host,
-			c->socks5.port, c->socks5.addr, c->socks5.addrlen,
-			5, c->socks5.user, c->socks5.pwd);
-		if (socks5_fd != -1)  {
+		proxy_fd = socks_connect(ip_str, port_str, _h, c->proxy.host,
+			c->proxy.port, c->proxy.addr, c->proxy.addrlen,
+			c->proxy.prox_typ, c->proxy.user, c->proxy.pwd);
+		if (proxy_fd != -1)  {
 			conn_ret = 0;
 			flags = fcntl(s, F_GETFL, 0);
-			dup2(socks5_fd, s);
+			dup2(proxy_fd, s);
 			fcntl(s, F_SETFL, flags);
-			close(socks5_fd);
+			close(proxy_fd);
 		}
 	}
 
@@ -2101,7 +2101,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	conn->wnd_to_tap = WINDOW_DEFAULT;
 
 	mss = tcp_conn_tap_mss(conn, opts, optlen);
-	if (!c->socks5.addr) {
+	if (!c->proxy.prox_typ) {
 		if (setsockopt(s, SOL_TCP, TCP_MAXSEG, &mss, sizeof(mss)))
 			trace("TCP: failed to set TCP_MAXSEG on socket %i", s);
 	}
@@ -2129,7 +2129,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 
 	tcp_hash_insert(c, conn);
 
-	if (!c->socks5.addr) {
+	if (!c->proxy.prox_typ) {
 		if (!bind(s, sa, sl)) {
 			tcp_rst(c, conn);	/* Nobody is listening then */
 			return;
@@ -2138,7 +2138,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 	if (errno != EADDRNOTAVAIL && errno != EACCES)
 		conn_flag(c, conn, LOCAL);
 
-	if (!c->socks5.addr) {
+	if (!c->proxy.prox_typ) {
 		if ((af == AF_INET && !IN4_IS_ADDR_LOOPBACK(&addr4.sin_addr)) ||
 		   (af == AF_INET6 && !IN6_IS_ADDR_LOOPBACK(&addr6.sin6_addr) &&
 		   !IN6_IS_ADDR_LINKLOCAL(&addr6.sin6_addr)))

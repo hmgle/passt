@@ -266,7 +266,7 @@ struct ctx {
 	int low_rmem;
 
 	pid_t keep_child_pid;
-	struct socks5_conf socks5;
+	struct proxy_conf proxy;
 };
 
 void proto_update_l2_buf(const unsigned char *eth_d, const unsigned char *eth_s,

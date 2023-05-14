@@ -12,7 +12,14 @@
 #define SOCKADDR(x) (satosin(x)->sin_addr.s_addr)
 #define SOCKPORT(x) (satosin(x)->sin_port)
 
-struct socks5_conf {
+enum proxy_type {
+        NONE_PROXY = 0,
+	SOCKS5_PROXY = 5,
+	HTTP_PROXY = -1,
+};
+
+struct proxy_conf {
+        enum proxy_type prox_typ;
         int ai_family;
         struct sockaddr *addr;
         socklen_t addrlen;
@@ -23,7 +30,7 @@ struct socks5_conf {
 };
 
 void parse_sockaddr(const struct sockaddr *sa, char **ip_str, char **port_str);
-int get_socks5_addr(const char *host, const char *port, struct sockaddr **addr,
+int get_proxy_addr(const char *host, const char *port, struct sockaddr **addr,
         socklen_t *addrlen, int *ai_family);
 
 int remote_connect(const struct sockaddr *addr, socklen_t addrlen,

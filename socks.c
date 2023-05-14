@@ -491,7 +491,7 @@ end:
 	return sockfd;
 }
 
-int get_socks5_addr(const char *host, const char *port, struct sockaddr **addr,
+int get_proxy_addr(const char *host, const char *port, struct sockaddr **addr,
 		socklen_t *addrlen, int *ai_family)
 {
 	int ret;
