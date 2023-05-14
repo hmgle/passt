@@ -91,6 +91,7 @@
  */
 
 #include <sched.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
 #include <stdio.h>
@@ -108,6 +109,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
+#include <arpa/inet.h>
 #include <time.h>
 
 #include "checksum.h"
@@ -116,6 +118,7 @@
 #include "tap.h"
 #include "pcap.h"
 #include "log.h"
+#include "uthash.h"
 
 #define UDP_CONN_TIMEOUT	180 /* s, timeout for ephemeral or local bind */
 #define UDP_MAX_FRAMES		32  /* max # of frames to receive at once */
@@ -239,6 +242,49 @@ static struct sockaddr_in6 udp6_localname = {
 
 static struct mmsghdr	udp4_mh_splice		[UDP_MAX_FRAMES];
 static struct mmsghdr	udp6_mh_splice		[UDP_MAX_FRAMES];
+
+struct udp_sockaddr_storage {
+	int s;
+	void *sockaddr;
+	socklen_t addrlen;
+
+	UT_hash_handle hh;	/* makes this structure hashable */
+};
+
+static struct udp_sockaddr_storage *UDP_SOCKADDR_STORAGE = NULL;
+
+static void add_udp_sockaddr_storage(struct udp_sockaddr_storage *us)
+{
+	HASH_ADD_INT(UDP_SOCKADDR_STORAGE, s, us);
+}
+
+static struct udp_sockaddr_storage *find_udp_sockaddr_storage(int s)
+{
+	struct udp_sockaddr_storage *us;
+
+	HASH_FIND_INT(UDP_SOCKADDR_STORAGE, &s, us);
+	return us;
+}
+
+static void delete_udp_sockaddr_storage(struct udp_sockaddr_storage *us)
+{
+	HASH_DEL(UDP_SOCKADDR_STORAGE, us);
+}
+
+static void delete_udp_sockaddr_storage_by_s(int s)
+{
+	struct udp_sockaddr_storage *us;
+	us = find_udp_sockaddr_storage(s);
+	if (us) {
+		delete_udp_sockaddr_storage(us);
+		if (us->sockaddr) {
+			free(us->sockaddr);
+			us->sockaddr = NULL;
+		}
+		free(us);
+		us = NULL;
+	}
+}
 
 /**
  * udp_invert_portmap() - Compute reverse port translations for return packets
@@ -578,7 +624,7 @@ static void udp_splice_sendfrom(const struct ctx *c, unsigned start, unsigned n,
  * Return: size of tap frame with headers
  */
 static size_t udp_update_hdr4(const struct ctx *c, int n, in_port_t dstport,
-			      const struct timespec *now)
+			      const struct timespec *now, int s)
 {
 	struct udp4_l2_buf_t *b = &udp4_l2_buf[n];
 	in_port_t src_port;
@@ -601,18 +647,41 @@ static size_t udp_update_hdr4(const struct ctx *c, int n, in_port_t dstport,
 	} else if (IN4_IS_ADDR_LOOPBACK(&b->s_in.sin_addr) ||
 		   IN4_IS_ADDR_UNSPECIFIED(&b->s_in.sin_addr)||
 		   IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.addr_seen)) {
-		b->iph.saddr = c->ip4.gw.s_addr;
-		udp_tap_map[V4][src_port].ts = now->tv_sec;
-		udp_tap_map[V4][src_port].flags |= PORT_LOCAL;
+		if (c->proxy.prox_typ == SOCKS5_PROXY && src_port != 53) {
+			struct udp_sockaddr_storage *us = find_udp_sockaddr_storage(s);
+			if (us && us->sockaddr) {
+				struct sockaddr *addr = us->sockaddr;
+				if (addr->sa_family == AF_INET) {
+					struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+					b->iph.saddr = saddr->sin_addr.s_addr;
+				}
+			}
+		} else {
+			b->iph.saddr = c->ip4.gw.s_addr;
+			udp_tap_map[V4][src_port].ts = now->tv_sec;
+			udp_tap_map[V4][src_port].flags |= PORT_LOCAL;
 
-		if (IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr.s_addr, &c->ip4.addr_seen))
-			udp_tap_map[V4][src_port].flags &= ~PORT_LOOPBACK;
-		else
-			udp_tap_map[V4][src_port].flags |= PORT_LOOPBACK;
+			if (IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr.s_addr, &c->ip4.addr_seen))
+				udp_tap_map[V4][src_port].flags &= ~PORT_LOOPBACK;
+			else
+				udp_tap_map[V4][src_port].flags |= PORT_LOOPBACK;
 
-		bitmap_set(udp_act[V4][UDP_ACT_TAP], src_port);
+			bitmap_set(udp_act[V4][UDP_ACT_TAP], src_port);
+		}
 	} else {
-		b->iph.saddr = b->s_in.sin_addr.s_addr;
+		if (c->proxy.prox_typ == SOCKS5_PROXY && src_port != 53) {
+			struct udp_sockaddr_storage *us = find_udp_sockaddr_storage(s);
+			if (us && us->sockaddr) {
+				struct sockaddr *addr = us->sockaddr;
+				if (addr->sa_family == AF_INET) {
+					struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+					b->iph.saddr = saddr->sin_addr.s_addr;
+					b->s_in.sin_addr.s_addr = saddr->sin_addr.s_addr;
+				}
+			}
+		} else {
+			b->iph.saddr = b->s_in.sin_addr.s_addr;
+		}
 	}
 
 	udp_update_check4(b);
@@ -716,7 +785,8 @@ static size_t udp_update_hdr6(const struct ctx *c, int n, in_port_t dstport,
  */
 static void udp_tap_send(struct ctx *c,
 			 unsigned int start, unsigned int n,
-			 in_port_t dstport, bool v6, const struct timespec *now)
+			 in_port_t dstport, bool v6, const struct timespec *now,
+			 int s)
 {
 	struct iovec *tap_iov;
 	unsigned int i;
@@ -732,7 +802,7 @@ static void udp_tap_send(struct ctx *c,
 		if (v6)
 			buf_len = udp_update_hdr6(c, i, dstport, now);
 		else
-			buf_len = udp_update_hdr4(c, i, dstport, now);
+			buf_len = udp_update_hdr4(c, i, dstport, now, s);
 
 		tap_iov[i].iov_len = buf_len;
 	}
@@ -777,9 +847,44 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 		udp4_localname.sin_port = htons(dstport);
 	}
 
+	struct udp_sockaddr_storage *us = NULL;
+	if (c->proxy.prox_typ == SOCKS5_PROXY)
+		us = find_udp_sockaddr_storage(ref.r.s);
+
 	n = recvmmsg(ref.r.s, mmh_recv, n, 0, NULL);
 	if (n <= 0)
 		return;
+
+	int SOCKS5_UDP_HEADER_SIZE = 10;
+	struct sockaddr_in from_addr;
+	for (i = 0; i < n; ++i) {
+		if (c->proxy.prox_typ != SOCKS5_PROXY || !us) break;
+		struct msghdr* msg = &(mmh_recv[i].msg_hdr);
+		struct sockaddr* addr = (struct sockaddr*) msg->msg_name;
+		if (addr->sa_family == AF_INET)
+			memcpy(&from_addr, addr, sizeof(struct sockaddr_in));
+		else
+			continue;
+
+		char ip_str[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &(from_addr.sin_addr), ip_str,
+				INET_ADDRSTRLEN);
+
+		uint16_t port = ntohs(from_addr.sin_port);
+
+		int bytes_received = mmh_recv[i].msg_len;
+		if (bytes_received > SOCKS5_UDP_HEADER_SIZE
+				&& port == strtoul(c->proxy.port, NULL, 10)) {
+			memmove(mmh_recv[i].msg_hdr.msg_iov->iov_base,
+					(char *)(mmh_recv[i].msg_hdr.msg_iov->iov_base) + SOCKS5_UDP_HEADER_SIZE,
+					bytes_received - SOCKS5_UDP_HEADER_SIZE);
+			mmh_recv[i].msg_len = bytes_received - SOCKS5_UDP_HEADER_SIZE;
+			if (us && us->sockaddr) {
+				memcpy(mmh_recv[i].msg_hdr.msg_name, us->sockaddr, us->addrlen);
+				mmh_recv[i].msg_hdr.msg_namelen = us->addrlen;
+			}
+		}
+	}
 
 	for (i = 0; i < n; i += m) {
 		int splicefrom = -1;
@@ -802,7 +907,7 @@ void udp_sock_handler(struct ctx *c, union epoll_ref ref, uint32_t events,
 					    v6, ref.r.p.udp.udp.ns,
 					    ref.r.p.udp.udp.orig, now);
 		else
-			udp_tap_send(c, i, m, dstport, v6, now);
+			udp_tap_send(c, i, m, dstport, v6, now, ref.r.s);
 	}
 }
 
@@ -825,11 +930,14 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 	struct iovec m[UIO_MAXIOV];
 	struct sockaddr_in6 s_in6;
 	struct sockaddr_in s_in;
+	struct sockaddr_in s_in2;
 	struct sockaddr *sa;
+	struct sockaddr *sa2;
 	int i, s, count = 0;
 	in_port_t src, dst;
 	struct udphdr *uh;
 	socklen_t sl;
+	socklen_t sl2;
 
 	(void)c;
 
@@ -849,6 +957,12 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 			.sin_port = uh->dest,
 			.sin_addr = *(struct in_addr *)addr,
 		};
+		if (c->proxy.prox_typ == SOCKS5_PROXY &&
+				ntohs(s_in.sin_port) != 53) {
+			s_in2 = *(struct sockaddr_in *)c->proxy.addr;
+			sa2 = (struct sockaddr *)&s_in2;
+			sl2 = sizeof(s_in2);
+		}
 
 		sa = (struct sockaddr *)&s_in;
 		sl = sizeof(s_in);
@@ -949,6 +1063,20 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		udp_tap_map[V6][src].ts = now->tv_sec;
 	}
 
+	if (c->proxy.prox_typ == SOCKS5_PROXY && ntohs(s_in.sin_port) != 53) {
+		struct udp_sockaddr_storage *us = find_udp_sockaddr_storage(s);
+		if (!us) {
+			us = malloc(sizeof *us);
+			us->s = s;
+			us->addrlen = sl;
+			us->sockaddr = malloc(sl);
+			memcpy(us->sockaddr, sa, sl);
+			add_udp_sockaddr_storage(us);
+		}
+	}
+
+	char socks5_udp_h[UIO_MAXIOV][10];
+
 	for (i = 0; i < (int)p->count; i++) {
 		struct udphdr *uh_send;
 		size_t len;
@@ -957,15 +1085,39 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		if (!uh_send)
 			return p->count;
 
-		mm[i].msg_hdr.msg_name = sa;
-		mm[i].msg_hdr.msg_namelen = sl;
+		if (c->proxy.prox_typ == SOCKS5_PROXY &&
+				ntohs(s_in.sin_port) != 53) {
+			mm[i].msg_hdr.msg_name = sa2;
+			mm[i].msg_hdr.msg_namelen = sl2;
+		} else {
+			mm[i].msg_hdr.msg_name = sa;
+			mm[i].msg_hdr.msg_namelen = sl;
+		}
+
 
 		if (len) {
-			m[i].iov_base = (char *)(uh_send + 1);
-			m[i].iov_len = len;
+			if (c->proxy.prox_typ == SOCKS5_PROXY &&
+					ntohs(s_in.sin_port) != 53) {
+				socks5_udp_h[i][0] = 0x00;
+				socks5_udp_h[i][1] = 0x00;
+				socks5_udp_h[i][2] = 0x00;
+				socks5_udp_h[i][3] = 0x01;
+				memcpy(socks5_udp_h[i] + 4, &s_in.sin_addr, 4);
+				memcpy(socks5_udp_h[i] + 8, &s_in.sin_port, 2);
+				m[i].iov_base = (char *)(socks5_udp_h[i]);
+				m[i].iov_len = sizeof(socks5_udp_h[i]);
+				m[i + 1].iov_base = (char *)(uh_send + 1);
+				m[i + 1].iov_len = len;
 
-			mm[i].msg_hdr.msg_iov = m + i;
-			mm[i].msg_hdr.msg_iovlen = 1;
+				mm[i].msg_hdr.msg_iov = m + i;
+				mm[i].msg_hdr.msg_iovlen = 2;
+			} else {
+				m[i].iov_base = (char *)(uh_send + 1);
+				m[i].iov_len = len;
+
+				mm[i].msg_hdr.msg_iov = m + i;
+				mm[i].msg_hdr.msg_iovlen = 1;
+			}
 		} else {
 			mm[i].msg_hdr.msg_iov = NULL;
 			mm[i].msg_hdr.msg_iovlen = 0;
@@ -1195,6 +1347,8 @@ static void udp_timer_one(struct ctx *c, int v6, enum udp_act_type type,
 
 	if (s > 0) {
 		epoll_ctl(c->epollfd, EPOLL_CTL_DEL, s, NULL);
+		if (c->proxy.prox_typ == SOCKS5_PROXY)
+			delete_udp_sockaddr_storage_by_s(s);
 		close(s);
 		bitmap_clear(udp_act[v6 ? V6 : V4][type], port);
 	}
