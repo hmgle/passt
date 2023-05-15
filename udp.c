@@ -647,27 +647,16 @@ static size_t udp_update_hdr4(const struct ctx *c, int n, in_port_t dstport,
 	} else if (IN4_IS_ADDR_LOOPBACK(&b->s_in.sin_addr) ||
 		   IN4_IS_ADDR_UNSPECIFIED(&b->s_in.sin_addr)||
 		   IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr, &c->ip4.addr_seen)) {
-		if (c->proxy.prox_typ == SOCKS5_PROXY && src_port != 53) {
-			struct udp_sockaddr_storage *us = find_udp_sockaddr_storage(s);
-			if (us && us->sockaddr) {
-				struct sockaddr *addr = us->sockaddr;
-				if (addr->sa_family == AF_INET) {
-					struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
-					b->iph.saddr = saddr->sin_addr.s_addr;
-				}
-			}
-		} else {
-			b->iph.saddr = c->ip4.gw.s_addr;
-			udp_tap_map[V4][src_port].ts = now->tv_sec;
-			udp_tap_map[V4][src_port].flags |= PORT_LOCAL;
+		b->iph.saddr = c->ip4.gw.s_addr;
+		udp_tap_map[V4][src_port].ts = now->tv_sec;
+		udp_tap_map[V4][src_port].flags |= PORT_LOCAL;
 
-			if (IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr.s_addr, &c->ip4.addr_seen))
-				udp_tap_map[V4][src_port].flags &= ~PORT_LOOPBACK;
-			else
-				udp_tap_map[V4][src_port].flags |= PORT_LOOPBACK;
+		if (IN4_ARE_ADDR_EQUAL(&b->s_in.sin_addr.s_addr, &c->ip4.addr_seen))
+			udp_tap_map[V4][src_port].flags &= ~PORT_LOOPBACK;
+		else
+			udp_tap_map[V4][src_port].flags |= PORT_LOOPBACK;
 
-			bitmap_set(udp_act[V4][UDP_ACT_TAP], src_port);
-		}
+		bitmap_set(udp_act[V4][UDP_ACT_TAP], src_port);
 	} else {
 		if (c->proxy.prox_typ == SOCKS5_PROXY && src_port != 53) {
 			struct udp_sockaddr_storage *us = find_udp_sockaddr_storage(s);
@@ -1074,7 +1063,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 			add_udp_sockaddr_storage(us);
 			char *ip_str, *port_str;
 			parse_sockaddr(sa, &ip_str, &port_str);
-			debug("\nudp redirect -> proxy[socks5://%s:%d] -> dest[%s:%s] ...",
+			debug("udp redirect -> proxy[socks5://%s:%d] -> dest[%s:%s] ...",
 			      c->proxy.host, c->proxy.port, ip_str, port_str);
 			free(ip_str);
 			free(port_str);

@@ -2061,7 +2061,7 @@ static void tcp_conn_from_tap(struct ctx *c, int af, const void *addr,
 		struct addrinfo _h = {0};
 
 		parse_sockaddr(sa, &ip_str, &port_str);
-		debug("\nproxy_connect -> proxy[%s://%s:%s] -> dest[%s:%s]  ...",
+		debug("proxy_connect -> proxy[%s://%s:%s] -> dest[%s:%s]  ...",
 			c->proxy.prox_typ == SOCKS5_PROXY ? "socks5" :
 			c->proxy.prox_typ == HTTP_PROXY ? "http": "socks4",
 			c->proxy.host, c->proxy.port, ip_str, port_str);
