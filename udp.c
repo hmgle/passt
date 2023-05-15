@@ -1063,7 +1063,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 			add_udp_sockaddr_storage(us);
 			char *ip_str, *port_str;
 			parse_sockaddr(sa, &ip_str, &port_str);
-			debug("udp redirect -> proxy[socks5://%s:%d] -> dest[%s:%s] ...",
+			debug("udp redirect -> proxy[socks5://%s:%s] -> dest[%s:%s] ...",
 			      c->proxy.host, c->proxy.port, ip_str, port_str);
 			free(ip_str);
 			free(port_str);
