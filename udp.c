@@ -930,14 +930,14 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 	struct iovec m[UIO_MAXIOV];
 	struct sockaddr_in6 s_in6;
 	struct sockaddr_in s_in;
-	struct sockaddr_in s_in2;
+	struct sockaddr_in s_in_proxy;
 	struct sockaddr *sa;
-	struct sockaddr *sa2;
+	struct sockaddr *sa_proxy;
 	int i, s, count = 0;
 	in_port_t src, dst;
 	struct udphdr *uh;
 	socklen_t sl;
-	socklen_t sl2;
+	socklen_t sl_proxy;
 
 	(void)c;
 
@@ -959,9 +959,9 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		};
 		if (c->proxy.prox_typ == SOCKS5_PROXY &&
 				ntohs(s_in.sin_port) != 53) {
-			s_in2 = *(struct sockaddr_in *)c->proxy.addr;
-			sa2 = (struct sockaddr *)&s_in2;
-			sl2 = sizeof(s_in2);
+			s_in_proxy = *(struct sockaddr_in *)c->proxy.addr;
+			sa_proxy = (struct sockaddr *)&s_in_proxy;
+			sl_proxy = sizeof(s_in_proxy);
 		}
 
 		sa = (struct sockaddr *)&s_in;
@@ -1072,6 +1072,12 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 			us->sockaddr = malloc(sl);
 			memcpy(us->sockaddr, sa, sl);
 			add_udp_sockaddr_storage(us);
+			char *ip_str, *port_str;
+			parse_sockaddr(sa, &ip_str, &port_str);
+			debug("\nudp redirect -> proxy[socks5://%s:%d] -> dest[%s:%s] ...",
+			      c->proxy.host, c->proxy.port, ip_str, port_str);
+			free(ip_str);
+			free(port_str);
 		}
 	}
 
@@ -1087,8 +1093,8 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 
 		if (c->proxy.prox_typ == SOCKS5_PROXY &&
 				ntohs(s_in.sin_port) != 53) {
-			mm[i].msg_hdr.msg_name = sa2;
-			mm[i].msg_hdr.msg_namelen = sl2;
+			mm[i].msg_hdr.msg_name = sa_proxy;
+			mm[i].msg_hdr.msg_namelen = sl_proxy;
 		} else {
 			mm[i].msg_hdr.msg_name = sa;
 			mm[i].msg_hdr.msg_namelen = sl;
