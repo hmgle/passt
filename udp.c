@@ -1009,7 +1009,7 @@ int udp_tap_handler(struct ctx *c, int af, const void *addr,
 		if (!IN6_IS_ADDR_UNSPECIFIED(&c->ip6.dns_redirect) &&
 		    IN6_ARE_ADDR_EQUAL(addr, &c->ip6.dns_host) &&
 		    ntohs(s_in6.sin6_port) == 53) {
-			s_in.sin_addr = c->ip4.dns_redirect;
+			s_in6.sin6_addr = c->ip6.dns_redirect;
 		} else if (IN6_ARE_ADDR_EQUAL(addr, &c->ip6.dns_match) &&
 		    ntohs(s_in6.sin6_port) == 53) {
 			s_in6.sin6_addr = c->ip6.dns_host;
